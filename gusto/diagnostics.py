@@ -3,27 +3,29 @@
 from firedrake import op2, assemble, dot, dx, Function, sqrt, \
     TestFunction, TrialFunction, Constant, grad, inner, curl, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds_b, ds_v, ds_t, dS_v, div, avg, jump, \
+    ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
-    Projector, Interpolator
+    Projector, Interpolator, FunctionSpace
 from firedrake.assign import Assigner
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 import gusto.thermodynamics as tde
+from gusto.coord_transforms import rotated_lonlatr_vectors
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.active_tracers import TracerVariableType, Phases
 import numpy as np
 
-__all__ = ["Diagnostics", "CourantNumber", "VelocityX", "VelocityZ", "VelocityY", "Gradient",
-           "SphericalComponent", "MeridionalComponent", "ZonalComponent", "RadialComponent",
+__all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
+           "ZComponent", "MeridionalComponent", "ZonalComponent", "RadialComponent",
            "RichardsonNumber", "Energy", "KineticEnergy", "ShallowWaterKineticEnergy",
            "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy",
            "CompressibleKineticEnergy", "Exner", "Sum", "Difference", "SteadyStateError",
            "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
-           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence"]
+           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
+           "TracerDensity"]
 
 
 class Diagnostics(object):
@@ -186,7 +188,10 @@ class DiagnosticField(object, metaclass=ABCMeta):
         if not self._initialised:
             if self.space is None:
                 if space is None:
-                    space = domain.spaces("DG0", "DG", 0)
+                    if not hasattr(domain.spaces, "DG0"):
+                        space = domain.spaces.create_space("DG0", "DG", 0)
+                    else:
+                        space = domain.spaces("DG0")
                 self.space = space
             else:
                 space = self.space
@@ -194,7 +199,8 @@ class DiagnosticField(object, metaclass=ABCMeta):
             # Add space to domain
             assert space.name is not None, \
                 f'Diagnostics {self.name} is using a function space which does not have a name'
-            domain.spaces(space.name, V=space)
+            if not hasattr(domain.spaces, space.name):
+                domain.spaces.add_space(space.name, space)
 
             self.field = state_fields(self.name, space=space, dump=self.to_dump, pick_up=False)
 
@@ -234,14 +240,17 @@ class CourantNumber(DiagnosticField):
     """Dimensionless Courant number diagnostic field."""
     name = "CourantNumber"
 
-    def __init__(self, velocity='u', name=None, to_dump=True, space=None,
-                 method='interpolate', required_fields=()):
+    def __init__(self, velocity='u', component='whole', name=None, to_dump=True,
+                 space=None, method='interpolate', required_fields=()):
         """
         Args:
             velocity (str or :class:`ufl.Expr`, optional): the velocity field to
                 take the Courant number of. Can be a string referring to an
                 existing field, or an expression. If it is an expression, the
                 name argument is required. Defaults to 'u'.
+            component (str, optional): the component of the velocity to use for
+                calculating the Courant number. Valid values are "whole",
+                "horizontal" or "vertical". Defaults to "whole".
             name (str, optional): the name to append to "CourantNumber" to form
                 the name of this diagnostic. This argument must be provided if
                 the velocity is an expression (rather than a string). Defaults
@@ -258,6 +267,11 @@ class CourantNumber(DiagnosticField):
                 are required for the computation of this diagnostic field.
                 Defaults to ().
         """
+        if component not in ["whole", "horizontal", "vertical"]:
+            raise ValueError(f'component arg {component} not valid. Allowed '
+                             + 'values are "whole", "horizontal" and "vertical"')
+        self.component = component
+
         # Work out whether to take Courant number from field or expression
         if type(velocity) is str:
             # Default name should just be CourantNumber
@@ -267,6 +281,8 @@ class CourantNumber(DiagnosticField):
                 self.name = 'CourantNumber_'+velocity
             else:
                 self.name = 'CourantNumber_'+name
+            if component != 'whole':
+                self.name += '_'+component
         else:
             if name is None:
                 raise ValueError('CourantNumber diagnostic: if provided '
@@ -289,72 +305,52 @@ class CourantNumber(DiagnosticField):
             state_fields (:class:`StateFields`): the model's field container.
         """
 
-        # set up area computation
-        V = domain.spaces("DG0", "DG", 0)
+        V = FunctionSpace(domain.mesh, "DG", 0)
         test = TestFunction(V)
-        self.area = Function(V)
-        assemble(test*dx, tensor=self.area)
+        cell_volume = Function(V)
+        self.cell_flux = Function(V)
 
+        # Calculate cell volumes
+        One = Function(V).assign(1)
+        assemble(One*test*dx, tensor=cell_volume)
+
+        # Get the velocity that is being used
         if type(self.velocity) is str:
             u = state_fields(self.velocity)
         else:
             u = self.velocity
 
-        self.expr = sqrt(dot(u, u))/sqrt(self.area)*domain.dt
+        # Determine the component of the velocity
+        if self.component == "whole":
+            u_expr = u
+        elif self.component == "vertical":
+            u_expr = dot(u, domain.k)*domain.k
+        elif self.component == "horizontal":
+            u_expr = u - dot(u, domain.k)*domain.k
+
+        # Work out which facet integrals to use
+        if domain.mesh.extruded:
+            dS_calc = dS_v + dS_h
+            ds_calc = ds_v + ds_t + ds_b
+        else:
+            dS_calc = dS
+            ds_calc = ds
+
+        # Set up form for DG flux
+        n = FacetNormal(domain.mesh)
+        un = 0.5*(inner(-u_expr, n) + abs(inner(-u_expr, n)))
+        self.cell_flux_form = 2*avg(un*test)*dS_calc + un*test*ds_calc
+
+        # Final Courant number expression
+        self.expr = self.cell_flux * domain.dt / cell_volume
 
         super().setup(domain, state_fields)
 
+    def compute(self):
+        """Compute the diagnostic field from the current state."""
 
-# TODO: unify all component diagnostics
-class VelocityX(DiagnosticField):
-    """The geocentric Cartesian X component of the velocity field."""
-    name = "VelocityX"
-
-    def setup(self, domain, state_fields):
-        """
-        Sets up the :class:`Function` for the diagnostic field.
-
-        Args:
-            domain (:class:`Domain`): the model's domain object.
-            state_fields (:class:`StateFields`): the model's field container.
-        """
-        u = state_fields("u")
-        self.expr = u[0]
-        super().setup(domain, state_fields)
-
-
-class VelocityZ(DiagnosticField):
-    """The geocentric Cartesian Z component of the velocity field."""
-    name = "VelocityZ"
-
-    def setup(self, domain, state_fields):
-        """
-        Sets up the :class:`Function` for the diagnostic field.
-
-        Args:
-            domain (:class:`Domain`): the model's domain object.
-            state_fields (:class:`StateFields`): the model's field container.
-        """
-        u = state_fields("u")
-        self.expr = u[domain.mesh.geometric_dimension() - 1]
-        super().setup(domain, state_fields)
-
-
-class VelocityY(DiagnosticField):
-    """The geocentric Cartesian Y component of the velocity field."""
-    name = "VelocityY"
-
-    def setup(self, domain, state_fields):
-        """
-        Sets up the :class:`Function` for the diagnostic field.
-
-        Args:
-            domain (:class:`Domain`): the model's domain object.
-            state_fields (:class:`StateFields`): the model's field container.
-        """
-        u = state_fields("u")
-        self.expr = u[1]
-        super().setup(domain, state_fields)
+        assemble(self.cell_flux_form, tensor=self.cell_flux)
+        super().compute()
 
 
 class Gradient(DiagnosticField):
@@ -452,8 +448,8 @@ class Divergence(DiagnosticField):
         super().setup(domain, state_fields, space=space)
 
 
-class SphericalComponent(DiagnosticField):
-    """Base diagnostic for computing spherical-polar components of fields."""
+class VectorComponent(DiagnosticField):
+    """Base diagnostic for orthogonal components of vector-valued fields."""
     def __init__(self, name, space=None, method='interpolate'):
         """
         Args:
@@ -468,31 +464,104 @@ class SphericalComponent(DiagnosticField):
         self.fname = name
         super().__init__(space=space, method=method, required_fields=(name,))
 
-    # TODO: these routines must be moved to somewhere more available generally
-    # (e.g. initialisation tools?)
-    def _spherical_polar_unit_vectors(self, domain):
+    def setup(self, domain, state_fields, unit_vector):
         """
-        Generate ufl expressions for the spherical polar unit vectors.
+        Sets up the :class:`Function` for the diagnostic field.
 
         Args:
-            domain (:class:`Domain`): the model's domain, containing its mesh.
-
-        Returns:
-            tuple of (:class:`ufl.Expr`): the zonal, meridional and radial unit
-                vectors.
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+            unit_vector (:class:`ufl.Expr`): the unit vector to extract the
+                component for. This assumes an orthogonal coordinate system.
         """
-        x, y, z = SpatialCoordinate(domain.mesh)
-        x_hat = Constant(as_vector([1.0, 0.0, 0.0]))
-        y_hat = Constant(as_vector([0.0, 1.0, 0.0]))
-        z_hat = Constant(as_vector([0.0, 0.0, 1.0]))
-        R = sqrt(x**2 + y**2)  # distance from z axis
-        r = sqrt(x**2 + y**2 + z**2)  # distance from origin
+        f = state_fields(self.fname)
+        self.expr = dot(f, unit_vector)
+        super().setup(domain, state_fields)
 
-        lambda_hat = (x * y_hat - y * x_hat) / R
-        phi_hat = (-x*z/R * x_hat - y*z/R * y_hat + R * z_hat) / r
-        r_hat = (x * x_hat + y * y_hat + z * z_hat) / r
 
-        return lambda_hat, phi_hat, r_hat
+class XComponent(VectorComponent):
+    """The geocentric Cartesian x-component of a vector-valued field."""
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return self.fname+"_x"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        dim = domain.mesh.topological_dimension()
+        e_x = as_vector([Constant(1.0)]+[Constant(0.0)]*(dim-1))
+        super().setup(domain, state_fields, e_x)
+
+
+class YComponent(VectorComponent):
+    """The geocentric Cartesian y-component of a vector-valued field."""
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return self.fname+"_y"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        assert domain.metadata['domain_type'] not in ['interval', 'vertical_slice'], \
+            f'Y-component diagnostic cannot be used with domain {domain.metadata["domain_type"]}'
+        dim = domain.mesh.topological_dimension()
+        e_y = as_vector([Constant(0.0), Constant(1.0)]+[Constant(0.0)]*(dim-2))
+        super().setup(domain, state_fields, e_y)
+
+
+class ZComponent(VectorComponent):
+    """The geocentric Cartesian z-component of a vector-valued field."""
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return self.fname+"_z"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        assert domain.metadata['domain_type'] not in ['interval', 'plane'], \
+            f'Z-component diagnostic cannot be used with domain {domain.metadata["domain_type"]}'
+        dim = domain.mesh.topological_dimension()
+        e_x = as_vector([Constant(0.0)]*(dim-1)+[Constant(1.0)])
+        super().setup(domain, state_fields, e_x)
+
+
+class SphericalComponent(VectorComponent):
+    """Base diagnostic for computing spherical-polar components of fields."""
+    def __init__(self, name, rotated_pole=None, space=None, method='interpolate'):
+        """
+        Args:
+            name (str): name of the field to compute the component of.
+            rotated_pole (tuple of floats, optional): a tuple of floats
+                (lon, lat) of the new pole, in the original coordinate system.
+                The longitude and latitude must be expressed in radians.
+                Defaults to None, corresponding to a pole of (0, pi/2).
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case the default space is the domain's DG space.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.rotated_pole = (0.0, pi/2) if rotated_pole is None else rotated_pole
+        super().__init__(name=name, space=space, method=method)
 
     def _check_args(self, domain, field):
         """
@@ -529,9 +598,9 @@ class MeridionalComponent(SphericalComponent):
         """
         f = state_fields(self.fname)
         self._check_args(domain, f)
-        _, phi_hat, _ = self._spherical_polar_unit_vectors(domain)
-        self.expr = dot(f, phi_hat)
-        super().setup(domain, state_fields)
+        xyz = SpatialCoordinate(domain.mesh)
+        _, e_lat, _ = rotated_lonlatr_vectors(xyz, self.rotated_pole)
+        super().setup(domain, state_fields, e_lat)
 
 
 class ZonalComponent(SphericalComponent):
@@ -551,9 +620,9 @@ class ZonalComponent(SphericalComponent):
         """
         f = state_fields(self.fname)
         self._check_args(domain, f)
-        lambda_hat, _, _ = self._spherical_polar_unit_vectors(domain)
-        self.expr = dot(f, lambda_hat)
-        super().setup(domain, state_fields)
+        xyz = SpatialCoordinate(domain.mesh)
+        e_lon, _, _ = rotated_lonlatr_vectors(xyz, self.rotated_pole)
+        super().setup(domain, state_fields, e_lon)
 
 
 class RadialComponent(SphericalComponent):
@@ -573,9 +642,9 @@ class RadialComponent(SphericalComponent):
         """
         f = state_fields(self.fname)
         self._check_args(domain, f)
-        _, _, r_hat = self._spherical_polar_unit_vectors(domain)
-        self.expr = dot(f, r_hat)
-        super().setup(domain, state_fields)
+        xyz = SpatialCoordinate(domain.mesh)
+        _, _, e_r = rotated_lonlatr_vectors(xyz, self.rotated_pole)
+        super().setup(domain, state_fields, e_r)
 
 
 class RichardsonNumber(DiagnosticField):
@@ -1356,7 +1425,11 @@ class HydrostaticImbalance(DiagnosticField):
 
 
 class Precipitation(DiagnosticField):
-    """The total precipitation falling through the domain's bottom surface."""
+    """
+    The total precipitation falling through the domain's bottom surface.
+
+    This is normalised by unit area, giving a result in kg / m^2.
+    """
     name = "Precipitation"
 
     def __init__(self):
@@ -1372,33 +1445,43 @@ class Precipitation(DiagnosticField):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        space = domain.spaces("DG0", "DG", 0)
-        assert space.extruded, 'Cannot compute precipitation on a non-extruded mesh'
+        if not hasattr(domain.spaces, "DG0"):
+            DG0 = domain.spaces.create_space("DG0", "DG", 0)
+        else:
+            DG0 = domain.spaces("DG0")
+        assert DG0.extruded, 'Cannot compute precipitation on a non-extruded mesh'
+        self.space = DG0
+
+        # Gather fields
         rain = state_fields('rain')
         rho = state_fields('rho')
         v = state_fields('rainfall_velocity')
         # Set up problem
-        self.phi = TestFunction(space)
-        flux = TrialFunction(space)
-        n = FacetNormal(domain.mesh)
-        un = 0.5 * (dot(v, n) + abs(dot(v, n)))
-        self.flux = Function(space)
+        self.phi = TestFunction(DG0)
+        flux = TrialFunction(DG0)
+        self.flux = Function(DG0)  # Flux to solve for
+        area = Function(DG0)  # Need to compute normalisation (area)
 
-        a = self.phi * flux * dx
-        L = self.phi * rain * un * rho * (ds_b + ds_t + ds_v)
+        eqn_lhs = self.phi * flux * dx
+        area_rhs = self.phi * ds_b
+        eqn_rhs = domain.dt * self.phi * (rain * dot(- v, domain.k) * rho / area) * ds_b
+
+        # Compute area normalisation
+        area_prob = LinearVariationalProblem(eqn_lhs, area_rhs, area)
+        area_solver = LinearVariationalSolver(area_prob)
+        area_solver.solve()
 
         # setup solver
-        problem = LinearVariationalProblem(a, L, self.flux)
-        self.solver = LinearVariationalSolver(problem)
-        self.space = space
-        self.field = state_fields(self.name, space=space, dump=True, pick_up=False)
-        # TODO: might we want to pick up this field? Otherwise initialise to zero
+        rain_prob = LinearVariationalProblem(eqn_lhs, eqn_rhs, self.flux)
+        self.solver = LinearVariationalSolver(rain_prob)
+        self.field = state_fields(self.name, space=DG0, dump=True, pick_up=True)
+        # Initialise field to zero, if picking up this will be overridden
         self.field.assign(0.0)
 
     def compute(self):
-        """Compute the diagnostic field from the current state."""
+        """Increment the precipitation diagnostic."""
         self.solver.solve()
-        self.field.assign(self.field + assemble(self.flux * self.phi * dx))
+        self.field.assign(self.field + self.flux)
 
 
 class Vorticity(DiagnosticField):
@@ -1539,3 +1622,39 @@ class RelativeVorticity(Vorticity):
             state_fields (:class:`StateFields`): the model's field container.
         """
         super().setup(domain, state_fields, vorticity_type="relative")
+
+
+class TracerDensity(DiagnosticField):
+    """Diagnostic for computing the density of a tracer. This is
+    computed as the product of a mixing ratio and dry density"""
+
+    name = "TracerDensity"
+
+    def __init__(self, mixing_ratio_name, density_name, space=None, method='interpolate'):
+        """
+        Args:
+            mixing_ratio_name (str): the name of the tracer mixing ratio variable
+            density_name (str): the name of the tracer density variable
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project' and
+                'assign'. Defaults to 'interpolate'.
+        """
+        super().__init__(method=method, required_fields=(mixing_ratio_name, density_name))
+        self.mixing_ratio_name = mixing_ratio_name
+        self.density_name = density_name
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        m_X = state_fields(self.mixing_ratio_name)
+        rho_d = state_fields(self.density_name)
+        self.expr = m_X*rho_d
+        super().setup(domain, state_fields)
