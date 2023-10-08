@@ -64,8 +64,8 @@ diagnostic_fields = [CourantNumber(), YComponent('u'),
                      IncompressibleEadyPotentialEnergy(parameters),
                      Sum("KineticEnergy", "EadyPotentialEnergy"),
                      Difference("KineticEnergy", "KineticEnergyY"),
-                     IncompressibleGeostrophicImbalance(parameters),
-                     TrueResidualV(parameters),
+                     IncompressibleGeostrophicImbalance(eqns),
+                     TrueResidualV(parameters), SawyerEliassenU(eqns),
                      Perturbation('p'), Perturbation('b')]
 
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
@@ -73,7 +73,7 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 # Transport schemes and methods
 b_opts = SUPGOptions()
 transport_schemes = [SSPRK3(domain, "u"), SSPRK3(domain, "b", options=b_opts)]
-transport_methods = [DGUpwind(eqns, "u"), DGUpwind("b", ibp=b_opts.ibp)]
+transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "b", ibp=b_opts.ibp)]
 
 # Linear solve
 linear_solver = IncompressibleSolver(eqns)
@@ -168,7 +168,7 @@ stepper.set_reference_profiles([('p', p_b),
                                 ('b', b_b)])
 
 # The residual diagnostic needs to have u_n added to stepper.fields
-u_n = stepper.xn('u')
+u_n = stepper.x.n('u')
 stepper.fields('u_n', field=u_n)
 
 # ---------------------------------------------------------------------------- #

@@ -1724,7 +1724,7 @@ class IncompressibleEadyPotentialEnergy(DiagnosticField):
         """
         _, _, z = SpatialCoordinate(domain.mesh)
         b = state_fields("b")
-        bbar = state_fields("bbar")
+        bbar = state_fields("b_bar")
         H = self.parameters.H
         self.expr = -(z-H/2)*(b-bbar)
         super().setup(domain, state_fields)
@@ -1774,11 +1774,11 @@ class IncompressibleGeostrophicImbalance(DiagnosticField):
     """Diagnostic for the amount of geostrophic imbalance."""
     name = "GeostrophicImbalance"
 
-    def __init__(self, parameters, space=None, method='interpolate'):
+    def __init__(self, equations, space=None, method='interpolate'):
         """
         Args:
-            parameters (:class:`EadyParameters`): the configuration
-                object containing the physical parameters for this equation.
+            equations (:class:`IncompressibleEadyEquations`): the equation set
+                being solved by the model.
             space (:class:`FunctionSpace`, optional): the function space to
                 evaluate the diagnostic field in. Defaults to None, in which
                 case a default space will be chosen for this diagnostic.
@@ -1786,7 +1786,8 @@ class IncompressibleGeostrophicImbalance(DiagnosticField):
                 for this diagnostic. Valid options are 'interpolate', 'project',
                 'assign' and 'solve'. Defaults to 'interpolate'.
         """
-        self.parameters = parameters
+        self.equations = equations
+        self.parameters = equations.parameters
         super().__init__(space=space, method=method, required_fields=("u", "b", "p"))
 
     def setup(self, domain, state_fields):
@@ -1808,14 +1809,14 @@ class IncompressibleGeostrophicImbalance(DiagnosticField):
         a = inner(w, v)*dx
         L = (div(w)*p+inner(w, as_vector([f*u[1], 0.0, b])))*dx
 
-        bcs = [DirichletBC(Vu, 0.0, "bottom"),
-               DirichletBC(Vu, 0.0, "top")]
+        bcs = self.equations.bcs['u']
 
         imbalance = Function(Vu)
         self.expr = imbalance[0]/f
         imbalanceproblem = LinearVariationalProblem(a, L, imbalance, bcs=bcs)
         self.imbalance_solver = LinearVariationalSolver(
             imbalanceproblem, solver_parameters={'ksp_type': 'cg'})
+        super().setup(domain, state_fields)
 
     def compute(self):
         """Compute the diagnostic field from the current state."""
@@ -1863,17 +1864,19 @@ class TrueResidualV(DiagnosticField):
         dt = domain.dt
         _, _, z = SpatialCoordinate(domain.mesh)
 
-        wv = TestFunction(self.space)
-        v = TrialFunction(self.space)
+        V = self.space if self.space is not None else FunctionSpace(domain.mesh, "DG", 0)
+        wv = TestFunction(V)
+        v = TrialFunction(V)
         vlhs = wv*v*dx
         vrhs = wv*((unew[1]-uold[1])/dt + ubar[0]*ubar[1].dx(0)
                    + ubar[2]*ubar[1].dx(2)
                    + f*ubar[0] + dbdy*(z-H/2))*dx
-        vtres = Function(self.space)
+        vtres = Function(V)
         self.expr = vtres
         vtresproblem = LinearVariationalProblem(vlhs, vrhs, vtres)
         self.v_residual_solver = LinearVariationalSolver(
             vtresproblem, solver_parameters={'ksp_type': 'cg'})
+        super().setup(domain, state_fields)
 
     def compute(self):
         """Compute the diagnostic field from the current state."""
@@ -1897,6 +1900,7 @@ class SawyerEliassenU(DiagnosticField):
         """
         space = equations.domain.spaces('HDiv')
         self.parameters = equations.parameters
+        self.solve_implemented = True
         super().__init__(space=space, method='solve', required_fields=("u", "b", "p"))
 
     def setup(self, domain, state_fields):
@@ -1906,6 +1910,8 @@ class SawyerEliassenU(DiagnosticField):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
+
+        super().setup(domain, state_fields)
 
         u = state_fields("u")
         b = state_fields("b")
