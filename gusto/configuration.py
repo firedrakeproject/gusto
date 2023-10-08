@@ -6,8 +6,9 @@ from firedrake import sqrt, Constant
 
 __all__ = [
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
-    "CompressibleParameters", "ShallowWaterParameters", "EadyParameters",
-    "CompressibleEadyParameters", "EmbeddedDGOptions", "RecoveryOptions",
+    "CompressibleParameters", "ShallowWaterParameters",
+    "EadyParameters", "CompressibleEadyParameters",
+    "EmbeddedDGOptions", "RecoveryOptions",
     "SUPGOptions", "SpongeLayerParameters", "DiffusionParameters"
 ]
 

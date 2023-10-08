@@ -1180,27 +1180,68 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
 
 
 class CompressibleEadyEquations(CompressibleEulerEquations):
+    """
+    The compressible equations in a vertical slice, augmented with a third
+    velocity component normal to the slice, as used in the Eady problem.
+    """
 
-    def __init__(self, state, family, degree, Omega=None, sponge=None,
-                 terms_to_linearise={'u': [time_derivative],
-                                     'rho': [time_derivative, transport],
-                                     'theta': [time_derivative, transport]},
+    def __init__(self, domain, parameters, Omega=None, sponge=None,
+                 extra_terms=None, space_names=None,
+                 linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
+            Omega (:class:`ufl.Expr`, optional): an expression for the planet's
+                rotation vector. Defaults to None.
+            sponge (:class:`ufl.Expr`, optional): an expression for a sponge
+                layer. Defaults to None.
+            extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
+                included in the equation set. Defaults to None.
+            space_names (dict, optional): a dictionary of strings for names of
+                the function spaces to use for the spatial discretisation. The
+                keys are the names of the prognostic variables. Defaults to None
+                in which case the spaces are taken from the de Rham complex.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
+            u_transport_option (str, optional): specifies the transport term
+                used for the velocity equation. Supported options are:
+                'vector_invariant_form', 'vector_advection_form' and
+                'circulation_form'.
+                Defaults to 'vector_invariant_form'.
+            diffusion_options (:class:`DiffusionOptions`, optional): any options
+                to specify for applying diffusion terms to variables. Defaults
+                to None.
+            no_normal_flow_bc_ids (list, optional): a list of IDs of domain
+                boundaries at which no normal flow will be enforced. Defaults to
+                None.
+            active_tracers (list, optional): a list of `ActiveTracer` objects
+                that encode the metadata for any active tracers to be included
+                in the equations.. Defaults to None.
 
-        super().__init__(state, family, degree,
-                         terms_to_linearise=terms_to_linearise,
-                         Omega=Omega, sponge=sponge,
+        Raises:
+            NotImplementedError: only mixing ratio tracers are implemented.
+        """
+
+        super().__init__(domain, parameters, Omega=Omega, sponge=sponge,
+                         extra_terms=extra_terms, space_names=space_names,
+                         linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
                          diffusion_options=diffusion_options,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
-        dthetady = state.parameters.dthetady
-        Pi0 = state.parameters.Pi0
-        cp = state.parameters.cp
+        dthetady = parameters.dthetady
+        cp = parameters.cp
         y_vec = as_vector([0., 1., 0.])
 
         W = self.function_space
@@ -1208,13 +1249,18 @@ class CompressibleEadyEquations(CompressibleEulerEquations):
         X = self.X
         u, rho, theta = split(X)
 
-        exner_pi = exner_pressure(state.parameters, rho, theta)
+        exner_pi = exner_pressure(parameters, rho, theta)
+        DG0 = FunctionSpace(domain.mesh, "DG", 0)
+        self.prescribed_fields.add_field('Pi0', DG0)
+        Pi0_field = self.prescribed_fields('Pi0')
 
         self.residual -= subject(prognostic(
-            cp*dthetady*(exner_pi-Pi0)*inner(w, y_vec)*dx, "u"), X)
+            cp*dthetady*(exner_pi-Pi0_field)*inner(w, y_vec)*dx, "u"), X)
 
         self.residual += subject(prognostic(
             gamma*(dthetady*inner(u, y_vec))*dx, "theta"), X)
+
+        # TODO: should there be moist contributions here?
 
 
 class IncompressibleBoussinesqEquations(PrognosticEquationSet):
@@ -1369,31 +1415,66 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
 
 
 class IncompressibleEadyEquations(IncompressibleBoussinesqEquations):
-    def __init__(self, state, family, degree, Omega=None,
-                 terms_to_linearise={'u': [time_derivative],
-                                     'p': [time_derivative],
-                                     'b': [time_derivative, transport]},
+    """
+    The incompressible equations in a vertical slice, augmented with a third
+    velocity component normal to the slice, as used in the Eady problem.
+    """
+
+    def __init__(self, domain, parameters, Omega=None,
+                 space_names=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
+            Omega (:class:`ufl.Expr`, optional): an expression for the planet's
+                rotation vector. Defaults to None.
+            space_names (dict, optional): a dictionary of strings for names of
+                the function spaces to use for the spatial discretisation. The
+                keys are the names of the prognostic variables. Defaults to None
+                in which case the spaces are taken from the de Rham complex.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
+            u_transport_option (str, optional): specifies the transport term
+                used for the velocity equation. Supported options are:
+                'vector_invariant_form', 'vector_advection_form' and
+                'circulation_form'.
+                Defaults to 'vector_invariant_form'.
+            no_normal_flow_bc_ids (list, optional): a list of IDs of domain
+                boundaries at which no normal flow will be enforced. Defaults to
+                None.
+            active_tracers (list, optional): a list of `ActiveTracer` objects
+                that encode the metadata for any active tracers to be included
+                in the equations.. Defaults to None.
 
-        super().__init__(state, family, degree,
-                         Omega=Omega,
-                         terms_to_linearise=terms_to_linearise,
+        Raises:
+            NotImplementedError: active tracers are not implemented.
+        """
+
+        super().__init__(domain, parameters, Omega=Omega,
+                         space_names=space_names,
+                         linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
-        dbdy = state.parameters.dbdy
-        H = state.parameters.H
-        _, _, z = SpatialCoordinate(state.mesh)
-        eady_exp = Function(state.spaces("DG")).interpolate(z-H/2.)
+        dbdy = parameters.dbdy
+        H = parameters.H
+        _, _, z = SpatialCoordinate(domain.mesh)
+        eady_exp = Function(domain.spaces("DG")).interpolate(z-H/2.)
         y_vec = as_vector([0., 1., 0.])
 
         W = self.function_space
         w, _, gamma = TestFunctions(W)
         X = self.X
-        u, _, b = split(X)
+        u, _, _ = split(X)
 
         self.residual += subject(prognostic(
             dbdy*eady_exp*inner(w, y_vec)*dx, "u"), X)

@@ -3,10 +3,14 @@ The Eady problem solved using the incompressible Boussinesq equations.
 """
 
 from gusto import *
-from firedrake import (as_vector, SpatialCoordinate,
+from firedrake import (as_vector, SpatialCoordinate, solve, ds_t, ds_b,
                        PeriodicRectangleMesh, ExtrudedMesh,
                        cos, sin, cosh, sinh, tanh, pi, Function, sqrt)
 import sys
+
+# ---------------------------------------------------------------------------- #
+# Test case parameters
+# ---------------------------------------------------------------------------- #
 
 day = 24.*60.*60.
 hour = 60.*60.
@@ -16,7 +20,7 @@ if '--running-tests' in sys.argv:
     tmax = dt
     tdump = dt
     columns = 10
-    nlayers = 10
+    nlayers = 5
 else:
     tmax = 30*day
     tdump = 2*hour
@@ -32,49 +36,66 @@ beta = 1.0
 f = f/beta
 L = beta*L
 
-# Construct 2D periodic base mesh
+dirname = 'incompressible_eady'
+
+# ---------------------------------------------------------------------------- #
+# Set up model objects
+# ---------------------------------------------------------------------------- #
+
+# Domain -- 2D periodic base mesh which is one cell thick
 m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e5, quadrilateral=True)
-
-# build 3D mesh by extruding the base mesh
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+domain = Domain(mesh, dt, "RTCF", 1)
 
-
-output = OutputParameters(dirname='incompressible_eady',
-                          dumpfreq=int(tdump/dt),
-                          perturbation_fields=['p', 'b'],
-                          log_level='INFO')
-
+# Equation
+Omega = as_vector([0., 0., f*0.5])
 parameters = EadyParameters(H=H, L=L, f=f,
                             deltax=2.*L/float(columns),
                             deltaz=H/float(nlayers),
                             fourthorder=True)
+eqns = IncompressibleEadyEquations(domain, parameters, Omega=Omega)
 
-diagnostic_fields = [CourantNumber(), VelocityY(),
+# I/O
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=int(tdump/dt))
+
+diagnostic_fields = [CourantNumber(), YComponent('u'),
                      KineticEnergy(), KineticEnergyY(),
-                     EadyPotentialEnergy(),
+                     IncompressibleEadyPotentialEnergy(parameters),
                      Sum("KineticEnergy", "EadyPotentialEnergy"),
                      Difference("KineticEnergy", "KineticEnergyY"),
-                     GeostrophicImbalance(), TrueResidualV()]
+                     IncompressibleGeostrophicImbalance(parameters),
+                     TrueResidualV(parameters),
+                     Perturbation('p'), Perturbation('b')]
 
-state = State(mesh,
-              dt=dt,
-              output=output,
-              parameters=parameters,
-              diagnostic_fields=diagnostic_fields)
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-# Coriolis expression
-Omega = as_vector([0., 0., f*0.5])
-eqns = IncompressibleEadyEquations(state, "RTCF", 1, Omega=Omega)
+# Transport schemes and methods
+b_opts = SUPGOptions()
+transport_schemes = [SSPRK3(domain, "u"), SSPRK3(domain, "b", options=b_opts)]
+transport_methods = [DGUpwind(eqns, "u"), DGUpwind("b", ibp=b_opts.ibp)]
+
+# Linear solve
+linear_solver = IncompressibleSolver(eqns)
+
+# Time stepper
+stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes,
+                                  transport_methods,
+                                  linear_solver=linear_solver)
+
+# ---------------------------------------------------------------------------- #
+# Initial conditions
+# ---------------------------------------------------------------------------- #
 
 # Initial conditions
-u0 = state.fields("u")
-b0 = state.fields("b")
-p0 = state.fields("p")
+u0 = stepper.fields("u")
+b0 = stepper.fields("b")
+p0 = stepper.fields("p")
 
 # spaces
-Vu = state.spaces("HDiv")
-Vb = state.spaces("theta")
-Vp = state.spaces("DG")
+Vu = domain.spaces("HDiv")
+Vb = domain.spaces("theta")
+Vp = domain.spaces("DG")
 
 # parameters
 x, y, z = SpatialCoordinate(mesh)
@@ -109,8 +130,8 @@ b0.project(b_b + b_pert)
 
 # calculate hydrostatic pressure
 p_b = Function(Vp)
-incompressible_hydrostatic_balance(state, b_b, p_b)
-incompressible_hydrostatic_balance(state, b0, p0)
+incompressible_hydrostatic_balance(eqns, b_b, p_b)
+incompressible_hydrostatic_balance(eqns, b0, p0)
 
 # set x component of velocity
 dbdy = parameters.dbdy
@@ -118,23 +139,40 @@ u = -dbdy/f*(z-H/2)
 
 # set y component of velocity
 v = Function(Vp).assign(0.)
-eady_initial_v(state, p0, v)
+
+g = TrialFunction(Vu)
+wg = TestFunction(Vu)
+
+n = FacetNormal(mesh)
+
+a = inner(wg, g)*dx
+L = -div(wg)*p0*dx + inner(wg, n)*p0*(ds_t + ds_b)
+pgrad = Function(Vu)
+solve(a == L, pgrad)
+
+# get initial v
+Vp = p0.function_space()
+phi = TestFunction(Vp)
+m = TrialFunction(Vp)
+
+a = f*phi*m*dx
+L = phi*pgrad[0]*dx
+solve(a == L, v)
 
 # set initial u
 u_exp = as_vector([u, v, 0.])
 u0.project(u_exp)
 
 # set the background profiles
-state.set_reference_profiles([('p', p_b),
-                              ('b', b_b)])
+stepper.set_reference_profiles([('p', p_b),
+                                ('b', b_b)])
 
-# Set up transport schemes
-b_opts = SUPGOptions()
-transported_fields = [SSPRK3(state, "u"), SSPRK3(state, "b", options=b_opts)]
+# The residual diagnostic needs to have u_n added to stepper.fields
+u_n = stepper.xn('u')
+stepper.fields('u_n', field=u_n)
 
-linear_solver = IncompressibleSolver(state, eqns)
-
-stepper = CrankNicolson(state, eqns, transported_fields,
-                        linear_solver=linear_solver)
+# ---------------------------------------------------------------------------- #
+# Run
+# ---------------------------------------------------------------------------- #
 
 stepper.run(t=0, tmax=tmax)

@@ -1,11 +1,12 @@
 """Common diagnostic fields."""
 
-from firedrake import op2, assemble, dot, dx, Function, sqrt, \
-    TestFunction, TrialFunction, Constant, grad, inner, curl, \
-    LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
-    TensorFunctionSpace, SpatialCoordinate, as_vector, \
-    Projector, Interpolator, FunctionSpace
+from firedrake import (op2, assemble, dot, dx, Function, sqrt, TestFunction,
+                       TrialFunction, Constant, grad, inner, curl, FacetNormal,
+                       LinearVariationalProblem, LinearVariationalSolver,
+                       ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi,
+                       TensorFunctionSpace, SpatialCoordinate, as_vector,
+                       as_matrix, Projector, Interpolator, FunctionSpace,
+                       DirichletBC, lhs, rhs)
 from firedrake.assign import Assigner
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -25,7 +26,9 @@ __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
            "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
-           "TracerDensity"]
+           "TracerDensity", "KineticEnergyY", "CompressibleKineticEnergyY",
+           "IncompressibleEadyPotentialEnergy", "CompressibleEadyPotentialEnergy",
+           "IncompressibleGeostrophicImbalance", "TrueResidualV", "SawyerEliassenU"]
 
 
 class Diagnostics(object):
@@ -1658,3 +1661,347 @@ class TracerDensity(DiagnosticField):
         rho_d = state_fields(self.density_name)
         self.expr = m_X*rho_d
         super().setup(domain, state_fields)
+
+
+class KineticEnergyY(KineticEnergy):
+    """Kinetic energy associated with the Y-component of the velocity."""
+    name = "KineticEnergyY"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        u = state_fields("u")
+        self.expr = self.kinetic(u[1])
+        super().setup(domain, state_fields)
+
+
+class CompressibleKineticEnergyY(CompressibleKineticEnergy):
+    """Kinetic energy associated with the Y-component of the velocity."""
+    name = "CompressibleKineticEnergyY"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        u = state_fields("u")
+        rho = state_fields("rho")
+        self.expr = self.kinetic(u[1], rho)
+        super().setup(domain, state_fields)
+
+
+class IncompressibleEadyPotentialEnergy(DiagnosticField):
+    """Potential energy in the incompressible Eady equations."""
+    name = "EadyPotentialEnergy"
+
+    def __init__(self, parameters, space=None, method='interpolate'):
+        """
+        Args:
+            parameters (:class:`EadyParameters`): the configuration
+                object containing the physical parameters for this equation.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.parameters = parameters
+        super().__init__(space=space, method=method, required_fields=("b"))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        _, _, z = SpatialCoordinate(domain.mesh)
+        b = state_fields("b")
+        bbar = state_fields("bbar")
+        H = self.parameters.H
+        self.expr = -(z-H/2)*(b-bbar)
+        super().setup(domain, state_fields)
+
+
+class CompressibleEadyPotentialEnergy(DiagnosticField):
+    """Potential energy in the compressible Eady equations."""
+    name = "CompressibleEadyPotentialEnergy"
+
+    def __init__(self, parameters, space=None, method='interpolate'):
+        """
+        Args:
+            parameters (:class:`CompressibleParameters`): the configuration
+                object containing the physical parameters for this equation.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.parameters = parameters
+        super().__init__(space=space, method=method, required_fields=("rho", "theta"))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        _, _, z = SpatialCoordinate(domain.mesh)
+        g = self.parameters.g
+        cp = self.parameters.cp
+        cv = self.parameters.cv
+        Pi0 = state_fields('Pi0')
+
+        rho = state_fields("rho")
+        theta = state_fields("theta")
+        Pi = tde.exner_pressure(self.parameters, rho, theta)
+
+        self.expr = rho*(g*z + cv*Pi*theta - cp*Pi0*theta)
+        super().setup(domain, state_fields)
+
+
+class IncompressibleGeostrophicImbalance(DiagnosticField):
+    """Diagnostic for the amount of geostrophic imbalance."""
+    name = "GeostrophicImbalance"
+
+    def __init__(self, parameters, space=None, method='interpolate'):
+        """
+        Args:
+            parameters (:class:`EadyParameters`): the configuration
+                object containing the physical parameters for this equation.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.parameters = parameters
+        super().__init__(space=space, method=method, required_fields=("u", "b", "p"))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+
+        u = state_fields("u")
+        b = state_fields("b")
+        p = state_fields("p")
+        f = self.parameters.f
+        Vu = u.function_space()
+
+        v = TrialFunction(Vu)
+        w = TestFunction(Vu)
+        a = inner(w, v)*dx
+        L = (div(w)*p+inner(w, as_vector([f*u[1], 0.0, b])))*dx
+
+        bcs = [DirichletBC(Vu, 0.0, "bottom"),
+               DirichletBC(Vu, 0.0, "top")]
+
+        imbalance = Function(Vu)
+        self.expr = imbalance[0]/f
+        imbalanceproblem = LinearVariationalProblem(a, L, imbalance, bcs=bcs)
+        self.imbalance_solver = LinearVariationalSolver(
+            imbalanceproblem, solver_parameters={'ksp_type': 'cg'})
+
+    def compute(self):
+        """Compute the diagnostic field from the current state."""
+        self.imbalance_solver.solve()
+        super().compute()
+
+
+class TrueResidualV(DiagnosticField):
+    """
+    Residual in the meridional velocity equation for the Eady equations.
+
+    NB: the user is required to manually add "u_n" to the state fields.
+    """
+    name = "TrueResidualV"
+
+    def __init__(self, parameters, space=None, method='interpolate'):
+        """
+        Args:
+            parameters (:class:`EadyParameters`): the configuration
+                object containing the physical parameters for this equation.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.parameters = parameters
+        super().__init__(space=space, method=method, required_fields=("u"))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+
+        unew = state_fields("u")
+        uold = state_fields("u_n")
+        ubar = 0.5*(unew+uold)
+        H = self.parameters.H
+        f = self.parameters.f
+        dbdy = self.parameters.dbdy
+        dt = domain.dt
+        _, _, z = SpatialCoordinate(domain.mesh)
+
+        wv = TestFunction(self.space)
+        v = TrialFunction(self.space)
+        vlhs = wv*v*dx
+        vrhs = wv*((unew[1]-uold[1])/dt + ubar[0]*ubar[1].dx(0)
+                   + ubar[2]*ubar[1].dx(2)
+                   + f*ubar[0] + dbdy*(z-H/2))*dx
+        vtres = Function(self.space)
+        self.expr = vtres
+        vtresproblem = LinearVariationalProblem(vlhs, vrhs, vtres)
+        self.v_residual_solver = LinearVariationalSolver(
+            vtresproblem, solver_parameters={'ksp_type': 'cg'})
+
+    def compute(self):
+        """Compute the diagnostic field from the current state."""
+        self.v_residual_solver.solve()
+        super().compute()
+
+
+class SawyerEliassenU(DiagnosticField):
+    """
+    Velocity associated with the Sawyer-Eliassen balance equation: the
+    secondary circulation associated with a stream function that ensures thermal
+    wind balance.
+    """
+    name = "SawyerEliassenU"
+
+    def __init__(self, equations):
+        """
+        Args:
+            equations (:class:`IncompressibleEadyEquations`): the equation set
+                being solved by the model.
+        """
+        space = equations.domain.spaces('HDiv')
+        self.parameters = equations.parameters
+        super().__init__(space=space, method='solve', required_fields=("u", "b", "p"))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+
+        u = state_fields("u")
+        b = state_fields("b")
+        v = inner(u, as_vector([0., 1., 0.]))
+
+        # spaces
+        V0 = domain.spaces('H1')
+        Vu = domain.spaces('HDiv')
+
+        # project b to V0
+        b_v0 = Function(V0)
+        btri = TrialFunction(V0)
+        btes = TestFunction(V0)
+        a = inner(btes, btri) * dx
+        L = inner(btes, b) * dx
+        projectbproblem = LinearVariationalProblem(a, L, b_v0)
+        self.project_b_solver = LinearVariationalSolver(
+            projectbproblem, solver_parameters={'ksp_type': 'cg'})
+
+        # project v to V0
+        v_v0 = Function(V0)
+        vtri = TrialFunction(V0)
+        vtes = TestFunction(V0)
+        a = inner(vtes, vtri) * dx
+        L = inner(vtes, v) * dx
+        projectvproblem = LinearVariationalProblem(a, L, v_v0)
+        self.project_v_solver = LinearVariationalSolver(
+            projectvproblem, solver_parameters={'ksp_type': 'cg'})
+
+        # stm/psi is a stream function
+        stm = Function(V0)
+        psi = TrialFunction(V0)
+        xsi = TestFunction(V0)
+
+        f = self.parameters.f
+        H = self.parameters.H
+        L = self.parameters.L
+        dbdy = self.parameters.dbdy
+        _, _, z = SpatialCoordinate(domain.mesh)
+
+        bcs = [DirichletBC(V0, 0., "bottom"),
+               DirichletBC(V0, 0., "top")]
+
+        Mat = as_matrix([[b.dx(2), 0., -f*v_v0.dx(2)],
+                         [0., 0., 0.],
+                         [-b_v0.dx(0), 0., f**2+f*v_v0.dx(0)]])
+
+        Equ = (
+            inner(grad(xsi), dot(Mat, grad(psi)))
+            - dbdy*inner(grad(xsi), as_vector([-v, 0., f*(z-H/2)]))
+        )*dx
+
+        # fourth-order terms
+        if self.parameters.fourthorder:
+            eps = Constant(0.0001)
+            brennersigma = Constant(10.0)
+            n = FacetNormal(domain.mesh)
+            deltax = Constant(self.parameters.deltax)
+            deltaz = Constant(self.parameters.deltaz)
+
+            nn = as_matrix([[sqrt(brennersigma/Constant(deltax)), 0., 0.],
+                            [0., 0., 0.],
+                            [0., 0., sqrt(brennersigma/Constant(deltaz))]])
+
+            mu = as_matrix([[1., 0., 0.],
+                            [0., 0., 0.],
+                            [0., 0., H/L]])
+
+            # anisotropic form
+            Equ += eps*(
+                div(dot(mu, grad(psi)))*div(dot(mu, grad(xsi)))*dx
+                - (
+                    avg(dot(dot(grad(grad(psi)), n), n))*jump(grad(xsi), n=n)
+                    + avg(dot(dot(grad(grad(xsi)), n), n))*jump(grad(psi), n=n)
+                    - jump(nn*grad(psi), n=n)*jump(nn*grad(xsi), n=n)
+                )*(dS_h + dS_v)
+            )
+
+        Au = lhs(Equ)
+        Lu = rhs(Equ)
+        stmproblem = LinearVariationalProblem(Au, Lu, stm, bcs=bcs)
+        self.stream_function_solver = LinearVariationalSolver(
+            stmproblem, solver_parameters={'ksp_type': 'cg'})
+
+        # solve for sawyer_eliassen u
+        utrial = TrialFunction(Vu)
+        w = TestFunction(Vu)
+        a = inner(w, utrial)*dx
+        L = (w[0]*(-stm.dx(2))+w[2]*(stm.dx(0)))*dx
+        ugproblem = LinearVariationalProblem(a, L, self.field)
+        self.sawyer_eliassen_u_solver = LinearVariationalSolver(
+            ugproblem, solver_parameters={'ksp_type': 'cg'})
+
+    def compute(self):
+        """Compute the diagnostic field from the current state."""
+        self.project_b_solver.solve()
+        self.project_v_solver.solve()
+        self.stream_function_solver.solve()
+        self.sawyer_eliassen_u_solver.solve()

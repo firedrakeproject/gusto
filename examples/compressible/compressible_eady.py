@@ -4,14 +4,22 @@ This solves the Eady problem using the compressible Euler equations.
 
 from gusto import *
 from gusto import thermodynamics
-from firedrake import (as_vector, SpatialCoordinate,
+from firedrake import (as_vector, SpatialCoordinate, solve, ds_b, ds_t,
                        PeriodicRectangleMesh, ExtrudedMesh,
                        exp, cos, sin, cosh, sinh, tanh, pi, Function, sqrt)
 import sys
 
+# ---------------------------------------------------------------------------- #
+# Test case parameters
+# ---------------------------------------------------------------------------- #
+
 day = 24.*60.*60.
 hour = 60.*60.
 dt = 30.
+L = 1000000.
+H = 10000.  # Height position of the model top
+f = 1.e-04
+
 if '--running-tests' in sys.argv:
     tmax = dt
     tdump = dt
@@ -23,54 +31,69 @@ else:
     columns = 30  # number of columns
     nlayers = 30  # horizontal layers
 
-# set up mesh
-L = 1000000.
-m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e5, quadrilateral=True)
-
-# build 2D mesh by extruding the base mesh
-H = 10000.  # Height position of the model top
-mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-
-# Coriolis expression
-f = 1.e-04
-Omega = as_vector([0., 0., f*0.5])
-
 dirname = 'compressible_eady'
-output = OutputParameters(dirname=dirname,
-                          dumpfreq=int(tdump/dt),
-                          dumplist=['u', 'rho', 'theta'],
-                          perturbation_fields=['rho', 'theta', 'ExnerPi'],
-                          log_level='INFO')
 
+# ---------------------------------------------------------------------------- #
+# Set up model objects
+# ---------------------------------------------------------------------------- #
+
+# Domain -- 2D periodic base mesh which is one cell thick
+m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e5, quadrilateral=True)
+mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+domain = Domain(mesh, dt, "RTCF", 1)
+
+# Equation
+Omega = as_vector([0., 0., f*0.5])
 parameters = CompressibleEadyParameters(H=H, f=f)
+eqns = CompressibleEadyEquations(domain, parameters, Omega=Omega)
 
-diagnostic_fields = [CourantNumber(), VelocityY(),
-                     ExnerPi(), ExnerPi(reference=True),
+# I/O
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=int(tdump/dt))
+
+diagnostic_fields = [CourantNumber(), YComponent('u'),
+                     Exner(parameters), Exner(parameters, reference=True),
                      CompressibleKineticEnergy(),
                      CompressibleKineticEnergyY(),
-                     CompressibleEadyPotentialEnergy(),
+                     CompressibleEadyPotentialEnergy(parameters),
                      Sum("CompressibleKineticEnergy",
                          "CompressibleEadyPotentialEnergy"),
                      Difference("CompressibleKineticEnergy",
-                                "CompressibleKineticEnergyY")]
+                                "CompressibleKineticEnergyY"),
+                     Perturbation('rho'), Perturbation('theta'),
+                     Perturbation('Exner')]
 
-state = State(mesh,
-              dt=dt,
-              output=output,
-              parameters=parameters,
-              diagnostic_fields=diagnostic_fields)
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-eqns = CompressibleEadyEquations(state, "RTCF", 1)
+# Transport schemes and methods
+theta_opts = SUPGOptions()
+transport_schemes = [SSPRK3(domain, "u"),
+                     SSPRK3(domain, "rho"),
+                     SSPRK3(domain, "theta", options=theta_opts)]
+transport_methods = [DGUpwind(eqns, "u"),
+                     DGUpwind(eqns, "rho"),
+                     DGUpwind(eqns, "theta", ibp=theta_opts.ibp)]
 
+# Linear solver
+linear_solver = CompressibleSolver(eqns)
+
+# Time stepper
+stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes,
+                                  transport_methods,
+                                  linear_solver=linear_solver)
+
+# ---------------------------------------------------------------------------- #
 # Initial conditions
-u0 = state.fields("u")
-rho0 = state.fields("rho")
-theta0 = state.fields("theta")
+# ---------------------------------------------------------------------------- #
+
+u0 = stepper.fields("u")
+rho0 = stepper.fields("rho")
+theta0 = stepper.fields("theta")
 
 # spaces
-Vu = state.spaces("HDiv")
-Vt = state.spaces("theta")
-Vr = state.spaces("DG")
+Vu = domain.spaces("HDiv")
+Vt = domain.spaces("theta")
+Vr = domain.spaces("DG")
 
 # first setup the background buoyancy profile
 # z.grad(bref) = N**2
@@ -110,39 +133,51 @@ theta0.interpolate(theta_b + theta_pert)
 
 # calculate hydrostatic Pi
 rho_b = Function(Vr)
-compressible_hydrostatic_balance(state, theta_b, rho_b)
-compressible_hydrostatic_balance(state, theta0, rho0)
+compressible_hydrostatic_balance(eqns, theta_b, rho_b, solve_for_rho=True)
+compressible_hydrostatic_balance(eqns, theta0, rho0, solve_for_rho=True)
 
-# set Pi0
-Pi0 = calculate_Pi0(state, theta0, rho0)
-state.parameters.Pi0 = Pi0
+# set Pi0 -- have to get this from the equations
+Pi0 = eqns.prescribed_fields('Pi0')
+Pi0.interpolate(exner_pressure(parameters, rho0, theta0))
 
 # set x component of velocity
-cp = state.parameters.cp
-dthetady = state.parameters.dthetady
-Pi = thermodynamics.pi(state.parameters, rho0, theta0)
+cp = parameters.cp
+dthetady = parameters.dthetady
+Pi = thermodynamics.exner_pressure(parameters, rho0, theta0)
 u = cp*dthetady/f*(Pi-Pi0)
 
-# set y component of velocity
+# set y component of velocity by solving a problem
 v = Function(Vr).assign(0.)
-compressible_eady_initial_v(state, theta0, rho0, v)
+
+# get Pi gradient
+g = TrialFunction(Vu)
+wg = TestFunction(Vu)
+
+n = FacetNormal(mesh)
+
+a = inner(wg, g)*dx
+L = -div(wg)*Pi*dx + inner(wg, n)*Pi*(ds_t + ds_b)
+pgrad = Function(Vu)
+solve(a == L, pgrad)
+
+# get initial v
+m = TrialFunction(Vr)
+phi = TestFunction(Vr)
+
+a = phi*f*m*dx
+L = phi*cp*theta0*pgrad[0]*dx
+solve(a == L, v)
 
 # set initial u
 u_exp = as_vector([u, v, 0.])
 u0.project(u_exp)
 
 # set the background profiles
-state.set_reference_profiles([('rho', rho_b),
-                              ('theta', theta_b)])
+stepper.set_reference_profiles([('rho', rho_b),
+                                ('theta', theta_b)])
 
-# Set up transport schemes
-transported_fields = [SSPRK3(state, "u"),
-                      SSPRK3(state, "rho"),
-                      SSPRK3(state, "theta")]
-
-linear_solver = CompressibleSolver(state, eqns)
-
-stepper = CrankNicolson(state, eqns, transported_fields,
-                        linear_solver=linear_solver)
+# ---------------------------------------------------------------------------- #
+# Run
+# ---------------------------------------------------------------------------- #
 
 stepper.run(t=0, tmax=tmax)
