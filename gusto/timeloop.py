@@ -145,7 +145,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         Logs the start of a time step.
         """
         logger.info('')
-        logger.info('*'*80)
+        logger.info('='*40)
         logger.info(f'at start of timestep {self.step}, t={float(self.t)}, dt={float(self.dt)}')
 
     def run(self, t, tmax, pick_up=False):
@@ -408,23 +408,22 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             linear_solver (:class:`TimesteppingSolver`, optional): the object
                 to use for the linear solve. Defaults to None.
             diffusion_schemes (iter, optional): iterable of pairs of the form
-                ``(field_name, scheme)`` indicating the fields to diffuse, and the
+                ``(field_name, scheme)`` indicating the fields to diffuse, and
                 the :class:`~.TimeDiscretisation` to use. Defaults to None.
             physics_schemes: (list, optional): a list of tuples of the form
-                (:class:`Physics`, :class:`TimeDiscretisation`), pairing physics
-                parametrisations and timestepping schemes to use for each.
-                Timestepping schemes for physics must be explicit. These schemes
-                are all evaluated at the end of the time step. Defaults to None.
+                (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`),
+                pairing physics parametrisations and timestepping schemes to use
+                for each. Timestepping schemes for physics must be explicit.
+                These schemes are all evaluated at the end of the time step.
+                Defaults to None.
             slow_physics_schemes: (list, optional): a list of tuples of the form
-                (:class:`Physics`, :class:`TimeDiscretisation`), pairing physics
-                parametrisations and timestepping schemes to use for each.
-                Timestepping schemes for physics must be explicit. These schemes
-                are all evaluated at the end of the time step. Defaults to None.
+                (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`).
+                These schemes are all evaluated at the start of the time step.
+                Defaults to None.
             fast_physics_schemes: (list, optional): a list of tuples of the form
-                (:class:`Physics`, :class:`TimeDiscretisation`), pairing physics
-                parametrisations and timestepping schemes to use for each.
-                Timestepping schemes for physics must be explicit. These schemes
-                are all evaluated at the end of the time step. Defaults to None.
+                (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`).
+                These schemes are evaluated within the outer loop. Defaults to
+                None.
             alpha (`ufl.Constant`, optional): the semi-implicit off-centering
                 parameter. A value of 1 corresponds to fully implicit, while 0
                 corresponds to fully explicit. Defaults to Constant(0.5).
@@ -601,7 +600,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xp = self.x.p
         x_after_slow = self.x.after_slow
         x_after_fast = self.x.after_fast
-
         xrhs = self.xrhs
         xrhs_phys = self.xrhs_phys
         dy = self.dy
@@ -748,7 +746,10 @@ class PrescribedTransport(Timestepper):
     def run(self, t, tmax, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main
         Args:
             t (float): the start time of the run
             tmax (float): the end time of the run
