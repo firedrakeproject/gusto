@@ -168,7 +168,8 @@ class Domain(object):
         x = SpatialCoordinate(self.mesh)
 
         # Make a height field in CG1
-        CG1 = self.spaces('CG1', family='CG', degree=1)
+        CG1 = FunctionSpace(self.mesh, "CG", 1, name='CG1')
+        self.spaces.add_space('CG1', CG1)
         self.coords.register_space(self, 'CG1')
         CG1_height = Function(CG1)
         CG1_height.interpolate(dot(self.k, x))
