@@ -140,4 +140,4 @@ def test_boundary_layer_mixing(tmpdir, field_name, recovered, semi_implicit):
     initial_data, _ = domain.coords.get_column_data(initial_field, domain)
 
     # Check first column
-    assert field_data[0,0] < 0.999*initial_data[0,0]
+    assert field_data[0, 0] < 0.999*initial_data[0, 0]
