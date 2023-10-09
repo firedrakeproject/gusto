@@ -14,7 +14,6 @@ from gusto.coord_transforms import rotated_lonlatr_vectors
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.active_tracers import TracerVariableType, Phases
-from gusto.initialisation_tools import latlon_coords
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
@@ -1565,7 +1564,6 @@ class SolidBodyImbalance(DiagnosticField):
         r_dot = dot(u, r_hat)     
         mesh = domain.mesh
 
-        lat, lon = latlon_coords(mesh)
         # TODO: Geostophic imbalance diagnostic
         F = TrialFunction(Vu)
         w = TestFunction(Vu)
