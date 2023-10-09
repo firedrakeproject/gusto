@@ -1082,7 +1082,7 @@ class Perturbation(Difference):
 class ThermodynamicDiagnostic(DiagnosticField):
     """Base thermodynamic diagnostic field, computing many common fields."""
 
-    def __init__(self, equations, space=None, method='project'):
+    def __init__(self, equations, space=None, method='interpolate'):
         """
         Args:
             equations (:class:`PrognosticEquationSet`): the equation set being
@@ -1202,7 +1202,7 @@ class PotentialEnergy(ThermodynamicDiagnostic):
         x = SpatialCoordinate(domain.mesh)
         self._setup_thermodynamics(domain, state_fields)
         self.expr = self.rho_averaged * (1 + self.r_t) * self.parameters.g * dot(x, domain.k)
-        super().setup(domain, state_fields, space=domain.spaces("DG"))
+        super().setup(domain, state_fields, space=self.Vtheta)
 
 
 # TODO: this needs consolidating with energy diagnostics
