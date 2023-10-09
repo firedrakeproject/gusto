@@ -3,8 +3,9 @@ This file provides a coordinate object, dependent on the mesh.
 Coordinate fields are stored in specified VectorFunctionSpaces.
 """
 
+from gusto.coord_transforms import lonlatr_from_xyz, rotated_lonlatr_coords
 from gusto.logging import logger
-from firedrake import (SpatialCoordinate, sqrt, atan2, asin, Function)
+from firedrake import SpatialCoordinate, Function
 import numpy as np
 
 
@@ -12,19 +13,23 @@ class Coordinates(object):
     """
     An object for holding and setting up coordinate fields.
     """
-    def __init__(self, mesh):
+    def __init__(self, mesh, on_sphere=False, rotated_pole=None, radius=None):
         """
         Args:
             mesh (:class:`Mesh`): the model's domain object.
+            on_sphere (bool, optional): whether the domain is on the surface of
+                a sphere. If False, the domain is assumed to be Cartesian.
+                Defaults to False.
+            rotated_pole (tuple, optional): a tuple of floats (lon, lat) of the
+                location to use as the north pole in a spherical coordinate
+                system. These are expressed in the original coordinate system.
+                The longitude and latitude must be expressed in radians.
+                Defaults to None. This is unused for non-spherical domains.
+            radius (float, optional): the radius of a spherical domain. Defaults
+                to None. This is unused for non-spherical domains.
         """
 
         self.mesh = mesh
-
-        # TODO: is this the best way of determining whether we are on a sphere?
-        if hasattr(mesh, "_base_mesh") and hasattr(mesh._base_mesh, 'geometric_dimension'):
-            on_sphere = (mesh._base_mesh.geometric_dimension() == 3 and mesh._base_mesh.topological_dimension() == 2)
-        else:
-            on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)
 
         # -------------------------------------------------------------------- #
         # Set up spatial coordinate
@@ -32,14 +37,14 @@ class Coordinates(object):
 
         if on_sphere:
             xyz = SpatialCoordinate(mesh)
-            r = sqrt(xyz[0]**2 + xyz[1]**2 + xyz[2]**2)  
-            lon = atan2(xyz[1] , xyz[0])
-            lat = asin(xyz[2]/r)
+            if rotated_pole is not None:
+                lon, lat, r = rotated_lonlatr_coords(xyz, rotated_pole)
+            else:
+                lon, lat, r = lonlatr_from_xyz(xyz[0], xyz[1], xyz[2])
 
             if mesh.extruded:
-                # TODO: would we prefer to store height instead of radius?
-                self.coords = (lon, lat, r)
-                self.coords_name = ['lon', 'lat', 'r']
+                self.coords = (lon, lat, r-radius)
+                self.coords_name = ['lon', 'lat', 'h']
             else:
                 self.coords = (lon, lat)
                 self.coords_name = ['lon', 'lat']

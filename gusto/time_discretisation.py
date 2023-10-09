@@ -15,7 +15,7 @@ from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.fml import (
     replace_subject, replace_test_function, Term, all_terms, drop
 )
-from gusto.labels import time_derivative, prognostic, physics
+from gusto.labels import time_derivative, prognostic, physics_label
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 import numpy as np
@@ -135,9 +135,13 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 map_if_false=drop)
 
         self.evaluate_source = []
+        self.physics_names = []
         for t in self.residual:
-            if t.has_label(physics):
-                self.evaluate_source.append(t.get(physics))
+            if t.has_label(physics_label):
+                physics_name = t.get(physics_label)
+                if t.labels[physics_name] not in self.physics_names:
+                    self.evaluate_source.append(t.labels[physics_name])
+                    self.physics_names.append(t.labels[physics_name])
 
         # -------------------------------------------------------------------- #
         # Set up Wrappers
@@ -329,8 +333,6 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         self.x0.assign(x_in)
         for i in range(self.ncycles):
-            for evaluate in self.evaluate_source:
-                evaluate(x_in, self.dt)
             self.apply_cycle(self.x1, self.x0)
             self.x0.assign(self.x1)
         x_out.assign(self.x1)

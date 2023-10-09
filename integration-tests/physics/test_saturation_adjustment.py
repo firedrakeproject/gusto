@@ -60,8 +60,8 @@ def run_cond_evap(dirname, process):
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    Vt = domain.spaces("theta", degree=1)
-    Vr = domain.spaces("DG", "DG", degree=1)
+    Vt = domain.spaces("theta")
+    Vr = domain.spaces("DG")
 
     # Declare prognostic fields
     rho0 = stepper.fields("rho")
