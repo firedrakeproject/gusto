@@ -1202,7 +1202,7 @@ class PotentialEnergy(ThermodynamicDiagnostic):
         x = SpatialCoordinate(domain.mesh)
         self._setup_thermodynamics(domain, state_fields)
         self.expr = self.rho_averaged * (1 + self.r_t) * self.parameters.g * dot(x, domain.k)
-        super().setup(domain, state_fields, space=self.Vtheta)
+        super().setup(domain, state_fields, space=domain.spaces("DG"))
 
 
 # TODO: this needs consolidating with energy diagnostics
