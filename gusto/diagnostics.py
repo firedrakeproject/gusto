@@ -1760,7 +1760,7 @@ class CompressibleEadyPotentialEnergy(DiagnosticField):
         g = self.parameters.g
         cp = self.parameters.cp
         cv = self.parameters.cv
-        Pi0 = state_fields('Pi0')
+        Pi0 = self.parameters.Pi0
 
         rho = state_fields("rho")
         theta = state_fields("theta")

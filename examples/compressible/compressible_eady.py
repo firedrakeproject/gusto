@@ -5,7 +5,7 @@ This solves the Eady problem using the compressible Euler equations.
 from gusto import *
 from gusto import thermodynamics
 from firedrake import (as_vector, SpatialCoordinate, solve, ds_b, ds_t,
-                       PeriodicRectangleMesh, ExtrudedMesh,
+                       PeriodicRectangleMesh, ExtrudedMesh, assemble,
                        exp, cos, sin, cosh, sinh, tanh, pi, Function, sqrt)
 import sys
 
@@ -44,7 +44,7 @@ domain = Domain(mesh, dt, "RTCF", 1)
 
 # Equation
 Omega = as_vector([0., 0., f*0.5])
-parameters = CompressibleEadyParameters(H=H, f=f)
+parameters = CompressibleEadyParameters(H=H, f=f, Pi0=Constant(1.0))
 eqns = CompressibleEadyEquations(domain, parameters, Omega=Omega)
 
 # I/O
@@ -136,14 +136,15 @@ rho_b = Function(Vr)
 compressible_hydrostatic_balance(eqns, theta_b, rho_b, solve_for_rho=True)
 compressible_hydrostatic_balance(eqns, theta0, rho0, solve_for_rho=True)
 
-# set Pi0 -- have to get this from the equations
-Pi0 = eqns.prescribed_fields('Pi0')
-Pi0.interpolate(exner_pressure(parameters, rho0, theta0))
+# set Pi0 -- set this in configuration so that everything sees the same value
+Pi = thermodynamics.exner_pressure(parameters, rho0, theta0)
+Pi0 = parameters.Pi0
+Pi0_value = assemble(Pi*dx) / assemble(Constant(1.0)*dx(domain=mesh))
+Pi0.assign(Pi0_value)
 
 # set x component of velocity
 cp = parameters.cp
 dthetady = parameters.dthetady
-Pi = thermodynamics.exner_pressure(parameters, rho0, theta0)
 u = cp*dthetady/f*(Pi-Pi0)
 
 # set y component of velocity by solving a problem

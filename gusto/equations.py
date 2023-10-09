@@ -1250,12 +1250,10 @@ class CompressibleEadyEquations(CompressibleEulerEquations):
         u, rho, theta = split(X)
 
         exner_pi = exner_pressure(parameters, rho, theta)
-        DG0 = FunctionSpace(domain.mesh, "DG", 0)
-        self.prescribed_fields.add_field('Pi0', DG0)
-        Pi0_field = self.prescribed_fields('Pi0')
+        Pi0 = self.parameters.Pi0
 
         self.residual -= subject(prognostic(
-            cp*dthetady*(exner_pi-Pi0_field)*inner(w, y_vec)*dx, "u"), X)
+            cp*dthetady*(exner_pi-Pi0)*inner(w, y_vec)*dx, "u"), X)
 
         self.residual += subject(prognostic(
             gamma*(dthetady*inner(u, y_vec))*dx, "theta"), X)
