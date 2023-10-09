@@ -21,7 +21,7 @@ from gusto.wrappers import *
 import numpy as np
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "SSPRK3", "RK4",
+__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "SSPRK3", "RK4", "RK4_SDC",
            "Heun", "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog",
            "AdamsMoulton", "AdamsBashforth"]
 
@@ -1836,13 +1836,24 @@ class FE_SDC(SDC):
         else:
             x_out.assign(self.Unodes[-1])
 
+
 class RK_SDC(SDC):
+
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None,
+                limiter=None, options=None, butcher_matrix=None):
+    if butcher_matrix is not None:
+        self.butcher_matrix = butcher_matrix
+        self.nbutcher = int(np.shape(self.butcher_matrix)[0])
+    super().__init__(domain, field_name=field_name, subcycles=subcycles,
+                        solver_parameters=solver_parameters,
+                        limiter=limiter, options=options, butcher_matrix = self.butcher_matrix)
+    
 
     def setup(self, equation, uadv=None):
 
         self.residual = equation.residual
 
-        self.base = ForwardEuler(self.domain)
+        self.base = ExplicitMultistage(self.domain)
         self.base.setup(equation, uadv=uadv)
         self.residual = self.base.residual
 
@@ -2280,3 +2291,27 @@ class IMEX_SDC(SDC):
             x_out.assign(self.Un)
         else:
             x_out.assign(self.Unodes[-1])
+
+
+class RK4_SDC(RK_SDC):
+    u"""
+    Implements the classic 4-stage Runge-Kutta method.
+
+    The classic 4-stage Runge-Kutta method for solving ∂y/∂t = F(y). It can be
+    written as:
+
+    k0 = F[y^n]
+    k1 = F[y^n + 1/2*dt*k1]
+    k2 = F[y^n + 1/2*dt*k2]
+    k3 = F[y^n + dt*k3]
+    y^(n+1) = y^n + (1/6) * dt * (k0 + 2*k1 + 2*k2 + k3)
+
+    where superscripts indicate the time-level.
+    """
+    def __init__(self, domain, field_name=None, subcycles=None, solver_parameters=None,
+                 limiter=None, options=None, butcher_matrix=None):
+        super().__init__(domain, field_name=field_name, subcycles=subcycles,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options, butcher_matrix=butcher_matrix)
+        self.butcher_matrix = np.array([[0.5, 0., 0., 0.], [0., 0.5, 0., 0.], [0., 0., 1., 0.], [1./6., 1./3., 1./3., 1./6.]])
+        self.nbutcher = int(np.shape(self.butcher_matrix)[0])
