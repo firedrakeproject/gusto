@@ -58,8 +58,8 @@ if COMM_WORLD.size == 1:
     output = OutputParameters(
         dirname=dirname,
         dumpfreq=dumpfreq,
-        pddumpfreq=dumpfreq,
-        dumplist=['u']
+        dump_nc=True,
+        dump_vtus=False
     )
 else:
     logger.warning(
@@ -69,11 +69,11 @@ else:
     output = OutputParameters(
         dirname=dirname,
         dumpfreq=dumpfreq,
-        pddumpfreq=dumpfreq,
-        dumplist=['u'],
-    )
+        dump_nc=True,
+        dump_vtus=False
+          )
 
-diagnostic_fields = [CourantNumber()]#, Pressure(eqns), SteadyStateError('Pressure_Vt')]
+diagnostic_fields = [CourantNumber(), Pressure(eqns), SteadyStateError('Pressure_Vt')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
