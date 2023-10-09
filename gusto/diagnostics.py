@@ -1082,7 +1082,7 @@ class Perturbation(Difference):
 class ThermodynamicDiagnostic(DiagnosticField):
     """Base thermodynamic diagnostic field, computing many common fields."""
 
-    def __init__(self, equations, space=None, method='interpolate'):
+    def __init__(self, equations, space=None, method='project'):
         """
         Args:
             equations (:class:`PrognosticEquationSet`): the equation set being
