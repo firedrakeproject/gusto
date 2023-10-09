@@ -34,19 +34,22 @@ def run_incompressible(tmpdir):
 
     # I/O
     output = OutputParameters(dirname=tmpdir+"/incompressible",
-                              dumpfreq=2, chkptfreq=2)
+                              dumpfreq=2, chkptfreq=2, checkpoint=True)
     io = IO(domain, output)
 
     # Transport Schemes
     b_opts = SUPGOptions()
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "b", options=b_opts)]
+    transport_methods = [DGUpwind(eqn, "u"),
+                         DGUpwind(eqn, "b", ibp=b_opts.ibp)]
 
     # Linear solver
     linear_solver = IncompressibleSolver(eqn)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
+                                      transport_methods,
                                       linear_solver=linear_solver)
 
     # ------------------------------------------------------------------------ #
@@ -84,12 +87,13 @@ def run_incompressible(tmpdir):
     checkpoint_name = 'incompressible_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
     check_output = OutputParameters(dirname=tmpdir+"/incompressible",
-                                    checkpoint_pickup_filename=new_path)
+                                    checkpoint_pickup_filename=new_path,
+                                    checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
     check_domain = Domain(check_mesh, dt, "CG", 1)
     check_eqn = IncompressibleBoussinesqEquations(check_domain, parameters)
     check_io = IO(check_domain, check_output)
-    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [])
+    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
     check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
 
     return stepper, check_stepper

@@ -7,7 +7,7 @@ to act as a convergence test.
 """
 
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, sin, cos, pi
 import sys
 
 # ---------------------------------------------------------------------------- #
@@ -28,6 +28,7 @@ else:
 # setup shallow water parameters
 R = 6371220.
 H = 5960.
+rotated_pole = (0.0, pi/3)
 
 # setup input that doesn't change with ref level or dt
 parameters = ShallowWaterParameters(H=H)
@@ -42,35 +43,41 @@ for ref_level, dt in ref_dt.items():
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=ref_level, degree=2)
     x = SpatialCoordinate(mesh)
-    domain = Domain(mesh, dt, 'BDM', 1)
+    domain = Domain(mesh, dt, 'BDM', 1, rotated_pole=rotated_pole)
 
     # Equation
     Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
+    _, lat, _ = rotated_lonlatr_coords(x, rotated_pole)
+    e_lon, _, _ = rotated_lonlatr_vectors(x, rotated_pole)
+    fexpr = 2*Omega*sin(lat)
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # I/O
     dirname = "williamson_2_ref%s_dt%s" % (ref_level, dt)
     dumpfreq = int(tmax / (ndumps*dt))
-    output = OutputParameters(dirname=dirname,
-                              dumpfreq=dumpfreq,
-                              dumplist_latlon=['D', 'D_error'],
-                              log_level='INFO',
-                              dump_nc=True)
+    output = OutputParameters(
+        dirname=dirname,
+        dumpfreq=dumpfreq,
+        dumplist_latlon=['D', 'D_error'],
+        dump_nc=True,
+    )
 
     diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                          ShallowWaterKineticEnergy(),
                          ShallowWaterPotentialEnergy(parameters),
                          ShallowWaterPotentialEnstrophy(),
-                         SteadyStateError('u'), SteadyStateError('D')]
+                         SteadyStateError('u'), SteadyStateError('D'),
+                         MeridionalComponent('u', rotated_pole),
+                         ZonalComponent('u', rotated_pole)]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "D", subcycles=2)]
+    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -80,9 +87,9 @@ for ref_level, dt in ref_dt.items():
     D0 = stepper.fields("D")
     x = SpatialCoordinate(mesh)
     u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
-    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
+    uexpr = u_max*cos(lat)*e_lon
     g = parameters.g
-    Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
+    Dexpr = H - (R * Omega * u_max + u_max*u_max/2.0)*(sin(lat))**2/g
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)

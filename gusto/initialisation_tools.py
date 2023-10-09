@@ -1,63 +1,20 @@
 """Tools for computing initial conditions, such as hydrostatic balance."""
 
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
-    TestFunction, TrialFunction, SpatialCoordinate, \
+    TestFunction, TrialFunction, \
     FacetNormal, inner, div, dx, ds_b, ds_t, DirichletBC, \
     Function, Constant, \
     LinearVariationalProblem, LinearVariationalSolver, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
-    sin, cos, sqrt, asin, atan_2, as_vector, min_value, max_value, FunctionSpace, \
-    errornorm, zero
+    FunctionSpace, errornorm, zero
 from gusto import thermodynamics
-from gusto.configuration import logger
+from gusto.logging import logger
 from gusto.recovery import Recoverer, BoundaryMethod
 
 
-__all__ = ["latlon_coords", "sphere_to_cartesian", "incompressible_hydrostatic_balance",
+__all__ = ["incompressible_hydrostatic_balance",
            "compressible_hydrostatic_balance", "remove_initial_w",
            "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
-
-
-# TODO: maybe coordinate transforms could go elsewhere
-def latlon_coords(mesh):
-    """
-    Gets expressions for the latitude and longitude fields.
-
-    Args:
-        mesh (:class:`Mesh`): the model's mesh.
-
-    Returns:
-        tuple of :class:`ufl.Expr`: expressions for the latitude and longitude
-            fields, in radians.
-    """
-    x0, y0, z0 = SpatialCoordinate(mesh)
-    unsafe = z0/sqrt(x0*x0 + y0*y0 + z0*z0)
-    safe = min_value(max_value(unsafe, -1.0), 1.0)  # avoid silly roundoff errors
-    theta = asin(safe)  # latitude
-    lamda = atan_2(y0, x0)  # longitude
-    return theta, lamda
-
-
-def sphere_to_cartesian(mesh, u_zonal, u_merid):
-    """
-    Convert the horizontal spherical-polar components of a vector into
-    geocentric Cartesian components.
-
-    Args:
-        mesh (:class:`Mesh`): _description_
-        u_zonal (:class:`ufl.Expr`): the zonal component of the vector.
-        u_merid (:class:`ufl.Expr`): the meridional component of the vector.
-
-    Returns:
-        _type_: _description_
-    """
-    theta, lamda = latlon_coords(mesh)
-
-    cartesian_u_expr = -u_zonal*sin(lamda) - u_merid*sin(theta)*cos(lamda)
-    cartesian_v_expr = u_zonal*cos(lamda) - u_merid*sin(theta)*sin(lamda)
-    cartesian_w_expr = u_merid*cos(theta)
-
-    return as_vector((cartesian_u_expr, cartesian_v_expr, cartesian_w_expr))
 
 
 def incompressible_hydrostatic_balance(equation, b0, p0, top=False, params=None):
@@ -133,7 +90,7 @@ def incompressible_hydrostatic_balance(equation, b0, p0, top=False, params=None)
 
     solve(a == L, w1, bcs=bcs, solver_parameters=params)
 
-    v, pprime = w1.split()
+    v, pprime = w1.subfunctions
     p0.project(pprime)
 
 
@@ -235,13 +192,13 @@ def compressible_hydrostatic_balance(equation, theta0, rho0, exner0=None,
                                            options_prefix="exner_solver")
 
     exner_solver.solve()
-    v, exner = w.split()
+    v, exner = w.subfunctions
     if exner0 is not None:
         exner0.assign(exner)
 
     if solve_for_rho:
         w1 = Function(W)
-        v, rho = w1.split()
+        v, rho = w1.subfunctions
         rho.interpolate(thermodynamics.rho(parameters, theta0, exner))
         v, rho = split(w1)
         dv, dexner = TestFunctions(W)
@@ -256,7 +213,7 @@ def compressible_hydrostatic_balance(equation, theta0, rho0, exner0=None,
         rhosolver = NonlinearVariationalSolver(rhoproblem, solver_parameters=params,
                                                options_prefix="rhosolver")
         rhosolver.solve()
-        v, rho_ = w1.split()
+        v, rho_ = w1.subfunctions
         rho0.assign(rho_)
     else:
         rho0.interpolate(thermodynamics.rho(parameters, theta0, exner))

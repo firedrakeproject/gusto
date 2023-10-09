@@ -26,16 +26,17 @@ def test_scalar_diffusion(tmpdir, DG, tracer_setup):
     f_end_expr = (1/(1+4*tmax))*f_init**(1/(1+4*tmax))
 
     if DG:
-        V = domain.spaces("DG", "DG", degree=1)
+        V = domain.spaces("DG")
     else:
-        V = domain.spaces("theta", degree=1)
+        V = domain.spaces("theta")
 
     mu = 5.
 
     diffusion_params = DiffusionParameters(kappa=kappa, mu=mu)
     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
     diffusion_scheme = BackwardEuler(domain)
-    timestepper = Timestepper(eqn, diffusion_scheme, setup.io)
+    diffusion_methods = [InteriorPenaltyDiffusion(eqn, "f", diffusion_params)]
+    timestepper = Timestepper(eqn, diffusion_scheme, setup.io, spatial_methods=diffusion_methods)
 
     # Initial conditions
     timestepper.fields("f").interpolate(f_init)
@@ -59,7 +60,7 @@ def test_vector_diffusion(tmpdir, DG, tracer_setup):
     if DG:
         V = VectorFunctionSpace(domain.mesh, "DG", 1)
     else:
-        V = domain.spaces("HDiv", "CG", 1)
+        V = domain.spaces("HDiv")
     f_init = as_vector([f_init, 0.])
     f_end_expr = as_vector([f_end_expr, 0.])
 
@@ -68,7 +69,8 @@ def test_vector_diffusion(tmpdir, DG, tracer_setup):
     diffusion_params = DiffusionParameters(kappa=kappa, mu=mu)
     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
     diffusion_scheme = BackwardEuler(domain)
-    timestepper = Timestepper(eqn, diffusion_scheme, setup.io)
+    diffusion_methods = [InteriorPenaltyDiffusion(eqn, "f", diffusion_params)]
+    timestepper = Timestepper(eqn, diffusion_scheme, setup.io, spatial_methods=diffusion_methods)
 
     # Initial conditions
     if DG:

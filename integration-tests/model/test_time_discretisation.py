@@ -28,7 +28,7 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
     if scheme == "ssprk":
         transport_scheme = SSPRK3(domain)
     elif scheme == "implicit_midpoint":
-        transport_scheme = ImplicitMidpoint(domain)
+        transport_scheme = TrapeziumRule(domain)
     elif scheme == "RK4":
         transport_scheme = RK4(domain)
     elif scheme == "Heun":
@@ -39,7 +39,8 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         transport_scheme = TR_BDF2(domain, gamma=0.5)
     elif scheme == "Leapfrog":
         # Leapfrog unstable with DG
-        Vf = domain.spaces("CG", "CG", 1)
+        domain.spaces.create_space("CG1", "CG", 1)
+        Vf = domain.spaces("CG1")
         eqn = AdvectionEquation(domain, Vf, "f")
         transport_scheme = Leapfrog(domain)
     elif scheme == "AdamsBashforth":
@@ -47,7 +48,9 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
     elif scheme == "AdamsMoulton":
         transport_scheme = AdamsMoulton(domain, order=2)
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+    transport_method = DGUpwind(eqn, 'f')
+
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)

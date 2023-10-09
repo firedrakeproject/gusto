@@ -9,7 +9,7 @@ PETSc.Sys.popErrorHandler()
 from gusto import *
 import itertools
 from firedrake import (as_vector, SpatialCoordinate, PeriodicIntervalMesh,
-                       ExtrudedMesh, exp, sin, Function, pi)
+                       ExtrudedMesh, exp, sin, Function, pi, COMM_WORLD)
 import numpy as np
 import sys
 
@@ -51,12 +51,28 @@ points_x = np.linspace(0., L, 100)
 points_z = [H/2.]
 points = np.array([p for p in itertools.product(points_x, points_z)])
 dirname = 'skamarock_klemp_nonlinear'
-output = OutputParameters(dirname=dirname,
-                          dumpfreq=dumpfreq,
-                          pddumpfreq=dumpfreq,
-                          dumplist=['u'],
-                          point_data=[('theta_perturbation', points)],
-                          log_level='INFO')
+
+# Dumping point data using legacy PointDataOutput is not supported in parallel
+if COMM_WORLD.size == 1:
+    output = OutputParameters(
+        dirname=dirname,
+        dumpfreq=dumpfreq,
+        pddumpfreq=dumpfreq,
+        dumplist=['u'],
+        point_data=[('theta_perturbation', points)],
+    )
+else:
+    logger.warning(
+        'Dumping point data using legacy PointDataOutput is not'
+        ' supported in parallel\nDisabling PointDataOutput'
+    )
+    output = OutputParameters(
+        dirname=dirname,
+        dumpfreq=dumpfreq,
+        pddumpfreq=dumpfreq,
+        dumplist=['u'],
+    )
+
 diagnostic_fields = [CourantNumber(), Gradient("u"), Perturbation('theta'),
                      Gradient("theta_perturbation"), Perturbation('rho'),
                      RichardsonNumber("theta", parameters.g/Tsurf), Gradient("theta")]
@@ -64,15 +80,19 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
 theta_opts = SUPGOptions()
-transported_fields = [ImplicitMidpoint(domain, "u"),
+transported_fields = [TrapeziumRule(domain, "u"),
                       SSPRK3(domain, "rho"),
                       SSPRK3(domain, "theta", options=theta_opts)]
+transport_methods = [DGUpwind(eqns, "u"),
+                     DGUpwind(eqns, "rho"),
+                     DGUpwind(eqns, "theta", ibp=theta_opts.ibp)]
 
 # Linear solver
 linear_solver = CompressibleSolver(eqns)
 
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  transport_methods,
                                   linear_solver=linear_solver)
 
 # ---------------------------------------------------------------------------- #

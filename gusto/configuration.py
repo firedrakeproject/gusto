@@ -1,35 +1,15 @@
 """Some simple tools for configuring the model."""
 from abc import ABCMeta, abstractproperty
 from enum import Enum
-import logging
-from logging import DEBUG, INFO, WARNING
 from firedrake import sqrt, Constant
 
 
-__all__ = ["WARNING", "INFO", "DEBUG", "IntegrateByParts",
-           "TransportEquationType", "OutputParameters",
-           "CompressibleParameters", "ShallowWaterParameters",
-           "logger", "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
-           "SpongeLayerParameters", "DiffusionParameters"]
-
-logger = logging.getLogger("gusto")
-
-
-def set_log_handler(comm):
-    """
-    Sets the handler for logging.
-
-    Args:
-        comm (:class:`MPI.Comm`): MPI communicator.
-    """
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(fmt="%(name)s:%(levelname)s %(message)s"))
-    if logger.hasHandlers():
-        logger.handlers.clear()
-    if comm.rank == 0:
-        logger.addHandler(handler)
-    else:
-        logger.addHandler(logging.NullHandler())
+__all__ = [
+    "IntegrateByParts", "TransportEquationType", "OutputParameters",
+    "CompressibleParameters", "ShallowWaterParameters",
+    "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
+    "SpongeLayerParameters", "DiffusionParameters"
+]
 
 
 class IntegrateByParts(Enum):
@@ -50,12 +30,14 @@ class TransportEquationType(Enum):
     advective: ∂q/∂t + (u.∇)q = 0                                             \n
     conservative: ∂q/∂t + ∇.(u*q) = 0                                         \n
     vector_invariant: ∂q/∂t + (∇×q)×u + (1/2)∇(q.u) + (1/2)[(∇q).u -(∇u).q)] = 0
+    circulation: ∂q/∂t + (∇×q)×u + non-transport terms = 0
     """
 
     no_transport = 702
     advective = 19
     conservative = 291
     vector_invariant = 9081
+    circulation = 512
 
 
 class Configuration(object):
@@ -90,7 +72,7 @@ class Configuration(object):
 
         # Almost all parameters should be Constants -- but there are some
         # specific exceptions which should be kept as integers
-        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq', 'log_level']:
+        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq']:
             object.__setattr__(self, name, Constant(value))
         else:
             object.__setattr__(self, name, value)
@@ -99,9 +81,6 @@ class Configuration(object):
 class OutputParameters(Configuration):
     """Parameters for controlling outputting."""
 
-    #: log_level for logger, can be DEBUG, INFO or WARNING. Takes
-    #: default value "warning"
-    log_level = WARNING
     dump_vtus = True
     dump_nc = False
     dumpfreq = 1
@@ -109,11 +88,13 @@ class OutputParameters(Configuration):
     dumplist = None
     dumplist_latlon = []
     dump_diagnostics = True
-    checkpoint = True
+    diagfreq = 1
+    checkpoint = False
     checkpoint_method = 'checkpointfile'
     checkpoint_pickup_filename = None
     chkptfreq = 1
     dirname = None
+    log_courant = True
     #: TODO: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
@@ -153,7 +134,7 @@ class ShallowWaterParameters(Configuration):
     H = None  # mean depth
 
 
-class TransportOptions(Configuration, metaclass=ABCMeta):
+class WrapperOptions(Configuration, metaclass=ABCMeta):
     """Base class for specifying options for a transport scheme."""
 
     @abstractproperty
@@ -161,14 +142,15 @@ class TransportOptions(Configuration, metaclass=ABCMeta):
         pass
 
 
-class EmbeddedDGOptions(TransportOptions):
+class EmbeddedDGOptions(WrapperOptions):
     """Specifies options for an embedded DG method."""
 
     name = "embedded_dg"
+    project_back_method = 'project'
     embedding_space = None
 
 
-class RecoveryOptions(TransportOptions):
+class RecoveryOptions(WrapperOptions):
     """Specifies options for a recovery wrapper method."""
 
     name = "recovered"
@@ -181,7 +163,7 @@ class RecoveryOptions(TransportOptions):
     broken_method = 'interpolate'
 
 
-class SUPGOptions(TransportOptions):
+class SUPGOptions(WrapperOptions):
     """Specifies options for an SUPG scheme."""
 
     name = "supg"

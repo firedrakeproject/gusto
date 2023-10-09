@@ -8,8 +8,9 @@ from firedrake import (IntervalMesh, RectangleMesh, CubedSphereMesh,
                        VectorFunctionSpace, ExtrudedMesh, SpatialCoordinate,
                        as_vector, exp)
 from gusto import (Domain, IO, PrescribedTransport, AdvectionEquation,
-                   ForwardEuler, OutputParameters, VelocityX, VelocityY,
-                   VelocityZ, MeridionalComponent, ZonalComponent, RadialComponent)
+                   ForwardEuler, OutputParameters, XComponent, YComponent,
+                   ZComponent, MeridionalComponent, ZonalComponent,
+                   RadialComponent, DGUpwind)
 from netCDF4 import Dataset
 import pytest
 
@@ -71,25 +72,31 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
     else:
         eqn = AdvectionEquation(domain, V, 'f')
     transport_scheme = ForwardEuler(domain)
-    output = OutputParameters(dirname=dirname, dumpfreq=1, dump_nc=True,
-                              dumplist=['f'], log_level='INFO', checkpoint=False)
+    transport_method = DGUpwind(eqn, 'f')
+    output = OutputParameters(
+        dirname=dirname,
+        dumpfreq=1,
+        dump_nc=True,
+        dumplist=['f'],
+        checkpoint=False
+    )
 
     # Make velocity components for this geometry
     if geometry == "interval":
-        diagnostic_fields = [VelocityX()]
+        diagnostic_fields = [XComponent('u')]
     elif geometry == "vertical_slice":
-        diagnostic_fields = [VelocityX(), VelocityZ()]
+        diagnostic_fields = [XComponent('u'), ZComponent('u')]
     elif geometry == "plane":
-        diagnostic_fields = [VelocityX(), VelocityY()]
+        diagnostic_fields = [XComponent('u'), YComponent('u')]
     elif geometry == "extruded_plane":
-        diagnostic_fields = [VelocityX(), VelocityY(), VelocityZ()]
+        diagnostic_fields = [XComponent('u'), YComponent('u'), ZComponent('u')]
     elif geometry == "spherical_shell":
         diagnostic_fields = [ZonalComponent('u'), MeridionalComponent('u')]
     elif geometry == "extruded_spherical_shell":
         diagnostic_fields = [ZonalComponent('u'), MeridionalComponent('u'), RadialComponent('u')]
 
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-    stepper = PrescribedTransport(eqn, transport_scheme, io)
+    stepper = PrescribedTransport(eqn, transport_scheme, io, transport_method)
 
     # ------------------------------------------------------------------------ #
     # Initialise fields

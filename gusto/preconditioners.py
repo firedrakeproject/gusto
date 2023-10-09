@@ -45,7 +45,7 @@ class VerticalHybridizationPC(PCBase):
         Args:
             pc (:class:`PETSc.PC`): preconditioner object to initialize.
         """
-        from firedrake import (FunctionSpace, Function, Constant,
+        from firedrake import (FunctionSpace, Function, Constant, Cofunction,
                                FiniteElement, TensorProductElement,
                                TrialFunction, TrialFunctions, TestFunction,
                                DirichletBC, interval, MixedElement, BrokenElement)
@@ -104,7 +104,7 @@ class VerticalHybridizationPC(PCBase):
         V_d = FunctionSpace(mesh, broken_elements)
 
         # Set up relevant functions
-        self.broken_solution = Function(V_d)
+        self.broken_solution = Function(V_d.dual())
         self.broken_residual = Function(V_d)
         self.trace_solution = Function(Vv_tr)
         self.unbroken_solution = Function(V)
@@ -175,7 +175,7 @@ class VerticalHybridizationPC(PCBase):
         K = Tensor(Kform)
 
         # Assemble the Schur complement operator and right-hand side
-        self.schur_rhs = Function(Vv_tr)
+        self.schur_rhs = Cofunction(Vv_tr.dual())
         self._assemble_Srhs = OneFormAssembler(
             K * Atilde.inv * AssembledVector(self.broken_residual),
             tensor=self.schur_rhs,
@@ -244,8 +244,8 @@ class VerticalHybridizationPC(PCBase):
         K_1 = Tensor(split_trace_op[(0, id1)])
 
         # Split functions and reconstruct each bit separately
-        split_residual = self.broken_residual.split()
-        split_sol = self.broken_solution.split()
+        split_residual = self.broken_residual.subfunctions
+        split_sol = self.broken_solution.subfunctions
         g = AssembledVector(split_residual[id0])
         f = AssembledVector(split_residual[id1])
         sigma = split_sol[id0]
@@ -316,8 +316,8 @@ class VerticalHybridizationPC(PCBase):
             # Transfer unbroken_rhs into broken_rhs
             # NOTE: Scalar space is already "broken" so no need for
             # any projections
-            unbroken_scalar_data = self.unbroken_residual.split()[self.pidx]
-            broken_scalar_data = self.broken_residual.split()[self.pidx]
+            unbroken_scalar_data = self.unbroken_residual.subfunctions[self.pidx]
+            broken_scalar_data = self.broken_residual.subfunctions[self.pidx]
             unbroken_scalar_data.dat.copy(broken_scalar_data.dat)
 
         with timed_region("VertHybridRHS"):
@@ -328,8 +328,8 @@ class VerticalHybridizationPC(PCBase):
             # basis functions that add together to give unbroken
             # basis functions.
 
-            unbroken_res_hdiv = self.unbroken_residual.split()[self.vidx]
-            broken_res_hdiv = self.broken_residual.split()[self.vidx]
+            unbroken_res_hdiv = self.unbroken_residual.subfunctions[self.vidx]
+            broken_res_hdiv = self.broken_residual.subfunctions[self.vidx]
             broken_res_hdiv.assign(0)
             self.average_kernel.apply(broken_res_hdiv, self.weight, unbroken_res_hdiv)
 
@@ -351,13 +351,13 @@ class VerticalHybridizationPC(PCBase):
 
         with timed_region("VertHybridRecover"):
             # Project the broken solution into non-broken spaces
-            broken_pressure = self.broken_solution.split()[self.pidx]
-            unbroken_pressure = self.unbroken_solution.split()[self.pidx]
+            broken_pressure = self.broken_solution.subfunctions[self.pidx]
+            unbroken_pressure = self.unbroken_solution.subfunctions[self.pidx]
             broken_pressure.dat.copy(unbroken_pressure.dat)
 
             # Compute the hdiv projection of the broken hdiv solution
-            broken_hdiv = self.broken_solution.split()[self.vidx]
-            unbroken_hdiv = self.unbroken_solution.split()[self.vidx]
+            broken_hdiv = self.broken_solution.subfunctions[self.vidx]
+            unbroken_hdiv = self.unbroken_solution.subfunctions[self.vidx]
             unbroken_hdiv.assign(0)
 
             self.average_kernel.apply(unbroken_hdiv, self.weight, broken_hdiv)

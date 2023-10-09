@@ -24,23 +24,27 @@ def set_up_model_objects(mesh, dt, output, stepper_type):
 
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
+    transport_methods = [DGUpwind(eqns, 'u'),
+                         DGUpwind(eqns, 'rho'),
+                         DGUpwind(eqns, 'theta')]
+
     if stepper_type == 'semi_implicit':
         # Set up transport schemes
-        transported_fields = []
-        transported_fields.append(SSPRK3(domain, "u"))
-        transported_fields.append(SSPRK3(domain, "rho"))
-        transported_fields.append(SSPRK3(domain, "theta"))
+        transported_fields = [SSPRK3(domain, "u"),
+                              SSPRK3(domain, "rho"),
+                              SSPRK3(domain, "theta")]
 
         # Set up linear solver
         linear_solver = CompressibleSolver(eqns)
 
         # build time stepper
         stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                          transport_methods,
                                           linear_solver=linear_solver)
 
     elif stepper_type == 'multi_level':
         scheme = AdamsBashforth(domain, order=2)
-        stepper = Timestepper(eqns, scheme, io)
+        stepper = Timestepper(eqns, scheme, io, spatial_methods=transport_methods)
 
     else:
         raise ValueError(f'stepper_type {stepper_type} not recognised')
@@ -96,7 +100,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
 
     # Set up mesh
     nlayers = 5   # horizontal layers
-    columns = 15  # number of columns
+    columns = 5   # number of columns
     L = 3.e5
     m = PeriodicIntervalMesh(columns, L)
     dt = 0.2
@@ -109,12 +113,20 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
     dirname_2 = str(tmpdir)+'/checkpointing_2'
     dirname_3 = str(tmpdir)+'/checkpointing_3'
 
-    output_1 = OutputParameters(dirname=dirname_1, dumpfreq=1,
-                                checkpoint_method=checkpoint_method,
-                                chkptfreq=4, log_level='INFO')
-    output_2 = OutputParameters(dirname=dirname_2, dumpfreq=1,
-                                checkpoint_method=checkpoint_method,
-                                chkptfreq=2, log_level='INFO')
+    output_1 = OutputParameters(
+        dirname=dirname_1,
+        dumpfreq=1,
+        checkpoint=True,
+        checkpoint_method=checkpoint_method,
+        chkptfreq=4,
+    )
+    output_2 = OutputParameters(
+        dirname=dirname_2,
+        dumpfreq=1,
+        checkpoint=True,
+        checkpoint_method=checkpoint_method,
+        chkptfreq=2,
+    )
 
     stepper_1, eqns_1 = set_up_model_objects(mesh, dt, output_1, stepper_type)
     stepper_2, eqns_2 = set_up_model_objects(mesh, dt, output_2, stepper_type)
@@ -140,10 +152,14 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
 
     chkpt_filename = 'chkpt' if checkpoint_method == 'dumbcheckpoint' else 'chkpt.h5'
     chkpt_2_path = path.join(stepper_2.io.dumpdir, chkpt_filename)
-    output_3 = OutputParameters(dirname=dirname_3, dumpfreq=1,
-                                chkptfreq=2, log_level='INFO',
-                                checkpoint_method=checkpoint_method,
-                                checkpoint_pickup_filename=chkpt_2_path)
+    output_3 = OutputParameters(
+        dirname=dirname_3,
+        dumpfreq=1,
+        chkptfreq=2,
+        checkpoint=True,
+        checkpoint_method=checkpoint_method,
+        checkpoint_pickup_filename=chkpt_2_path,
+    )
 
     if checkpoint_method == 'checkpointfile':
         mesh = pick_up_mesh(output_3, mesh_name)
@@ -163,27 +179,31 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
             f'Checkpointed and picked up field {field_name} is not equal'
 
     # ------------------------------------------------------------------------ #
-    # Pick up from checkpoint and run *same* timestepper for 2 more time steps
+    # Run *new* timestepper for 2 time steps
     # ------------------------------------------------------------------------ #
 
+    output_3 = OutputParameters(
+        dirname=dirname_3,
+        dumpfreq=1,
+        chkptfreq=2,
+        checkpoint=True,
+        checkpoint_method=checkpoint_method,
+        checkpoint_pickup_filename=chkpt_2_path
+    )
+    if checkpoint_method == 'checkpointfile':
+        mesh = pick_up_mesh(output_3, mesh_name)
+    stepper_3, _ = set_up_model_objects(mesh, dt, output_3, stepper_type)
+    stepper_3.run(t=2*dt, tmax=4*dt, pick_up=True)
+
+    # ------------------------------------------------------------------------ #
+    # Pick up from checkpoint and run *same* timestepper for 2 more time steps
+    # ------------------------------------------------------------------------ #
+    # Done after stepper_3, as we don't want to checkpoint again
     # Wipe fields from second time stepper
     if checkpoint_method == 'dumbcheckpoint':
         # Get an error when picking up fields with the same stepper with new method
         initialise_fields(eqns_2, stepper_2)
         stepper_2.run(t=2*dt, tmax=4*dt, pick_up=True)
-
-    # ------------------------------------------------------------------------ #
-    # Run *new* timestepper for 2 time steps
-    # ------------------------------------------------------------------------ #
-
-    output_3 = OutputParameters(dirname=dirname_3, dumpfreq=1,
-                                chkptfreq=2, log_level='INFO',
-                                checkpoint_method=checkpoint_method,
-                                checkpoint_pickup_filename=chkpt_2_path)
-    if checkpoint_method == 'checkpointfile':
-        mesh = pick_up_mesh(output_3, mesh_name)
-    stepper_3, _ = set_up_model_objects(mesh, dt, output_3, stepper_type)
-    stepper_3.run(t=2*dt, tmax=4*dt, pick_up=True)
 
     # ------------------------------------------------------------------------ #
     # Compare fields against saved values for run without checkpointing

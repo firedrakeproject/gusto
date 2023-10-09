@@ -6,7 +6,7 @@ checks the result against a known checkpointed answer.
 from os.path import join, abspath, dirname
 from gusto import *
 from firedrake import (PeriodicSquareMesh, SpatialCoordinate, Constant, sin,
-                       cos, pi)
+                       cos, pi, as_vector)
 import numpy as np
 
 
@@ -33,13 +33,16 @@ def run_linear_sw_wave(tmpdir):
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # I/O
-    output = OutputParameters(dirname=str(tmpdir)+"/linear_sw_wave",
-                              dumpfreq=1,
-                              log_level='INFO')
+    output = OutputParameters(
+        dirname=str(tmpdir)+"/linear_sw_wave",
+        dumpfreq=1,
+        checkpoint=True
+    )
     io = IO(domain, output)
+    transport_methods = [DefaultTransport(eqns, "D")]
 
     # Timestepper
-    stepper = Timestepper(eqns, RK4(domain), io)
+    stepper = Timestepper(eqns, RK4(domain), io, transport_methods)
 
     # ---------------------------------------------------------------------- #
     # Initial conditions
@@ -68,7 +71,8 @@ def run_linear_sw_wave(tmpdir):
     checkpoint_name = 'linear_sw_wave_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
     check_output = OutputParameters(dirname=tmpdir+"/linear_sw_wave",
-                                    checkpoint_pickup_filename=new_path)
+                                    checkpoint_pickup_filename=new_path,
+                                    checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
     check_domain = Domain(check_mesh, dt, 'BDM', 1)
     check_eqn = ShallowWaterEquations(check_domain, parameters, fexpr=fexpr)

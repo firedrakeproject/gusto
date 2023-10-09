@@ -50,12 +50,13 @@ eqns = CompressibleEulerEquations(domain, params,
                                   no_normal_flow_bc_ids=[1, 2])
 
 # I/O
-output = OutputParameters(dirname=dirname,
-                          dumpfreq=int(tmax / (5*dt)),
-                          dumplist=['rho'],
-                          dump_vtus=False,
-                          dump_nc=True,
-                          log_level='INFO')
+output = OutputParameters(
+    dirname=dirname,
+    dumpfreq=int(tmax / (5*dt)),
+    dumplist=['rho'],
+    dump_vtus=False,
+    dump_nc=True,
+)
 diagnostic_fields = [Perturbation('theta')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
@@ -78,11 +79,14 @@ transported_fields = [SSPRK3(domain, "rho", options=rho_opts),
                       SSPRK3(domain, "theta", options=theta_opts),
                       SSPRK3(domain, "u", options=u_opts)]
 
+transport_methods = [DGUpwind(eqns, field) for field in ["u", "rho", "theta"]]
+
 # Linear solver
 linear_solver = CompressibleSolver(eqns)
 
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  transport_methods,
                                   linear_solver=linear_solver)
 
 # ---------------------------------------------------------------------------- #
