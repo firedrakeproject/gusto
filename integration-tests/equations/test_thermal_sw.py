@@ -80,7 +80,7 @@ def set_up_initial_conditions(domain, equation, stepper):
 
     bexpr = g * (1 - theta)
 
-    u0.project(as_vector(uexpr))
+    u0.project(uexpr)
     D0.interpolate(Dexpr)
     b0.interpolate(bexpr)
 

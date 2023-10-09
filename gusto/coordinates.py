@@ -189,13 +189,16 @@ class Coordinates(object):
         # Work out digits to round to, based on number of points and range of coords
         num_points = np.size(coords_X)
         data_range = np.max(coords_X) - np.min(coords_X)
-        digits = int(np.floor(-np.log10(data_range / num_points)) + 3)
-        coords_X = coords_X.round(digits)
+        if data_range > 1e-16:
+            digits = int(np.floor(-np.log10(data_range / num_points)) + 3)
+            coords_X = coords_X.round(digits)
 
         if data_is_3d:
             data_range = np.max(coords_Y) - np.min(coords_Y)
-            digits = int(np.floor(-np.log10(data_range / num_points)) + 3)
-            coords_Y = coords_Y.round(digits)
+            if data_range > 1e-16:
+                # Only round if there is already some range
+                digits = int(np.floor(-np.log10(data_range / num_points)) + 3)
+                coords_Y = coords_Y.round(digits)
 
         # -------------------------------------------------------------------- #
         # Make data frame
