@@ -1201,7 +1201,9 @@ class PotentialEnergy(ThermodynamicDiagnostic):
         """
         x = SpatialCoordinate(domain.mesh)
         self._setup_thermodynamics(domain, state_fields)
-        self.expr = self.rho_averaged * (1 + self.r_t) * self.parameters.g * dot(x, domain.k)
+        z = Function(self.rho_averaged.function_space())
+        z.interpolate(dot(x, domain.k))
+        self.expr = self.rho_averaged * (1 + self.r_t) * self.parameters.g * z
         super().setup(domain, state_fields, space=domain.spaces("DG"))
 
 
