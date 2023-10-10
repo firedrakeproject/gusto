@@ -1019,7 +1019,7 @@ class SteadyStateError(Difference):
         self.field_name1 = name
         self.field_name2 = name+'_init'
         DiagnosticField.__init__(self, method='assign', required_fields=(name, self.field_name2))
-            
+
     def setup(self, domain, state_fields):
         """
         Sets up the :class:`Function` for the diagnostic field.
@@ -1034,7 +1034,7 @@ class SteadyStateError(Difference):
             field2 = state_fields(self.field_name2, space=field1.function_space(),
                                   pick_up=True, dump=False)
             self.init_field_set = False
-            # Attach state fields to self so that we can pick it up in compute    
+            # Attach state fields to self so that we can pick it up in compute
             self.state_fields = state_fields
         else:
             self.init_field_set = True
@@ -1089,7 +1089,6 @@ class Perturbation(Difference):
                              pick_up=True, dump=False)
 
         super().setup(domain, state_fields)
-
 
 
 # TODO: unify thermodynamic diagnostics
@@ -1214,7 +1213,10 @@ class PotentialEnergy(ThermodynamicDiagnostic):
             state_fields (:class:`StateFields`): the model's field container.
         """
         x = SpatialCoordinate(domain.mesh)
-        self.expr = self.rho_averaged * (1 + self.r_t) * self.parameters.g * dot(x, domain.k)
+        self._setup_thermodynamics(domain, state_fields)
+        z = Function(self.rho_averaged.function_space())
+        z.interpolate(dot(x, domain.k))
+        self.expr = self.rho_averaged * (1 + self.r_t) * self.parameters.g * z
         super().setup(domain, state_fields, space=domain.spaces("DG"))
 
 
@@ -1257,6 +1259,7 @@ class ThermodynamicKineticEnergy(ThermodynamicDiagnostic):
             state_fields (:class:`StateFields`): the model's field container.
         """
         u = state_fields('u')
+        self._setup_thermodynamics(domain, state_fields)
         self.expr = 0.5 * self.rho_averaged * (1 + self.r_t) * dot(u, u)
         super().setup(domain, state_fields, space=domain.spaces("DG"))
 
