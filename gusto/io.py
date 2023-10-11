@@ -630,6 +630,10 @@ class IO(object):
             self.output.checkpoint_pickup_filename = None
         else:
             raise ValueError("Must set checkpoint True if picking up")
+        # Prevent any steady-state diagnostics overwriting their original fields
+        for diagnostic_field in self.diagnostic_fields:
+            if hasattr(diagnostic_field, "init_field_set"):
+                diagnostic_field.init_field_set = True
 
         return t, reference_profiles, step, initial_steps
 

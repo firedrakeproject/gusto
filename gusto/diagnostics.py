@@ -1033,18 +1033,15 @@ class SteadyStateError(Difference):
             field1 = state_fields(self.field_name1)
             field2 = state_fields(self.field_name2, space=field1.function_space(),
                                   pick_up=True, dump=False)
-            
-            self.init_field_set = False
-
-            #HACK Defo not the best way to do this perhaps we want a flag for checkpoint or prognostic
-            if not self.name in ['rho', 'u', 'theta']:
-                self.init_field_set = True
-
             # Attach state fields to self so that we can pick it up in compute
             self.state_fields = state_fields
-            field2.assign(field1)
-
+            self.init_field_set = False
         else:
+            field1 = state_fields(self.field_name1)
+            field2 = state_fields(self.field_name2, space=field1.function_space(),
+                                  pick_up=True, dump=False)
+            field2.assign(field1)
+            self.state_fields = state_fields
             self.init_field_set = True
 
         super().setup(domain, state_fields)
