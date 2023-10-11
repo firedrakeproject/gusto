@@ -27,10 +27,10 @@ if '--running-tests' in sys.argv:
     tmax = dt
     dumpfreq = 1
 else:
-    nlayers = 5
-    columns = 30
-    tmax = 10*dt
-    dumpfreq = 1
+    nlayers = 10
+    columns = 150
+    tmax = 3600
+    dumpfreq = int(tmax / (2*dt))
 
 # ---------------------------------------------------------------------------- #
 # Set up model objects
@@ -59,7 +59,9 @@ if COMM_WORLD.size == 1:
         dirname=dirname,
         dumpfreq=dumpfreq,
         dump_nc=True,
-        dump_vtus=False
+        dump_vtus=True,
+        dumplist=['u'],
+        point_data=[('theta_perturbation', points)]
     )
 else:
     logger.warning(
@@ -71,9 +73,11 @@ else:
         dumpfreq=dumpfreq,
         dump_nc=True,
         dump_vtus=False
-          )
+    )
 
-diagnostic_fields = [CourantNumber(), Pressure(eqns), SteadyStateError('Pressure_Vt')]
+diagnostic_fields = [CourantNumber(), Gradient('u'), Perturbation('theta'),
+                     Gradient('theta_perturbation'), Perturbation('rho'),
+                     RichardsonNumber('theta', parameters.g/Tsurf), Gradient('theta')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
