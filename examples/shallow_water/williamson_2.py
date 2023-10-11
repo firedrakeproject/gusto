@@ -62,7 +62,8 @@ for ref_level, dt in ref_dt.items():
         dump_nc=True,
     )
 
-    diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
+    diagnostic_fields = [RelativeVorticity(), SteadyStateError('RelativeVorticity'), 
+                         PotentialVorticity(),
                          ShallowWaterKineticEnergy(),
                          ShallowWaterPotentialEnergy(parameters),
                          ShallowWaterPotentialEnstrophy(),
