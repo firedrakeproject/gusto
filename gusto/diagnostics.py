@@ -1032,14 +1032,18 @@ class SteadyStateError(Difference):
         if not hasattr(state_fields, self.field_name2):
             field1 = state_fields(self.field_name1)
             field2 = state_fields(self.field_name2, space=field1.function_space(),
-                                  pick_up=True, dump=False)
+                                  pick_up=True, dump=False)         
             # Attach state fields to self so that we can pick it up in compute
             self.state_fields = state_fields
+            # The initial value for fields may not have alreay been set yet so we
+            # postpone setting it untill the compute method is called
             self.init_field_set = False
-        else:
+        else: 
             field1 = state_fields(self.field_name1)
             field2 = state_fields(self.field_name2, space=field1.function_space(),
                                   pick_up=True, dump=False)
+            # By default set this new field to the current value
+            # This may be overwritten if picking up from a checkpoint 
             field2.assign(field1)
             self.state_fields = state_fields
             self.init_field_set = True
@@ -1047,6 +1051,8 @@ class SteadyStateError(Difference):
         super().setup(domain, state_fields)
 
     def compute(self):
+        # The first time the compute method is called we set the initial field.
+        # We do not want to do this is picking up from a checkpoint
         if not self.init_field_set:
             # Set initial field
             full_field = self.state_fields(self.field_name1)
