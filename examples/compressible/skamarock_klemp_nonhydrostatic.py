@@ -44,24 +44,23 @@ domain = Domain(mesh, dt, "CG", 1)
 # Equation
 Tsurf = 300.
 parameters = CompressibleParameters()
-eqns = CompressibleEulerEquations(domain, parameters, u_transport_option='vector_advection_form')
+eqns = CompressibleEulerEquations(domain, parameters)
 print(f'Number of DOFs = {eqns.X.function_space().dim()}')
 
 # I/O
 points_x = np.linspace(0., L, 100)
 points_z = [H/2.]
 points = np.array([p for p in itertools.product(points_x, points_z)])
-dirname = 'testing'
+dirname = 'skamarock_klemp_nonlinear'
 
 # Dumping point data using legacy PointDataOutput is not supported in parallel
 if COMM_WORLD.size == 1:
     output = OutputParameters(
         dirname=dirname,
         dumpfreq=dumpfreq,
-        dump_nc=True,
-        dump_vtus=True,
+        pddumpfreq=dumpfreq,
         dumplist=['u'],
-        point_data=[('theta_perturbation', points)]
+        point_data=[('theta_perturbation', points)],
     )
 else:
     logger.warning(
@@ -71,8 +70,8 @@ else:
     output = OutputParameters(
         dirname=dirname,
         dumpfreq=dumpfreq,
-        dump_nc=True,
-        dump_vtus=False
+        pddumpfreq=dumpfreq,
+        dumplist=['u'],
     )
 
 diagnostic_fields = [CourantNumber(), Gradient('u'), Perturbation('theta'),
