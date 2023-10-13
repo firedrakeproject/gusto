@@ -1035,7 +1035,7 @@ class SteadyStateError(Difference):
                                   pick_up=True, dump=False)         
             # Attach state fields to self so that we can pick it up in compute
             self.state_fields = state_fields
-            # The initial value for fields may not have alreay been set yet so we
+            # The initial value for fields may not have already been set yet so we
             # postpone setting it until the compute method is called
             self.init_field_set = False
         else: 
