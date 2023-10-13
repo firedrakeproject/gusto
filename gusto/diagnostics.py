@@ -1052,7 +1052,7 @@ class SteadyStateError(Difference):
 
     def compute(self):
         # The first time the compute method is called we set the initial field.
-        # We do not want to do this is picking up from a checkpoint
+        # We do not want to do this if picking up from a checkpoint
         if not self.init_field_set:
             # Set initial field
             full_field = self.state_fields(self.field_name1)
