@@ -239,24 +239,6 @@ class ImplicitMultistage(TimeDiscretisation):
     A class for implementing general diagonally implicit multistage (Runge-Kutta)
     methods based on its Butcher tableau.
 
-    A Butcher tableau is formed in the following way for a s-th order
-    diagonally implicit scheme:                                               \n
-    c_0 | a_00 a_01  .    a_0s                                                \n
-    c_1 | a_10 a_11       a_1s                                                \n
-     .  |   .   .    .    .                                                   \n
-     .  |   .   .    .    .                                                   \n
-    c_s | a_s0 a_s1  .    a_ss                                                \n
-     -------------------------                                                \n
-        |  b_1  b_2  ...  b_s                                                 \n
-    
-    The gradient function has no time-dependence, so c elements are not needed.
-    A square 'butcher_matrix' is defined in each class that uses
-    the ImplicitMultiStage structure,                                         \n
-    [a_00   0   .       0  ]                                                  \n
-    [a_10 a_11  .       0  ]                                                  \n
-    [  .    .   .       .  ]                                                  \n
-    [ b_0  b_1  .       b_s]                                                  \n
-
     Unlike the explicit method, all upper diagonal a_ij elements are non-zero for implicit methods.
 
     There are three steps to move from the current solution, y^n, to the new one, y^{n+1}
@@ -279,6 +261,11 @@ class ImplicitMultistage(TimeDiscretisation):
                 mesh and the compatible function spaces.
             butcher_matrix (numpy array): A matrix containing the coefficients of
                 a butcher tableau defining a given Runge Kutta time discretisation.
+                The matrix is of the form:
+                [a_00   0   .       0  ]
+                [a_10 a_11  .       0  ]
+                [  .    .   .       .  ]
+                [ b_0  b_1  .       b_s]
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
@@ -519,6 +506,11 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                 mesh and the compatible function spaces.
             butcher_matrix (numpy array): A matrix containing the coefficients of
                 a butcher tableau defining a given Runge Kutta time discretisation.
+                The matrix is of the form:
+                [a_10   0   .       0  ]
+                [a_20 a_21  .       0  ]
+                [  .    .   .       .  ]
+                [ b_0  b_1  .       b_s]
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             subcycles (int, optional): the number of sub-steps to perform.
