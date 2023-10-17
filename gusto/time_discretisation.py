@@ -1350,8 +1350,8 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
 class SDC(object, metaclass=ABCMeta):
 
-    def __init__(self, domain, M, maxk):
-
+    def __init__(self, domain, M, maxk, field_name=None):
+        self.field_name=field_name
         self.domain = domain
         self.dt = domain.dt
         self.M = M
@@ -1482,9 +1482,7 @@ class FE_SDC(SDC):
 
     def setup(self, equation):
 
-        residual = equation.residual
-
-        self.base = ForwardEuler(self.domain)
+        self.base = ForwardEuler(self.domain, field_name=self.field_name)
         self.base.setup(equation)
         self.residual = self.base.residual
 
