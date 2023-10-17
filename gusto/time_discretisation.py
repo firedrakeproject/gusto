@@ -1281,7 +1281,7 @@ class Leapfrog(MultilevelTimeDiscretisation):
 
 class AdamsBashforth(MultilevelTimeDiscretisation):
     """
-    Implements the explicit multistep Adams-Bashforth timestepping 
+    Implements the explicit multistep Adams-Bashforth timestepping
     method of general order up to 5.
 
     The general AB timestepping method for operator F is written as:                                      \n
@@ -1412,7 +1412,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
 
 class AdamsMoulton(MultilevelTimeDiscretisation):
     """
-    Implements the implicit multistep Adams-Moulton 
+    Implements the implicit multistep Adams-Moulton
     timestepping method of general order up to 5
 
     The general AM timestepping method for operator F is written as                      \n
