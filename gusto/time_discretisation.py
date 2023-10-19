@@ -7,7 +7,7 @@ operator F.
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, DirichletBC, split, Constant)
+                       NonlinearVariationalSolver, DirichletBC, Constant)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
@@ -21,10 +21,10 @@ from gusto.wrappers import *
 import numpy as np
 
 
-__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "ImplicitMultistage", "IMEXMultistage",
+__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "IMEXMultistage",
            "SSPRK3", "RK4", "Heun", "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2",
-           "Leapfrog", "AdamsMoulton", "AdamsBashforth", "ImplicitMidpoint", "QinZhang", "IMEX_Euler",
-           "ARS3","ARK2", "Trap2", "SSP3"]
+           "Leapfrog", "AdamsMoulton", "AdamsBashforth", "IMEX_Euler",
+           "ARS3", "ARK2", "Trap2", "SSP3"]
 
 
 def wrapper_apply(original_apply):
@@ -234,20 +234,78 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """
         pass
 
-class IMEXMultistage(TimeDiscretisation):
 
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, 
-                options=None, butcher_imp=None, butcher_exp=None):
+class IMEXMultistage(TimeDiscretisation):
+    """
+    A class for implementing general IMEX multistage (Runge-Kutta)
+    methods based on two Butcher tableaus, to solve                           \n
+
+    ∂y/∂t = F(y) + S(y)                                                       \n
+
+    Where F are implicit fast terms, and S are explicit slow terms.           \n
+
+    There are three steps to move from the current solution, y^n, to the new one, y^{n+1}
+
+    For each i = 1, s  in an s stage method
+    we compute the intermediate solutions:                                    \n
+    y_i = y^n + dt*(a_i1*F(y_1) + a_i2*F(y_2)+ ... + a_ii*F(y_i))            \n
+              + dt*(d_i1*S(y_1) + d_i2*S(y_2)+ ... + d_{i,i-1}*S(y_{i-1}))
+
+    At the last stage, compute the new solution by:                           \n
+    y^{n+1} = y^n + dt*(b_1*F(y_1) + b_2*F(y_2) + .... + b_s*F(y_s))          \n
+                  + dt*(e_1*S(y_1) + e_2*S(y_2) + .... + e_s*S(y_s))          \n
+
+    """
+    # ---------------------------------------------------------------------------
+    # Butcher tableaus for a s-th order
+    # diagonally implicit scheme (left) and explicit scheme (right):
+    #  c_0 | a_00  0    .     0        f_0 |   0   0    .     0
+    #  c_1 | a_10 a_11  .     0        f_1 | d_10  0    .     0
+    #   .  |   .   .    .     .         .  |   .   .    .     .
+    #   .  |   .   .    .     .         .  |   .   .    .     .
+    #  c_s | a_s0 a_s1  .    a_ss      f_s | d_s0 d_s1  .     0
+    #   -------------------------       -------------------------
+    #      |  b_1  b_2  ...  b_s           |  b_1  b_2  ...  b_s
+    #
+    #
+    # The corresponding square 'butcher_imp' and 'butcher_exp' matrices are:
+    #
+    #  [a_00   0   0   .   0  ]        [  0    0   0   .   0  ]
+    #  [a_10 a_11  0   .   0  ]        [d_10   0   0   .   0  ]
+    #  [a_20 a_21 a_22 .   0  ]        [d_20  d_21 0   .   0  ]
+    #  [  .    .   .   .   .  ]        [  .    .   .   .   .  ]
+    #  [ b_0  b_1  .       b_s]        [ e_0  e_1  .   .   e_s]
+    # ---------------------------------------------------------------------------
+
+    def __init__(self, domain, butcher_imp, butcher_exp, field_name=None,
+                 solver_parameters=None, limiter=None, options=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            butcher_imp (numpy array): A matrix containing the coefficients of
+                a butcher tableau defining a given implicit Runge Kutta time discretisation.
+            butcher_exp (numpy array): A matrix containing the coefficients of
+                a butcher tableau defining a given explicit Runge Kutta time discretisation.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycles (int, optional): the number of sub-steps to perform.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
         super().__init__(domain, field_name=field_name,
-                            solver_parameters=solver_parameters,
-                            limiter=limiter, options=options)
-        if butcher_imp is not None:
-            self.butcher_imp = butcher_imp
-            self.nStages = int(np.shape(self.butcher_imp)[1])
-        
-        if butcher_exp is not None:
-            self.butcher_exp = butcher_exp
-            self.nStages = int(np.shape(self.butcher_exp)[1])
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+        self.butcher_imp = butcher_imp
+        self.butcher_exp = butcher_exp
+        self.nStages = int(np.shape(self.butcher_imp)[1])
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -269,40 +327,26 @@ class IMEXMultistage(TimeDiscretisation):
             lambda t: t.has_label(transport),
             map_if_true=lambda t: explicit(t))
 
-        self.nStages = int(np.shape(self.butcher_imp)[1])
         self.xs = [Function(self.fs) for i in range(self.nStages)]
 
-    @property
+    @cached_property
     def lhs(self):
-        l = self.residual.label_map(
-            lambda t: any(t.has_label(implicit, time_derivative)),
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
-            map_if_false=drop)
-        l = l.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=lambda t: self.dt*t)
-        return l.form
+        """Set up the discretisation's left hand side (the time derivative)."""
+        return super(IMEXMultistage, self).lhs
 
-    @property
+    @cached_property
     def rhs(self):
-        r = self.residual.label_map(
-            lambda t: any(t.has_label(explicit, time_derivative)),
-            map_if_true=replace_subject(self.x1, old_idx=self.idx),
-            map_if_false=drop)
-        r = r.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=lambda t: -self.dt*t)
+        """Set up the discretisation's right hand side (the time derivative)."""
+        return super(IMEXMultistage, self).rhs
 
-        return r.form
-
-    def resval(self, stage):
+    def res(self, stage):
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=drop)
-        res = mass_form.label_map(all_terms,
-                                  map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        res -= mass_form.label_map(all_terms,
-                                    map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual -= mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
         for i in range(stage):
             r_exp = self.residual.label_map(
                 lambda t: t.has_label(explicit),
@@ -318,27 +362,26 @@ class IMEXMultistage(TimeDiscretisation):
             r_imp = r_imp.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_false=lambda t: Constant(self.butcher_imp[stage, i])*self.dt*t)
-            res += r_imp
-            res +=r_exp
+            residual += r_imp
+            residual += r_exp
         r_imp = self.residual.label_map(
-                lambda t: t.has_label(implicit),
-                map_if_true=replace_subject(self.x_out, old_idx=self.idx),
-                map_if_false=drop)
+            lambda t: t.has_label(implicit),
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+            map_if_false=drop)
         r_imp = r_imp.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=lambda t: Constant(self.butcher_imp[stage, stage])*self.dt*t)
-        res += r_imp
-        return res.form
-    
+        residual += r_imp
+        return residual.form
+
     @property
-    def resfin(self):
-        mass_form = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=drop)
-        res = mass_form.label_map(all_terms,
-                                  map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        res -= mass_form.label_map(all_terms,
-                                    map_if_true=replace_subject(self.x1, old_idx=self.idx))
+    def final_res(self):
+        mass_form = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                            map_if_false=drop)
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual -= mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
         for i in range(self.nStages):
             r_exp = self.residual.label_map(
                 lambda t: t.has_label(explicit),
@@ -354,160 +397,38 @@ class IMEXMultistage(TimeDiscretisation):
             r_imp = r_imp.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_false=lambda t: Constant(self.butcher_imp[self.nStages, i])*self.dt*t)
-            res += r_imp
-            res +=r_exp
-        return res.form
+            residual += r_imp
+            residual += r_exp
+        return residual.form
 
-    def solver(self,stage):
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.resval(stage), self.x_out, bcs=self.bcs)
-        solver_name = self.field_name+self.__class__.__name__+"%s"%(stage)
-        return NonlinearVariationalSolver(problem, options_prefix=solver_name)
-    
     @cached_property
     def solvers(self):
         solvers = []
         for stage in range(self.nStages):
-        # setup solver using lhs and rhs defined in derived class
-            problem = NonlinearVariationalProblem(self.resval(stage), self.x_out, bcs=self.bcs)
-            solver_name = self.field_name+self.__class__.__name__+"%s"%(stage)
+            # setup solver using residual defined in derived class
+            problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
+            solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
             solvers.append(NonlinearVariationalSolver(problem, options_prefix=solver_name))
         return solvers
-    
+
     @cached_property
-    def solver_fin(self):
+    def final_solver(self):
         # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.resfin, self.x_out, bcs=self.bcs)
+        problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, options_prefix=solver_name)
-
 
     def apply(self, x_out, x_in):
         self.x1.assign(x_in)
         solver_list = self.solvers
-        
+
         for stage in range(self.nStages):
-            solver = solver_list[stage]
-            solver.solve()
+            self.solver = solver_list[stage]
+            self.solver.solve()
             self.xs[stage].assign(self.x_out)
 
-        self.solver_fin.solve()
+        self.final_solver.solve()
         x_out.assign(self.x_out)
-
-
-class ImplicitMultistage(TimeDiscretisation):
-    """
-    A class for implementing general diagonally implicit multistage (Runge-Kutta)
-    methods based on its Butcher tableau.
-
-    A Butcher tableau is formed in the following way for a s-th order
-    diagonally implicit scheme:
-
-    c_0 | a_00 a_01  .    a_0s
-    c_1 | a_10 a_11       a_1s
-     .  |   .   .    .    .
-     .  |   .   .    .    .
-    c_s | a_s0 a_s1  .    a_ss
-     -------------------------
-        |  b_1  b_2  ...  b_s
-
-    The gradient function has no time-dependence, so c elements are not needed.
-    A square 'butcher_matrix' is defined in each class that uses
-    the ImplicitMultiStage structure,
-
-    [a_00   0   .       0  ]
-    [a_10 a_11  .       0  ]
-    [  .    .   .       .  ]
-    [ b_0  b_1  .       b_s]
-
-    Unlike the explicit method, all upper diagonal a_ij elements are non-zero for implicit methods.
-
-    There are three steps to move from the current solution, y^n, to the new one, y^{n+1}
-
-    For an s stage method,
-      At iteration i (from 0 to s-1)
-        An intermediate location is computed as y_i = y^n + sum{over j less than or equal to i} (dt*a_ij*k_i)
-        Compute the gradient at the intermediate location, k_i = F(y_i)
-
-    At the last stage, compute the new solution by:
-    y^{n+1} = y^n + sum_{j from 0 to s} (dt*b_i*k_i)
-
-    """
-
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
-        super().__init__(domain, field_name=field_name,
-                         solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
-        if butcher_matrix is not None:
-            self.butcher_matrix = butcher_matrix
-            self.nStages = int(np.shape(self.butcher_matrix)[1])
-
-    def setup(self, equation, apply_bcs=True, *active_labels):
-        """
-        Set up the time discretisation based on the equation.
-
-        Args:
-            equation (:class:`PrognosticEquation`): the model's equation.
-            *active_labels (:class:`Label`): labels indicating which terms of
-                the equation to include.
-        """
-
-        super().setup(equation, apply_bcs, *active_labels)
-
-        self.k = [Function(self.fs) for i in range(self.nStages)]
-
-    def lhs(self):
-        return super().lhs
-
-    def rhs(self):
-        return super().rhs
-
-    def solvers(self, stage):
-        residual = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_true=drop,
-            map_if_false=replace_subject(self.xnph, self.idx),
-        )
-        mass_form = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=drop)
-        residual += mass_form.label_map(all_terms,
-                                        replace_subject(self.x_out, self.idx))
-
-        problem = NonlinearVariationalProblem(residual.form, self.x_out, bcs=self.bcs)
-
-        solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
-                                          options_prefix=solver_name)
-
-    def solve_stage(self, x0, stage):
-        self.x1.assign(x0)
-        for i in range(stage):
-            self.x1.assign(self.x1 + self.butcher_matrix[stage, i]*self.dt*self.k[i])
-
-        if self.limiter is not None:
-            self.limiter.apply(self.x1)
-
-        if self.idx is None and len(self.fs) > 1:
-            self.xnph = tuple([self.dt*self.butcher_matrix[stage, stage]*a + b for a, b in zip(split(self.x_out), split(self.x1))])
-        else:
-            self.xnph = self.x1 + self.butcher_matrix[stage, stage]*self.dt*self.x_out
-
-        self.solvers(stage).solve()
-
-        self.k[stage].assign(self.x_out)
-
-    def apply(self, x_out, x_in):
-
-        for i in range(self.nStages):
-            self.solve_stage(x_in, i)
-
-        x_out.assign(x_in)
-        for i in range(self.nStages):
-            x_out.assign(x_out + self.butcher_matrix[self.nStages, i]*self.dt*self.k[i])
-
-        if self.limiter is not None:
-            self.limiter.apply(x_out)
 
 
 class ExplicitTimeDiscretisation(TimeDiscretisation):
@@ -1621,145 +1542,194 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         x_out.assign(self.x_out)
 
 
-class ImplicitMidpoint(ImplicitMultistage):
-    u"""
-    Implements the Implicit Midpoint method as a 1-stage Runge Kutta method.
-
-    The method, for solving
-    ∂y/∂t = F(y), can be written as:
-
-    k0 = F[y^n + 0.5*dt*k0]
-    y^(n+1) = y^n + dt*k0
-    """
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
-        super().__init__(domain, field_name,
-                         solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
-        self.butcher_matrix = np.array([[0.5], [1.]])
-        self.nStages = int(np.shape(self.butcher_matrix)[1])
-
-
-class QinZhang(ImplicitMultistage):
-    u"""
-    Implements Qin and Zhang's two-stage, 2nd order, implicit Runge–Kutta method.
-
-    The method, for solving
-    ∂y/∂t = F(y), can be written as:
-
-    k0 = F[y^n + 0.25*dt*k0]
-    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]
-    y^(n+1) = y^n + 0.5*dt*(k0 + k1)
-    """
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
-        super().__init__(domain, field_name,
-                         solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
-        self.butcher_matrix = np.array([[0.25, 0], [0.5, 0.25], [0.5, 0.5]])
-        self.nStages = int(np.shape(self.butcher_matrix)[1])
-
 class IMEX_Euler(IMEXMultistage):
     u"""
-    Implements Qin and Zhang's two-stage, 2nd order, implicit Runge–Kutta method.
+    Implements IMEX Euler one-stage method.
 
-    The method, for solving
-    ∂y/∂t = F(y), can be written as:
+    The method, for solving                                                    \n
+    ∂y/∂t = F(y) + S(y), can be written as:                                    \n
 
-    k0 = F[y^n + 0.25*dt*k0]
-    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]
-    y^(n+1) = y^n + 0.5*dt*(k0 + k1)
+    y_0 = y^n                                                                  \n
+    y_1 = y^n + dt*F[y_1] + dt*S[y_0]                                          \n
+    y^(n+1) = y^n + dt*F[y_1] + dt*S[y_0]                                      \n
     """
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_imp=None, butcher_exp=None):
-        super().__init__(domain, field_name,
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
+        butcher_imp = np.array([[0., 0.], [0., 1.], [0., 1.]])
+        butcher_exp = np.array([[0., 0.], [1., 0.], [1., 0.]])
+        super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        self.butcher_imp = np.array([[0., 0.], [0., 1.], [0., 1.]])
-        self.butcher_exp = np.array([[0., 0.], [1., 0.], [1., 0.]])
-        self.nStages = int(np.shape(self.butcher_imp)[1])
+
 
 class ARS3(IMEXMultistage):
     u"""
-    Implements Qin and Zhang's two-stage, 2nd order, implicit Runge–Kutta method.
+    Implements ARS3(2,3,3) two-stage IMEX Runge–Kutta method
+    from RK IMEX for HEVI (Weller et al 2013).
+    Where g = (3 + sqrt(3))/6.
 
-    The method, for solving
-    ∂y/∂t = F(y), can be written as:
+    The method, for solving                                                    \n
+    ∂y/∂t = F(y) + S(y), can be written as:                                    \n
 
-    k0 = F[y^n + 0.25*dt*k0]
-    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]
-    y^(n+1) = y^n + 0.5*dt*(k0 + k1)
+    y_0 = y^n                                                                  \n
+    y_1 = y^n + dt*g*F[y_1] + dt*g*S[y_0]                                      \n
+    y_2 = y^n + dt*((1-2g)*F[y_1]+g*F[y_2])                                    \n
+              + dt*((g-1)*S[y_0]+2(g-1)*S[y_1])                                \n
+    y^(n+1) = y^n + dt*(g*F[y_1]+(1-g)*F[y_2])                                 \n
+                  + dt*(0.5*S[y_1]+0.5*S[y_2])                                 \n
     """
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_imp=None, butcher_exp=None):
-        super().__init__(domain, field_name,
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
+        g = (3. + np.sqrt(3.))/6.
+        butcher_imp = np.array([[0., 0., 0.], [0., g, 0.], [0., 1-2.*g, g], [0., 0.5, 0.5]])
+        butcher_exp = np.array([[0., 0., 0.], [g, 0., 0.], [g-1., 2.*(1.-g), 0.], [0., 0.5, 0.5]])
+
+        super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        # ARS3
-        g = (3. + np.sqrt(3.))/6.
 
-        self.butcher_imp = np.array([[0., 0., 0.], [0., g, 0.], [0., 1-2.*g, g], [0., 0.5, 0.5]])
-        self.butcher_exp = np.array([[0., 0., 0.], [g, 0., 0.], [g-1., 2.*(1.-g), 0.], [0., 0.5, 0.5]])
-
-        self.nStages = int(np.shape(self.butcher_imp)[1])
 
 class ARK2(IMEXMultistage):
     u"""
-    Implements Qin and Zhang's two-stage, 2nd order, implicit Runge–Kutta method.
+    Implements ARK2(2,3,2) two-stage IMEX Runge–Kutta method from
+    RK IMEX for HEVI (Weller et al 2013).
+    Where g = 1 - 1/sqrt(2), a = 1/6(3 + 2sqrt(2)), d = 1/2sqrt(2).
 
-    The method, for solving
-    ∂y/∂t = F(y), can be written as:
+    The method, for solving                                                    \n
+    ∂y/∂t = F(y) + S(y), can be written as:                                    \n
 
-    k0 = F[y^n + 0.25*dt*k0]
-    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]
-    y^(n+1) = y^n + 0.5*dt*(k0 + k1)
+    y_0 = y^n                                                                  \n
+    y_1 = y^n + dt*(g*F[y_0]+g*F[y_1]) + 2*dt*g*S[y_0]                         \n
+    y_2 = y^n + dt*(d*F[y_0]+d*F[y_1]+g*F[y_2])                                \n
+              + dt*((1-a)*S[y_0]+a*S[y_1])                                     \n
+    y^(n+1) = y^n + dt*(d*F[y_0]+d*F[y_1]+g*F[y_2])                            \n
+                  + dt*(d*S[y_0]+d*S[y_1]+g*S[y_2])                            \n
     """
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_imp=None, butcher_exp=None):
-        super().__init__(domain, field_name,
-                         solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
-        # ARK2
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
         g = 1. - 1./np.sqrt(2.)
         d = 1./(2.*np.sqrt(2.))
         a = 1./6.*(3. + 2.*np.sqrt(2.))
-        self.butcher_imp = np.array([[0., 0., 0.], [g, g, 0.], [d, d, g], [d, d, g]])
-        self.butcher_exp = np.array([[0., 0., 0.], [2.*g, 0., 0.], [1.-a, a, 0.], [d, d, g]])
-        self.nStages = int(np.shape(self.butcher_imp)[1])
+        butcher_imp = np.array([[0., 0., 0.], [g, g, 0.], [d, d, g], [d, d, g]])
+        butcher_exp = np.array([[0., 0., 0.], [2.*g, 0., 0.], [1.-a, a, 0.], [d, d, g]])
+        super().__init__(domain, butcher_imp, butcher_exp, field_name,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options)
+
 
 class SSP3(IMEXMultistage):
     u"""
-    Implements Qin and Zhang's two-stage, 2nd order, implicit Runge–Kutta method.
+    Implements SSP3(3,3,2) three-stage IMEX Runge–Kutta method from RK IMEX for HEVI (Weller et al 2013).
+    Where g = 1 - 1/sqrt(2)
 
-    The method, for solving
-    ∂y/∂t = F(y), can be written as:
+    The method, for solving                                                    \n
+    ∂y/∂t = F(y) + S(y), can be written as:                                    \n
 
-    k0 = F[y^n + 0.25*dt*k0]
-    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]
-    y^(n+1) = y^n + 0.5*dt*(k0 + k1)
+    y_1 = y^n + dt*g*F[y_1]                                                    \n
+    y_2 = y^n + dt*((1-2g)*F[y_1]+g*F[y_2]) + dt*S[y_1]                        \n
+    y_3 = y^n + dt*((0.5-g)*F[y_1]+g*F[y_3]) + dt*(0.25*S[y_1]+0.25*S[y_2])    \n
+    y^(n+1) = y^n + dt*(1/6*F[y_1]+1/6*F[y_2]+2/3*F[y_3])                      \n
+                  + dt*(1/6*S[y_1]+1/6*S[y_2]+2/3*S[y_3])                      \n
     """
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_imp=None, butcher_exp=None):
-        super().__init__(domain, field_name,
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
+        g = 1. - (1./np.sqrt(2.))
+        butcher_imp = np.array([[g, 0., 0.], [1-2.*g, g, 0.], [0.5-g, 0., g], [(1./6.), (1./6.), (2./3.)]])
+        butcher_exp = np.array([[0., 0., 0.], [1., 0., 0.], [0.25, 0.25, 0.], [(1./6.), (1./6.), (2./3.)]])
+        super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        # SSP3(3,3,2)
-        g = 1. - (1./np.sqrt(2.))
-        self.butcher_imp = np.array([[g, 0., 0.], [1-2.*g, g, 0.], [0.5-g, 0., g], [(1./6.),(1./6.), (2./3.)]])
-        self.butcher_exp = np.array([[0., 0., 0.], [1., 0., 0.], [0.25, 0.25, 0.], [(1./6.),(1./6.), (2./3.)]])
-        self.nStages = int(np.shape(self.butcher_imp)[1])
+
 
 class Trap2(IMEXMultistage):
     u"""
-    Implements Qin and Zhang's two-stage, 2nd order, implicit Runge–Kutta method.
+    Implements Trap2(2+e,3,2) three-stage IMEX Runge–Kutta method from RK IMEX for HEVI (Weller et al 2013).
+    For e = 1 or 0.
 
-    The method, for solving
-    ∂y/∂t = F(y), can be written as:
+    The method, for solving                                                    \n
+    ∂y/∂t = F(y) + S(y), can be written as:                                    \n
 
-    k0 = F[y^n + 0.25*dt*k0]
-    k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]
-    y^(n+1) = y^n + 0.5*dt*(k0 + k1)
+    y_0 = y^n                                                                  \n
+    y_1 = y^n + dt*e*F[y_0] + dt*S[y_0]                                        \n
+    y_2 = y^n + dt*(0.5*F[y_0]+0.5*F[y_2]) + dt*(0.5*S[y_0]+0.5*S[y_1])        \n
+    y_3 = y^n + dt*(0.5*F[y_0]+0.5*F[y_3]) + dt*(0.5*S[y_0]+0.5*S[y_2])        \n
+    y^(n+1) = y^n + dt*(0.5*F[y_0]+0.5*F[y_3]) + dt*(0.5*S[y_0] + 0.5*S[y_2])  \n
     """
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None, butcher_imp=None, butcher_exp=None):
-        super().__init__(domain, field_name,
+    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
+        e = 0.
+        butcher_imp = np.array([[0., 0., 0., 0.], [e, 0., 0., 0.], [0.5, 0., 0.5, 0.], [0.5, 0., 0., 0.5], [0.5, 0., 0., 0.5]])
+        butcher_exp = np.array([[0., 0., 0., 0.], [1., 0., 0., 0.], [0.5, 0.5, 0., 0.], [0.5, 0., 0.5, 0.], [0.5, 0., 0.5, 0.]])
+        super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-        # Trap2(2+e,3,2)
-        e = 0.
-        self.butcher_imp = np.array([[0., 0., 0.,0,], [e, 0., 0.,0.], [0.5, 0., 0.5, 0.], [0.5, 0., 0., 0.5], [0.5, 0., 0., 0.5]])
-        self.butcher_exp= np.array([[0., 0., 0.,0,], [1., 0., 0.,0.], [0.5, 0.5, 0., 0.], [0.5, 0., 0.5, 0.], [0.5, 0., 0.5, 0.]])
-        self.nStages = int(np.shape(self.butcher_imp)[1])
