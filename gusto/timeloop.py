@@ -297,6 +297,8 @@ class Timestepper(BaseTimestepper):
         self.setup_equation(self.equation)
         self.scheme.setup(self.equation)
         self.setup_transporting_velocity(self.scheme)
+        if hasattr(self.scheme, 'base'):
+                self.setup_transporting_velocity(self.scheme.base)
 
     def timestep(self):
         """
@@ -364,6 +366,8 @@ class SplitPhysicsTimestepper(Timestepper):
         apply_bcs = True
         self.scheme.setup(self.equation, apply_bcs, dynamics)
         self.setup_transporting_velocity(self.scheme)
+        if hasattr(self.scheme, 'base'):
+            self.setup_transporting_velocity(self.scheme.base)
 
     def timestep(self):
 
@@ -506,6 +510,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.setup_equation(aux_eqn)
             aux_scheme.setup(aux_eqn)
             self.setup_transporting_velocity(aux_scheme)
+            if hasattr(aux_scheme, 'base'):
+                self.setup_transporting_velocity(aux_scheme.base)
 
         self.tracers_to_copy = []
         for name in equation_set.field_names:
@@ -567,6 +573,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for _, scheme in self.active_transport:
             scheme.setup(self.equation, apply_bcs, transport)
             self.setup_transporting_velocity(scheme)
+            if hasattr(scheme, 'base'):
+                self.setup_transporting_velocity(scheme.base)
 
         apply_bcs = True
         for _, scheme in self.diffusion_schemes:

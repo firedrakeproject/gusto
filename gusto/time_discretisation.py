@@ -401,6 +401,11 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                 the equation to include.
         """
         super().setup(equation, apply_bcs, *active_labels)
+        print(equation.residual.terms[0].labels.keys())
+        print(equation.residual.terms[1].labels.keys())
+        print("SET UP STUFF")
+        print(self.residual.terms[0].labels.keys())
+        print(self.residual.terms[1].labels.keys())
 
         self.k = [Function(self.fs) for i in range(self.nStages)]
 
@@ -455,10 +460,15 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             self.limiter.apply(x_in)
 
         self.x1.assign(x_in)
-
+        
         for i in range(self.nStages):
+            print("DOING SOLVE")
             self.solve_stage(x_in, i)
         x_out.assign(self.x1)
+        print(np.max(x_out.dat.data[:]))
+        print(np.max(x_out.dat.data[:] - x_in.dat.data[:]))
+        print(self.residual.terms[0].labels.keys())
+        print(self.residual.terms[1].labels.keys())
 
 
 class ForwardEuler(ExplicitMultistage):
@@ -1480,10 +1490,12 @@ class SDC(object, metaclass=ABCMeta):
 
 class FE_SDC(SDC):
 
-    def setup(self, equation):
-
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        print(equation.residual.terms[0].labels.keys())
+        print(equation.residual.terms[1].labels.keys())
+        print("SET UP STUFF")
         self.base = ForwardEuler(self.domain, field_name=self.field_name)
-        self.base.setup(equation)
+        self.base.setup(equation, apply_bcs=True, *active_labels)
         self.residual = self.base.residual
 
         # set up SDC form and solver
@@ -1580,6 +1592,7 @@ class FE_SDC(SDC):
             x_out.assign(self.Un)
         else:
             x_out.assign(self.Unodes[-1])
+            
 
 
 class BE_SDC(SDC):
