@@ -542,25 +542,23 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
 
     A Butcher tableau is formed in the following way for a s-th order explicit scheme:
 
-    c_0 | a_00 a_01  .    a_0s
-    c_1 | a_10 a_11       a_1s
+    c_0 | a_00
+    c_1 | a_10 a_11
+     .  | a_20 a_21 a_22
      .  |   .   .    .    .
-     .  |   .   .    .    .
-    c_s | a_s0 a_s1  .    a_ss
      -------------------------
-        |  b_1  b_2  ...  b_s
+    c_s |  b_1  b_2  ...  b_s
 
     The gradient function has no time-dependence, so c elements are not needed.
     A square 'butcher_matrix' is defined in each class that uses
     the ExplicitMultiStage structure,
 
-    [a_10   0   .       0  ]
-    [a_20 a_21  .       0  ]
+    [a_00   0   .       0  ]
+    [a_10 a_11  .       0  ]
     [  .    .   .       .  ]
-    [ b_0  b_1  .       b_s]
+    [ b_0  b_1  .   b_{s-1}]
 
-    All upper diagonal a_ij elements are zero for explicit methods. We exclude the first
-    row of the butcher tableau from our butcher matrix as the row is always zeros.
+    All upper diagonal a_ij elements are zero for explicit methods.
 
     There are three steps to move from the current solution, y^n, to the new one, y^{n+1}
 
