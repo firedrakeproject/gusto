@@ -1491,9 +1491,6 @@ class SDC(object, metaclass=ABCMeta):
 class FE_SDC(SDC):
 
     def setup(self, equation, apply_bcs=True, *active_labels):
-        print(equation.residual.terms[0].labels.keys())
-        print(equation.residual.terms[1].labels.keys())
-        print("SET UP STUFF")
         self.base = ForwardEuler(self.domain, field_name=self.field_name)
         self.base.setup(equation, apply_bcs=True, *active_labels)
         self.residual = self.base.residual
@@ -1512,8 +1509,31 @@ class FE_SDC(SDC):
         self.Un = Function(W)
         self.Q_ = Function(W)
 
+        try:
+            #bcs = equation.bcs['u']
+            self.bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
+        except KeyError:
+            self.bcs = None
+
+        # set up RHS evaluation
+        self.Urhs = Function(W)
+        self.Uin = Function(W)
+
+    @property
+    def res_rhs(self):
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs),
+                                    drop)
+        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    drop,
+                                    replace_subject(self.Uin))
+        Frhs = a - L
+        return Frhs.form
+    
+    @property
+    def res_SDC(self):
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    map_if_false=lambda t: dt*t)
+                                    map_if_false=lambda t: self.dt*t)
 
         a = F.label_map(lambda t: t.has_label(time_derivative),
                         replace_subject(self.U_SDC),
@@ -1534,27 +1554,27 @@ class FE_SDC(SDC):
                                     drop)
 
         F_SDC = a + F_exp + F0 + Q
-
-        try:
-            #bcs = equation.bcs['u']
-            bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
-        except KeyError:
-            bcs = None
-        prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC, bcs=bcs)
-        self.solver_SDC = NonlinearVariationalSolver(prob_SDC)
-
-        # set up RHS evaluation
-        self.Urhs = Function(W)
-        self.Uin = Function(W)
-        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Urhs),
-                                    drop)
-        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    drop,
-                                    replace_subject(self.Uin))
-        Frhs = a - L
-        prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs, bcs=bcs)
-        self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
+        return F_SDC.form
+    
+    @cached_property
+    def solver_SDC(self):
+        """Set up the problem and the solver."""
+        # setup linear solver using lhs and rhs defined in derived class
+        prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
+        #solver_name = self.field_name+self.__class__.__name__+"_SDC"
+        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
+        #self.solver_parameters.setdefault('snes_type', 'ksponly')
+        return NonlinearVariationalSolver(prob_SDC)
+    
+    @cached_property
+    def solver_rhs(self):
+        """Set up the problem and the solver."""
+        # setup linear solver using lhs and rhs defined in derived class
+        prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
+        #solver_name = self.field_name+self.__class__.__name__+"_rhs"
+        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
+        #self.solver_parameters.setdefault('snes_type', 'ksponly')
+        return NonlinearVariationalSolver(prob_rhs)
 
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
@@ -1620,6 +1640,29 @@ class BE_SDC(SDC):
         self.Un = Function(W)
         self.Q_ = Function(W)
 
+        try:
+            #bcs = equation.bcs['u']
+            self.bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
+        except KeyError:
+            self.bcs = None
+        
+        # set up RHS evaluation
+        self.Urhs = Function(W)
+        self.Uin = Function(W)
+    
+    @property
+    def res_rhs(self):
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs),
+                                    drop)
+        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    drop,
+                                    replace_subject(self.Uin))
+        Frhs = a - L
+        return Frhs.form
+    
+    @property
+    def res_SDC(self):
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     map_if_false=lambda t: self.dt*t)
 
@@ -1633,8 +1676,8 @@ class BE_SDC(SDC):
                                 lambda t: -1*t)
 
         F01 = F.label_map(lambda t: t.has_label(time_derivative),
-                          drop,
-                          replace_subject(self.U01))
+                            drop,
+                            replace_subject(self.U01))
 
         F01 = F01.label_map(all_terms, lambda t: -1*t)
 
@@ -1643,27 +1686,27 @@ class BE_SDC(SDC):
                                     drop)
 
         F_SDC = F_imp + F_exp + F01 + Q
-
-        try:
-            #bcs = equation.bcs['u']
-            bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
-        except KeyError:
-            bcs = None
-        prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC, bcs=bcs)
-        self.solver_SDC = NonlinearVariationalSolver(prob_SDC)
-
-        # set up RHS evaluation
-        self.Urhs = Function(W)
-        self.Uin = Function(W)
-        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Urhs),
-                                    drop)
-        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    drop,
-                                    replace_subject(self.Uin))
-        Frhs = a - L
-        prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs, bcs=bcs)
-        self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
+        return F_SDC.form
+    
+    @cached_property
+    def solver_SDC(self):
+        """Set up the problem and the solver."""
+        # setup linear solver using lhs and rhs defined in derived class
+        prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
+        #solver_name = self.field_name+self.__class__.__name__+"_SDC"
+        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
+        #self.solver_parameters.setdefault('snes_type', 'ksponly')
+        return NonlinearVariationalSolver(prob_SDC)
+    
+    @cached_property
+    def solver_rhs(self):
+        """Set up the problem and the solver."""
+        # setup linear solver using lhs and rhs defined in derived class
+        prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
+        #solver_name = self.field_name+self.__class__.__name__+"_rhs"
+        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
+        #self.solver_parameters.setdefault('snes_type', 'ksponly')
+        return NonlinearVariationalSolver(prob_rhs)
 
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
@@ -1674,7 +1717,8 @@ class BE_SDC(SDC):
             #print(float(self.dtau[m]))
             self.base.dt = float(self.dtau[m])
             self.base.apply(self.Unodes[m+1], self.Unodes[m])
-
+        print(self.residual.terms[0].labels.keys())
+        print(self.residual.terms[1].labels.keys())
         k = 0
         while k < self.maxk:
             #print("doing interations..")
