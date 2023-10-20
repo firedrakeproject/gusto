@@ -297,6 +297,7 @@ class Timestepper(BaseTimestepper):
         self.setup_equation(self.equation)
         self.scheme.setup(self.equation)
         self.setup_transporting_velocity(self.scheme)
+        self.scheme.courant_max = self.io.courant_max
 
     def timestep(self):
         """
@@ -364,6 +365,7 @@ class SplitPhysicsTimestepper(Timestepper):
         apply_bcs = True
         self.scheme.setup(self.equation, apply_bcs, dynamics)
         self.setup_transporting_velocity(self.scheme)
+        self.scheme.courant_max = self.io.courant_max
 
     def timestep(self):
 
@@ -567,6 +569,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for _, scheme in self.active_transport:
             scheme.setup(self.equation, apply_bcs, transport)
             self.setup_transporting_velocity(scheme)
+            scheme.courant_max = self.io.courant_max
 
         apply_bcs = True
         for _, scheme in self.diffusion_schemes:
