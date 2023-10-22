@@ -347,9 +347,11 @@ class SplitPhysicsTimestepper(Timestepper):
             self.physics_schemes = []
 
         for parametrisation, phys_scheme in self.physics_schemes:
-            # check that the supplied schemes for physics are explicit
-            # assert isinstance(phys_scheme, ExplicitTimeDiscretisation), \
-            #     "Only explicit time discretisations can be used for physics"
+            # check that the supplied schemes for physics are valid
+            if hasattr(parametrisation, "explicit_only") and parametrisation.explicit_only:
+                assert isinstance(phys_scheme, ExplicitTimeDiscretisation), \
+                    ("Only explicit time discretisations can be used with "
+                     + f"physics scheme {parametrisation.label.label}")
             apply_bcs = False
             phys_scheme.setup(equation, apply_bcs, parametrisation.label)
 
@@ -460,10 +462,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                                     + self.fast_physics_schemes
                                     + self.final_physics_schemes)
 
-        for _, scheme in self.all_physics_schemes:
+        for parametrisation, scheme in self.all_physics_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
-            # assert isinstance(scheme, ExplicitTimeDiscretisation), \
-            #     "Only explicit time discretisations can be used for physics"
+            if hasattr(parametrisation, "explicit_only") and parametrisation.explicit_only:
+                assert isinstance(scheme, ExplicitTimeDiscretisation), \
+                    ("Only explicit time discretisations can be used with "
+                     + f"physics scheme {parametrisation.label.label}")
 
         self.active_transport = []
         for scheme in transport_schemes:

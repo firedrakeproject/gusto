@@ -4,7 +4,6 @@ the set of compatible function spaces defined upon it. It also contains the
 model's time interval.
 """
 
-from gusto.logging import logger
 from gusto.coordinates import Coordinates
 from gusto.function_spaces import Spaces, check_degree_args
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
@@ -176,24 +175,15 @@ class Domain(object):
         height_above_surface = Function(CG1)
 
         # Turn height into columnwise data
-        try:
-            columnwise_height, index_data = self.coords.get_column_data(CG1_height, self)
+        columnwise_height, index_data = self.coords.get_column_data(CG1_height, self)
 
-            # Find minimum height in each column
-            surface_height_1d = np.min(columnwise_height, axis=1)
-            height_above_surface_data = columnwise_height - surface_height_1d[:, None]
+        # Find minimum height in each column
+        surface_height_1d = np.min(columnwise_height, axis=1)
+        height_above_surface_data = columnwise_height - surface_height_1d[:, None]
 
-            self.coords.set_field_from_column_data(height_above_surface,
-                                                   height_above_surface_data,
-                                                   index_data)
-        except ModuleNotFoundError:
-            # If no pandas, then don't take orography into account
-            logger.warning(
-                'Pandas not found, so using height as height above surface. '
-                + 'This will be incorrect in the presence of orography')
-
-            if self.on_sphere:
-                height_above_surface.assign(CG1_height - self.radius)
+        self.coords.set_field_from_column_data(height_above_surface,
+                                               height_above_surface_data,
+                                               index_data)
 
         self.height_above_surface = height_above_surface
 

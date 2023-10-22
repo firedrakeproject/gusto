@@ -7,6 +7,7 @@ from gusto.coord_transforms import lonlatr_from_xyz, rotated_lonlatr_coords
 from gusto.logging import logger
 from firedrake import SpatialCoordinate, Function
 import numpy as np
+import pandas as pd
 
 
 class Coordinates(object):
@@ -170,8 +171,6 @@ class Coordinates(object):
                 ordered column data.
         """
 
-        import pandas as pd
-
         space_name = field.function_space().name
         if space_name not in self.chi_coords.keys():
             self.register_space(domain, space_name)
@@ -189,13 +188,13 @@ class Coordinates(object):
         # Work out digits to round to, based on number of points and range of coords
         num_points = np.size(coords_X)
         data_range = np.max(coords_X) - np.min(coords_X)
-        if data_range > 1e-16:
+        if data_range > np.finfo(type(data_range)).tiny:
             digits = int(np.floor(-np.log10(data_range / num_points)) + 3)
             coords_X = coords_X.round(digits)
 
         if data_is_3d:
             data_range = np.max(coords_Y) - np.min(coords_Y)
-            if data_range > 1e-16:
+            if data_range > np.finfo(type(data_range)).tiny:
                 # Only round if there is already some range
                 digits = int(np.floor(-np.log10(data_range / num_points)) + 3)
                 coords_Y = coords_Y.round(digits)

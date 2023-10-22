@@ -222,7 +222,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
     def compute(self):
         """Compute the diagnostic field from the current state."""
 
-        logger.info(f'Computing diagnostic {self.name} with {self.method} method')
+        logger.debug(f'Computing diagnostic {self.name} with {self.method} method')
 
         if self.method == 'interpolate':
             self.evaluator.interpolate()

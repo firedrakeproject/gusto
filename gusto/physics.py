@@ -200,6 +200,7 @@ class SaturationAdjustment(PhysicsParametrisation):
         """
 
         label_name = 'saturation_adjustment'
+        self.explicit_only = True
         super().__init__(equation, label_name, parameters=parameters)
 
         # TODO: make a check on the variable type of the active tracers
@@ -262,7 +263,7 @@ class SaturationAdjustment(PhysicsParametrisation):
                 liquid_water += self.X.subfunctions[liq_idx]
 
         # define some parameters as attributes
-        self.dt = Constant(1.0)
+        self.dt = Constant(0.0)
         R_d = parameters.R_d
         cp = parameters.cp
         cv = parameters.cv
@@ -439,6 +440,7 @@ class Fallout(PhysicsParametrisation):
             terminal_velocity = Constant(5)  # in m/s
             v.project(-terminal_velocity*domain.k)
         elif moments == AdvectedMoments.M3:
+            self.explicit_only = True
             # this advects the third moment M3 of the raindrop
             # distribution, which corresponds to the mean mass
             rho_idx = equation.field_names.index('rho')
@@ -524,6 +526,7 @@ class Coalescence(PhysicsParametrisation):
                 process in the parametrisation. Defaults to True.
         """
 
+        self.explicit_only = True
         label_name = "coalescence"
         if accretion:
             label_name += "_accretion"
@@ -549,7 +552,7 @@ class Coalescence(PhysicsParametrisation):
         self.source = Function(Vt)
 
         # define some parameters as attributes
-        self.dt = Constant(1.0)
+        self.dt = Constant(0.0)
         # TODO: should these parameters be hard-coded or configurable?
         k_1 = Constant(0.001)  # accretion rate in 1/s
         k_2 = Constant(2.2)  # accumulation rate in 1/s
@@ -635,6 +638,7 @@ class EvaporationOfRain(PhysicsParametrisation):
                 CompressibleEulerEquations.
         """
 
+        self.explicit_only = True
         label_name = 'evaporation_of_rain'
         super().__init__(equation, label_name, parameters=None)
 
@@ -694,7 +698,7 @@ class EvaporationOfRain(PhysicsParametrisation):
                 liquid_water += self.X.subfunctions[liq_idx]
 
         # define some parameters as attributes
-        self.dt = Constant(1.0)
+        self.dt = Constant(0.0)
         R_d = parameters.R_d
         cp = parameters.cp
         cv = parameters.cv
@@ -819,6 +823,7 @@ class InstantRain(PhysicsParametrisation):
                 parameters are obtained from the equation.
         """
 
+        self.explicit_only = True
         label_name = 'instant_rain'
         super().__init__(equation, label_name, parameters=parameters)
 
@@ -986,6 +991,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
                 parameters are obtained from the equation.
         """
 
+        self.explicit_only = True
         label_name = 'saturation_adjustment'
         super().__init__(equation, label_name, parameters=parameters)
 
@@ -1144,8 +1150,8 @@ class SurfaceFluxes(PhysicsParametrisation):
             implicit_formulation (bool, optional): whether the scheme is already
                 put into a Backwards Euler formulation (which allows this scheme
                 to actually be used with a Forwards Euler or other explicit time
-                discretisation. Otherwise, this is formulated more generally and
-                can be used with any time stepper. Defaults to False.
+                discretisation). Otherwise, this is formulated more generally
+                and can be used with any time stepper. Defaults to False.
             parameters (:class:`BoundaryLayerParameters`): configuration object
                 giving the parameters for boundary and surface level schemes.
                 Defaults to None, in which case default values are used.
@@ -1169,7 +1175,7 @@ class SurfaceFluxes(PhysicsParametrisation):
 
         self.implicit_formulation = implicit_formulation
         self.X = Function(equation.X.function_space())
-        self.dt = Constant(1.0)
+        self.dt = Constant(0.0)
 
         # -------------------------------------------------------------------- #
         # Extract prognostic variables
@@ -1324,8 +1330,8 @@ class WindDrag(PhysicsParametrisation):
             implicit_formulation (bool, optional): whether the scheme is already
                 put into a Backwards Euler formulation (which allows this scheme
                 to actually be used with a Forwards Euler or other explicit time
-                discretisation. Otherwise, this is formulated more generally and
-                can be used with any time stepper. Defaults to False.
+                discretisation). Otherwise, this is formulated more generally
+                and can be used with any time stepper. Defaults to False.
             parameters (:class:`BoundaryLayerParameters`): configuration object
                 giving the parameters for boundary and surface level schemes.
                 Defaults to None, in which case default values are used.
@@ -1346,7 +1352,7 @@ class WindDrag(PhysicsParametrisation):
         k = equation.domain.k
         self.implicit_formulation = implicit_formulation
         self.X = Function(equation.X.function_space())
-        self.dt = Constant(1.0)
+        self.dt = Constant(0.0)
 
         # -------------------------------------------------------------------- #
         # Extract prognostic variables
@@ -1441,6 +1447,7 @@ class StaticAdjustment(PhysicsParametrisation):
                 to "theta_vd".
         """
 
+        self.explicit_only = True
         from functools import partial
 
         # -------------------------------------------------------------------- #
@@ -1457,7 +1464,7 @@ class StaticAdjustment(PhysicsParametrisation):
         super().__init__(equation, label_name, parameters=equation.parameters)
 
         self.X = Function(equation.X.function_space())
-        self.dt = Constant(1.0)
+        self.dt = Constant(0.0)
 
         # -------------------------------------------------------------------- #
         # Extract prognostic variables
@@ -1540,6 +1547,8 @@ class SuppressVerticalWind(PhysicsParametrisation):
                 period.
         """
 
+        self.explicit_only = True
+
         # -------------------------------------------------------------------- #
         # Check arguments and generic initialisation
         # -------------------------------------------------------------------- #
@@ -1554,7 +1563,7 @@ class SuppressVerticalWind(PhysicsParametrisation):
         super().__init__(equation, label_name, parameters=equation.parameters)
 
         self.X = Function(equation.X.function_space())
-        self.dt = Constant(1.0)
+        self.dt = Constant(0.0)
         self.t = domain.t
         self.spin_up_period = Constant(spin_up_period)
         self.strength = Constant(1.0)
