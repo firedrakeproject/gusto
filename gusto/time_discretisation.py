@@ -18,6 +18,7 @@ from gusto.fml import (
 from gusto.labels import time_derivative, prognostic, physics_label
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
+import math
 import numpy as np
 
 
@@ -71,8 +72,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.field_name = field_name
         self.equation = None
 
-        self.dt = domain.dt
-        self.original_dt = Constant(self.dt)
+        self.dt = Constant(0.0)
+        self.dt.assign(domain.dt)
+        self.original_dt = Constant(0.0)
+        self.original_dt.assign(self.dt)
         self.options = options
         self.limiter = limiter
         self.courant_max = None
@@ -243,23 +246,24 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 class ExplicitTimeDiscretisation(TimeDiscretisation):
     """Base class for explicit time discretisations."""
 
-    def __init__(self, domain, field_name=None, subcycles=None, subcycle_by=None,
-                 solver_parameters=None, limiter=None, options=None):
+    def __init__(self, domain, field_name=None, fixed_subcycles=None,
+                 subcycle_by_courant=None, solver_parameters=None, limiter=None,
+                 options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            subcycles (int, optional): the fixed number of sub-steps to perform.
-                Defaults to None. This option cannot be specified with the
-                `subcycle_by` argument.
-            subcycle_by (float, optional): specifying this option will make the
-                scheme performing adaptive sub-cycling based on the Courant
-                number. The specified argument is the maximum Courant for one
-                sub-cycle. Defaults to None, in which case adaptive sub-cycling
-                is not used. This option cannot be specified with the
-                `subcycles` argument.
+            fixed_subcycles (int, optional): the fixed number of sub-steps to
+                perform. This option cannot be specified with the
+                `subcycle_by_courant` argument. Defaults to None.
+            subcycle_by_courant (float, optional): specifying this option will
+                make the scheme perform adaptive sub-cycling based on the
+                Courant number. The specified argument is the maximum Courant
+                for one sub-cycle. Defaults to None, in which case adaptive
+                sub-cycling is not used. This option cannot be specified with the
+                `fixed_subcycles` argument.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -273,11 +277,11 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
-        if subcycles is not None and subcycle_by is not None:
+        if fixed_subcycles is not None and subcycle_by_courant is not None:
             raise ValueError('Cannot specify both subcycle and subcycle_by '
                              + 'arguments to a time discretisation')
-        self.subcycles = subcycles
-        self.subcycle_by = subcycle_by
+        self.fixed_subcycles = fixed_subcycles
+        self.subcycle_by_courant = subcycle_by_courant
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -292,11 +296,11 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         super().setup(equation, apply_bcs, *active_labels)
 
-        # if user has specified a number of subcycles, then save this
+        # if user has specified a number of fixed subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
-        if self.subcycles is not None:
-            self.dt = self.dt/self.subcycles
-            self.ncycles = self.subcycles
+        if self.fixed_subcycles is not None:
+            self.dt.assign(self.dt/self.fixed_subcycles)
+            self.ncycles = self.fixed_subcycles
         else:
             self.dt = self.dt
             self.ncycles = 1
@@ -344,11 +348,10 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field.
         """
-        import math
         # If doing adaptive subcycles, update dt and ncycles here
-        if self.subcycle_by is not None:
-            self.ncycles = math.ceil(float(self.courant_max)/self.subcycle_by)
-            self.dt = self.original_dt/self.ncycles
+        if self.subcycle_by_courant is not None:
+            self.ncycles = math.ceil(float(self.courant_max)/self.subcycle_by_courant)
+            self.dt.assign(self.original_dt/self.ncycles)
 
         self.x0.assign(x_in)
         for i in range(self.ncycles):
@@ -394,11 +397,14 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
 
     """
 
-    def __init__(self, domain, field_name=None, subcycles=None, subcycle_by=None,
-                 solver_parameters=None, limiter=None, options=None,
-                 butcher_matrix=None):
-        super().__init__(domain, field_name=field_name, subcycles=subcycles,
-                         subcycle_by=subcycle_by, solver_parameters=solver_parameters,
+    def __init__(self, domain, field_name=None, fixed_subcycles=None,
+                 subcycle_by_courant=None, solver_parameters=None,
+                 limiter=None, options=None, butcher_matrix=None):
+
+        super().__init__(domain, field_name=field_name,
+                         fixed_subcycles=fixed_subcycles,
+                         subcycle_by_courant=subcycle_by_courant,
+                         solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
         if butcher_matrix is not None:
             self.butcher_matrix = butcher_matrix
@@ -498,11 +504,15 @@ class ForwardEuler(ExplicitMultistage):
     k0 = F[y^n]
     y^(n+1) = y^n + dt*k0
     """
-    def __init__(self, domain, field_name=None, subcycles=None, subcycle_by=None,
-                 solver_parameters=None, limiter=None, options=None, butcher_matrix=None):
-        super().__init__(domain, field_name=field_name, subcycles=subcycles,
-                         subcycle_by=subcycle_by, solver_parameters=solver_parameters,
-                         limiter=limiter, options=options, butcher_matrix=butcher_matrix)
+    def __init__(self, domain, field_name=None, fixed_subcycles=None,
+                 subcycle_by_courant=None, solver_parameters=None,
+                 limiter=None, options=None, butcher_matrix=None):
+        super().__init__(domain, field_name=field_name,
+                         fixed_subcycles=fixed_subcycles,
+                         subcycle_by_courant=subcycle_by_courant,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options,
+                         butcher_matrix=butcher_matrix)
         self.butcher_matrix = np.array([1.]).reshape(1, 1)
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
 
@@ -517,12 +527,15 @@ class SSPRK3(ExplicitMultistage):
     k2 = F[y^n + (1/4)*dt*(k0+k1)]
     y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + 4*k2)
     """
-    def __init__(self, domain, field_name=None, subcycles=None,
-                 subcycle_by=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None, fixed_subcycles=None,
+                 subcycle_by_courant=None, solver_parameters=None,
                  limiter=None, options=None, butcher_matrix=None):
-        super().__init__(domain, field_name=field_name, subcycles=subcycles,
-                         subcycle_by=subcycle_by, solver_parameters=solver_parameters,
-                         limiter=limiter, options=options, butcher_matrix=butcher_matrix)
+        super().__init__(domain, field_name=field_name,
+                         fixed_subcycles=fixed_subcycles,
+                         subcycle_by_courant=subcycle_by_courant,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options,
+                         butcher_matrix=butcher_matrix)
         self.butcher_matrix = np.array([[1., 0., 0.], [1./4., 1./4., 0.], [1./6., 1./6., 2./3.]])
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
 
@@ -542,12 +555,15 @@ class RK4(ExplicitMultistage):
 
     where superscripts indicate the time-level.
     """
-    def __init__(self, domain, field_name=None, subcycles=None,
-                 subcycle_by=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None, fixed_subcycles=None,
+                 subcycle_by_courant=None, solver_parameters=None,
                  limiter=None, options=None, butcher_matrix=None):
-        super().__init__(domain, field_name=field_name, subcycles=subcycles,
-                         subcycle_by=subcycle_by, solver_parameters=solver_parameters,
-                         limiter=limiter, options=options, butcher_matrix=butcher_matrix)
+        super().__init__(domain, field_name=field_name,
+                         fixed_subcycles=fixed_subcycles,
+                         subcycle_by_courant=subcycle_by_courant,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options,
+                         butcher_matrix=butcher_matrix)
         self.butcher_matrix = np.array([[0.5, 0., 0., 0.], [0., 0.5, 0., 0.], [0., 0., 1., 0.], [1./6., 1./3., 1./3., 1./6.]])
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
 
@@ -565,11 +581,11 @@ class Heun(ExplicitMultistage):
     where superscripts indicate the time-level and subscripts indicate the stage
     number.
     """
-    def __init__(self, domain, field_name=None, subcycles=None,
-                 subcycle_by=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None, fixed_subcycles=None,
+                 subcycle_by_courant=None, solver_parameters=None,
                  limiter=None, options=None, butcher_matrix=None):
-        super().__init__(domain, field_name, subcycles=subcycles,
-                         subcycle_by=subcycle_by,
+        super().__init__(domain, field_name, fixed_subcycles=fixed_subcycles,
+                         subcycle_by_courant=subcycle_by_courant,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
         self.butcher_matrix = np.array([[1., 0.], [0.5, 0.5]])
@@ -591,7 +607,7 @@ class BackwardEuler(TimeDiscretisation):
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            subcycles (int, optional): the number of sub-steps to perform.
+            fixed_subcycles (int, optional): the number of sub-steps to perform.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.

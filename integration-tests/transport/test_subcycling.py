@@ -22,9 +22,9 @@ def test_subcyling(tmpdir, subcycling, tracer_setup):
     eqn = AdvectionEquation(domain, V, "f")
 
     if subcycling == "fixed":
-        transport_scheme = SSPRK3(domain, subcycles=2)
+        transport_scheme = SSPRK3(domain, fixed_subcycles=2)
     elif subcycling == "adaptive":
-        transport_scheme = SSPRK3(domain, subcycle_by=0.25)
+        transport_scheme = SSPRK3(domain, subcycle_by_courant=0.25)
     transport_method = DGUpwind(eqn, "f")
 
     timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)

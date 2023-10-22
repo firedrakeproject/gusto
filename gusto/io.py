@@ -7,7 +7,7 @@ import sys
 import time
 from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.meshes import get_flat_latlon_mesh
-from firedrake import (Function, functionspaceimpl, Constant, File,
+from firedrake import (Function, functionspaceimpl, File, Constant,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 from pyop2.mpi import MPI
 import numpy as np
