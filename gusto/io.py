@@ -308,6 +308,30 @@ class IO(object):
                 logger.info(f'Max Courant: {courant_max:.2e}')
             else:
                 logger.info(f'Max Courant {message}: {courant_max:.2e}')
+                
+            logger.info(diagnostic_names)
+            species_1_idx = diagnostic_names.index('X_plus_X')
+            species_2_idx = diagnostic_names.index('X2_plus_X2')
+            
+            s1_diagnostic = self.diagnostic_fields[species_1_idx]
+            s2_diagnostic = self.diagnostic_fields[species_2_idx]
+            
+            s1_diagnostic.compute()
+            s2_diagnostic.compute()
+            
+            s1_field = state_fields('X_plus_X')
+            s2_field = state_fields('X2_plus_X2')
+            
+            species_1_min = self.diagnostics.min(s1_field)/2
+            species_2_min = self.diagnostics.min(s2_field)/2
+            
+            species_1_max = self.diagnostics.max(s1_field)/2
+            species_2_max = self.diagnostics.max(s2_field)/2
+            
+            logger.info(f'X min, {species_1_min}')
+            logger.info(f'X max, {species_1_max}')
+            logger.info(f'X2 min, {species_2_min}')
+            logger.info(f'X2 max, {species_2_max}')
 
     def setup_diagnostics(self, state_fields):
         """
