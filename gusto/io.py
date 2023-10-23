@@ -7,7 +7,7 @@ import sys
 import time
 from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.meshes import get_flat_latlon_mesh
-from firedrake import (Function, functionspaceimpl, File,
+from firedrake import (Function, functionspaceimpl, File, Constant,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 from pyop2.mpi import MPI
 import numpy as np
@@ -233,6 +233,9 @@ class IO(object):
         self.dumpfile = None
         self.to_pick_up = None
 
+        if output.log_courant:
+            self.courant_max = Constant(0.0)
+
     def log_parameters(self, equation):
         """
         Logs an equation's physical parameters that take non-default values.
@@ -333,6 +336,13 @@ class IO(object):
             logger.info(f'X2 min, {species_2_min}')
             logger.info(f'X2 max, {species_2_max}')
 
+            if component == 'whole':
+                # TODO: this will update the Courant number more than we need to
+                # and possibly with the wrong Courant number
+                # we could make self.courant_max a dict with keys depending on
+                # the field to take the Courant number of
+                self.courant_max.assign(courant_max)
+
     def setup_diagnostics(self, state_fields):
         """
         Prepares the I/O for computing the model's global diagnostics and
@@ -430,6 +440,9 @@ class IO(object):
 
         # make dump counter
         self.dumpcount = itertools.count()
+        # if picking-up, don't do initial dump
+        if pick_up:
+            next(self.dumpcount)
 
         if self.output.dump_vtus:
             # setup pvd output file
@@ -450,6 +463,11 @@ class IO(object):
                     nc_field_file = Dataset(self.nc_filename, 'r')
                     self.field_t_idx = len(nc_field_file['time'][:])
                     nc_field_file.close()
+                else:
+                    self.field_t_idx = None
+                # Send information to other processors
+                self.field_t_idx = self.mesh.comm.bcast(self.field_t_idx, root=0)
+
             else:
                 # File needs creating
                 self.create_nc_dump(self.nc_filename, space_names)
@@ -484,6 +502,11 @@ class IO(object):
                                                        self.mesh.comm,
                                                        create=to_create)
 
+            # if picking-up, don't do initial dump
+            self.diagcount = itertools.count()
+            if pick_up:
+                next(self.diagcount)
+
         if len(self.output.point_data) > 0:
             # set up point data output
             pointdata_filename = self.dumpdir+"/point_data.nc"
@@ -498,6 +521,9 @@ class IO(object):
 
             # make point data dump counter
             self.pddumpcount = itertools.count()
+            # if picking-up, don't do initial dump
+            if pick_up:
+                next(self.pddumpcount)
 
             # set frequency of point data output - defaults to
             # dumpfreq if not set by user
@@ -522,10 +548,13 @@ class IO(object):
 
             # make a checkpoint counter
             self.chkptcount = itertools.count()
+            # if picking-up, don't do initial dump
+            if pick_up:
+                next(self.chkptcount)
 
         # dump initial fields
         if not pick_up:
-            self.dump(state_fields, t)
+            self.dump(state_fields, t, step=1)
 
     def pick_up_from_checkpoint(self, state_fields):
         """
@@ -596,8 +625,9 @@ class IO(object):
                     except AttributeError:
                         initial_steps = None
 
-                    # Finally pick up time
+                    # Finally pick up time and step number
                     t = chk.read_attribute("/", "time")
+                    step = chk.read_attribute("/", "step")
 
             else:
                 with CheckpointFile(chkfile, 'r') as chk:
@@ -627,6 +657,7 @@ class IO(object):
 
                     # Finally pick up time
                     t = chk.get_attr("/", "time")
+                    step = chk.get_attr("/", "step")
 
             # If we have picked up from a non-standard file, reset this name
             # so that we will checkpoint using normal file name from now on
@@ -634,9 +665,9 @@ class IO(object):
         else:
             raise ValueError("Must set checkpoint True if picking up")
 
-        return t, reference_profiles, initial_steps
+        return t, reference_profiles, step, initial_steps
 
-    def dump(self, state_fields, t, initial_steps=None):
+    def dump(self, state_fields, t, step, initial_steps=None):
         """
         Dumps all of the required model output.
 
@@ -647,6 +678,7 @@ class IO(object):
         Args:
             state_fields (:class:`StateFields`): the model's field container.
             t (float): the simulation's current time.
+            step (int): the number of time steps.
             initial_steps (int, optional): the number of initial time steps
                 completed by a multi-level time scheme. Defaults to None.
         """
@@ -657,7 +689,7 @@ class IO(object):
         for field in self.diagnostic_fields:
             field.compute()
 
-        if output.dump_diagnostics:
+        if output.dump_diagnostics and (next(self.diagcount) % output.diagfreq) == 0:
             # Output diagnostic data
             self.diagnostic_output.dump(state_fields, t)
 
@@ -671,6 +703,7 @@ class IO(object):
                 for field_name in self.to_pick_up:
                     self.chkpt.store(state_fields(field_name), name=field_name)
                 self.chkpt.write_attribute("/", "time", t)
+                self.chkpt.write_attribute("/", "step", step)
                 if initial_steps is not None:
                     self.chkpt.write_attribute("/", "initial_steps", initial_steps)
             else:
@@ -679,6 +712,7 @@ class IO(object):
                     for field_name in self.to_pick_up:
                         chk.save_function(state_fields(field_name), name=field_name)
                     chk.set_attr("/", "time", t)
+                    chk.set_attr("/", "step", step)
                     if initial_steps is not None:
                         chk.set_attr("/", "initial_steps", initial_steps)
 
