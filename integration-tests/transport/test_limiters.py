@@ -53,7 +53,7 @@ def setup_limiters(dirname, space):
     else:
         raise NotImplementedError
 
-    Vpsi = domain.spaces('CG', 'CG', degree+1)
+    Vpsi = domain.spaces('H1')
 
     # Equation
     eqn = AdvectionEquation(domain, V, 'tracer')
