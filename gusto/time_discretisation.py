@@ -444,6 +444,18 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             map_if_true=drop,
             map_if_false=lambda t: -1*t)
 
+        # If there are no active labels, we may have no terms at this point
+        # So that we can still do xnp1 = xn, put in a zero term here
+        if len(r.terms) == 0:
+            logger.warning('No terms detected for RHS of explicit problem. '
+                           + 'Adding a zero term to avoid failure.')
+            null_term = Constant(0.0)*self.residual.label_map(
+                lambda t: t.has_label(time_derivative),
+                # Drop label from this
+                map_if_true=lambda t: time_derivative.remove(t),
+                map_if_false=drop)
+            r += null_term
+
         return r.form
 
     def solve_stage(self, x0, stage):
@@ -604,13 +616,7 @@ class BackwardEuler(TimeDiscretisation):
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods. Defaults to None.
-
-        Raises:
-            NotImplementedError: if options is an instance of
-            EmbeddedDGOptions or RecoveryOptions
         """
-        if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
-            raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         if not solver_parameters:
             # default solver parameters
             solver_parameters = {'ksp_type': 'gmres',
@@ -649,6 +655,13 @@ class BackwardEuler(TimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field.
         """
+        for evaluate in self.evaluate_source:
+            evaluate(x_in, self.dt)
+
+        if len(self.evaluate_source) > 0:
+            # If we have physics, use x_in as first guess
+            self.x_out.assign(x_in)
+
         self.x1.assign(x_in)
         self.solver.solve()
         x_out.assign(self.x_out)

@@ -1,7 +1,7 @@
 """
-# This tests the Condensation routine. It creates a bubble of water vapour that
-# is advected by a prescribed velocity. The test passes if the integral
-# of the water mixing ratio is conserved.
+This tests the SaturationAdjustment routine. It creates a bubble of water vapour
+that is advected by a prescribed velocity. The test passes if the integral
+of the water mixing ratio is conserved.
 """
 
 from os import path
@@ -34,8 +34,6 @@ def run_cond_evap(dirname, process):
     domain = Domain(mesh, dt, "CG", 1)
 
     x, z = SpatialCoordinate(mesh)
-
-    # spaces
 
     # Set up equation
     tracers = [WaterVapour(), CloudWater()]
