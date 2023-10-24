@@ -138,4 +138,4 @@ def RexiCoefficients(rexi_parameters):
 
     alpha = numpy.concatenate((alpha, -alpha))
 
-    return alpha, beta, beta2
+    return [alpha[0]], [beta[0]], [beta2[0]]
