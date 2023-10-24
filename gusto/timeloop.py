@@ -216,6 +216,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             set the reference field.
         """
         for field_name, profile in reference_profiles:
+            breakpoint()
             if field_name+'_bar' in self.fields:
                 # For reference profiles already added to state, allow
                 # interpolation from expressions
@@ -228,16 +229,19 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             else:
                 raise ValueError(f'When initialising reference profile {field_name}'
                                  + ' the passed profile must be a Function')
+            # if field name is not prognostic we need to add it 
             ref.interpolate(profile)
-
             # Assign profile to X_ref belonging to equation
             if isinstance(self.equation, PrognosticEquationSet):
-                assert field_name in self.equation.field_names, \
-                    f'Cannot set reference profile as field {field_name} not found'
-                idx = self.equation.field_names.index(field_name)
-                X_ref = self.equation.X_ref.subfunctions[idx]
-                X_ref.assign(ref)
-
+                if field_name in self.equation.field_names:
+                    idx = self.equation.field_names.index(field_name)
+                    X_ref = self.equation.X_ref.subfunctions[idx]
+                    X_ref.assign(ref)
+                else:
+                    # reference profile of a diagnostic
+                    # warn user in case they made a typo
+                    logger.warning(f'Setting reference profile for diagnostic {field_name}')
+                    # dont need to do anythin else as value in field container has already been set
         self.reference_profiles_initialised = True
 
 

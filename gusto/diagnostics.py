@@ -1101,7 +1101,6 @@ class Perturbation(Difference):
 
         super().setup(domain, state_fields)
 
-
 # TODO: unify thermodynamic diagnostics
 class ThermodynamicDiagnostic(DiagnosticField):
     """Base thermodynamic diagnostic field, computing many common fields."""

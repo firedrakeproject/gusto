@@ -45,7 +45,6 @@ domain = Domain(mesh, dt, "CG", 1)
 Tsurf = 300.
 parameters = CompressibleParameters()
 eqns = CompressibleEulerEquations(domain, parameters)
-print(f'Number of DOFs = {eqns.X.function_space().dim()}')
 
 # I/O
 points_x = np.linspace(0., L, 100)
