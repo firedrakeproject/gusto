@@ -1035,8 +1035,8 @@ class SteadyStateError(Difference):
                                   pick_up=True, dump=False)         
             # Attach state fields to self so that we can pick it up in compute
             self.state_fields = state_fields
-            # The initial value for fields may not have alreay been set yet so we
-            # postpone setting it untill the compute method is called
+            # The initial value for fields may not have already been set yet so we
+            # postpone setting it until the compute method is called
             self.init_field_set = False
         else: 
             field1 = state_fields(self.field_name1)
@@ -1052,7 +1052,7 @@ class SteadyStateError(Difference):
 
     def compute(self):
         # The first time the compute method is called we set the initial field.
-        # We do not want to do this is picking up from a checkpoint
+        # We do not want to do this if picking up from a checkpoint
         if not self.init_field_set:
             # Set initial field
             full_field = self.state_fields(self.field_name1)
