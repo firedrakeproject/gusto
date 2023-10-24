@@ -750,10 +750,6 @@ class PrescribedTransport(Timestepper):
     def run(self, t, tmax, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/main
         Args:
             t (float): the start time of the run
             tmax (float): the end time of the run
