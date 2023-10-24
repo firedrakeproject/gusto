@@ -1005,7 +1005,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             interpolator.interpolate()
             
             
-class TerminatorToy(Physics):
+class TerminatorToy(PhysicsParametrisation):
   """
   Setup the Terminator Toy chemistry interaction
   as specified in 'The terminator toy chemistry test ...'
@@ -1034,9 +1034,13 @@ class TerminatorToy(Physics):
             to 'X2'.
             
         """
+             
+        label_name = 'terminator_toy'
+        super().__init__(equation, label_name, parameters=None)     
                  
         assert species1_name in equation.field_names, f"Field {species1_name} does not exist in the equation set"
         assert species2_name in equation.field_names, f"Field {species2_name} does not exist in the equation set"
+
         
         self.species1_idx = equation.field_names.index(species1_name)
         self.species2_idx = equation.field_names.index(species2_name)
@@ -1067,7 +1071,7 @@ class TerminatorToy(Physics):
         # Add term to equation's residual
         test_1 = equation.tests[self.species1_idx]
         test_2 = equation.tests[self.species2_idx]
-        equation.residual += physics(subject(test_1 * -2*self.source * dx
+        equation.residual += self.label(subject(test_1 * -2*self.source * dx
                                              + test_2 * self.source * dx,
                                              equation.X),
                                      self.evaluate)
