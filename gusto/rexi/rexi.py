@@ -82,30 +82,34 @@ class REXI_PC(PCBase):
         #                        'fieldsplit_1_ksp_type': 'cg'})
 
         # solve a system for unr, uni (the back-substitute routine)
-        self.ub = Function(W)
+        self.uD_out = Function(W)
+        Vu = MixedFunctionSpace((W.sub(0), W.sub(1)))
+        self.ub = Function(Vu)
+        wr, wi = TestFunctions(Vu)
+        ubr, ubi = TrialFunctions(Vu)
         self.p = Function(W)
         _, _, p_r, p_i = self.p.subfunctions
 
-        ab = ((inner(v_r, y_r) + inner(v_r, y_i) -inner(v_i, y_r)
-               + inner(v_i, y_i))*dx)
+        ab = ((inner(wr, ubr) + inner(wr, ubi) -inner(wi, ubr)
+               + inner(wi, ubi))*dx)
 
         Lb = ((alpha_r**2 + alpha_i**2)**(-1) *
-              (inner(v_r, u0r)*beta_r*alpha_r
-               - inner(v_r, u0r)*beta_r*alpha_i
-               + inner(v_r, u0r)*beta_i*alpha_r
-               + inner(v_r, u0r)*beta_i*alpha_i
-               - inner(v_i, u0r)*beta_r*alpha_r
-               - inner(v_i, u0r)*beta_r*alpha_i
-               + inner(v_i, u0r)*beta_i*alpha_r
-               - inner(v_i, u0r)*beta_i*alpha_i
-               - tau*alpha_r*inner(div(v_r), p_r)
-               + tau*alpha_i*inner(div(v_r), p_r)
-               + tau*alpha_r*inner(div(v_i), p_r)
-               + tau*alpha_i*inner(div(v_i), p_r)
-               - tau*alpha_r*inner(div(v_r), p_i)
-               - tau*alpha_i*inner(div(v_r), p_i)
-               - tau*alpha_r*inner(div(v_i), p_i)
-               + tau*alpha_i*inner(div(v_i), p_i)
+              (inner(wr, u0r)*beta_r*alpha_r
+               - inner(wr, u0r)*beta_r*alpha_i
+               + inner(wr, u0r)*beta_i*alpha_r
+               + inner(wr, u0r)*beta_i*alpha_i
+               - inner(wi, u0r)*beta_r*alpha_r
+               - inner(wi, u0r)*beta_r*alpha_i
+               + inner(wi, u0r)*beta_i*alpha_r
+               - inner(wi, u0r)*beta_i*alpha_i
+               - tau*alpha_r*inner(div(wr), p_r)
+               + tau*alpha_i*inner(div(wr), p_r)
+               + tau*alpha_r*inner(div(wi), p_r)
+               + tau*alpha_i*inner(div(wi), p_r)
+               - tau*alpha_r*inner(div(wr), p_i)
+               - tau*alpha_i*inner(div(wr), p_i)
+               - tau*alpha_r*inner(div(wi), p_i)
+               + tau*alpha_i*inner(div(wi), p_i)
               )) * dx
 
         b_prob = LinearVariationalProblem(ab, Lb, self.ub)
@@ -134,13 +138,15 @@ class REXI_PC(PCBase):
     
         self.b_solver.solve()
 
+        ubr, ubi = self.ub.subfunctions
+        ur_out, ui_out, Dr_out, Di_out = self.uD_out.subfunctions
+        ur_out.assign(ubr)
+        ui_out.assign(ubi)
         _, _, p_r, p_i = self.p.subfunctions
-
-        _, _, Dr_out, Di_out = self.ub.subfunctions
         Dr_out.assign(p_r + 1)
         Di_out.assign(p_i)
 
-        with self.ub as v:
+        with self.uD_out.dat.vec_ro as v:
             v.copy(y)
 
     def applyTranspose(self, pc, x, y):
