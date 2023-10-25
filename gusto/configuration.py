@@ -8,7 +8,7 @@ __all__ = [
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
     "CompressibleParameters", "ShallowWaterParameters",
     "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
-    "SpongeLayerParameters", "DiffusionParameters"
+    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
 ]
 
 
@@ -185,3 +185,18 @@ class DiffusionParameters(Configuration):
 
     kappa = None
     mu = None
+
+
+class BoundaryLayerParameters(Configuration):
+    """
+    Parameters for the idealised wind drag, surface flux and boundary layer
+    mixing schemes.
+    """
+
+    coeff_drag_0 = 7e-4         # Zeroth drag coefficient (dimensionless)
+    coeff_drag_1 = 6.5e-5       # First drag coefficient (s/m)
+    coeff_drag_2 = 2e-3         # Second drag coefficient (dimensionless)
+    coeff_heat = 1.1e-3         # Dimensionless surface sensible heat coefficient
+    coeff_evap = 1.1e-3         # Dimensionless surface evaporation coefficient
+    height_surface_layer = 75.  # Height (m) of surface level (usually lowest level)
+    mu = 100.                   # Interior penalty coefficient for vertical diffusion
