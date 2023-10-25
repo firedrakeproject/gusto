@@ -37,7 +37,7 @@ class REXI_PC(PCBase):
         W = test.function_space()
 
         self.uD_in = Function(W)
-        u_r, u_i, D_r, D_i = self.uD_in.subfunctions
+        u0r, u0i, D0r, D0i = self.uD_in.subfunctions
         tests = TestFunctions(W)
         trials = TrialFunctions(W)
         v_r = tests[0]
@@ -54,8 +54,8 @@ class REXI_PC(PCBase):
         ### functions, stored in self so that we can copy the values
         ### from x and y in to them in the apply method - if you look
         ### in the apply method I have called this self.uD_in
-        f_r = beta_r*g*(D_r-H) + tau*g*H*gamma_r*div(u_r)
-        f_i = beta_r*g*(D_r-H) + tau*g*H*gamma_i*div(u_r)
+        f_r = beta_r*g*(D0r-H) + tau*g*H*gamma_r*div(u0r)
+        f_i = beta_r*g*(D0r-H) + tau*g*H*gamma_i*div(u0r)
 
         # define a and L
         a = (lamda_r * (inner(v_r, y_r) + inner(v_r, y_i) - inner(v_i, y_r) + inner(v_i, y_i)) + lamda_i * (inner(v_r, y_r) - inner(v_r, y_i) + inner(v_i, y_r) +inner(v_i, y_i))) * dx
@@ -81,19 +81,32 @@ class REXI_PC(PCBase):
         #                        'fieldsplit_0_ksp_type': 'cg',
         #                        'fieldsplit_1_ksp_type': 'cg'})
 
+        # solve a system for unr, uni (the back-substitute routine)
         self.ub = Function(W)
         self.p = Function(W)
         _, _, p_r, p_i = self.p.subfunctions
 
-        ab = inner(v_r, y_r)*dx + inner(v_i, y_i)*dx
+        ab = ((inner(v_r, y_r) + inner(v_r, y_i) -inner(v_i, y_r)
+               + inner(v_i, y_i))*dx)
 
-        Lb = (inner(v_r, u_r)*beta_r*alpha_r + inner(v_r, u_r)*beta_i*alpha_i
-              - tau*alpha_r*inner(div(v_r), p_r)
-              - tau*alpha_i*inner(div(v_r), p_i)
-              -inner(v_i, u_r)*beta_r*alpha_i + inner(v_i, u_r)*beta_i*alpha_r
-              - tau*alpha_r*inner(div(v_i), p_i)
-              + tau*alpha_i*inner(div(v_i), p_r)
-              )* dx
+        Lb = ((alpha_r**2 + alpha_i**2)**(-1) *
+              (inner(v_r, u0r)*beta_r*alpha_r
+               - inner(v_r, u0r)*beta_r*alpha_i
+               + inner(v_r, u0r)*beta_i*alpha_r
+               + inner(v_r, u0r)*beta_i*alpha_i
+               - inner(v_i, u0r)*beta_r*alpha_r
+               - inner(v_i, u0r)*beta_r*alpha_i
+               + inner(v_i, u0r)*beta_i*alpha_r
+               - inner(v_i, u0r)*beta_i*alpha_i
+               - tau*alpha_r*inner(div(v_r), p_r)
+               + tau*alpha_i*inner(div(v_r), p_r)
+               + tau*alpha_r*inner(div(v_i), p_r)
+               + tau*alpha_i*inner(div(v_i), p_r)
+               - tau*alpha_r*inner(div(v_r), p_i)
+               - tau*alpha_i*inner(div(v_r), p_i)
+               - tau*alpha_r*inner(div(v_i), p_i)
+               + tau*alpha_i*inner(div(v_i), p_i)
+              )) * dx
 
         b_prob = LinearVariationalProblem(ab, Lb, self.ub)
         self.b_solver = LinearVariationalSolver(b_prob)
