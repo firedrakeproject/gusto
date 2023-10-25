@@ -331,10 +331,24 @@ class IO(object):
             species_1_max = self.diagnostics.max(s1_field)/2
             species_2_max = self.diagnostics.max(s2_field)/2
             
-            logger.info(f'X min, {species_1_min}')
-            logger.info(f'X max, {species_1_max}')
-            logger.info(f'X2 min, {species_2_min}')
-            logger.info(f'X2 max, {species_2_max}')
+            species_1_total = self.diagnostics.total(s1_field)/2
+            species_2_total = self.diagnostics.total(s2_field)/2
+            
+            #logger.info(f'X min, {species_1_min}')
+            #logger.info(f'X max, {species_1_max}')
+            #logger.info(f'X2 min, {species_2_min}')
+            #logger.info(f'X2 max, {species_2_max}')
+            
+            x_tot_idx = diagnostic_names.index('TracerDensity')
+            x_tot_diagnostic = self.diagnostic_fields[x_tot_idx]
+            x_tot_diagnostic.compute()
+            
+            x_tot_field = state_fields('TracerDensity')
+            x_tot_total = self.diagnostics.total(x_tot_field) 
+            
+            logger.info(f'X total, {species_1_total}')
+            logger.info(f'X2 total, {species_2_total}')
+            logger.info(f'Total stuff, {x_tot_total}')
 
             if component == 'whole':
                 # TODO: this will update the Courant number more than we need to
