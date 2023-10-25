@@ -287,18 +287,14 @@ class IMEXMultistage(TimeDiscretisation):
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            butcher_imp (numpy array): A matrix containing the coefficients of
+            butcher_imp (:class:`numpy.ndarray`): A matrix containing the coefficients of
                 a butcher tableau defining a given implicit Runge Kutta time discretisation.
-            butcher_exp (numpy array): A matrix containing the coefficients of
+            butcher_exp (:class:`numpy.ndarray`): A matrix containing the coefficients of
                 a butcher tableau defining a given explicit Runge Kutta time discretisation.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            subcycles (int, optional): the number of sub-steps to perform.
-                Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
-            limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
@@ -306,7 +302,7 @@ class IMEXMultistage(TimeDiscretisation):
         """
         super().__init__(domain, field_name=field_name,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         options=options)
         self.butcher_imp = butcher_imp
         self.butcher_exp = butcher_exp
         self.nStages = int(np.shape(self.butcher_imp)[1])
@@ -344,6 +340,8 @@ class IMEXMultistage(TimeDiscretisation):
         return super(IMEXMultistage, self).rhs
 
     def res(self, stage):
+        """Set up the discretisation's residual for a given stage."""
+        # Add time derivative terms  y_s - y^n for stage s 
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=drop)
@@ -351,6 +349,10 @@ class IMEXMultistage(TimeDiscretisation):
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        # Loop through stages up to s-1 and calcualte/sum
+        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
+        # and
+        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
         for i in range(stage):
             r_exp = self.residual.label_map(
                 lambda t: t.has_label(explicit),
@@ -368,6 +370,7 @@ class IMEXMultistage(TimeDiscretisation):
                 map_if_false=lambda t: Constant(self.butcher_imp[stage, i])*self.dt*t)
             residual += r_imp
             residual += r_exp
+        # Calculate and add on dt*a_ss*F(y_s)
         r_imp = self.residual.label_map(
             lambda t: t.has_label(implicit),
             map_if_true=replace_subject(self.x_out, old_idx=self.idx),
@@ -380,12 +383,18 @@ class IMEXMultistage(TimeDiscretisation):
 
     @property
     def final_res(self):
+        """Set up the discretisation's final residual."""
+        # Add time derivative terms  y^{n+1} - y^n 
         mass_form = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                             map_if_false=drop)
         residual = mass_form.label_map(all_terms,
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        # Loop through stages up to s-1 and calcualte/sum
+        # dt*(b_1*F(y_1) + b_2*F(y_2) + .... + b_s*F(y_s))
+        # and
+        # dt*(e_1*S(y_1) + e_2*S(y_2) + .... + e_s*S(y_s))
         for i in range(self.nStages):
             r_exp = self.residual.label_map(
                 lambda t: t.has_label(explicit),
@@ -407,6 +416,7 @@ class IMEXMultistage(TimeDiscretisation):
 
     @cached_property
     def solvers(self):
+        """Set up a list of solvers for each problem at a stage."""
         solvers = []
         for stage in range(self.nStages):
             # setup solver using residual defined in derived class
@@ -417,6 +427,7 @@ class IMEXMultistage(TimeDiscretisation):
 
     @cached_property
     def final_solver(self):
+        """Set up a solver for the final solve to evaluate time level n+1."""
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
