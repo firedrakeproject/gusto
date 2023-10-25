@@ -1490,8 +1490,12 @@ class SDC(object, metaclass=ABCMeta):
 
 class FE_SDC(SDC):
 
-    def setup(self, equation, apply_bcs=True, *active_labels):
-        self.base = ForwardEuler(self.domain, field_name=self.field_name)
+    def __init__(self, base_scheme, domain, M, maxk, field_name=None):
+        super().__init__(domain, M, maxk, field_name=field_name)
+        self.base = base_scheme
+
+
+    def setup(self, equation, butcher_matrix, apply_bcs=True, *active_labels):
         self.base.setup(equation, apply_bcs=True, *active_labels)
         self.residual = self.base.residual
 
