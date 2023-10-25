@@ -260,7 +260,7 @@ class IMEXMultistage(TimeDiscretisation):
                   + dt*(e_1*S(y_1) + e_2*S(y_2) + .... + e_s*S(y_s))          \n
 
     """
-    # ---------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Butcher tableaus for a s-th order
     # diagonally implicit scheme (left) and explicit scheme (right):
     #  c_0 | a_00  0    .     0        f_0 |   0   0    .     0
@@ -279,7 +279,8 @@ class IMEXMultistage(TimeDiscretisation):
     #  [a_20 a_21 a_22 .   0  ]        [d_20  d_21 0   .   0  ]
     #  [  .    .   .   .   .  ]        [  .    .   .   .   .  ]
     #  [ b_0  b_1  .       b_s]        [ e_0  e_1  .   .   e_s]
-    # ---------------------------------------------------------------------------
+    #
+    # --------------------------------------------------------------------------
 
     def __init__(self, domain, butcher_imp, butcher_exp, field_name=None,
                  solver_parameters=None, limiter=None, options=None):
@@ -326,6 +327,8 @@ class IMEXMultistage(TimeDiscretisation):
         self.residual = self.residual.label_map(
             lambda t: t.has_label(transport),
             map_if_true=lambda t: explicit(t))
+        
+        logger.warning("Default IMEX Multistage treats transport terms explicitly, and all other terms implicitly")
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
 
@@ -341,7 +344,7 @@ class IMEXMultistage(TimeDiscretisation):
 
     def res(self, stage):
         """Set up the discretisation's residual for a given stage."""
-        # Add time derivative terms  y_s - y^n for stage s 
+        # Add time derivative terms  y_s - y^n for stage s
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=drop)
@@ -384,7 +387,7 @@ class IMEXMultistage(TimeDiscretisation):
     @property
     def final_res(self):
         """Set up the discretisation's final residual."""
-        # Add time derivative terms  y^{n+1} - y^n 
+        # Add time derivative terms  y^{n+1} - y^n
         mass_form = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                             map_if_false=drop)
         residual = mass_form.label_map(all_terms,
