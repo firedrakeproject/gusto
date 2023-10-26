@@ -582,7 +582,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
                  space_names=None, linearisation_map='default',
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None,
-                 thermal=False, conservative_depth=True):
+                 thermal=False):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -676,10 +676,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
         # Depth transport term
-        if (conservative_depth):
-            D_adv = prognostic(continuity_form(phi, D, u), 'D')
-        else:
-            D_adv = prognostic(advection_form(phi, D, u), 'D')
+        D_adv = prognostic(continuity_form(phi, D, u), 'D')
 
         # Transport term needs special linearisation
         if self.linearisation_map(D_adv.terms[0]):
@@ -710,11 +707,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 subject(prognostic(-g*div(w)*D*dx, 'u'), self.X))
 
             residual = (mass_form + adv_form + pressure_gradient_form)
-
-        # Add divergence term
-        if (not conservative_depth):
-            geo_grad_form = subject(prognostic(phi*D*div(u)*dx), self.X)
-            residual += geo_grad_form
 
         # -------------------------------------------------------------------- #
         # Extra Terms (Coriolis, Topography and Thermal)
