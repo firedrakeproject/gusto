@@ -14,6 +14,7 @@ from gusto.coord_transforms import rotated_lonlatr_vectors
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.active_tracers import TracerVariableType, Phases
+from gusto.logging import logger
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
@@ -25,7 +26,7 @@ __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
            "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
-           "TracerDensity"]
+           "BruntVaisalaFrequencySquared", "TracerDensity"]
 
 
 class Diagnostics(object):
@@ -220,6 +221,8 @@ class DiagnosticField(object, metaclass=ABCMeta):
 
     def compute(self):
         """Compute the diagnostic field from the current state."""
+
+        logger.debug(f'Computing diagnostic {self.name} with {self.method} method')
 
         if self.method == 'interpolate':
             self.evaluator.interpolate()
@@ -941,6 +944,51 @@ class Exner(DiagnosticField):
         rho = state_fields(self.rho_name)
         theta = state_fields(self.theta_name)
         self.expr = tde.exner_pressure(self.parameters, rho, theta)
+        super().setup(domain, state_fields)
+
+
+class BruntVaisalaFrequencySquared(DiagnosticField):
+    """The diagnostic for the Brunt-Väisälä frequency."""
+    name = "Brunt-Vaisala_squared"
+
+    def __init__(self, equations, space=None, method='interpolate'):
+        """
+        Args:
+            equations (:class:`PrognosticEquationSet`): the equation set being
+                solved by the model.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.parameters = equations.parameters
+        # Work out required fields
+        if isinstance(equations, CompressibleEulerEquations):
+            required_fields = ['theta']
+            if equations.active_tracers is not None and len(equations.active_tracers) > 1:
+                # TODO: I think theta here should be theta_e, which would be
+                # easiest if this is a ThermodynamicDiagnostic. But in the dry
+                # case, our numerical theta_e does not reduce to the numerical
+                # dry theta
+                raise NotImplementedError(
+                    'Brunt-Vaisala diagnostic not implemented for moist equations')
+        else:
+            raise NotImplementedError(
+                f'Brunt-Vaisala diagnostic not implemented for {type(equations)}')
+        super().__init__(space=space, method=method, required_fields=tuple(required_fields))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        theta = state_fields('theta')
+        self.expr = self.parameters.g/theta * dot(domain.k, grad(theta))
         super().setup(domain, state_fields)
 
 
