@@ -412,12 +412,14 @@ class SplitPrescribedTransport(Timestepper):
         else:
             self.physics_schemes = []
 
-        for _, phys_scheme in self.physics_schemes:
-            # check that the supplied schemes for physics are explicit
-            assert isinstance(phys_scheme, ExplicitTimeDiscretisation), \
-                "Only explicit time discretisations can be used for physics"
+        for parametrisation, phys_scheme in self.physics_schemes:
+            # check that the supplied schemes for physics are valid
+            if hasattr(parametrisation, "explicit_only") and parametrisation.explicit_only:
+                assert isinstance(phys_scheme, ExplicitTimeDiscretisation), \
+                    ("Only explicit time discretisations can be used with "
+                     + f"physics scheme {parametrisation.label.label}")
             apply_bcs = False
-            phys_scheme.setup(equation, apply_bcs, physics_label)
+            phys_scheme.setup(equation, apply_bcs, parametrisation.label)
             
         if prescribed_transporting_velocity is not None:
             self.velocity_projection = Projector(
