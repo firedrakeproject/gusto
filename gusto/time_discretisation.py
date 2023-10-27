@@ -27,7 +27,7 @@ import numpy as np
 
 __all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage",
            "IMEXMultistage", "SSPRK3", "RK4", "Heun", "ThetaMethod",
-           "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog","AdamsMoulton", 
+           "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton",
            "AdamsBashforth", "ImplicitMidpoint", "QinZhang",
            "IMEX_Euler", "ARS3", "ARK2", "Trap2", "SSP3"]
 
