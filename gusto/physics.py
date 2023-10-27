@@ -1765,18 +1765,24 @@ class TerminatorToy(PhysicsParametrisation):
   
   """
   def __init__(self, equation, k1=1, k2=1, 
-               species1_name='X', species2_name='X2'):
+               species1_name='X', species2_name='X2', 
+               implicit_formulation=False):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation
             k1(float, optional): Reaction rate for species 1 (X). Defaults to a constant
-            over the domain.
+              over the domain.
             k2(float, optional): Reaction rate for species 2 (X2). Defaults to a constant 
-            over the domain.
+              over the domain.
             species1_name(str, optional): Name of the first interacting species. Defaults 
-            to 'X'.
+              to 'X'.
             species2_name(str, optional): Name of the second interacting species. Defaults 
-            to 'X2'.
+              to 'X2'.
+            implicit_formulation (bool, optional): whether the scheme is already
+                put into a Backwards Euler formulation (which allows this scheme
+                to actually be used with a Forwards Euler or other explicit time
+                discretisation). Otherwise, this is formulated more generally
+                and can be used with any time stepper. Defaults to False.
             
         """
              
@@ -1786,40 +1792,80 @@ class TerminatorToy(PhysicsParametrisation):
         assert species1_name in equation.field_names, f"Field {species1_name} does not exist in the equation set"
         assert species2_name in equation.field_names, f"Field {species2_name} does not exist in the equation set"
 
-        
         self.species1_idx = equation.field_names.index(species1_name)
         self.species2_idx = equation.field_names.index(species2_name)
-        #V1 = equation.function_space.sub(self.species1_idx)
-        #V2 = equation.function_space.sub(self.species2_idx)
+        
+        self.implicit_formulation = implicit_formulation
         
         assert equation.function_space.sub(self.species1_idx) == equation.function_space.sub(self.species2_idx), f"The function spaces for the two species need to be the same"
         
         V = equation.function_space.sub(self.species1_idx)
         
-        #self.species1 = Function(V1)
-        #self.species2 = Function(V2)
-        
         self.species1 = Function(V)
         self.species2 = Function(V)
-                 
-        #Vs1 = self.species1.function_space()
-        #Vs2 = self.species2.function_space()
+        Xt = Function(V)
         
         # Declare function space and source field
         Vs = self.species1.function_space()
         self.source = Function(Vs)
         
-        Kx = k1*self.species2 - k2*(self.species1**2)
-                 
-        self.source_interpolator = Interpolator(Kx, self.source)
-
-        # Add term to equation's residual
-        test_1 = equation.tests[self.species1_idx]
-        test_2 = equation.tests[self.species2_idx]
-        equation.residual += self.label(subject(test_1 * -2*self.source * dx
-                                             + test_2 * self.source * dx,
-                                             equation.X),
-                                     self.evaluate)
+        X = self.species1
+        X2 = self.species2
+        
+        # or?
+        self.X_eq = Function(equation.X.function_space())
+        self.dt = Constant(0.0)
+        X_eq = self.X_eq
+        dt = self.dt
+        
+        X = split(X_eq)[self.species1_idx]
+        X2 = split(X_eq)[self.species2_idx]
+        
+        if implicit_formulation:
+          # Use an analytical
+          # forcing solution given in Appendix G.
+          r = k1/(4*k2)
+          Xt.assign(X + 2*X2)
+          
+          X_plus_X2 = Sum('X', 'X2')
+          Xt = Sum('X_plus_X2', 'X2') 
+          
+          d = sqrt(r*r + 2*r*Xt)
+          
+          e = exp(-4*k2*d*dt)
+          
+          if abs(d*k2*dt) > 1e-16:
+            el = (1-e)/(d*dt)
+          else:
+            el = 4*k2
+            
+          fX = -el*(X-d+r)*(X+d+r)/(1+e+dt*el*(X+r))
+          fX2 = -fX/2
+        
+          test_1 = equation.tests[self.species1_idx]
+          test_2 = equation.tests[self.species2_idx]
+          equation.residual += self.label(subject(test_1 * -fX * dx
+                                               + test_2 * -fX2 * dx,
+                                               equation.X),
+                                       self.evaluate)
+        
+        else:
+          # Define ODE equations to solve
+          # These will require a very small time
+          # step with explicit timesteppers,
+          # so an implicit timestepper is recommended
+        
+          Kx = k1*self.species2 - k2*(self.species1**2)
+                   
+          self.source_interpolator = Interpolator(Kx, self.source)
+  
+          # Add term to equation's residual
+          test_1 = equation.tests[self.species1_idx]
+          test_2 = equation.tests[self.species2_idx]
+          equation.residual += self.label(subject(test_1 * -2*self.source * dx
+                                               + test_2 * self.source * dx,
+                                               equation.X),
+                                       self.evaluate)
 
   def evaluate(self, x_in, dt):
         """
@@ -1829,6 +1875,8 @@ class TerminatorToy(PhysicsParametrisation):
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
         """
+        
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
 
         # Update the values of internal variables
         self.species1.assign(x_in.subfunctions[self.species1_idx])

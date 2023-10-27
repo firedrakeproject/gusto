@@ -441,6 +441,9 @@ class SplitPrescribedTransport(Timestepper):
         self.scheme.courant_max = self.io.courant_max
 
     def timestep(self):
+    
+        if self.velocity_projection is not None:
+            self.velocity_projection.project()
 
         super().timestep()
 
