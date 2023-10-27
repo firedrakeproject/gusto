@@ -8,18 +8,20 @@ with "evaluate" methods.
 """
 
 from abc import ABCMeta, abstractmethod
+from firedrake import (
+    Interpolator, conditional, Function, dx, sqrt, dot, min_value,
+    max_value, Constant, pi, Projector, grad, TestFunctions, split,
+    inner, TestFunction, exp, avg, outer, FacetNormal,
+    SpatialCoordinate, dS_v, NonlinearVariationalProblem,
+    NonlinearVariationalSolver
+)
+from firedrake.fml import identity, Term, subject
 from gusto.active_tracers import Phases, TracerVariableType
 from gusto.configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.fml import identity, Term, subject
 from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognostic
 from gusto.logging import logger
-from firedrake import (Interpolator, conditional, Function, dx, sqrt, dot,
-                       min_value, max_value, Constant, pi, Projector, grad,
-                       TestFunctions, split, inner, TestFunction, exp, avg,
-                       outer, FacetNormal, SpatialCoordinate, dS_v,
-                       NonlinearVariationalProblem, NonlinearVariationalSolver)
 from gusto import thermodynamics
 import ufl
 import math

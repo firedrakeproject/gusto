@@ -4,7 +4,7 @@ spatial discretisation of some term.
 """
 
 from firedrake import split
-from gusto.fml import Term, keep, drop
+from firedrake.fml import Term, keep, drop
 from gusto.labels import prognostic
 
 __all__ = ['SpatialMethod']

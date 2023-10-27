@@ -4,7 +4,7 @@ from firedrake import (
     Function, TrialFunctions, DirichletBC, LinearVariationalProblem,
     LinearVariationalSolver
 )
-from gusto.fml import drop, replace_subject, name
+from firedrake.fml import drop, replace_subject, name_label
 from gusto.labels import (
     transport, diffusion, time_derivative, hydrostatic, physics_label
 )

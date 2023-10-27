@@ -2,9 +2,9 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, Projector, split, Constant
+from firedrake.fml import drop, Label, Term
 from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
-from gusto.fml import drop, Label, Term
 from gusto.fields import TimeLevelFields, StateFields
 from gusto.forcing import Forcing
 from gusto.labels import (

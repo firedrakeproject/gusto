@@ -1,22 +1,27 @@
 """Objects describing geophysical fluid equations to be solved in weak form."""
 
 from abc import ABCMeta
-from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
-                       FunctionSpace, MixedFunctionSpace, TestFunctions,
-                       TrialFunction, FacetNormal, jump, avg, dS_v, dS,
-                       DirichletBC, conditional, SpatialCoordinate,
-                       split, Constant, action)
+from firedrake import (
+    TestFunction, Function, sin, pi, inner, dx, div, cross,
+    FunctionSpace, MixedFunctionSpace, TestFunctions, TrialFunction,
+    FacetNormal, jump, avg, dS_v, dS, DirichletBC, conditional,
+    SpatialCoordinate, split, Constant, action
+)
+from firedrake.fml import (
+    Term, all_terms, keep, drop, Label, subject, name_label,
+    replace_subject, replace_trial_function
+)
 from gusto.fields import PrescribedFields
-from gusto.fml import (Term, all_terms, keep, drop, Label, subject, name,
-                       replace_subject, replace_trial_function)
-from gusto.labels import (time_derivative, transport, prognostic, hydrostatic,
-                          linearisation, pressure_gradient, coriolis)
+from gusto.labels import (
+    time_derivative, transport, prognostic, hydrostatic, linearisation,
+    pressure_gradient, coriolis
+)
 from gusto.thermodynamics import exner_pressure
-from gusto.common_forms import (advection_form, continuity_form,
-                                vector_invariant_form, kinetic_energy_form,
-                                advection_equation_circulation_form,
-                                diffusion_form, linear_continuity_form,
-                                linear_advection_form)
+from gusto.common_forms import (
+    advection_form, continuity_form, vector_invariant_form,
+    kinetic_energy_form, advection_equation_circulation_form,
+    diffusion_form, linear_continuity_form, linear_advection_form
+)
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
 from gusto.configuration import TransportEquationType
 import ufl
