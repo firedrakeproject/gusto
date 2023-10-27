@@ -977,7 +977,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 raise NotImplementedError('Only mixing ratio tracers are implemented')
         theta_v = theta / (Constant(1.0) + tracer_mr_total)
 
-        pressure_gradient_form = name(subject(prognostic(
+        pressure_gradient_form = name_label(subject(prognostic(
             cp*(-div(theta_v*w)*exner*dx
                 + jump(theta_v*w, n)*avg(exner)*dS_v), 'u'), self.X), "pressure_gradient")
 
@@ -1044,7 +1044,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                                  mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
             self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
 
-            residual += name(subject(prognostic(
+            residual += name_label(subject(prognostic(
                 self.mu*inner(w, domain.k)*inner(u, domain.k)*dx, 'u'), self.X), "sponge")
 
         if diffusion_options is not None:
@@ -1149,7 +1149,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
 
         k = self.domain.k
         u = split(self.X)[0]
-        self.residual += name(
+        self.residual += name_label(
             subject(
                 prognostic(
                     -inner(k, self.tests[0]) * inner(k, u) * dx, "u"),
@@ -1314,8 +1314,10 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # The p features here so that the div(u) evaluated in the "forcing" step
         # replaces the whole pressure field, rather than merely providing an
         # increment to it.
-        divergence_form = name(subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
-                               "incompressibility")
+        divergence_form = name_label(
+            subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
+            "incompressibility"
+        )
 
         residual = (mass_form + adv_form + divergence_form
                     + pressure_gradient_form + gravity_form)

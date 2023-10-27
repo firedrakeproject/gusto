@@ -58,20 +58,26 @@ class Forcing(object):
 
         # the explicit forms are multiplied by (1-alpha) and moved to the rhs
         L_explicit = -(1-alpha)*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms or t.get(name) == "hydrostatic_form",
+            lambda t:
+                t.has_label(time_derivative)
+                or t.get(name_label) in implicit_terms
+                or t.get(name_label) == "hydrostatic_form",
             drop,
             replace_subject(self.x0))
 
         # the implicit forms are multiplied by alpha and moved to the rhs
         L_implicit = -alpha*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms or t.get(name) == "hydrostatic_form",
+            lambda t:
+                t.has_label(time_derivative)
+                or t.get(name_label) in implicit_terms
+                or t.get(name_label) == "hydrostatic_form",
             drop,
             replace_subject(self.x0))
 
         # now add the terms that are always fully implicit
-        if any(t.get(name) in implicit_terms for t in residual):
+        if any(t.get(name_label) in implicit_terms for t in residual):
             L_implicit -= dt*residual.label_map(
-                lambda t: t.get(name) in implicit_terms,
+                lambda t: t.get(name_label) in implicit_terms,
                 replace_subject(self.x0),
                 drop)
 
@@ -79,12 +85,12 @@ class Forcing(object):
         if any([t.has_label(hydrostatic) for t in residual]):
 
             L_explicit += residual.label_map(
-                lambda t: t.get(name) == "hydrostatic_form",
+                lambda t: t.get(name_label) == "hydrostatic_form",
                 replace_subject(self.x0),
                 drop)
 
             L_implicit -= residual.label_map(
-                lambda t: t.get(name) == "hydrostatic_form",
+                lambda t: t.get(name_label) == "hydrostatic_form",
                 replace_subject(self.x0),
                 drop)
 
