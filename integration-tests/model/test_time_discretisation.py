@@ -8,9 +8,8 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parametrize("scheme", ["ssprk", "TrapeziumRule",
-                                    "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth",
-                                    "Leapfrog", "AdamsMoulton"])
+@pytest.mark.parametrize("scheme", ["ssprk", "TrapeziumRule", "ImplicitMidpoint", "QinZhang",
+                                    "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth", "Leapfrog", "AdamsMoulton"])
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
     if (scheme == "AdamsBashforth"):
         # Tighter stability constraints
@@ -30,6 +29,10 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         transport_scheme = SSPRK3(domain)
     elif scheme == "TrapeziumRule":
         transport_scheme = TrapeziumRule(domain)
+    elif scheme == "ImplicitMidpoint":
+        transport_scheme = ImplicitMidpoint(domain)
+    elif scheme == "QinZhang":
+        transport_scheme = QinZhang(domain)
     elif scheme == "RK4":
         transport_scheme = RK4(domain)
     elif scheme == "Heun":

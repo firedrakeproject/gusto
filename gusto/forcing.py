@@ -6,7 +6,7 @@ from firedrake import (
 )
 from gusto.fml import drop, replace_subject, name
 from gusto.labels import (
-    transport, diffusion, time_derivative, hydrostatic
+    transport, diffusion, time_derivative, hydrostatic, physics_label
 )
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 
@@ -47,7 +47,7 @@ class Forcing(object):
 
         # drop terms relating to transport and diffusion
         residual = equation.residual.label_map(
-            lambda t: any(t.has_label(transport, diffusion, return_tuple=True)), drop)
+            lambda t: any(t.has_label(transport, diffusion, physics_label, return_tuple=True)), drop)
 
         # the lhs of both of the explicit and implicit solvers is just
         # the time derivative form

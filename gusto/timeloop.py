@@ -1,7 +1,7 @@
 """Classes for controlling the timestepping loop."""
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import Function, Projector, Constant, split
+from firedrake import Function, Projector, split, Constant
 from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
 from gusto.fml import drop, Label, Term
@@ -297,6 +297,7 @@ class Timestepper(BaseTimestepper):
         self.setup_equation(self.equation)
         self.scheme.setup(self.equation)
         self.setup_transporting_velocity(self.scheme)
+        self.scheme.courant_max = self.io.courant_max
 
     def timestep(self):
         """
@@ -345,12 +346,14 @@ class SplitPhysicsTimestepper(Timestepper):
         else:
             self.physics_schemes = []
 
-        for _, phys_scheme in self.physics_schemes:
-            # check that the supplied schemes for physics are explicit
-            assert isinstance(phys_scheme, ExplicitTimeDiscretisation), \
-                "Only explicit time discretisations can be used for physics"
+        for parametrisation, phys_scheme in self.physics_schemes:
+            # check that the supplied schemes for physics are valid
+            if hasattr(parametrisation, "explicit_only") and parametrisation.explicit_only:
+                assert isinstance(phys_scheme, ExplicitTimeDiscretisation), \
+                    ("Only explicit time discretisations can be used with "
+                     + f"physics scheme {parametrisation.label.label}")
             apply_bcs = False
-            phys_scheme.setup(equation, apply_bcs, physics_label)
+            phys_scheme.setup(equation, apply_bcs, parametrisation.label)
 
     @property
     def transporting_velocity(self):
@@ -364,6 +367,7 @@ class SplitPhysicsTimestepper(Timestepper):
         apply_bcs = True
         self.scheme.setup(self.equation, apply_bcs, dynamics)
         self.setup_transporting_velocity(self.scheme)
+        self.scheme.courant_max = self.io.courant_max
 
     def timestep(self):
 
@@ -458,10 +462,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                                     + self.fast_physics_schemes
                                     + self.final_physics_schemes)
 
-        for _, scheme in self.all_physics_schemes:
+        for parametrisation, scheme in self.all_physics_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
-            assert isinstance(scheme, ExplicitTimeDiscretisation), \
-                "Only explicit time discretisations can be used for physics"
+            if hasattr(parametrisation, "explicit_only") and parametrisation.explicit_only:
+                assert isinstance(scheme, ExplicitTimeDiscretisation), \
+                    ("Only explicit time discretisations can be used with "
+                     + f"physics scheme {parametrisation.label.label}")
 
         self.active_transport = []
         for scheme in transport_schemes:
@@ -567,13 +573,14 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for _, scheme in self.active_transport:
             scheme.setup(self.equation, apply_bcs, transport)
             self.setup_transporting_velocity(scheme)
+            scheme.courant_max = self.io.courant_max
 
         apply_bcs = True
         for _, scheme in self.diffusion_schemes:
             scheme.setup(self.equation, apply_bcs, diffusion)
-        for _, scheme in self.all_physics_schemes:
+        for parametrisation, scheme in self.all_physics_schemes:
             apply_bcs = True
-            scheme.setup(self.equation, apply_bcs, physics_label)
+            scheme.setup(self.equation, apply_bcs, parametrisation.label)
 
     def copy_active_tracers(self, x_in, x_out):
         """
@@ -610,6 +617,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         with timed_stage("Apply forcing terms"):
             logger.info('SIQN: Explicit forcing')
+            # TODO: check if forcing is applied to x_after_slow or xn
             # Put explicit forcing into xstar
             self.forcing.apply(x_after_slow, x_after_slow, xstar(self.field_name), "explicit")
 
@@ -628,7 +636,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:
                 with timed_stage("Fast physics"):
-                    logger.info('SIQN: Fast physics')
+                    logger.info(f'SIQN: Fast physics {outer}')
                     for _, scheme in self.fast_physics_schemes:
                         scheme.apply(x_after_fast(scheme.field_name), x_after_fast(scheme.field_name))
 
@@ -639,6 +647,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'SIQN: Implicit forcing {(outer, inner)}')
+                    # TODO: why don't we update xnp1 with a better guess here?
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
 
                 xrhs -= xnp1(self.field_name)
@@ -652,7 +661,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 xnp1X += dy
 
             # Update xnp1 values for active tracers not included in the linear solve
-            self.copy_active_tracers(xp, xnp1)
+            self.copy_active_tracers(x_after_fast, xnp1)
 
             self._apply_bcs()
 
