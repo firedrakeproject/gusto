@@ -1809,26 +1809,25 @@ class TerminatorToy(PhysicsParametrisation):
         Vs = self.species1.function_space()
         self.source = Function(Vs)
         
-        X = self.species1
-        X2 = self.species2
+        self.X = Function(equation.X.function_space())
+        X = self.X
+        species1 = split(X)[self.species1_idx]
+        species2 = split(X)[self.species2_idx]
         
-        # or?
-        self.X_eq = Function(equation.X.function_space())
+        # Determine the test functions:
+        tests = TestFunctions(X.function_space()) if implicit_formulation else equation.tests
+        
+        test_1 = tests[self.species1_idx]
+        test_2 = tests[self.species2_idx]
+        
         self.dt = Constant(0.0)
-        X_eq = self.X_eq
-        dt = self.dt
-        
-        X = split(X_eq)[self.species1_idx]
-        X2 = split(X_eq)[self.species2_idx]
         
         if implicit_formulation:
           # Use an analytical
           # forcing solution given in Appendix G.
-          r = k1/(4*k2)
-          Xt.assign(X + 2*X2)
           
-          X_plus_X2 = Sum('X', 'X2')
-          Xt = Sum('X_plus_X2', 'X2') 
+          r = k1/(4*k2)
+          Xt.assign(self.species1 + 2*self.species2)
           
           d = sqrt(r*r + 2*r*Xt)
           
@@ -1839,13 +1838,11 @@ class TerminatorToy(PhysicsParametrisation):
           else:
             el = 4*k2
             
-          fX = -el*(X-d+r)*(X+d+r)/(1+e+dt*el*(X+r))
+          fX = -el*(self.species1-d+r)*(self.species1+d+r)/(1+e+dt*el*(self.species1+r))
           fX2 = -fX/2
-        
-          test_1 = equation.tests[self.species1_idx]
-          test_2 = equation.tests[self.species2_idx]
-          equation.residual += self.label(subject(test_1 * -fX * dx
-                                               + test_2 * -fX2 * dx,
+
+          equation.residual -= self.label(subject(test_1 * fX * dx
+                                               + test_2 * fX2 * dx,
                                                equation.X),
                                        self.evaluate)
         
@@ -1860,12 +1857,22 @@ class TerminatorToy(PhysicsParametrisation):
           self.source_interpolator = Interpolator(Kx, self.source)
   
           # Add term to equation's residual
-          test_1 = equation.tests[self.species1_idx]
-          test_2 = equation.tests[self.species2_idx]
+          #test_1 = equation.tests[self.species1_idx]
+          #test_2 = equation.tests[self.species2_idx]
           equation.residual += self.label(subject(test_1 * -2*self.source * dx
                                                + test_2 * self.source * dx,
                                                equation.X),
                                        self.evaluate)
+                                       
+          #Kx = k1*species2 - k2*(species1**2)
+                   
+          #self.source_interpolator = Interpolator(Kx, self.source)
+  
+          # Add term to equation's residual
+          #equation.residual += self.label(subject(test_1 * -2*self.source * dx
+          #                                     + test_2 * self.source * dx,
+          #                                     equation.X),
+          #                             self.evaluate)
 
   def evaluate(self, x_in, dt):
         """

@@ -312,7 +312,7 @@ class IO(object):
             else:
                 logger.info(f'Max Courant {message}: {courant_max:.2e}')
                 
-            logger.info(diagnostic_names)
+            #logger.info(diagnostic_names)
             species_1_idx = diagnostic_names.index('X_plus_X')
             species_2_idx = diagnostic_names.index('X2_plus_X2')
             
@@ -325,11 +325,11 @@ class IO(object):
             s1_field = state_fields('X_plus_X')
             s2_field = state_fields('X2_plus_X2')
             
-            species_1_min = self.diagnostics.min(s1_field)/2
-            species_2_min = self.diagnostics.min(s2_field)/2
+            #species_1_min = self.diagnostics.min(s1_field)/2
+            #species_2_min = self.diagnostics.min(s2_field)/2
             
-            species_1_max = self.diagnostics.max(s1_field)/2
-            species_2_max = self.diagnostics.max(s2_field)/2
+            #species_1_max = self.diagnostics.max(s1_field)/2
+            #species_2_max = self.diagnostics.max(s2_field)/2
             
             species_1_total = self.diagnostics.total(s1_field)/2
             species_2_total = self.diagnostics.total(s2_field)/2
@@ -344,6 +344,9 @@ class IO(object):
             x_tot_diagnostic.compute()
             
             x_tot_field = state_fields('TracerDensity')
+            
+            species_1_total = self.diagnostics.total(s1_field)/2
+            species_2_total = self.diagnostics.total(s2_field)/2
             x_tot_total = self.diagnostics.total(x_tot_field) 
             
             logger.info(f'X total, {species_1_total}')
