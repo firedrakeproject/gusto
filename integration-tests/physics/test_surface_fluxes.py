@@ -9,6 +9,7 @@ import gusto.thermodynamics as td
 from gusto.labels import physics_label
 from firedrake import (norm, Constant, PeriodicIntervalMesh, as_vector,
                        SpatialCoordinate, ExtrudedMesh, Function, conditional)
+from firedrake.fml import identity
 import pytest
 
 

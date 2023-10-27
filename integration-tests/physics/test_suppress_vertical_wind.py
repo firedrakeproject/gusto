@@ -7,6 +7,7 @@ from gusto import *
 from gusto.labels import physics_label
 from firedrake import (Constant, PeriodicIntervalMesh, as_vector, sin, norm,
                        SpatialCoordinate, ExtrudedMesh, Function, dot)
+from firedrake.fml import identity
 
 
 def run_suppress_vertical_wind(dirname):
