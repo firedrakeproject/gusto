@@ -1806,9 +1806,9 @@ class TerminatorToy(PhysicsParametrisation):
         Xt = Function(V)
         
         self.X = Function(equation.X.function_space())
-        X = self.X
-        species1 = split(X)[self.species1_idx]
-        species2 = split(X)[self.species2_idx]
+        Xq = self.X
+        species1 = split(Xq)[self.species1_idx]
+        species2 = split(Xq)[self.species2_idx]
         
         # Determine the test functions:
         tests = TestFunctions(X.function_space()) if implicit_formulation else equation.tests
@@ -1823,17 +1823,15 @@ class TerminatorToy(PhysicsParametrisation):
           # forcing solution given in Appendix G.
           
           r = k1/(4*k2)
-          Xt.assign(self.species1 + 2*self.species2)
+          
+          #Xt.assign(self.species1 + 2*self.species2)
+          Xt = self.species1 + 2*self.species2
           
           d = sqrt(r*r + 2*r*Xt)
           
           e = exp(-4*k2*d*self.dt)
           
-          #if (abs(d*k2*self.dt) > 1e-16):
-          if (abs(k2) > 1e-16):
-            el = (1-e)/(d*self.dt)
-          else:
-            el = 4*k2
+          el = conditional((abs(d*k2*self.dt) > 1e-16),(1-e)/(d*self.dt),4*k2)
             
           fX1 = -el*(self.species1-d+r)*(self.species1+d+r)/(1+e+self.dt*el*(self.species1+r))
           fX2 = -fX1/2
@@ -1854,16 +1852,31 @@ class TerminatorToy(PhysicsParametrisation):
           # step with explicit timesteppers,
           # so an implicit timestepper is recommended
         
-          Kx = k1*self.species2 - k2*(self.species1**2)
+          # Old implementation:
+        
+          #Kx = k1*self.species2 - k2*(self.species1**2)
                
-          Vs = self.species1.function_space()
-          self.source = Function(Vs)    
-          self.source_interpolator = Interpolator(Kx, self.source)
+          #Vs = self.species1.function_space()
+          #self.source = Function(Vs)    
+          #self.source_interpolator = Interpolator(Kx, self.source)
   
-          equation.residual += self.label(subject(test_1 * -2*self.source * dx
-                                               + test_2 * self.source * dx,
-                                               equation.X),
-                                       self.evaluate)
+          #equation.residual += self.label(subject(test_1 * -2*self.source * dx
+          #                                     + test_2 * self.source * dx,
+          #                                     equation.X),
+          #                             self.evaluate)
+                                       
+                                       
+          # New implementation:
+          Kx = k1*species2 - k2*(species1**2)
+               
+          #Vs = self.species1.function_space()
+          #self.source1 = Function(Vs)    
+          #self.source2 = Function(Vs)   
+          
+          source1_expr = test_1 * 2*Kx * dx
+          source2_expr = test_2 * -Kx * dx
+          equation.residual -= self.label(subject(prognostic(source1_expr, 'X'), Xq), self.evaluate)
+          equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate)
                                        
 
   def evaluate(self, x_in, dt):
@@ -1876,12 +1889,12 @@ class TerminatorToy(PhysicsParametrisation):
         """
         
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
-
-        # Update the values of internal variables
-        self.species1.assign(x_in.subfunctions[self.species1_idx])
-        self.species2.assign(x_in.subfunctions[self.species2_idx])
         
         if self.implicit_formulation:
+          # Update the values of internal variables
+          self.species1.assign(x_in.subfunctions[self.species1_idx])
+          self.species2.assign(x_in.subfunctions[self.species2_idx])
+          
           for interpolator in self.source_interpolators:
              interpolator.interpolate()
         #else:
