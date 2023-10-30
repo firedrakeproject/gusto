@@ -185,7 +185,7 @@ class Relaxation(PhysicsParametrisation):
                 Default is 'interpolate'.
         """
 
-        label_name = f'Relaxation_{variable_name}'
+        label_name = f'relaxation_{variable_name}'
         super().__init__(equation, label_name, parameters=None)
 
         # Check the variable exists
@@ -1385,7 +1385,7 @@ class RayleighFriction(PhysicsParametrisation):
             forcing_coeff (:class:`unsure what to put here`): the coefficient 
             determining rate of friction
         """
-        label_name = 'Rayleigh Friction'
+        label_name = 'rayleigh_friction'
         super().__init__(equation, label_name, parameters=None)
 
         self.X = Function(equation.X.function_space())
@@ -1399,7 +1399,7 @@ class RayleighFriction(PhysicsParametrisation):
         u_hori = u - k*dot(u, k)
         u_hori_mag = sqrt(dot(u_hori, u_hori))
 
-        forcing_expr = -u_hori * u_hori_mag / forcing_coeff
+        forcing_expr = -u_hori / forcing_coeff
         dx_reduced = dx(degree=4)
         source_expr = inner(test, forcing_expr) * dx_reduced
         equation.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
