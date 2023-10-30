@@ -10,6 +10,7 @@ import gusto.thermodynamics as td
 from firedrake import (norm, Constant, PeriodicIntervalMesh,
                        SpatialCoordinate, ExtrudedMesh, Function, sqrt,
                        conditional)
+from firedrake.fml import identity
 from netCDF4 import Dataset
 import pytest
 
