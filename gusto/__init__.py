@@ -11,7 +11,6 @@ from gusto.domain import *                           # noqa
 from gusto.diagnostics import *                      # noqa
 from gusto.diffusion_methods import *                # noqa
 from gusto.equations import *                        # noqa
-from gusto.fml import *                              # noqa
 from gusto.forcing import *                          # noqa
 from gusto.initialisation_tools import *             # noqa
 from gusto.io import *                               # noqa
