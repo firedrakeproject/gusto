@@ -11,7 +11,7 @@ from abc import ABCMeta, abstractmethod
 from firedrake import (
     Interpolator, conditional, Function, dx, sqrt, dot, min_value,
     max_value, Constant, pi, Projector, grad, TestFunctions, split,
-    inner, TestFunction, exp, avg, outer, FacetNormal,
+    inner, TestFunction, exp, avg, outer, FacetNormal, sin, cos, ge, ln, 
     SpatialCoordinate, dS_v, NonlinearVariationalProblem,
     NonlinearVariationalSolver
 )
