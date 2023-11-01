@@ -83,8 +83,8 @@ output = OutputParameters(
     dumpfreq=dumpfreq,
 )
 diagnostic_fields = [Perturbation('theta'), Perturbation('rho'),
-                     CompressibleKineticEnergy(), PotentialEnergy(eqns)] 
-                    
+                     CompressibleKineticEnergy(), PotentialEnergy(eqns)]
+
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
