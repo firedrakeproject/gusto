@@ -3,11 +3,11 @@ Provides some basic forms for discretising various common terms in equations for
 geophysical fluid dynamics."""
 
 from firedrake import (dx, dot, grad, div, inner, outer, cross, curl, split,
-                       TestFunctions)
+                       TestFunctions, TrialFunction)
 from firedrake.fml import subject, drop
 from gusto.configuration import TransportEquationType
 from gusto.labels import (transport, transporting_velocity, diffusion,
-                          prognostic)
+                          prognostic, linearisation)
 
 __all__ = ["advection_form", "continuity_form", "vector_invariant_form",
            "kinetic_energy_form", "advection_equation_circulation_form",
@@ -217,7 +217,7 @@ def split_continuity_form(equation):
 
     for t in equation.residual:
         if (t.get(transport) == TransportEquationType.conservative):
-            # Split continuity form term
+            # Get fields and test functions
             subj = t.get(subject)
             prognostic_field_name = t.get(prognostic)
             if hasattr(equation, "field_names"):
@@ -236,9 +236,23 @@ def split_continuity_form(equation):
                 uadv = equation.prescribed_fields('u')
             else:
                 raise ValueError('Cannot get velocity field')
+
+            # Create new advective and divergence terms
             adv_term = prognostic(advection_form(test, q, uadv), prognostic_field_name)
             div_term = prognostic(test*q*div(uadv)*dx, prognostic_field_name)
-            # Add onto residual
+
+            # Add linearisations of new terms if required
+            if (t.has_label(linearisation)):
+                u_trial = TrialFunction(W)[u_idx]
+                qbar = split(equation.X_ref)[idx]
+                # Add linearisation to adv_term
+                linear_adv_term = linear_advection_form(test, qbar, u_trial)
+                adv_term = linearisation(adv_term, linear_adv_term)
+                # Add linearisation to div_term
+                linear_div_term = transporting_velocity(qbar*test*div(u_trial)*dx, u_trial)
+                div_term = linearisation(div_term, linear_div_term)
+
+            # Add new terms onto residual
             equation.residual += subject(adv_term + div_term, subj)
             # Drop old term
             equation.residual = equation.residual.label_map(
