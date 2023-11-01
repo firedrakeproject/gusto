@@ -3,7 +3,7 @@ Provides some basic forms for discretising various common terms in equations for
 geophysical fluid dynamics."""
 
 from firedrake import (dx, dot, grad, div, inner, outer, cross, curl, split,
-                       TestFunctions, TrialFunction)
+                       TestFunction, TestFunctions, TrialFunction)
 from firedrake.fml import subject, drop
 from gusto.configuration import TransportEquationType
 from gusto.labels import (transport, transporting_velocity, diffusion,
@@ -222,11 +222,13 @@ def split_continuity_form(equation):
             prognostic_field_name = t.get(prognostic)
             if hasattr(equation, "field_names"):
                 idx = equation.field_names.index(prognostic_field_name)
+                W = equation.function_space
+                test = TestFunctions(W)[idx]
+                q = split(subj)[idx]
             else:
-                idx = equation.field_name.index(prognostic_field_name)
-            W = equation.function_space
-            test = TestFunctions(W)[idx]
-            q = split(subj)[idx]
+                W = equation.function_space
+                test = TestFunction(W)
+                q = subj
             # u is either a prognostic or prescribed field
             if (hasattr(equation, "field_names")
                and 'u' in equation.field_names):
