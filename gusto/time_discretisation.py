@@ -95,7 +95,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             elif self.wrapper_name == "supg":
                 self.wrapper = SUPGWrapper(self, options)
             else:
-                raise NotImplementedError(
+                raise RuntimeError(
                     f'Time discretisation: wrapper {self.wrapper_name} not implemented')
         else:
             self.wrapper = None
