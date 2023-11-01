@@ -183,7 +183,7 @@ def advection_equation_circulation_form(domain, test, q, ubar):
 
 def diffusion_form(test, q, kappa):
     u"""
-    The diffusion form, ∇.(κ∇q) for diffusivity κ and variable q.
+    The diffusion form, -∇.(κ∇q) for diffusivity κ and variable q.
 
     Args:
         test (:class:`TestFunction`): the test function.
@@ -191,6 +191,6 @@ def diffusion_form(test, q, kappa):
         kappa: (:class:`ufl.Expr`): the diffusivity value.
     """
 
-    form = inner(test, div(kappa*grad(q)))*dx
+    form = -inner(test, div(kappa*grad(q)))*dx
 
     return diffusion(form)

@@ -5,12 +5,14 @@ The linear solvers provided here are used for solving linear problems on mixed
 finite element spaces.
 """
 
-from firedrake import (split, LinearVariationalProblem, Constant,
-                       LinearVariationalSolver, TestFunctions, TrialFunctions,
-                       TestFunction, TrialFunction, lhs, rhs, FacetNormal,
-                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner, action,
-                       dot, grad, Function, VectorSpaceBasis, BrokenElement,
-                       FunctionSpace, MixedFunctionSpace, DirichletBC)
+from firedrake import (
+    split, LinearVariationalProblem, Constant, LinearVariationalSolver,
+    TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
+    rhs, FacetNormal, div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b,
+    ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis,
+    BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC
+)
+from firedrake.fml import Term, drop
 from firedrake.petsc import flatten_parameters
 from pyop2.profiling import timed_function, timed_region
 
@@ -18,7 +20,6 @@ from gusto.active_tracers import TracerVariableType
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
-from gusto.fml.form_manipulation_language import Term, drop
 from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
