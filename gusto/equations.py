@@ -1,22 +1,27 @@
 """Objects describing geophysical fluid equations to be solved in weak form."""
 
 from abc import ABCMeta
-from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
-                       FunctionSpace, MixedFunctionSpace, TestFunctions,
-                       TrialFunction, FacetNormal, jump, avg, dS_v, dS,
-                       DirichletBC, conditional, SpatialCoordinate,
-                       split, Constant, action)
+from firedrake import (
+    TestFunction, Function, sin, pi, inner, dx, div, cross,
+    FunctionSpace, MixedFunctionSpace, TestFunctions, TrialFunction,
+    FacetNormal, jump, avg, dS_v, dS, DirichletBC, conditional,
+    SpatialCoordinate, split, Constant, action
+)
+from firedrake.fml import (
+    Term, all_terms, keep, drop, Label, subject, name_label,
+    replace_subject, replace_trial_function
+)
 from gusto.fields import PrescribedFields
-from gusto.fml import (Term, all_terms, keep, drop, Label, subject, name,
-                       replace_subject, replace_trial_function)
-from gusto.labels import (time_derivative, transport, prognostic, hydrostatic,
-                          linearisation, pressure_gradient, coriolis)
+from gusto.labels import (
+    time_derivative, transport, prognostic, hydrostatic, linearisation,
+    pressure_gradient, coriolis
+)
 from gusto.thermodynamics import exner_pressure
-from gusto.common_forms import (advection_form, continuity_form,
-                                vector_invariant_form, kinetic_energy_form,
-                                advection_equation_circulation_form,
-                                diffusion_form, linear_continuity_form,
-                                linear_advection_form)
+from gusto.common_forms import (
+    advection_form, continuity_form, vector_invariant_form,
+    kinetic_energy_form, advection_equation_circulation_form,
+    diffusion_form, linear_continuity_form, linear_advection_form
+)
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
 from gusto.configuration import TransportEquationType
 import ufl
@@ -973,7 +978,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 raise NotImplementedError('Only mixing ratio tracers are implemented')
         theta_v = theta / (Constant(1.0) + tracer_mr_total)
 
-        pressure_gradient_form = name(subject(prognostic(
+        pressure_gradient_form = name_label(subject(prognostic(
             cp*(-div(theta_v*w)*exner*dx
                 + jump(theta_v*w, n)*avg(exner)*dS_v), 'u'), self.X), "pressure_gradient")
 
@@ -1040,7 +1045,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                                  mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
             self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
 
-            residual += name(subject(prognostic(
+            residual += name_label(subject(prognostic(
                 self.mu*inner(w, domain.k)*inner(u, domain.k)*dx, 'u'), self.X), "sponge")
 
         if diffusion_options is not None:
@@ -1145,7 +1150,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
 
         k = self.domain.k
         u = split(self.X)[0]
-        self.residual += name(
+        self.residual += name_label(
             subject(
                 prognostic(
                     -inner(k, self.tests[0]) * inner(k, u) * dx, "u"),
@@ -1310,8 +1315,10 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # The p features here so that the div(u) evaluated in the "forcing" step
         # replaces the whole pressure field, rather than merely providing an
         # increment to it.
-        divergence_form = name(subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
-                               "incompressibility")
+        divergence_form = name_label(
+            subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
+            "incompressibility"
+        )
 
         residual = (mass_form + adv_form + divergence_form
                     + pressure_gradient_form + gravity_form)
