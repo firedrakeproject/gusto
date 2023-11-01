@@ -7,7 +7,8 @@ def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
-@pytest.mark.parametrize("scheme", ["ssp3","ark2","ars3", "trap2", "euler"])
+
+@pytest.mark.parametrize("scheme", ["ssp3", "ark2", "ars3", "trap2", "euler"])
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
 
     setup = tracer_setup(tmpdir, "sphere")
@@ -16,7 +17,7 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
     eqn = ContinuityEquation(domain, V, "f")
     # Split continuity term
     eqn = split_continuity_form(eqn)
-    #Label terms are implicit and explicit
+    # Label terms are implicit and explicit
     eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
     eqn.label_terms(lambda t: t.has_label(transport), explicit)
 
