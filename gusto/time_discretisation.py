@@ -6,19 +6,18 @@ operator F.
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, TestFunction, TestFunctions,
+from firedrake import (Function, TestFunction,
                        NonlinearVariationalProblem, NonlinearVariationalSolver,
-                       DirichletBC, Constant, split, div, dx)
+                       DirichletBC, Constant, split)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
-from gusto.configuration import EmbeddedDGOptions, RecoveryOptions, TransportEquationType
+from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.fml import (
-    replace_subject, replace_test_function, Term, all_terms, drop, subject
+    replace_subject, replace_test_function, Term, all_terms, drop
 )
 from gusto.labels import (time_derivative, prognostic, physics_label,
-                          transport, implicit, explicit)
-from gusto.common_forms import advection_form
+                          implicit, explicit)
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 import math
@@ -329,38 +328,12 @@ class IMEXMultistage(TimeDiscretisation):
 
         super().setup(equation, apply_bcs, *active_labels)
 
-        # Get continuity form transport term
+        # Check all terms are labeled implicit, exlicit
         for t in self.residual:
-            if (t.get(transport) == TransportEquationType.conservative):
-                # Split continuity form term
-                subj = t.get(subject)
-                prognostic_field_name = t.get(prognostic)
-                idx = self.equation.field_names.index(prognostic_field_name)
-                W = self.fs
-                test = TestFunctions(W)[idx]
-                transported_field = split(subj)[idx]
-                u_idx = self.equation.field_names.index('u')
-                uadv = split(self.equation.X)[u_idx]
-                new_transport_term = prognostic(advection_form(test, transported_field, uadv), prognostic_field_name)
-                div_term = prognostic(test*transported_field*div(uadv)*dx, prognostic_field_name)
-                # Add onto residual
-                self.residual += subject(new_transport_term + div_term, subj)
-
-        # Drop old term
-        self.residual = self.residual.label_map(
-            lambda t: t.get(transport) == TransportEquationType.conservative,
-            map_if_true=drop)
-
-        # Label transport terms as explicit, all other terms as implicit
-        self.residual = self.residual.label_map(
-            lambda t: any(t.has_label(time_derivative, transport)),
-            map_if_false=lambda t: implicit(t))
-
-        self.residual = self.residual.label_map(
-            lambda t: t.has_label(transport),
-            map_if_true=lambda t: explicit(t))
-
-        logger.warning("Default IMEX Multistage treats transport terms explicitly, and all other terms implicitly")
+            if ((not t.has_label(implicit)) and (not t.has_label(explicit))
+               and (not t.has_label(time_derivative))):
+                logger.error("Non time-derivative terms must be labeled as implicit or explicit")
+                raise NotImplementedError
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
 

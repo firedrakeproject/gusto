@@ -2,13 +2,17 @@
 Provides some basic forms for discretising various common terms in equations for
 geophysical fluid dynamics."""
 
-from firedrake import dx, dot, grad, div, inner, outer, cross, curl
+from firedrake import (dx, dot, grad, div, inner, outer, cross, curl, split,
+                       TestFunctions)
 from gusto.configuration import TransportEquationType
-from gusto.labels import transport, transporting_velocity, diffusion
+from gusto.labels import (transport, transporting_velocity, diffusion,
+                          prognostic)
+from gusto.fml import subject, drop
 
 __all__ = ["advection_form", "continuity_form", "vector_invariant_form",
            "kinetic_energy_form", "advection_equation_circulation_form",
-           "diffusion_form", "linear_advection_form", "linear_continuity_form"]
+           "diffusion_form", "linear_advection_form", "linear_continuity_form",
+           "split_continuity_form"]
 
 
 def advection_form(test, q, ubar):
@@ -194,3 +198,51 @@ def diffusion_form(test, q, kappa):
     form = -inner(test, div(kappa*grad(q)))*dx
 
     return diffusion(form)
+
+
+def split_continuity_form(equation):
+    u"""
+    Loops through terms in a given equation, and splits continuity terms into
+    advective and divergence terms.
+
+    This describes splitting ∇.(u*q) into u.∇q and q(∇.u),
+    for transporting velocity u and transported q.
+
+    Args:
+        equation (:class:`PrognosticEquation`): the model's equation.
+
+    Returns:
+        equation (:class:`PrognosticEquation`): the model's equation.
+    """
+
+    for t in equation.residual:
+        if (t.get(transport) == TransportEquationType.conservative):
+            # Split continuity form term
+            subj = t.get(subject)
+            prognostic_field_name = t.get(prognostic)
+            if hasattr(equation, "field_names"):
+                idx = equation.field_names.index(prognostic_field_name)
+            else:
+                idx = equation.field_name.index(prognostic_field_name)
+            W = equation.function_space
+            test = TestFunctions(W)[idx]
+            q = split(subj)[idx]
+            # u is either a prognostic or prescribed field
+            if (hasattr(equation, "field_names")
+               and 'u' in equation.field_names):
+                u_idx = equation.field_names.index('u')
+                uadv = split(equation.X)[u_idx]
+            elif 'u' in equation.prescribed_fields._field_names:
+                uadv = equation.prescribed_fields('u')
+            else:
+                raise ValueError('Cannot get velocity field')
+            adv_term = prognostic(advection_form(test, q, uadv), prognostic_field_name)
+            div_term = prognostic(test*q*div(uadv)*dx, prognostic_field_name)
+            # Add onto residual
+            equation.residual += subject(adv_term + div_term, subj)
+            # Drop old term
+            equation.residual = equation.residual.label_map(
+                lambda t: t.get(transport) == TransportEquationType.conservative,
+                map_if_true=drop)
+
+    return equation
