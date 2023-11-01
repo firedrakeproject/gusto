@@ -6,10 +6,6 @@ operator F.
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-<<<<<<< HEAD
-from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, DirichletBC, Constant)
-=======
 import math
 import numpy as np
 
@@ -20,7 +16,6 @@ from firedrake import (
 from firedrake.fml import (
     replace_subject, replace_test_function, Term, all_terms, drop
 )
->>>>>>> main
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
@@ -28,23 +23,15 @@ from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.labels import time_derivative, prognostic, physics_label
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
-<<<<<<< HEAD
 import numpy as np
 import scipy
 from scipy.special import legendre
 
 
-
-__all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "SSPRK3", "RK4",
-           "Heun", "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog",
-           "AdamsMoulton", "AdamsBashforth", "BE_SDC", "FE_SDC"]
-=======
-
-
 __all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "ImplicitMultistage",
            "SSPRK3", "RK4", "Heun", "ThetaMethod", "TrapeziumRule", "BDF2", "TR_BDF2",
-           "Leapfrog", "AdamsMoulton", "AdamsBashforth", "ImplicitMidpoint", "QinZhang"]
->>>>>>> main
+           "Leapfrog", "AdamsMoulton", "AdamsBashforth", "ImplicitMidpoint", "QinZhang"
+           , "BE_SDC", "FE_SDC"]
 
 
 def wrapper_apply(original_apply):
@@ -610,12 +597,6 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                 the equation to include.
         """
         super().setup(equation, apply_bcs, *active_labels)
-        print(equation.residual.terms[0].labels.keys())
-        print(equation.residual.terms[1].labels.keys())
-        print("SET UP STUFF")
-        print(self.residual.terms[0].labels.keys())
-        print(self.residual.terms[1].labels.keys())
-
         self.k = [Function(self.fs) for i in range(self.nStages)]
 
     @cached_property
@@ -683,13 +664,8 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         self.x1.assign(x_in)
         
         for i in range(self.nStages):
-            print("DOING SOLVE")
             self.solve_stage(x_in, i)
         x_out.assign(self.x1)
-        print(np.max(x_out.dat.data[:]))
-        print(np.max(x_out.dat.data[:] - x_in.dat.data[:]))
-        print(self.residual.terms[0].labels.keys())
-        print(self.residual.terms[1].labels.keys())
 
 
 class ForwardEuler(ExplicitMultistage):
@@ -1676,7 +1652,6 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         """
         if self.initial_timesteps < self.nlevels-1:
             self.initial_timesteps += 1
-            print(self.initial_timesteps)
             solver = self.solver0
         else:
             solver = self.solver
@@ -1823,7 +1798,7 @@ class FE_SDC(SDC):
         self.base = base_scheme
 
 
-    def setup(self, equation, butcher_matrix, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True, *active_labels):
         self.base.setup(equation, apply_bcs=True, *active_labels)
         self.residual = self.base.residual
 
@@ -1939,7 +1914,6 @@ class FE_SDC(SDC):
                 self.Unodes[m].assign(self.Unodes1[m])
 
             self.Un.assign(self.Unodes1[-1])
-            # print(k, self.Un.split()[1].dat.data.max())
         if self.maxk > 0:
             x_out.assign(self.Un)
         else:
@@ -2045,15 +2019,10 @@ class BE_SDC(SDC):
 
         self.Unodes[0].assign(self.Un)
         for m in range(self.M):
-            #print(m)
-            #print(float(self.dtau[m]))
             self.base.dt = float(self.dtau[m])
             self.base.apply(self.Unodes[m+1], self.Unodes[m])
-        print(self.residual.terms[0].labels.keys())
-        print(self.residual.terms[1].labels.keys())
         k = 0
         while k < self.maxk:
-            #print("doing interations..")
             k += 1
 
             for m in range(1, self.M+1):
@@ -2076,7 +2045,6 @@ class BE_SDC(SDC):
                 self.Unodes[m].assign(self.Unodes1[m])
 
             self.Un.assign(self.Unodes1[-1])
-            #print(k, self.Un.split()[1].dat.data.max())
         if self.maxk > 0:
             x_out.assign(self.Un)
         else:
@@ -2164,14 +2132,11 @@ class IM_SDC(SDC):
 
         self.Unodes[0].assign(self.Un)
         for m in range(self.M):
-            #print(m)
-            #print(float(self.dtau[m]))
             self.base.dt = float(self.dtau[m])
             self.base.apply(self.Unodes[m+1], self.Unodes[m])
 
         k = 0
         while k < self.maxk:
-            #print("doing interations..")
             k += 1
 
             for m in range(1, self.M+1):
@@ -2194,7 +2159,6 @@ class IM_SDC(SDC):
                 self.Unodes[m].assign(self.Unodes1[m])
 
             self.Un.assign(self.Unodes1[-1])
-            #print(k, self.Un.split()[1].dat.data.max())
         if self.maxk > 0:
             x_out.assign(self.Un)
         else:
@@ -2309,7 +2273,6 @@ class IMEX_SDC(SDC):
                 self.Unodes[m].assign(self.Unodes1[m])
 
             self.Un.assign(self.Unodes1[-1])
-            #print('Un',k, self.Un.split()[1].dat.data.max())
         if self.maxk > 0:
             x_out.assign(self.Un)
         else:
