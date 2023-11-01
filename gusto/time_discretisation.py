@@ -332,8 +332,7 @@ class IMEXMultistage(TimeDiscretisation):
         for t in self.residual:
             if ((not t.has_label(implicit)) and (not t.has_label(explicit))
                and (not t.has_label(time_derivative))):
-                logger.error("Non time-derivative terms must be labeled as implicit or explicit")
-                raise NotImplementedError
+                raise NotImplementedError("Non time-derivative terms must be labeled as implicit or explicit")
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
 
