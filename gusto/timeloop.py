@@ -216,7 +216,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             set the reference field.
         """
         for field_name, profile in reference_profiles:
-            breakpoint()
             if field_name+'_bar' in self.fields:
                 # For reference profiles already added to state, allow
                 # interpolation from expressions
@@ -229,7 +228,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             else:
                 raise ValueError(f'When initialising reference profile {field_name}'
                                  + ' the passed profile must be a Function')
-            # if field name is not prognostic we need to add it 
+            # if field name is not prognostic we need to add it
             ref.interpolate(profile)
             # Assign profile to X_ref belonging to equation
             if isinstance(self.equation, PrognosticEquationSet):
