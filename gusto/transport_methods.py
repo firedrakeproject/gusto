@@ -2,11 +2,12 @@
 Defines TransportMethod objects, which are used to solve a transport problem.
 """
 
-from firedrake import (dx, dS, dS_v, dS_h, ds_t, ds_b, ds_v, dot, inner, outer,
-                       jump, grad, div, FacetNormal, Function, sign, avg, cross,
-                       curl)
+from firedrake import (
+    dx, dS, dS_v, dS_h, ds_t, ds_b, ds_v, dot, inner, outer, jump,
+    grad, div, FacetNormal, Function, sign, avg, cross, curl
+)
+from firedrake.fml import Term, keep, drop
 from gusto.configuration import IntegrateByParts, TransportEquationType
-from gusto.fml import Term, keep, drop
 from gusto.labels import prognostic, transport, transporting_velocity, ibp_label
 from gusto.logging import logger
 from gusto.spatial_methods import SpatialMethod

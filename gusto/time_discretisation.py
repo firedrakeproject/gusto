@@ -6,20 +6,23 @@ operator F.
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import (Function, TestFunction, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, DirichletBC, split, Constant)
+import math
+import numpy as np
+
+from firedrake import (
+    Function, TestFunction, NonlinearVariationalProblem,
+    NonlinearVariationalSolver, DirichletBC, split, Constant
+)
+from firedrake.fml import (
+    replace_subject, replace_test_function, Term, all_terms, drop
+)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
-from gusto.fml import (
-    replace_subject, replace_test_function, Term, all_terms, drop
-)
 from gusto.labels import time_derivative, prognostic, physics_label
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
-import math
-import numpy as np
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage", "ImplicitMultistage",
