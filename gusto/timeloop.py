@@ -370,7 +370,6 @@ class SplitPhysicsTimestepper(Timestepper):
 
     def timestep(self):
 
-
         super().timestep()
 
         with timed_stage("Physics"):
@@ -382,7 +381,7 @@ class SplitPrescribedTransport(Timestepper):
     """
     Implements a timeloop where the physics terms are solved separately from
     the dynamics, like with SplitPhysicsTimestepper, but here we define
-    a prescribed transporting velocity, as opposed to having the 
+    a prescribed transporting velocity, as opposed to having the
     velocity as a prognostic variable.
     """
 
@@ -405,8 +404,8 @@ class SplitPrescribedTransport(Timestepper):
                 pairing physics parametrisations and timestepping schemes to use
                 for each. Timestepping schemes for physics can be explicit
                 or implicit. Defaults to None.
-            prescribed_transporting_velocity: (field, optional): A known 
-                velocity field that is used for the transport of tracers. 
+            prescribed_transporting_velocity: (field, optional): A known
+                velocity field that is used for the transport of tracers.
                 Defaults to None.
         """
 
@@ -427,7 +426,7 @@ class SplitPrescribedTransport(Timestepper):
                      + f"physics scheme {parametrisation.label.label}")
             apply_bcs = False
             phys_scheme.setup(equation, apply_bcs, parametrisation.label)
-            
+
         if prescribed_transporting_velocity is not None:
             self.velocity_projection = Projector(
                 prescribed_transporting_velocity(self.t),
@@ -450,7 +449,7 @@ class SplitPrescribedTransport(Timestepper):
         self.scheme.courant_max = self.io.courant_max
 
     def timestep(self):
-    
+
         if self.velocity_projection is not None:
             self.velocity_projection.project()
 
