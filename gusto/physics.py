@@ -8,20 +8,18 @@ with "evaluate" methods.
 """
 
 from abc import ABCMeta, abstractmethod
-from firedrake import (
-    Interpolator, conditional, Function, dx, sqrt, dot, min_value,
-    max_value, Constant, pi, Projector, grad, TestFunctions, split,
-    inner, TestFunction, exp, avg, outer, FacetNormal,
-    SpatialCoordinate, dS_v, NonlinearVariationalProblem,
-    NonlinearVariationalSolver
-)
-from firedrake.fml import identity, Term, subject
 from gusto.active_tracers import Phases, TracerVariableType
 from gusto.configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
+from gusto.fml import identity, Term, subject
 from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognostic
 from gusto.logging import logger
+from firedrake import (Interpolator, conditional, Function, dx, sqrt, dot,
+                       min_value, max_value, Constant, pi, Projector, grad,
+                       TestFunctions, split, inner, TestFunction, exp, avg,
+                       outer, FacetNormal, SpatialCoordinate, dS_v,
+                       NonlinearVariationalProblem, NonlinearVariationalSolver)
 from gusto import thermodynamics
 import ufl
 import math
@@ -1758,9 +1756,9 @@ class TerminatorToy(PhysicsParametrisation):
     Setup the Terminator Toy chemistry interaction
     as specified in 'The terminator toy chemistry test ...'
     Lauritzen et. al. (2014).
-    
+
     The coupled equations for the two species are given by:
-    
+
     D/Dt (X) = 2Kx
     D/Dt (X2) = -Kx
     
@@ -1783,7 +1781,7 @@ class TerminatorToy(PhysicsParametrisation):
         """
 
         label_name = 'terminator_toy'
-        super().__init__(equation, label_name, parameters=None)     
+        super().__init__(equation, label_name, parameters=None)
 
         assert species1_name in equation.field_names, f"Field {species1_name} does not exist in the equation set"
         assert species2_name in equation.field_names, f"Field {species2_name} does not exist in the equation set"
@@ -1809,13 +1807,13 @@ class TerminatorToy(PhysicsParametrisation):
         test_1 = tests[self.species1_idx]
         test_2 = tests[self.species2_idx]
 
-        Kx = k1*species2 - k2*(species1**2) 
+        Kx = k1*species2 - k2*(species1**2)
 
         source1_expr = test_1 * 2*Kx * dx
         source2_expr = test_2 * -Kx * dx
 
         equation.residual -= self.label(subject(prognostic(source1_expr, 'X'), Xq), self.evaluate)
-        equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate)                 
+        equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -1825,6 +1823,5 @@ class TerminatorToy(PhysicsParametrisation):
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
         """
-        
+
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
-          
