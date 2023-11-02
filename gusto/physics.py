@@ -8,18 +8,20 @@ with "evaluate" methods.
 """
 
 from abc import ABCMeta, abstractmethod
+from firedrake import (
+    Interpolator, conditional, Function, dx, sqrt, dot, min_value,
+    max_value, Constant, pi, Projector, grad, TestFunctions, split,
+    inner, TestFunction, exp, avg, outer, FacetNormal,
+    SpatialCoordinate, dS_v, NonlinearVariationalProblem,
+    NonlinearVariationalSolver
+)
+from firedrake.fml import identity, Term, subject
 from gusto.active_tracers import Phases, TracerVariableType
 from gusto.configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.fml import identity, Term, subject
 from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognostic
 from gusto.logging import logger
-from firedrake import (Interpolator, conditional, Function, dx, sqrt, dot,
-                       min_value, max_value, Constant, pi, Projector, grad,
-                       TestFunctions, split, inner, TestFunction, exp, avg,
-                       outer, FacetNormal, SpatialCoordinate, dS_v,
-                       NonlinearVariationalProblem, NonlinearVariationalSolver)
 from gusto import thermodynamics
 import ufl
 import math
@@ -1761,22 +1763,22 @@ class TerminatorToy(PhysicsParametrisation):
 
     D/Dt (X) = 2Kx
     D/Dt (X2) = -Kx
-    
+
     where Kx = k1*X2 - k2*(X**2)
     """
 
     def __init__(self, equation, k1=1, k2=1,
-               species1_name='X', species2_name='X2'):
+                 species1_name='X', species2_name='X2'):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation
             k1(float, optional): Reaction rate for species 1 (X). Defaults to a constant
               over the domain.
-            k2(float, optional): Reaction rate for species 2 (X2). Defaults to a constant 
+            k2(float, optional): Reaction rate for species 2 (X2). Defaults to a constant
               over the domain.
-            species1_name(str, optional): Name of the first interacting species. Defaults 
+            species1_name(str, optional): Name of the first interacting species. Defaults
               to 'X'.
-            species2_name(str, optional): Name of the second interacting species. Defaults 
+            species2_name(str, optional): Name of the second interacting species. Defaults
               to 'X2'.
         """
 
@@ -1789,7 +1791,7 @@ class TerminatorToy(PhysicsParametrisation):
         self.species1_idx = equation.field_names.index(species1_name)
         self.species2_idx = equation.field_names.index(species2_name)
 
-        assert equation.function_space.sub(self.species1_idx) == equation.function_space.sub(self.species2_idx), f"The function spaces for the two species need to be the same"
+        assert equation.function_space.sub(self.species1_idx) == equation.function_space.sub(self.species2_idx), "The function spaces for the two species need to be the same"
 
         V = equation.function_space.sub(self.species1_idx)
 
