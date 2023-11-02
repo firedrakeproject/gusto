@@ -1805,46 +1805,94 @@ class TerminatorToy(PhysicsParametrisation):
         self.species2 = Function(V)
         Xt = Function(V)
         
-        self.X = Function(equation.X.function_space())
-        Xq = self.X
+        #self.X = Function(equation.X.function_space())
+        #Xq = self.X
+        
+        self.Xq = Function(equation.X.function_space())
+        Xq = self.Xq
+        
         species1 = split(Xq)[self.species1_idx]
         species2 = split(Xq)[self.species2_idx]
         
         # Determine the test functions:
-        tests = TestFunctions(X.function_space()) if implicit_formulation else equation.tests
+        tests = TestFunctions(Xq.function_space()) if implicit_formulation else equation.tests
         
         test_1 = tests[self.species1_idx]
         test_2 = tests[self.species2_idx]
         
         self.dt = Constant(0.0)
         
+        #self.fX1_expr = Constant(0.0)
+        #self.fX2_expr = Constant(0.0)
+        
         if implicit_formulation:
           # Use an analytical
-          # forcing solution given in Appendix G.
+          # forcing solution given in Appendiecs F, G.
+          
+          self.source_interpolators = []
           
           r = k1/(4*k2)
           
           #Xt.assign(self.species1 + 2*self.species2)
-          Xt = self.species1 + 2*self.species2
+          Xt = species1 + 2*species2
+          #Xt = 4e-6
           
           d = sqrt(r*r + 2*r*Xt)
           
           e = exp(-4*k2*d*self.dt)
           
-          el = conditional((abs(d*k2*self.dt) > 1e-16),(1-e)/(d*self.dt),4*k2)
-            
-          fX1 = -el*(self.species1-d+r)*(self.species1+d+r)/(1+e+self.dt*el*(self.species1+r))
+          L = conditional((abs(d*k2*self.dt) > 1e-16),(1-e)/(d*self.dt),4*k2)
+          
+          fX1 = -L*(species1-d+r)*(species1+d+r)/(1+e+self.dt*L*(species1+r))
           fX2 = -fX1/2
           
-          fXs = [fX1, fX2]
-          
-          self.source = [Function(V) for fX in fXs]
-          self.source_interpolators = [Interpolator(fX, source) for fX, source in zip(fXs, self.source)]
+          source1 = Function(V)
+          source2 = Function(V)
 
-          equation.residual -= self.label(subject(test_1 * fX1 * dx
-                                               + test_2 * fX2 * dx,
-                                               equation.X),
-                                       self.evaluate)
+          source1_expr = test_1 * source1 * dx
+          source2_expr = test_2 * source2 * dx
+          
+          self.source_interpolators.append(Interpolator(fX1, source1))
+          self.source_interpolators.append(Interpolator(fX2, source2))
+
+          equation.residual -= self.label(subject(prognostic(source1_expr, 'X'), Xq), self.evaluate)
+          equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate)
+          
+          
+          #fXs = [fX1, fX2]
+          
+          #fX1 = -self.dt*L*(species1-d+r)*(species1+d+r)/(1+e+self.dt*L*(species1+r))
+          #fX2 = -self.dt*fX1/2
+          
+          #self.fX1_expr.assign(fX1)
+          #self.fX2_expr.assign(fX2)
+          
+          #self.source = [Function(V) for fX in fXs]
+          #self.source_interpolators = [Interpolator(fX, source) for fX, source in zip(fXs, self.source)]
+          #equation.residual -= self.label(subject(test_1 * fX1 * dx
+          #                                    + test_2 * fX2 * dx,
+          #                                     equation.X),
+          #                             self.evaluate)
+
+          #species1_np1 = species1 + self.dt*fX1
+          #species2_np2 = species2 + self.dt*fX2
+
+          #dX1_dt = (species1_np1-species1)/self.dt
+          #dX2_dt = species2 + self.dt*fX2
+        
+          #source1 = Function(V)
+          #source2 = Function(V)
+
+          #source1_expr = test_1 * source1 * dx
+          #source2_expr = test_2 * source2 * dx
+          
+          #self.source_interpolators.append(Interpolator(fX1, source1))
+          #self.source_interpolators.append(Interpolator(fX2, source2))
+          #self.source_interpolators.append(Interpolator(dX1_dt, source1))
+          #self.source_interpolators.append(Interpolator(dX2_dt, source2))
+
+          #equation.residual -= self.label(subject(prognostic(source1_expr, 'X'), Xq), self.evaluate)
+          #equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate)
         
         else:
           # Define ODE equations to solve
@@ -1890,13 +1938,15 @@ class TerminatorToy(PhysicsParametrisation):
         
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
         
-        if self.implicit_formulation:
+        #if self.implicit_formulation:
           # Update the values of internal variables
-          self.species1.assign(x_in.subfunctions[self.species1_idx])
-          self.species2.assign(x_in.subfunctions[self.species2_idx])
+          #self.species1.assign(x_in.subfunctions[self.species1_idx])
+          #self.species2.assign(x_in.subfunctions[self.species2_idx])
           
-          for interpolator in self.source_interpolators:
-             interpolator.interpolate()
-        #else:
-          # Remove this once Backwards Euler can be used
-        #  self.source_interpolator.interpolate()
+          #self.Xq.assign(x_in)
+          
+          #self.dt.assign(dt)
+          
+          #for source_interpolator in self.source_interpolators:
+          #   source_interpolator.interpolate()
+          
