@@ -124,7 +124,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 transport term should be replaced with the transport term of
                 this discretisation.
         """
-        print('self.fields.field_names is', self.fields._field_names)
         if self.transporting_velocity == "prognostic" and "u" in self.fields._field_names:
             # Use the prognostic wind variable as the transporting velocity
             u_idx = self.equation.field_names.index('u')

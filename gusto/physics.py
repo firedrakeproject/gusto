@@ -30,7 +30,7 @@ from types import FunctionType
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
            "SourceSink", "SurfaceFluxes", "WindDrag", "StaticAdjustment",
-           "SuppressVerticalWind", "BoundaryLayerMixing", "TerminatorToy" ]
+           "SuppressVerticalWind", "BoundaryLayerMixing", "TerminatorToy"]
 
 
 class PhysicsParametrisation(object, metaclass=ABCMeta):
@@ -1125,7 +1125,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
-            
+
 
 class SurfaceFluxes(PhysicsParametrisation):
     """
@@ -1750,21 +1750,22 @@ class BoundaryLayerMixing(PhysicsParametrisation):
         self.X.assign(x_in)
         self.rho_recoverer.project()
 
+
 class TerminatorToy(PhysicsParametrisation):
-  """
-  Setup the Terminator Toy chemistry interaction
-  as specified in 'The terminator toy chemistry test ...'
-  Lauritzen et. al. (2014).
-  
-  The coupled equations for the two species are given by:
-  
-  D/Dt (X) = 2Kx
-  D/Dt (X2) = -Kx
-  
-  where Kx = k1*X2 - k2*(X**2)
-  
-  """
-  def __init__(self, equation, k1=1, k2=1, 
+    """
+    Setup the Terminator Toy chemistry interaction
+    as specified in 'The terminator toy chemistry test ...'
+    Lauritzen et. al. (2014).
+    
+    The coupled equations for the two species are given by:
+    
+    D/Dt (X) = 2Kx
+    D/Dt (X2) = -Kx
+    
+    where Kx = k1*X2 - k2*(X**2)
+    """
+
+    def __init__(self, equation, k1=1, k2=1,
                species1_name='X', species2_name='X2'):
         """
         Args:
@@ -1777,57 +1778,42 @@ class TerminatorToy(PhysicsParametrisation):
               to 'X'.
             species2_name(str, optional): Name of the second interacting species. Defaults 
               to 'X2'.
-            
         """
-             
+
         label_name = 'terminator_toy'
         super().__init__(equation, label_name, parameters=None)     
-                 
+
         assert species1_name in equation.field_names, f"Field {species1_name} does not exist in the equation set"
         assert species2_name in equation.field_names, f"Field {species2_name} does not exist in the equation set"
 
         self.species1_idx = equation.field_names.index(species1_name)
         self.species2_idx = equation.field_names.index(species2_name)
-        
+
         assert equation.function_space.sub(self.species1_idx) == equation.function_space.sub(self.species2_idx), f"The function spaces for the two species need to be the same"
-        
+
         V = equation.function_space.sub(self.species1_idx)
-        
+
         self.species1 = Function(V)
         self.species2 = Function(V)
-        
+
         self.Xq = Function(equation.X.function_space())
         Xq = self.Xq
-        
+
         species1 = split(Xq)[self.species1_idx]
         species2 = split(Xq)[self.species2_idx]
-        
-        # Determine the test functions:
+
         tests = equation.tests
-        
+
         test_1 = tests[self.species1_idx]
         test_2 = tests[self.species2_idx]
-        
-        #self.dt = Constant(0.0)
-        
-        # Define ODE equations to solve
-        # These will require a very small time
-        # step with explicit timesteppers,
-        # so an implicit timestepper is recommended
-      
-        
-        Kx = k1*species2 - k2*(species1**2)
-             
-        #Vs = self.species1.function_space()
-        #self.source1 = Function(Vs)    
-        #self.source2 = Function(Vs)   
-        
+
+        Kx = k1*species2 - k2*(species1**2) 
+
         source1_expr = test_1 * 2*Kx * dx
         source2_expr = test_2 * -Kx * dx
-        
+
         equation.residual -= self.label(subject(prognostic(source1_expr, 'X'), Xq), self.evaluate)
-        equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate)
-                                       
+        equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate)                 
 
   def evaluate(self, x_in, dt):
         """
