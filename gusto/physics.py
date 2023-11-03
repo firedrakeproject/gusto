@@ -1793,21 +1793,14 @@ class TerminatorToy(PhysicsParametrisation):
 
         assert equation.function_space.sub(self.species1_idx) == equation.function_space.sub(self.species2_idx), "The function spaces for the two species need to be the same"
 
-        V = equation.function_space.sub(self.species1_idx)
-
-        self.species1 = Function(V)
-        self.species2 = Function(V)
-
         self.Xq = Function(equation.X.function_space())
         Xq = self.Xq
 
         species1 = split(Xq)[self.species1_idx]
         species2 = split(Xq)[self.species2_idx]
 
-        tests = equation.tests
-
-        test_1 = tests[self.species1_idx]
-        test_2 = tests[self.species2_idx]
+        test_1 = equation.tests[self.species1_idx]
+        test_2 = equation.tests[self.species2_idx]
 
         Kx = k1*species2 - k2*(species1**2)
 
