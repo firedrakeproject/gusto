@@ -212,7 +212,7 @@ def split_continuity_form(equation):
         equation (:class:`PrognosticEquation`): the model's equation.
 
     Returns:
-        equation (:class:`PrognosticEquation`): the model's equation.
+        :class:`PrognosticEquation`: the model's equation.
     """
 
     for t in equation.residual:
