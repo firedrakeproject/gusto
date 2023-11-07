@@ -202,10 +202,10 @@ def diffusion_form(test, q, kappa):
 
 def split_continuity_form(equation):
     u"""
-    Loops through terms in a given equation, and splits continuity terms into
-    advective and divergence terms.
+    Loops through terms in a given equation, and splits all continuity terms
+    into advective and divergence terms.
 
-    This describes splitting ∇.(u*q) into u.∇q and q(∇.u),
+    This describes splitting ∇.(u*q) terms into u.∇q and q(∇.u),
     for transporting velocity u and transported q.
 
     Args:
