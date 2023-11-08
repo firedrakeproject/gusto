@@ -1785,8 +1785,10 @@ class TerminatorToy(PhysicsParametrisation):
         label_name = 'terminator_toy'
         super().__init__(equation, label_name, parameters=None)
 
-        assert species1_name in equation.field_names, f"Field {species1_name} does not exist in the equation set"
-        assert species2_name in equation.field_names, f"Field {species2_name} does not exist in the equation set"
+        if species1_name not in equation.field_names:
+            raise ValueError(f"Field {species1_name} does not exist in the equation set")
+        if species2_name not in equation.field_names:
+            raise ValueError(f"Field {species2_name} does not exist in the equation set")
 
         self.species1_idx = equation.field_names.index(species1_name)
         self.species2_idx = equation.field_names.index(species2_name)
@@ -1820,3 +1822,5 @@ class TerminatorToy(PhysicsParametrisation):
         """
 
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
+
+        pass

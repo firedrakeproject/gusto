@@ -406,6 +406,8 @@ class SplitPrescribedTransport(Timestepper):
                 or implicit. Defaults to None.
             prescribed_transporting_velocity: (field, optional): A known
                 velocity field that is used for the transport of tracers.
+                This can be made time-varying by defining a python function
+                that uses time as an argument.
                 Defaults to None.
         """
 
