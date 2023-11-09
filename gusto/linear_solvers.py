@@ -550,6 +550,57 @@ class IncompressibleSolver(TimesteppingSolver):
         b.assign(self.b)
 
 
+class ThermalSWSolver(TimesteppingSolver):
+    """
+    Linear solver object for the thermal shallow water equations.
+
+    This solves a linear problem for the thermal shallow water equations with
+    prognostic variables u (velocity), D (depth) and b (buoyancy). It follows
+    the following strategy:
+
+    (1) Eliminate b
+    (2) Solve the resulting system for (u, D) using a hybrid-mixed method
+    (3) Reconstruct b
+     """
+
+    solver_parameters = {
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': {'ksp_type': 'cg',
+                          'pc_type': 'gamg',
+                          'ksp_rtol': 1e-8,
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'}}
+    }
+
+    @timed_function("Gusto:SolverSetup")
+    def _setup_solver(self):
+        equation = self.equations      # just cutting down line length a bit
+        dt = self.dt
+        beta_ = dt*self.alpha
+        Vu = equation.domain.spaces("HDiv")
+        VD = equation.domain.spaces("DG")
+        Vb = equation.domain.spaces("DG")
+
+        # Store time-stepping coefficients as UFL Constants
+        beta = Constant(beta_)
+
+        # Split up the rhs vector (symbolically)
+        self.xrhs = Function(self.equations.function_space)
+        u_in, D_in, b_in = split(self.xrhs)
+
+        # Build the reduced function space for u, D
+        M = MixedFunctionSpace((Vu, VD))
+        w, phi = TestFunctions(M)
+        u, D = TrialFunctions(M)
+
+
+
+
 class LinearTimesteppingSolver(object):
     """
     A general object for solving mixed finite element linear problems.
