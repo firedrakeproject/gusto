@@ -6,13 +6,13 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 """
 
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
-                       FiniteElement, TensorProductElement)
+                       FiniteElement, TensorProductElement, split)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.kernels import LimitMidpoints
 
 import numpy as np
 
-__all__ = ["DG1Limiter", "ThetaLimiter", "NoLimiter"]
+__all__ = ["DG1Limiter", "ThetaLimiter", "NoLimiter", "MixedFSLimiter"]
 
 
 class DG1Limiter(object):
@@ -178,3 +178,51 @@ class NoLimiter(object):
                 applied, if this was not a blank limiter.
         """
         pass
+
+
+class MixedFSLimiter(object):
+    """A dictionary that holds limiters for individual components.
+    If no limiter is specified, then we apply a blank limiter"""
+    
+    
+    def __init__(self, tracers, sublimiters):
+        self.tracers = tracers
+        self.sublimiters = sublimiters
+        
+        for tracer in tracers:
+            #print(tracer.name)
+            #sublimiter = sublimiters.get(tracer.name)
+            #print(sublimiter)
+            if tracer.name not in sublimiters:
+              sublimiters[tracer.name] = NoLimiter()
+            sublimiter = sublimiters.get(tracer.name)
+            print(sublimiter)   
+            
+        self.sublimiters = sublimiters
+        print(len(self.tracers))
+        print(len(self.sublimiters))
+        
+        # Check that each tracer has a defined sublimiter
+        # Else, give it a blank limiter instead.
+        
+        
+    def apply(self, fields):
+        """
+        Apply individual limiter
+        """
+        
+        #Iterate over each tracer
+        #Apply the sublimiter
+        
+        for tracer in self.tracers:
+            sublimiter = self.sublimiters[tracer.name]
+            print(sublimiter)
+            
+            # split specific tracer from x_in 
+            # then apply the limiter to this.
+            
+            sublimiter.apply(tracer.field)
+        
+    
+    
+    
