@@ -9,7 +9,7 @@ from firedrake import (
     split, LinearVariationalProblem, Constant, LinearVariationalSolver,
     TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
     rhs, FacetNormal, div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b,
-    ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis,
+    ds_tb, dS, inner, action, dot, grad, Function, VectorSpaceBasis,
     BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC
 )
 from firedrake.fml import Term, drop
@@ -24,7 +24,7 @@ from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["IncompressibleSolver", "LinearTimesteppingSolver", "CompressibleSolver"]
+__all__ = ["IncompressibleSolver", "LinearTimesteppingSolver", "CompressibleSolver", "ThermalSWSolver"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -598,7 +598,93 @@ class ThermalSWSolver(TimesteppingSolver):
         w, phi = TestFunctions(M)
         u, D = TrialFunctions(M)
 
+        # Get background buoynacy
+        bbar = split(equation.X_ref)[2]
 
+        # Approximate elimination of b
+        b = -u*grad(bbar)*beta + b_in
+
+        # TODO: check about surface terms, and about D - D_in
+        n = FacetNormal(equation.domain.mesh)
+        H = equation.parameters('H')
+        eqn = (
+            inner(w, (u - u_in)) * dx
+            - beta * D * div(w*bbar) * dx
+            + beta * avg(D) * jump(bbar*w, n) * dS
+            + beta * 0.5 * H * w * grad(bbar) * dx
+            - beta * 0.5 * H * b * div(w) * dx
+            + beta * 0.5 * w * D * grad(bbar) * dx
+            + inner(phi, (D - D_in)) * dx
+            + beta * phi * H * div(u) * dx
+        )
+
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
+
+        # Place to put results of (u,D) solver
+        self.uD = Function(M)
+
+        # Boundary conditions
+        # TODO: this is taken from the IncompressibleSolver - does it assume an
+        # extruded mesh?
+        bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
+
+        # Solver for u, D
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs)
+
+        # Provide callback for the nullspace of the trace system
+        # TODO: what is this?
+        def trace_nullsp(T):
+            return VectorSpaceBasis(constant=True)
+
+        appctx = {"trace_nullspace": trace_nullsp}
+        self.uD_solver = LinearVariationalSolver(uD_problem,
+                                                 solver_parameters=self.solver_parameters,
+                                                 appctx=appctx)
+        # Reconstruction of b
+        b = TrialFunction(Vb)
+        gamma = TestFunction(Vb)
+
+        u, D = self.uD.subfunctions
+        self.b = Function(Vb)
+
+        b_eqn = gamma*(b - b_in + u*grad(bbar)*beta) * dx
+
+        b_problem = LinearVariationalProblem(lhs(b_eqn),
+                                             rhs(b_eqn),
+                                             self.b)
+        self.b_solver = LinearVariationalSolver(b_problem)
+
+        # Log residuals on hybridized solver
+        self.log_ksp_residuals(self.up_solver.snes.ksp)
+
+    @timed_function("Gusto:LinearSolve")
+    def solve(self, xrhs, dy):
+        """
+        Solve the linear problem.
+
+        Args:
+            xrhs (:class:`Function`): the right-hand side field in the
+                appropriate :class:`MixedFunctionSpace`.
+            dy (:class:`Function`): the resulting field in the appropriate
+                :class:`MixedFunctionSpace`.
+        """
+        self.xrhs.assign(xrhs)
+
+        with timed_region("Gusto:VelocityDepthSolve"):
+            logger.info('Thermal linear solver: mixed solve')
+            self.uD_solver.solve()
+
+        u1, D1 = self.uD.subfunctions
+        u, D, b = dy.subfunctions
+        u.assign(u1)
+        D.assign(D1)
+
+        with timed_region("Gusto:BuoyancyRecon"):
+            logger.info('Thermal linear solver: buoyancy reconstruction')
+            self.b_solver.solve()
+
+        b.assign(self.b)
 
 
 class LinearTimesteppingSolver(object):
