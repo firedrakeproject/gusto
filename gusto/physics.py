@@ -1454,12 +1454,12 @@ class RayleighFriction(PhysicsParametrisation):
         tao_cond = (sigma - sigmab) / (1 - sigmab)*cos(lat)**4
         wind_timescale = 1 / taofric * conditional(ge(0, tao_cond), 0, tao_cond)
 
-        forcing_expr = -u_hori / wind_timescale
+        self.forcing_expr = -u_hori / wind_timescale
 
         tests = equation.tests
         test = tests[u_idx]
         dx_reduced = dx(degree=4)
-        self.source_expr = inner(test, forcing_expr) * dx_reduced
+        self.source_expr = inner(test, self.forcing_expr) * dx_reduced
         self.source= Function(H1)
 
         equation.residual -= self.label(subject(prognostic(self.source_expr, 'u'), X), self.evaluate)
@@ -1479,7 +1479,7 @@ class RayleighFriction(PhysicsParametrisation):
         print(self.rho_averaged.dat.data.min(), self.rho_averaged.dat.data.max())
         print(self.theta.dat.data.min(), self.theta.dat.data.max())
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        self.source.project(self.source_expr)
+        self.source.project(self.forcing_expr)
         print(self.source.dat.data.min(), self.source.dat.data.max())
 
 class WindDrag(PhysicsParametrisation):
