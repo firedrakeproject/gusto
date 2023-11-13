@@ -6,7 +6,7 @@ import sys
 # Test case parameters
 # ----------------------------------------------------------------- #
 
-dt = 100
+dt = 500
 
 if '--running-tests' in sys.argv:
     tmax = dt
@@ -42,7 +42,7 @@ fexpr = 2*Omega*x[2]/R
 eqns = ShallowWaterEquations(domain, params, fexpr=fexpr, u_transport_option='vector_advection_form', thermal=True)
 
 # IO
-dirname = "thermal_williamson2"
+dirname = "thermal_williamson2_SIQN"
 output = OutputParameters(
     dirname=dirname,
     dumpfreq=dumpfreq,
@@ -54,14 +54,26 @@ diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                      ShallowWaterPotentialEnergy(params),
                      ShallowWaterPotentialEnstrophy(),
                      SteadyStateError('u'), SteadyStateError('D'),
-                     MeridionalComponent('u'), ZonalComponent('u')]
+                     SteadyStateError('b'), MeridionalComponent('u'),
+                     ZonalComponent('u')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+
+# Transport schemes
+transported_fields = [TrapeziumRule(domain, "u"),
+                      SSPRK3(domain, "D", fixed_subcycles=2),
+                      SSPRK3(domain, "b", fixed_subcycles=2)]
 transport_methods = [DGUpwind(eqns, "u"),
                      DGUpwind(eqns, "D"),
                      DGUpwind(eqns, "b")]
 
+# Linear solver
+linear_solver = ThermalSWSolver(eqns)
+
 # Time stepper
-stepper = Timestepper(eqns, RK4(domain), io, spatial_methods=transport_methods)
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  transport_methods,
+                                  linear_solver=linear_solver)
+# stepper = Timestepper(eqns, RK4(domain), io, spatial_methods=transport_methods)
 
 # ----------------------------------------------------------------- #
 # Initial conditions
@@ -91,6 +103,11 @@ bexpr = params.g * (1 - theta)
 u0.project(uexpr)
 D0.interpolate(Dexpr)
 b0.interpolate(bexpr)
+
+# Set reference profiles
+Dbar = Function(D0.function_space()).assign(H)
+bbar = Function(b0.function_space()).interpolate(bexpr)
+stepper.set_reference_profiles([('D', Dbar), ('b', bbar)])
 
 # ----------------------------------------------------------------- #
 # Run

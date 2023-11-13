@@ -598,22 +598,23 @@ class ThermalSWSolver(TimesteppingSolver):
         w, phi = TestFunctions(M)
         u, D = TrialFunctions(M)
 
-        # Get background buoynacy
+        # Get background buoyancy and depth
         bbar = split(equation.X_ref)[2]
+        Dbar = split(equation.X_ref)[1]
 
         # Approximate elimination of b
-        b = -u*grad(bbar)*beta + b_in
+        b = -dot(u, grad(bbar))*beta + b_in
 
         # TODO: check about surface terms, and about D - D_in
         n = FacetNormal(equation.domain.mesh)
-        H = equation.parameters('H')
+        H = Dbar
         eqn = (
             inner(w, (u - u_in)) * dx
             - beta * D * div(w*bbar) * dx
             + beta * avg(D) * jump(bbar*w, n) * dS
-            + beta * 0.5 * H * w * grad(bbar) * dx
+            + beta * 0.5 * H * inner(w, grad(bbar)) * dx
             - beta * 0.5 * H * b * div(w) * dx
-            + beta * 0.5 * w * D * grad(bbar) * dx
+            + beta * 0.5 * D * inner(w, grad(bbar)) * dx
             + inner(phi, (D - D_in)) * dx
             + beta * phi * H * div(u) * dx
         )
@@ -648,7 +649,7 @@ class ThermalSWSolver(TimesteppingSolver):
         u, D = self.uD.subfunctions
         self.b = Function(Vb)
 
-        b_eqn = gamma*(b - b_in + u*grad(bbar)*beta) * dx
+        b_eqn = gamma*(b - b_in + inner(u, grad(bbar))*beta) * dx
 
         b_problem = LinearVariationalProblem(lhs(b_eqn),
                                              rhs(b_eqn),
@@ -656,7 +657,7 @@ class ThermalSWSolver(TimesteppingSolver):
         self.b_solver = LinearVariationalSolver(b_problem)
 
         # Log residuals on hybridized solver
-        self.log_ksp_residuals(self.up_solver.snes.ksp)
+        self.log_ksp_residuals(self.uD_solver.snes.ksp)
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
