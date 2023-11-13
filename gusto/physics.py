@@ -1430,20 +1430,19 @@ class RayleighFriction(PhysicsParametrisation):
         X = self.X
         k = equation.domain.k
         u_idx = equation.field_names.index('u')
-        T_idx = equation.field_names.index('theta')
+        theta_idx = equation.field_names.index('theta')
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
         h1 = equation.domain.spaces('H1')
-        self.Vt = X.subfunctions[T_idx]
+        self.theta = X.subfunctions[theta_idx]
 
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
         self.rho_averaged = Function(h1)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged, method='project', boundary_method=boundary_method)
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.Vt)
+        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
 
         u = split(X)[u_idx]
         u_hori = u - k*dot(u, k)
-        self.dt = Constant(0.0)
         sigmab = 0.7
         kappa = parameters.kappa
         taofric = 24 * 60 * 60
@@ -1460,8 +1459,10 @@ class RayleighFriction(PhysicsParametrisation):
         tests = equation.tests
         test = tests[u_idx]
         dx_reduced = dx(degree=4)
-        source_expr = inner(test, forcing_expr) * dx_reduced
-        equation.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
+        self.source_expr = inner(test, forcing_expr) * dx_reduced
+        self.source= Function('H1')
+
+        equation.residual -= self.label(subject(prognostic(self.source_expr, 'u'), X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -1474,10 +1475,13 @@ class RayleighFriction(PhysicsParametrisation):
                 interval for the scheme.
         """
         self.X.assign(x_in)
-        self.dt.assign(dt)
         self.rho_recoverer.project()
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.Vt)
-
+        print(self.rho_averaged.dat.data.min(), self.rho_averaged.dat.data.max())
+        print(self.theta.dat.data.min(), self.theta.dat.data.max())
+        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
+        self.source.project(self.source_expr)
+        print(self.source.dat.data.min(), self.source.dat.data.max())
+        
 class WindDrag(PhysicsParametrisation):
     """
     A simple surface wind drag scheme. This formulation is taken from the DCMIP
