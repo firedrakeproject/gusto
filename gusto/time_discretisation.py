@@ -633,7 +633,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
     def solve_stage(self, x0, stage):
         self.x1.assign(x0)
         for i in range(stage):
-            self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
+            self.x1.assign(self.x1 + self.dt*Constant(self.butcher_matrix[stage-1, i])*self.k[i])
         for evaluate in self.evaluate_source:
             evaluate(self.x1, self.dt)
         if self.limiter is not None:
@@ -644,7 +644,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         if (stage == self.nStages - 1):
             self.x1.assign(x0)
             for i in range(self.nStages):
-                self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage, i]*self.k[i])
+                self.x1.assign( self.x1 + self.dt*Constant(self.butcher_matrix[stage, i])*self.k[i])
             self.x1.assign(self.x1)
 
             if self.limiter is not None:
@@ -1799,11 +1799,17 @@ class FE_SDC(SDC):
 
 
     def setup(self, equation, apply_bcs=True, *active_labels):
-        self.base.setup(equation, apply_bcs=True, *active_labels)
+        self.base.setup(equation, *active_labels)
         self.residual = self.base.residual
 
         # set up SDC form and solver
-        W = equation.function_space
+        if self.field_name is not None and hasattr(equation, "field_names"):
+            self.idx = equation.field_names.index(self.field_name)
+            W = equation.spaces[self.idx]
+        else:
+            self.field_name = equation.field_name
+            W = equation.function_space
+            self.idx = None
         dt = self.dt
         self.W = W
         self.Unodes = [Function(W) for _ in range(self.M+1)]
@@ -1829,11 +1835,11 @@ class FE_SDC(SDC):
     @property
     def res_rhs(self):
         a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Urhs),
+                                    replace_subject(self.Urhs, old_idx=self.idx),
                                     drop)
         L = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     drop,
-                                    replace_subject(self.Uin))
+                                    replace_subject(self.Uin, old_idx=self.idx))
         Frhs = a - L
         return Frhs.form
     
@@ -1843,21 +1849,21 @@ class FE_SDC(SDC):
                                     map_if_false=lambda t: self.dt*t)
 
         a = F.label_map(lambda t: t.has_label(time_derivative),
-                        replace_subject(self.U_SDC),
+                        replace_subject(self.U_SDC, old_idx=self.idx),
                         drop)
 
-        F_exp = F.label_map(all_terms, replace_subject(self.Un))
+        F_exp = F.label_map(all_terms, replace_subject(self.Un, old_idx=self.idx))
         F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
                                 lambda t: -1*t)
 
         F0 = F.label_map(lambda t: t.has_label(time_derivative),
                          drop,
-                         replace_subject(self.U0))
+                         replace_subject(self.U0, old_idx=self.idx))
         F0 = F0.label_map(all_terms,
                           lambda t: -1*t)
 
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Q_),
+                                    replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
 
         F_SDC = a + F_exp + F0 + Q
@@ -1904,7 +1910,7 @@ class FE_SDC(SDC):
 
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
-                self.dt = self.dtau[m-1]
+                self.dt = float(self.dtau[m-1])
                 self.U0.assign(self.Unodes[m-1])
                 self.Un.assign(self.Unodes1[m-1])
                 self.Q_.assign(self.quad[m-1])
@@ -1923,17 +1929,26 @@ class FE_SDC(SDC):
 
 class BE_SDC(SDC):
 
-    def setup(self, equation):
+    def __init__(self, base_scheme, domain, M, maxk, field_name=None):
+        super().__init__(domain, M, maxk, field_name=field_name)
+        self.base = base_scheme
 
-        self.base = BackwardEuler(self.domain)
+
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        self.base.setup(equation, *active_labels)
+        self.residual = self.base.residual
 
         #uadv = self.state.fields("u")
 
-        self.base.setup(equation)
-        self.residual = self.base.residual
 
         # set up SDC form and solver
-        W = equation.function_space
+        if self.field_name is not None and hasattr(equation, "field_names"):
+            self.idx = equation.field_names.index(self.field_name)
+            W = equation.spaces[self.idx]
+        else:
+            self.field_name = equation.field_name
+            W = equation.function_space
+            self.idx = None
         self.W = W
         self.Unodes = [Function(W) for _ in range(self.M+1)]
         self.Unodes1 = [Function(W) for _ in range(self.M+1)]
@@ -1959,11 +1974,11 @@ class BE_SDC(SDC):
     @property
     def res_rhs(self):
         a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Urhs),
+                                    replace_subject(self.Urhs, old_idx=self.idx),
                                     drop)
         L = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     drop,
-                                    replace_subject(self.Uin))
+                                    replace_subject(self.Uin, old_idx=self.idx))
         Frhs = a - L
         return Frhs.form
     
@@ -1973,7 +1988,7 @@ class BE_SDC(SDC):
                                     map_if_false=lambda t: self.dt*t)
 
         F_imp = F.label_map(all_terms,
-                            replace_subject(self.U_SDC))
+                            replace_subject(self.U_SDC, old_idx=self.idx))
 
         F_exp = F.label_map(lambda t: t.has_label(time_derivative),
                             replace_subject(self.Un),
@@ -1983,12 +1998,12 @@ class BE_SDC(SDC):
 
         F01 = F.label_map(lambda t: t.has_label(time_derivative),
                             drop,
-                            replace_subject(self.U01))
+                            replace_subject(self.U01, old_idx=self.idx))
 
         F01 = F01.label_map(all_terms, lambda t: -1*t)
 
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Q_),
+                                    replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
 
         F_SDC = F_imp + F_exp + F01 + Q
@@ -2019,7 +2034,7 @@ class BE_SDC(SDC):
 
         self.Unodes[0].assign(self.Un)
         for m in range(self.M):
-            self.base.dt = float(self.dtau[m])
+            self.base.dt = self.dtau[m]
             self.base.apply(self.Unodes[m+1], self.Unodes[m])
         k = 0
         while k < self.maxk:
@@ -2132,7 +2147,7 @@ class IM_SDC(SDC):
 
         self.Unodes[0].assign(self.Un)
         for m in range(self.M):
-            self.base.dt = float(self.dtau[m])
+            self.base.dt = self.dtau[m]
             self.base.apply(self.Unodes[m+1], self.Unodes[m])
 
         k = 0
@@ -2148,7 +2163,7 @@ class IM_SDC(SDC):
 
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
-                self.dt = float(self.dtau[m-1])
+                self.dt = self.dtau[m-1]
                 self.U0.assign(self.Unodes[m-1])
                 self.U01.assign(self.Unodes[m])
                 self.Un.assign(self.Unodes1[m-1])
