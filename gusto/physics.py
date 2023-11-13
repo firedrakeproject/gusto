@@ -1434,6 +1434,7 @@ class RayleighFriction(PhysicsParametrisation):
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
         H1 = equation.domain.spaces('H1')
+        Hdiv = equation.domain.spaces('Hdiv')
         self.theta = X.subfunctions[theta_idx]
 
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
@@ -1460,7 +1461,7 @@ class RayleighFriction(PhysicsParametrisation):
         test = tests[u_idx]
         dx_reduced = dx(degree=4)
         self.source_expr = inner(test, self.forcing_expr) * dx_reduced
-        self.source= Function(H1)
+        self.source= Function(Hdiv)
 
         equation.residual -= self.label(subject(prognostic(self.source_expr, 'u'), X), self.evaluate)
 
