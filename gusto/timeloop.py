@@ -240,7 +240,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                     # reference profile of a diagnostic
                     # warn user in case they made a typo
                     logger.warning(f'Setting reference profile for diagnostic {field_name}')
-                    # dont need to do anythin else as value in field container has already been set
+                    # Don't need to do anything else as value in field container has already been set
         self.reference_profiles_initialised = True
 
 
