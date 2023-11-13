@@ -243,7 +243,7 @@ class Relaxation(PhysicsParametrisation):
         test = equation.tests[T_idx]
         dx_reduced = dx(degree=4)
         forcing = test * coeff * (theta - equilibrium_expr) * dx_reduced
-        equation.residual -= self.label(subject(prognostic(forcing, 'theta'), X), self.evaluate)
+        equation.residual += self.label(subject(prognostic(forcing, 'theta'), X), self.evaluate)
         
     def evaluate(self, x_in, dt):
         """
@@ -1461,7 +1461,7 @@ class RayleighFriction(PhysicsParametrisation):
         test = tests[u_idx]
         dx_reduced = dx(degree=4)
         source_expr = inner(test, forcing_expr) * dx_reduced
-        equation.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
+        equation.residual += self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
