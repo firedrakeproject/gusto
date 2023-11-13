@@ -1429,16 +1429,16 @@ class RayleighFriction(PhysicsParametrisation):
         X = self.X
         k = equation.domain.k
         u_idx = equation.field_names.index('u')
-        Vu = X.subfunctions[u_idx]
+        T_idx = equation.field_names.index('theta')
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
         h1 = equation.domain.spaces('H1')
-
+        Vt = X.subfunctions[T_idx]
 
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
         rho_averaged = Function(h1)
-        self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
-        exner = thermodynamics.exner_pressure(equation.parameters, rho_averaged, h1)
+        self.rho_recoverer = Recoverer(rho, rho_averaged, method='project', boundary_method=boundary_method)
+        exner = thermodynamics.exner_pressure(equation.parameters, rho_averaged, Vt)
 
 
         u = split(X)[u_idx]
