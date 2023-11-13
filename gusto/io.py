@@ -641,6 +641,11 @@ class IO(object):
         else:
             raise ValueError("Must set checkpoint True if picking up")
 
+        # Prevent any steady-state diagnostics overwriting their original fields
+        for diagnostic_field in self.diagnostic_fields:
+            if hasattr(diagnostic_field, "init_field_set"):
+                diagnostic_field.init_field_set = True
+
         return t, reference_profiles, step, initial_steps
 
     def dump(self, state_fields, t, step, initial_steps=None):
