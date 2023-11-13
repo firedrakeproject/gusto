@@ -1425,6 +1425,7 @@ class RayleighFriction(PhysicsParametrisation):
         label_name = 'rayleigh_friction'
         super().__init__(equation, label_name, parameters=None)
 
+        self.parameters = equation.parameters
         self.X = Function(equation.X.function_space())
         X = self.X
         k = equation.domain.k
@@ -1433,13 +1434,12 @@ class RayleighFriction(PhysicsParametrisation):
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
         h1 = equation.domain.spaces('H1')
-        Vt = X.subfunctions[T_idx]
+        self.Vt = X.subfunctions[T_idx]
 
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
-        rho_averaged = Function(h1)
-        self.rho_recoverer = Recoverer(rho, rho_averaged, method='project', boundary_method=boundary_method)
-        exner = thermodynamics.exner_pressure(equation.parameters, rho_averaged, Vt)
-
+        self.rho_averaged = Function(h1)
+        self.rho_recoverer = Recoverer(rho, self.rho_averaged, method='project', boundary_method=boundary_method)
+        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.Vt)
 
         u = split(X)[u_idx]
         u_hori = u - k*dot(u, k)
@@ -1451,7 +1451,7 @@ class RayleighFriction(PhysicsParametrisation):
         x, y, z = SpatialCoordinate(mesh)
         _, lat, _ = lonlatr_from_xyz(x, y, z)
 
-        sigma = exner**-kappa
+        sigma = self.exner**-kappa
         tao_cond = (sigma - sigmab) / (1 - sigmab)*cos(lat)**4
         wind_timescale = 1 / taofric * conditional(ge(0, tao_cond), 0, tao_cond)
 
@@ -1461,7 +1461,7 @@ class RayleighFriction(PhysicsParametrisation):
         test = tests[u_idx]
         dx_reduced = dx(degree=4)
         source_expr = inner(test, forcing_expr) * dx_reduced
-        equation.residual += self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
+        equation.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -1476,6 +1476,7 @@ class RayleighFriction(PhysicsParametrisation):
         self.X.assign(x_in)
         self.dt.assign(dt)
         self.rho_recoverer.project()
+        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.Vt)
 
 class WindDrag(PhysicsParametrisation):
     """
