@@ -2,8 +2,8 @@
 
 import ufl
 from firedrake import Function
+from firedrake.fml import Term, Label, LabelledForm
 from gusto.configuration import IntegrateByParts, TransportEquationType
-from gusto.fml.form_manipulation_language import Term, Label, LabelledForm
 from types import MethodType
 
 dynamics_label = Label("dynamics", validator=lambda value: type(value) is str)
@@ -90,6 +90,8 @@ class PhysicsLabel(Label):
 # ---------------------------------------------------------------------------- #
 
 time_derivative = Label("time_derivative")
+implicit = Label("implicit")
+explicit = Label("explicit")
 transport = Label("transport", validator=lambda value: type(value) == TransportEquationType)
 diffusion = Label("diffusion")
 transporting_velocity = Label("transporting_velocity", validator=lambda value: type(value) in [Function, ufl.tensors.ListTensor])

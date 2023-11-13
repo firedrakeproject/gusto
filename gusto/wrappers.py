@@ -5,11 +5,12 @@ called.
 """
 
 from abc import ABCMeta, abstractmethod
-from firedrake import (FunctionSpace, Function, BrokenElement, Projector,
-                       Interpolator, VectorElement, Constant, as_ufl, dot, grad,
-                       TestFunction)
+from firedrake import (
+    FunctionSpace, Function, BrokenElement, Projector, Interpolator,
+    VectorElement, Constant, as_ufl, dot, grad, TestFunction
+)
+from firedrake.fml import Term
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
-from gusto.fml import Term
 from gusto.recovery import Recoverer, ReversibleRecoverer
 from gusto.labels import transporting_velocity
 import ufl
