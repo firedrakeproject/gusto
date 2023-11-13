@@ -241,7 +241,8 @@ class Relaxation(PhysicsParametrisation):
 
         # Add relaxation term to residual
         test = equation.tests[T_idx]
-        forcing = test * coeff * (theta - equilibrium_expr) * dx
+        dx_reduced = dx(degree=4)
+        forcing = test * coeff * (theta - equilibrium_expr) * dx_reduced
         equation.residual -= self.label(subject(prognostic(forcing, 'theta'), X), self.evaluate)
         
     def evaluate(self, x_in, dt):
@@ -1431,12 +1432,13 @@ class RayleighFriction(PhysicsParametrisation):
         Vu = X.subfunctions[u_idx]
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
+        h1 = equation.domain.spaces('H1')
 
 
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
-        rho_averaged = Function(equation.function_space.sub(u_idx))
+        rho_averaged = Function(h1)
         self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
-        exner = thermodynamics.exner_pressure(equation.parameters, rho_averaged, Vu)
+        exner = thermodynamics.exner_pressure(equation.parameters, rho_averaged, h1)
 
 
         u = split(X)[u_idx]
