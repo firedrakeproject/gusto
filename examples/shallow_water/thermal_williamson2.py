@@ -42,7 +42,7 @@ fexpr = 2*Omega*x[2]/R
 eqns = ShallowWaterEquations(domain, params, fexpr=fexpr, u_transport_option='vector_advection_form', thermal=True)
 
 # IO
-dirname = "thermal_williamson2_SIQN"
+dirname = "thermal_williamson2_SIQN_Tues"
 output = OutputParameters(
     dirname=dirname,
     dumpfreq=dumpfreq,

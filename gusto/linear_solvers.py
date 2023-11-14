@@ -611,7 +611,7 @@ class ThermalSWSolver(TimesteppingSolver):
         eqn = (
             inner(w, (u - u_in)) * dx
             - beta * D * div(w*bbar) * dx
-            + beta * avg(D) * jump(bbar*w, n) * dS
+            # + beta * avg(D) * jump(bbar*w, n) * dS
             + beta * 0.5 * H * inner(w, grad(bbar)) * dx
             - beta * 0.5 * H * b * div(w) * dx
             + beta * 0.5 * D * inner(w, grad(bbar)) * dx
@@ -631,10 +631,9 @@ class ThermalSWSolver(TimesteppingSolver):
         bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, D
-        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs)
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD) # , bcs=bcs)
 
         # Provide callback for the nullspace of the trace system
-        # TODO: what is this?
         def trace_nullsp(T):
             return VectorSpaceBasis(constant=True)
 
