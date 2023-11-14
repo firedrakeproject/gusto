@@ -682,6 +682,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         # Depth transport term
         D_adv = prognostic(continuity_form(phi, D, u), 'D')
+
         # Transport term needs special linearisation
         if self.linearisation_map(D_adv.terms[0]):
             linear_D_adv = linear_continuity_form(phi, H, u_trial)
