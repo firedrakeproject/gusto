@@ -181,48 +181,47 @@ class NoLimiter(object):
 
 
 class MixedFSLimiter(object):
-    """A dictionary that holds limiters for individual components.
-    If no limiter is specified, then we apply a blank limiter"""
+    """An object to hold a dictionary that defines limiters for transported prognostic 
+    variables. Different limiters may be applied to different fields and not every transported variable needs a defined limiter.
+    """
     
-    
-    def __init__(self, tracers, sublimiters):
-        self.tracers = tracers
+    def __init__(self, equation, sublimiters):
+        """
+        Args:
+            equation (:class: 'PrognosticEquationSet'): the prognostic equation(s)
+            sublimiters (dict): A dictionary holding limiters defined for individual prognostic variables 
+        Raises:
+            ValueError: If a limiter is defined for a field that is not in the prognostic variable set
+        """
         self.sublimiters = sublimiters
         
-        for tracer in tracers:
-            #print(tracer.name)
-            #sublimiter = sublimiters.get(tracer.name)
-            #print(sublimiter)
-            if tracer.name not in sublimiters:
-              sublimiters[tracer.name] = NoLimiter()
-            sublimiter = sublimiters.get(tracer.name)
-            print(sublimiter)   
-            
-        self.sublimiters = sublimiters
-        print(len(self.tracers))
-        print(len(self.sublimiters))
-        
-        # Check that each tracer has a defined sublimiter
-        # Else, give it a blank limiter instead.
-        
-        
+        for tracer, sublimiter in sublimiters.items():
+            # Check that the tracer is being solved in the equation:
+            if tracer not in equation.field_names:
+                raise ValueError(f"The limiter for {tracer} is for a field that does not exist in the equation set")
+            else:
+                self.sublimiters[tracer].idx = equation.field_names.index(tracer)
+
+        #for tracer in tracers:
+        #    if tracer.name in sublimiters:
+        #        sublimiter = sublimiters.get(tracer.name)
+        #        print(sublimiter)
+        #        self.sublimiters[tracer.name].idx = equation.field_names.index(tracer.name
+              
     def apply(self, fields):
         """
-        Apply individual limiter
+        Apply the individual limiters to specific prognostic variables
         """
         
-        #Iterate over each tracer
-        #Apply the sublimiter
-        
-        for tracer in self.tracers:
-            sublimiter = self.sublimiters[tracer.name]
-            print(sublimiter)
+        #for tracer in self.tracers:
+        #    if tracer.name in self.sublimiters:
+        #        sublimiter = self.sublimiters[tracer.name]
+        #        field = fields.subfunctions[sublimiter.idx]
+        #        sublimiter.apply(field)
+        #        print(f'Applying sublimiter on {tracer.name} field')
+                
+        for _, sublimiter in self.sublimiters.items():
+            field = fields.subfunctions[sublimiter.idx]
+            sublimiter.apply(field)
+            #print(f'Applying sublimiter on {tracer} field')
             
-            # split specific tracer from x_in 
-            # then apply the limiter to this.
-            
-            sublimiter.apply(tracer.field)
-        
-    
-    
-    
