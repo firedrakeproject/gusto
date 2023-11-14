@@ -175,16 +175,7 @@ class Relaxation(PhysicsParametrisation):
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
             variable_name (str): the name of the variable
-            rate_expression (:class:`ufl.Expr` or func): an expression giving
-                the rate of change of the variable. If a time-varying expression
-                is needed, this should be a function taking a single argument
-                representing the time. Then the `time_varying` argument must
-                be set to True.
-            time_varying (bool, optional): whether the source/sink expression
-                varies with time. Defaults to False.
-            method (str, optional): the method to use to evaluate the expression
-                for the source. Valid options are 'interpolate' or 'project'.
-                Default is 'interpolate'.
+
         """
 
         label_name = f'relaxation_{variable_name}'
@@ -199,16 +190,16 @@ class Relaxation(PhysicsParametrisation):
                 f'Field {variable_name} does not exist in the equation'
         self.X = Function(equation.X.function_space())
         X = equation.X
-        T_idx = equation.field_names.index('theta')
-        Vt = X.subfunctions[T_idx]
-        theta = split(X)[T_idx]
+        theta_idx = equation.field_names.index('theta')
+        Vt = X.subfunctions[theta_idx]
+        theta = split(X)[theta_idx]
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
 
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
-        rho_averaged = Function(equation.function_space.sub(T_idx))
-        self.rho_recoverer = Recoverer(rho, rho_averaged, boundary_method=boundary_method)
-        exner = thermodynamics.exner_pressure(equation.parameters, rho_averaged, Vt)
+        self.rho_averaged = Function(equation.function_space.sub(theta_idx))
+        self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
+        self.exner = thermodynamics.exner_pressure(equation.parameters, self.rho_averaged, theta)
         
         # -----------
         # Parameters and equilibirum expression
@@ -229,21 +220,22 @@ class Relaxation(PhysicsParametrisation):
         x, y, z = SpatialCoordinate(mesh)
         _, lat, _ = lonlatr_from_xyz(x, y, z)
 
-        T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(exner**-kappa) * cos(lat)**2) * exner
+        T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner**-kappa) * cos(lat)**2) * exner
         Teq = conditional(ge(T0stra, T_condition), T0stra, T_condition)
-        equilibrium_expr = Teq / exner
+        equilibrium_expr = Teq / self.exner
         # timescale of temperature forcing
-        sigma = exner**-kappa
+        sigma = self.exner**-kappa
         tao_cond = (sigma - sigmab) / (1 - sigmab)*cos(lat)**4
         tau_rad_inverse = 1 / taod + (1/taou - 1/taod) * conditional(ge(0, tao_cond), 0, tao_cond)
-        coeff = exner * tau_rad_inverse
+        coeff = self.exner * tau_rad_inverse
 
 
         # Add relaxation term to residual
-        test = equation.tests[T_idx]
+        test = equation.tests[theta_idx]
         dx_reduced = dx(degree=4)
-        forcing = test * coeff * (theta - equilibrium_expr) * dx_reduced
-        equation.residual += self.label(subject(prognostic(forcing, 'theta'), X), self.evaluate)
+        self.forcing = test * coeff * (theta - equilibrium_expr) * dx_reduced
+        self.force_field = Function(Vt)
+        equation.residual += self.label(subject(prognostic(self.forcing, 'theta'), X), self.evaluate)
         
     def evaluate(self, x_in, dt):
         """
@@ -254,10 +246,14 @@ class Relaxation(PhysicsParametrisation):
             dt: (:class:`Constant`): the timestep, which can be the time
                 interval for the scheme. 
         """
-        self.dt.assign(dt)
+        
         self.X.assign(x_in)
-        if isinstance(self.equation, CompressibleEulerEquations):
-            self.rho_recoverer.project()
+        self.rho_recoverer.project()
+        print(self.rho_averaged.dat.data.min(), self.rho_averaged.dat.data.max())
+        print(self.theta.dat.data.min(), self.theta.dat.data.max())
+        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
+        self.force_field.project(self.forcing)
+        print(self.source.dat.data.min(), self.source.dat.data.max())
 
 class SaturationAdjustment(PhysicsParametrisation):
     """
@@ -1439,7 +1435,7 @@ class RayleighFriction(PhysicsParametrisation):
 
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
         self.rho_averaged = Function(H1)
-        self.rho_recoverer = Recoverer(rho, self.rho_averaged, method='project', boundary_method=boundary_method)
+        self.rho_recoverer = Recoverer(rho, self.rho_averaged,  boundary_method=boundary_method)
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
 
         u = split(X)[u_idx]
