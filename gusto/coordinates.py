@@ -99,7 +99,7 @@ class Coordinates(object):
         space = domain.spaces(space_name)
 
         # Use the appropriate scalar function space if the space is vector
-        if np.prod(space.ufl_element().value_shape()) > 1:
+        if np.prod(space.ufl_element().value_shape) > 1:
             # TODO: get scalar space, and only compute coordinates if necessary
             logger.warning(f'Space {space_name} has more than one dimension, '
                            + 'and coordinates used for netCDF output have not '
