@@ -213,6 +213,8 @@ def upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=Fa
 
     if outflow and ibp == IntegrateByParts.NEVER:
         raise ValueError("outflow is True and ibp is None are incompatible options")
+
+    # TO DO distinguish between velocity space and HDiv space
     Vu = domain.spaces("HDiv")
     dS_ = (dS_v + dS_h) if Vu.extruded else dS
     ubar = Function(Vu)
