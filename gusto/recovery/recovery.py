@@ -207,7 +207,7 @@ class Recoverer(object):
         if self.vector_function_space:
             # VectorElement has to be on the outside
             # so first need to get underlying finite element
-            brok_elt = VectorElement(BrokenElement(rec_elt.sub_elements()[0]))
+            brok_elt = VectorElement(BrokenElement(rec_elt.sub_elements[0]))
         else:
             # Otherwise we can immediately get broken element
             brok_elt = BrokenElement(rec_elt)
