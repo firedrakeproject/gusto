@@ -6,7 +6,7 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 """
 
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
-                       FiniteElement, TensorProductElement, split)
+                       FiniteElement, TensorProductElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.kernels import LimitMidpoints
 
@@ -184,44 +184,29 @@ class MixedFSLimiter(object):
     """An object to hold a dictionary that defines limiters for transported prognostic 
     variables. Different limiters may be applied to different fields and not every transported variable needs a defined limiter.
     """
-    
+
     def __init__(self, equation, sublimiters):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the prognostic equation(s)
-            sublimiters (dict): A dictionary holding limiters defined for individual prognostic variables 
+            sublimiters (dict): A dictionary holding limiters defined for individual prognostic variables
         Raises:
             ValueError: If a limiter is defined for a field that is not in the prognostic variable set
         """
         self.sublimiters = sublimiters
-        
-        for tracer, sublimiter in sublimiters.items():
-            # Check that the tracer is being solved in the equation:
-            if tracer not in equation.field_names:
-                raise ValueError(f"The limiter for {tracer} is for a field that does not exist in the equation set")
-            else:
-                self.sublimiters[tracer].idx = equation.field_names.index(tracer)
 
-        #for tracer in tracers:
-        #    if tracer.name in sublimiters:
-        #        sublimiter = sublimiters.get(tracer.name)
-        #        print(sublimiter)
-        #        self.sublimiters[tracer.name].idx = equation.field_names.index(tracer.name
-              
+        for field, sublimiter in sublimiters.items():
+            # Check that the field is in the prognostic variable set:
+            if field not in equation.field_names:
+                raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
+            else:
+                self.sublimiters[field].idx = equation.field_names.index(field)
+
     def apply(self, fields):
         """
         Apply the individual limiters to specific prognostic variables
         """
-        
-        #for tracer in self.tracers:
-        #    if tracer.name in self.sublimiters:
-        #        sublimiter = self.sublimiters[tracer.name]
-        #        field = fields.subfunctions[sublimiter.idx]
-        #        sublimiter.apply(field)
-        #        print(f'Applying sublimiter on {tracer.name} field')
-                
+
         for _, sublimiter in self.sublimiters.items():
             field = fields.subfunctions[sublimiter.idx]
             sublimiter.apply(field)
-            #print(f'Applying sublimiter on {tracer} field')
-            

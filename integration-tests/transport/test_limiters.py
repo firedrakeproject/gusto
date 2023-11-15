@@ -53,8 +53,7 @@ def setup_limiters(dirname, space):
     elif space == 'mixed_FS':
         V = domain.spaces('HDiv')
         VA = domain.spaces('DG')
-        #VB = domain.spaces('theta')
-        VB = domain.spaces('DG')
+        VB = domain.spaces('DG1_equispaced')
     else:
         raise NotImplementedError
 
@@ -65,10 +64,7 @@ def setup_limiters(dirname, space):
         tracerA = ActiveTracer(name='tracerA', space='DG',
                                variable_type=TracerVariableType.mixing_ratio,
                                transport_eqn=TransportEquationType.advective)
-        #tracerB = ActiveTracer(name='tracerB', space='theta',
-        #                       variable_type=TracerVariableType.mixing_ratio,
-        #                       transport_eqn=TransportEquationType.advective)
-        tracerB = ActiveTracer(name='tracerB', space='DG',
+        tracerB = ActiveTracer(name='tracerB', space='DG1_equispaced',
                                variable_type=TracerVariableType.mixing_ratio,
                                transport_eqn=TransportEquationType.advective)
         tracers = [tracerA, tracerB]
@@ -106,14 +102,9 @@ def setup_limiters(dirname, space):
         
     elif space == 'mixed_FS':
         sublimiters = {'tracerA': DG1Limiter(domain.spaces('DG')),
-                       'tracerB': DG1Limiter(domain.spaces('DG'))}
-                       #'tracerB': ThetaLimiter(domain.spaces('theta'))}
-        # Need Embedded DG if wanting to test theta limiter. 
+                       'tracerB': VertexBasedLimiter(domain.spaces('DG1_equispaced'))}
         MixedLimiter = MixedFSLimiter(eqn, sublimiters)
         transport_schemes = SSPRK3(domain, limiter=MixedLimiter)
-        
-        #theta_opts = EmbeddedDGOptions()
-
     else:
         raise NotImplementedError
 
@@ -234,8 +225,8 @@ def setup_limiters(dirname, space):
         return stepper, tmax, true_field
 
 #move mixed_FS to the end once finished debugging
-@pytest.mark.parametrize('space', ['Vtheta_degree_0', 'mixed_FS'])#,  'Vtheta_degree_1',
-                                   #'DG0', 'DG1', 'DG1_equispaced'])
+@pytest.mark.parametrize('space', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
+                                   'DG1', 'DG1_equispaced', 'mixed_FS'])
 def test_limiters(tmpdir, space):
 
     # Setup and run
@@ -245,50 +236,50 @@ def test_limiters(tmpdir, space):
         stepper, tmax, true_fieldA, true_fieldB = setup_limiters(dirname, space)
     else:
         stepper, tmax, true_field = setup_limiters(dirname, space)
-        
+
     stepper.run(t=0, tmax=tmax)
-    
+
     tol = 1e-9
-    
+
     if space == 'mixed_FS':
         final_fieldA = stepper.fields('tracerA')
         final_fieldB = stepper.fields('tracerB')
-        
+
         # Check tracer is roughly in the correct place
         assert norm(true_fieldA - final_fieldA) / norm(true_fieldA) < 0.05, \
         'Something is wrong with the DG space tracer using a mixed limiter'
-        
+
         # Check tracer is roughly in the correct place
         assert norm(true_fieldB - final_fieldB) / norm(true_fieldB) < 0.05, \
-        'Something is wrong with the theta space tracer using a mixed limiter'
-        
+        'Something is wrong with the DG1 equispaced tracer using a mixed limiter'
+
         # Check for no new overshoots in A
         assert np.max(final_fieldA.dat.data) <= np.max(true_fieldA.dat.data) + tol, \
             'Application of the DG space limiter in the mixed limiter has not prevented overshoots'
-        
+
         # Check for no new undershoots in A
         assert np.min(final_fieldA.dat.data) >= np.min(true_fieldA.dat.data) - tol, \
             'Application of the DG space limiter in the mixed limiter has not prevented undershoots'
-            
+
         # Check for no new overshoots in B
         assert np.max(final_fieldB.dat.data) <= np.max(true_fieldB.dat.data) + tol, \
-            'Application of the theta space limiter in the mixed limiter has not prevented overshoots'
-        
+            'Application of the DG1 equispaced limiter in the mixed limiter has not prevented overshoots'
+
         # Check for no new undershoots in B
         assert np.min(final_fieldB.dat.data) >= np.min(true_fieldB.dat.data) - tol, \
-            'Application of the theta space limiter in the mixed limiter has not prevented undershoots'
-    
+            'Application of the DG1 equispaced limiter in the mixed limiter has not prevented undershoots'
+
     else:
         final_field = stepper.fields('tracer')
-        
+
         # Check tracer is roughly in the correct place
         assert norm(true_field - final_field) / norm(true_field) < 0.05, \
             'Something appears to have gone wrong with transport of tracer using a limiter'
-        
+
         # Check for no new overshoots
         assert np.max(final_field.dat.data) <= np.max(true_field.dat.data) + tol, \
             'Application of limiter has not prevented overshoots'
-        
+
         # Check for no new undershoots
         assert np.min(final_field.dat.data) >= np.min(true_field.dat.data) - tol, \
             'Application of limiter has not prevented undershoots'
