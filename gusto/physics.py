@@ -178,23 +178,22 @@ class Relaxation(PhysicsParametrisation):
             variable_name (str): the name of the variable
 
         """
-
+        ic()
         label_name = f'relaxation_{variable_name}'
         super().__init__(equation, label_name, parameters=None)
-
+        self.equation = equation
         self.parameters = equation.parameters
         self.X = Function(equation.X.function_space())
         X = equation.X
         theta_idx = equation.field_names.index('theta')
-        self.theta_field = X.subfunctions[theta_idx]
-        self.theta = split(X)[theta_idx]
+        self.theta = X.subfunctions[theta_idx]
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
 
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
         self.rho_averaged = Function(equation.function_space.sub(theta_idx))
         self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta_field)
+        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
         
         # -----------
         # Parameters and equilibirum expression
@@ -227,7 +226,7 @@ class Relaxation(PhysicsParametrisation):
         # Add relaxation term to residual
         test = equation.tests[theta_idx]
         dx_reduced = dx(degree=4)
-        self.forcing = coeff * (self.theta_field - equilibrium_expr)
+        self.forcing = coeff * (self.theta - equilibrium_expr)
         self.force_field = Function(equation.function_space.sub(theta_idx))
         equation.residual += self.label(subject(prognostic(test * self.forcing * dx_reduced, 'theta'), X), self.evaluate)
         
@@ -239,14 +238,20 @@ class Relaxation(PhysicsParametrisation):
             x_in: (:class:`Function`): the (mixed) field to be evolved. 
             dt: (:class:`Constant`): the timestep, which can be the time
                 interval for the scheme. 
-        """
-        
+        """ 
         self.X.assign(x_in)
+        theta_idx = self.equation.field_names.index('theta')        
+        rho_idx = self.equation.field_names.index('rho') 
+        rho = split(self.X)[rho_idx]
+        self.theta = self.X.subfunctions[theta_idx]
+        boundary_method = BoundaryMethod.extruded if self.equation.domain.vertical_degree == 0 else None
+        self.rho_averaged = Function(self.equation.function_space.sub(theta_idx))
+        self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
         self.rho_recoverer.project()
         ic(self.rho_averaged.dat.data.min())
         print(f'min / max of rho avg is {self.rho_averaged.dat.data.min()}, {self.rho_averaged.dat.data.max()}')
-        print(f'min / max of theta is {self.theta_field.dat.data.min()}, {self.theta_field.dat.data.max()}')
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta_field)
+        print(f'min / max of theta is {self.theta.dat.data.min()}, {self.theta.dat.data.max()}')
+        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
         # print(self.force_field.dat.data.min(), self.force_field.dat.data.max())
 
 class SaturationAdjustment(PhysicsParametrisation):
@@ -1414,7 +1419,6 @@ class RayleighFriction(PhysicsParametrisation):
         """
         label_name = 'rayleigh_friction'
         super().__init__(equation, label_name, parameters=None)
-
         self.parameters = equation.parameters
         self.X = Function(equation.X.function_space())
         X = self.X
@@ -1467,7 +1471,7 @@ class RayleighFriction(PhysicsParametrisation):
         """
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        print(self.rho_averaged.dat.data.min(), self.rho_averaged.dat.data.max())
+        
         print(self.theta.dat.data.min(), self.theta.dat.data.max())
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
         self.source.project(self.forcing_expr)
