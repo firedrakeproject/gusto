@@ -28,7 +28,7 @@ import ufl
 import math
 from enum import Enum
 from types import FunctionType
-
+from icecream import ic
 
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
@@ -37,7 +37,8 @@ __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain"
 
 
 class PhysicsParametrisation(object, metaclass=ABCMeta):
-    """Base class for the parametrisation of physical processes for Gusto."""
+    """
+    Base class for the parametrisation of physical processes for Gusto."""  
 
     def __init__(self, equation, label_name, parameters=None):
         """
@@ -181,29 +182,22 @@ class Relaxation(PhysicsParametrisation):
         label_name = f'relaxation_{variable_name}'
         super().__init__(equation, label_name, parameters=None)
 
-        # Check the variable exists
-        if hasattr(equation, "field_names"):
-            assert variable_name in equation.field_names, \
-                f'Field {variable_name} does not exist in the equation set'
-        else:
-            assert variable_name == equation.field_name, \
-                f'Field {variable_name} does not exist in the equation'
+        self.parameters = equation.parameters
         self.X = Function(equation.X.function_space())
         X = equation.X
         theta_idx = equation.field_names.index('theta')
-        Vt = X.subfunctions[theta_idx]
-        theta = split(X)[theta_idx]
+        self.theta_field = X.subfunctions[theta_idx]
+        self.theta = split(X)[theta_idx]
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
 
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
         self.rho_averaged = Function(equation.function_space.sub(theta_idx))
         self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
-        self.exner = thermodynamics.exner_pressure(equation.parameters, self.rho_averaged, theta)
+        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta_field)
         
         # -----------
         # Parameters and equilibirum expression
-        self.dt = Constant(0.0)
         T0stra = 200 # Stratosphere temp
         T0surf = 315 # Surface temperature at equator
         T0horiz = 60 # Equator to pole temperature difference
@@ -220,22 +214,22 @@ class Relaxation(PhysicsParametrisation):
         x, y, z = SpatialCoordinate(mesh)
         _, lat, _ = lonlatr_from_xyz(x, y, z)
 
-        T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner**-kappa) * cos(lat)**2) * exner
+        T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner**(cp/Rd)) * cos(lat)**2) * self.exner
         Teq = conditional(ge(T0stra, T_condition), T0stra, T_condition)
-        equilibrium_expr = Teq / self.exner
+        equilibrium_expr = Teq * self.exner
         # timescale of temperature forcing
-        sigma = self.exner**-kappa
-        tao_cond = (sigma - sigmab) / (1 - sigmab)*cos(lat)**4
-        tau_rad_inverse = 1 / taod + (1/taou - 1/taod) * conditional(ge(0, tao_cond), 0, tao_cond)
+        sigma = self.exner**(cp/Rd)
+        tao_cond = (sigma - sigmab) / (1 - sigmab)
+        tau_rad_inverse = 1 / taod + (1/taou - 1/taod) * conditional(ge(0, tao_cond), 0, tao_cond) * cos(lat)**4
         coeff = self.exner * tau_rad_inverse
 
 
         # Add relaxation term to residual
         test = equation.tests[theta_idx]
         dx_reduced = dx(degree=4)
-        self.forcing = test * coeff * (theta - equilibrium_expr) * dx_reduced
-        self.force_field = Function(Vt)
-        equation.residual += self.label(subject(prognostic(self.forcing, 'theta'), X), self.evaluate)
+        self.forcing = coeff * (self.theta_field - equilibrium_expr)
+        self.force_field = Function(equation.function_space.sub(theta_idx))
+        equation.residual += self.label(subject(prognostic(test * self.forcing * dx_reduced, 'theta'), X), self.evaluate)
         
     def evaluate(self, x_in, dt):
         """
@@ -249,11 +243,11 @@ class Relaxation(PhysicsParametrisation):
         
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        print(self.rho_averaged.dat.data.min(), self.rho_averaged.dat.data.max())
-        print(self.theta.dat.data.min(), self.theta.dat.data.max())
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        self.force_field.project(self.forcing)
-        print(self.source.dat.data.min(), self.source.dat.data.max())
+        ic(self.rho_averaged.dat.data.min())
+        print(f'min / max of rho avg is {self.rho_averaged.dat.data.min()}, {self.rho_averaged.dat.data.max()}')
+        print(f'min / max of theta is {self.theta_field.dat.data.min()}, {self.theta_field.dat.data.max()}')
+        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta_field)
+        # print(self.force_field.dat.data.min(), self.force_field.dat.data.max())
 
 class SaturationAdjustment(PhysicsParametrisation):
     """
@@ -1448,10 +1442,10 @@ class RayleighFriction(PhysicsParametrisation):
         _, lat, _ = lonlatr_from_xyz(x, y, z)
 
         sigma = self.exner**-kappa
-        tao_cond = (sigma - sigmab) / (1 - sigmab)*cos(lat)**4
-        wind_timescale = 1 / taofric * conditional(ge(0, tao_cond), 0, tao_cond)
+        tao_cond = (sigma - sigmab) / (1 - sigmab)
+        wind_timescale = conditional(ge(0, tao_cond), 0, tao_cond) / taofric
 
-        self.forcing_expr = -u_hori / wind_timescale
+        self.forcing_expr = -u_hori * wind_timescale
 
         tests = equation.tests
         test = tests[u_idx]
@@ -1914,4 +1908,3 @@ class BoundaryLayerMixing(PhysicsParametrisation):
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
 
         self.X.assign(x_in)
-        self.rho_recoverer.project()
