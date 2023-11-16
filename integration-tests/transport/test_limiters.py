@@ -224,10 +224,9 @@ def setup_limiters(dirname, space):
     else:
         return stepper, tmax, true_field
 
+
 @pytest.mark.parametrize('space', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
                                    'DG1', 'DG1_equispaced', 'mixed_FS'])
-                                   
-
 def test_limiters(tmpdir, space):
 
     # Setup and run
