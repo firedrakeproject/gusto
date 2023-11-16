@@ -181,7 +181,7 @@ class NoLimiter(object):
 
 
 class MixedFSLimiter(object):
-    """An object to hold a dictionary that defines limiters for transported prognostic 
+    """An object to hold a dictionary that defines limiters for transported prognostic
     variables. Different limiters may be applied to different fields and not every transported variable needs a defined limiter.
     """
 
