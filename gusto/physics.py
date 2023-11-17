@@ -178,10 +178,8 @@ class Relaxation(PhysicsParametrisation):
             variable_name (str): the name of the variable
 
         """
-        ic()
         label_name = f'relaxation_{variable_name}'
         super().__init__(equation, label_name, parameters=None)
-        self.equation = equation
         self.parameters = equation.parameters
         self.X = Function(equation.X.function_space())
         X = self.X
@@ -215,7 +213,7 @@ class Relaxation(PhysicsParametrisation):
 
         T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner**(cp/Rd)) * cos(lat)**2) * self.exner
         Teq = conditional(ge(T0stra, T_condition), T0stra, T_condition)
-        equilibrium_expr = Teq * self.exner
+        equilibrium_expr = Teq / self.exner
         # timescale of temperature forcing
         sigma = self.exner**(cp/Rd)
         tao_cond = (sigma - sigmab) / (1 - sigmab)
@@ -228,7 +226,7 @@ class Relaxation(PhysicsParametrisation):
         dx_reduced = dx(degree=4)
         self.forcing = coeff * (self.theta - equilibrium_expr)
         self.force_field = Function(equation.function_space.sub(theta_idx))
-        equation.residual += self.label(subject(prognostic(test * self.forcing * dx_reduced, 'theta'), X), self.evaluate)
+        equation.residual -= self.label(subject(prognostic(test * self.forcing * dx_reduced, 'theta'), X), self.evaluate)
         
     def evaluate(self, x_in, dt):
         """
@@ -241,11 +239,8 @@ class Relaxation(PhysicsParametrisation):
         """ 
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        ic(self.rho_averaged.dat.data.min())
-        print(f'min / max of rho avg is {self.rho_averaged.dat.data.min()}, {self.rho_averaged.dat.data.max()}')
-        print(f'min / max of theta is {self.theta.dat.data.min()}, {self.theta.dat.data.max()}')
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        # print(self.force_field.dat.data.min(), self.force_field.dat.data.max())
+
 
 class SaturationAdjustment(PhysicsParametrisation):
     """
