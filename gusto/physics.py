@@ -8,6 +8,7 @@ with "evaluate" methods.
 """
 
 from abc import ABCMeta, abstractmethod
+from symbol import parameters
 from firedrake import (
     Interpolator, conditional, Function, dx, sqrt, dot, min_value,
     max_value, Constant, pi, Projector, grad, TestFunctions, split,
@@ -1429,9 +1430,6 @@ class RayleighFriction(PhysicsParametrisation):
         sigmab = 0.7
         kappa = parameters.kappa
         taofric = 24 * 60 * 60
-        mesh = equation.domain.mesh
-        x, y, z = SpatialCoordinate(mesh)
-        _, lat, _ = lonlatr_from_xyz(x, y, z)
 
         sigma = self.exner**-kappa
         tao_cond = (sigma - sigmab) / (1 - sigmab)
@@ -1443,7 +1441,7 @@ class RayleighFriction(PhysicsParametrisation):
         test = tests[u_idx]
         dx_reduced = dx(degree=4)
         self.source_expr = inner(test, self.forcing_expr) * dx_reduced
-        self.source= Function(HDiv)
+      #  self.source= Function(HDiv)
 
         equation.residual -= self.label(subject(prognostic(self.source_expr, 'u'), X), self.evaluate)
 
@@ -1459,11 +1457,14 @@ class RayleighFriction(PhysicsParametrisation):
         """
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        
         print(self.theta.dat.data.min(), self.theta.dat.data.max())
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        self.source.project(self.forcing_expr)
-        print(self.source.dat.data.min(), self.source.dat.data.max())
+        sigma = self.exner**-(self.parameters.kappa)
+        ic(sigma.dat.data.min())
+        ic(sigma.dat.data.max())
+        ic(sigma)
+    #    self.source.project(self.forcing_expr)
+    #    print(self.source.dat.data.min(), self.source.dat.data.max())
 
 class WindDrag(PhysicsParametrisation):
     """
