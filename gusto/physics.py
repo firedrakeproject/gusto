@@ -184,7 +184,7 @@ class Relaxation(PhysicsParametrisation):
         self.equation = equation
         self.parameters = equation.parameters
         self.X = Function(equation.X.function_space())
-        X = equation.X
+        X = self.X
         theta_idx = equation.field_names.index('theta')
         self.theta = X.subfunctions[theta_idx]
         rho_idx = equation.field_names.index('rho')
@@ -240,13 +240,6 @@ class Relaxation(PhysicsParametrisation):
                 interval for the scheme. 
         """ 
         self.X.assign(x_in)
-        theta_idx = self.equation.field_names.index('theta')        
-        rho_idx = self.equation.field_names.index('rho') 
-        rho = split(self.X)[rho_idx]
-        self.theta = self.X.subfunctions[theta_idx]
-        boundary_method = BoundaryMethod.extruded if self.equation.domain.vertical_degree == 0 else None
-        self.rho_averaged = Function(self.equation.function_space.sub(theta_idx))
-        self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
         self.rho_recoverer.project()
         ic(self.rho_averaged.dat.data.min())
         print(f'min / max of rho avg is {self.rho_averaged.dat.data.min()}, {self.rho_averaged.dat.data.max()}')
