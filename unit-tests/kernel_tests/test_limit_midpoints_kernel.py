@@ -62,6 +62,8 @@ def test_limit_midpoints(profile):
     init_field.interpolate(init_expr)
     DG1_field.interpolate(DG_expr)
 
+    import pdb; pdb.set_trace()
+
     # ------------------------------------------------------------------------ #
     # Apply kernel
     # ------------------------------------------------------------------------ #
