@@ -253,7 +253,7 @@ def is_cg(V):
     if isinstance(ele, BrokenElement):
         return False
     elif type(ele) == VectorElement:
-        return all([e.sobolev_space().name == "H1" for e in ele._sub_elements])
+        return all([e.sobolev_space.name == "H1" for e in ele._sub_elements])
     else:
         return V.ufl_element().sobolev_space.name == "H1"
 
