@@ -212,22 +212,21 @@ class Relaxation(PhysicsParametrisation):
         x, y, z = SpatialCoordinate(mesh)
         _, lat, _ = lonlatr_from_xyz(x, y, z)
 
-        T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner**(cp/Rd)) * cos(lat)**2) * self.exner
+        T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner) * cos(lat)**2 / kappa) * self.exner
         Teq = conditional(ge(T0stra, T_condition), T0stra, T_condition)
         equilibrium_expr = Teq / self.exner
+        
         # timescale of temperature forcing
         sigma = self.exner**(cp/Rd)
         tao_cond = (sigma - sigmab) / (1 - sigmab)
-        tau_rad_inverse = 1 / taod + (1/taou - 1/taod) * conditional(ge(0, tao_cond), 0, tao_cond) * cos(lat)**4
-        coeff = self.exner * tau_rad_inverse
-
+        newton_freq = 1 / taod + (1/taou - 1/taod) * conditional(ge(0, tao_cond), 0, tao_cond) * cos(lat)**4
+        self.forcing = -newton_freq * (self.theta - equilibrium_expr)
 
         # Add relaxation term to residual
         test = equation.tests[theta_idx]
         dx_reduced = dx(degree=4)
-        self.forcing = coeff * (self.theta - equilibrium_expr)
-        self.force_field = Function(equation.function_space.sub(theta_idx))
-        equation.residual -= self.label(subject(prognostic(test * self.forcing * dx_reduced, 'theta'), X), self.evaluate)
+        forcing_expr = test * self.forcing * dx_reduced
+        equation.residual -= self.label(subject(prognostic(forcing_expr, 'theta'), X), self.evaluate)
         
     def evaluate(self, x_in, dt):
         """
@@ -1416,12 +1415,11 @@ class RayleighFriction(PhysicsParametrisation):
         theta_idx = equation.field_names.index('theta')
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
-        H1 = equation.domain.spaces('H1')
-        HDiv = equation.domain.spaces('HDiv')
         self.theta = X.subfunctions[theta_idx]
+        
 
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
-        self.rho_averaged = Function(H1)
+        self.rho_averaged = Function(equation.function_space.sub(theta_idx))
         self.rho_recoverer = Recoverer(rho, self.rho_averaged,  boundary_method=boundary_method)
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
 
@@ -1432,10 +1430,13 @@ class RayleighFriction(PhysicsParametrisation):
         taofric = 24 * 60 * 60
 
         sigma = self.exner**-kappa
+        # sigma = exner / exner_surf
+
+
         tao_cond = (sigma - sigmab) / (1 - sigmab)
         wind_timescale = conditional(ge(0, tao_cond), 0, tao_cond) / taofric
 
-        self.forcing_expr = -u_hori * wind_timescale
+        self.forcing_expr = -u_hori * wind_timescale 
 
         tests = equation.tests
         test = tests[u_idx]
