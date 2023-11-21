@@ -605,18 +605,16 @@ class ThermalSWSolver(TimesteppingSolver):
         # Approximate elimination of b
         b = -dot(u, grad(bbar))*beta + b_in
 
-        # TODO: check about surface terms, and about D - D_in
         n = FacetNormal(equation.domain.mesh)
         H = Dbar
         eqn = (
             inner(w, (u - u_in)) * dx
-            - beta * D * div(w*bbar) * dx
-            # + beta * avg(D) * jump(bbar*w, n) * dS
-            + beta * 0.5 * H * inner(w, grad(bbar)) * dx
-            - beta * 0.5 * H * b * div(w) * dx
-            + beta * 0.5 * D * inner(w, grad(bbar)) * dx
+            - beta * (D - Dbar) * div(w*bbar) * dx
+            + beta * 0.5 * Dbar * inner(w, grad(bbar)) * dx
+            - beta * 0.5 * Dbar * b * div(w) * dx
+            + beta * 0.5 * (D - Dbar) * inner(w, grad(bbar)) * dx
             + inner(phi, (D - D_in)) * dx
-            + beta * phi * H * div(u) * dx
+            + beta * phi * Dbar * div(u) * dx
         )
 
         aeqn = lhs(eqn)
@@ -631,7 +629,7 @@ class ThermalSWSolver(TimesteppingSolver):
         bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, D
-        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD) # , bcs=bcs)
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs)
 
         # Provide callback for the nullspace of the trace system
         def trace_nullsp(T):

@@ -107,6 +107,7 @@ b0.interpolate(bexpr)
 # Set reference profiles
 Dbar = Function(D0.function_space()).assign(H)
 bbar = Function(b0.function_space()).interpolate(bexpr)
+ref_g = Function(b0.function_space()).assign(g)
 stepper.set_reference_profiles([('D', Dbar), ('b', bbar)])
 
 # ----------------------------------------------------------------- #
