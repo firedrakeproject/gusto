@@ -1,19 +1,21 @@
 """
-This tests the prescribed wind feature of the PrescribedTransport timestepper.
+This tests the prescribed wind feature of the PrescribedTransport and 
+SplitPresribedTransport (with no physics schemes) timesteppers.
 A tracer is transported with a time-varying wind and the computed solution is
 compared with a true one to check that the transport is working correctly.
 """
 
 from gusto import *
 from firedrake import sin, cos, norm, pi, as_vector
+import pytest
 
 
 def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
-
-def test_prescribed_transport_setup(tmpdir, tracer_setup):
+@pytest.mark.parametrize('timestep_method', ['prescribed', 'split_prescribed'])
+def test_prescribed_transport_setup(tmpdir, tracer_setup, timestep_method):
 
     # Make domain using routine from conftest
     geometry = "slice"
@@ -31,11 +33,20 @@ def test_prescribed_transport_setup(tmpdir, tracer_setup):
                           sin(2*pi*t/setup.tmax)*sin(pi*z)])
 
     transport_scheme = SSPRK3(domain)
-    transport_method = DGUpwind(eqn, 'f')
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io,
-                                      transport_method,
-                                      prescribed_transporting_velocity=u_evaluation)
+    if timestep_method == 'prescribed':
+        transport_method = DGUpwind(eqn, 'f')
+        timestepper = PrescribedTransport(eqn, transport_scheme, setup.io,
+                                          transport_method,
+                                          prescribed_transporting_velocity=u_evaluation)
+    elif timestep_method == 'split_prescribed':
+        transport_method = [DGUpwind(eqn, 'f')]
+        timestepper = SplitPrescribedTransport(eqn, transport_scheme, setup.io,
+                                               transport_method,
+                                               prescribed_transporting_velocity=u_evaluation)
+    else:
+        raise NotImplementedError
+
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)
