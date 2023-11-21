@@ -1,5 +1,5 @@
 """
-This tests the prescribed wind feature of the PrescribedTransport and 
+This tests the prescribed wind feature of the PrescribedTransport and
 SplitPresribedTransport (with no physics schemes) timesteppers.
 A tracer is transported with a time-varying wind and the computed solution is
 compared with a true one to check that the transport is working correctly.
@@ -13,6 +13,7 @@ import pytest
 def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
+
 
 @pytest.mark.parametrize('timestep_method', ['prescribed', 'split_prescribed'])
 def test_prescribed_transport_setup(tmpdir, tracer_setup, timestep_method):
@@ -46,7 +47,6 @@ def test_prescribed_transport_setup(tmpdir, tracer_setup, timestep_method):
                                                prescribed_transporting_velocity=u_evaluation)
     else:
         raise NotImplementedError
-
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)
