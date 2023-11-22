@@ -14,7 +14,7 @@ from firedrake import (
     max_value, Constant, pi, Projector, grad, TestFunctions, split,
     inner, TestFunction, exp, avg, outer, FacetNormal, sin, cos, ge, ln, 
     SpatialCoordinate, dS_v, NonlinearVariationalProblem,
-    NonlinearVariationalSolver
+    NonlinearVariationalSolver, DirichletBC
 )
 from firedrake.fml import identity, Term, subject
 from gusto.active_tracers import Phases, TracerVariableType
@@ -186,14 +186,26 @@ class Relaxation(PhysicsParametrisation):
         X = self.X
         theta_idx = equation.field_names.index('theta')
         self.theta = X.subfunctions[theta_idx]
+        Vt = equation.function_space.sub(theta_idx)
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
 
+
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
-        self.rho_averaged = Function(equation.function_space.sub(theta_idx))
+        self.rho_averaged = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
+
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        
+
+        # creates a surface function space which has value 1 on surface and 0 
+        # everywhere else
+        surf = Function(Vt) 
+        bc = DirichletBC(Vt, Constant(1.0), 'bottom' )
+        bc.apply(surf)
+        # applied surface function space to exner to extract the surface exner
+        surface_exner = Function(Vt)
+        surface_exner.interpolate(inner(self.exner, surf))
+
         # -----------
         # Parameters and equilibirum expression
         T0stra = 200 # Stratosphere temp
@@ -217,7 +229,7 @@ class Relaxation(PhysicsParametrisation):
         equilibrium_expr = Teq / self.exner
         
         # timescale of temperature forcing
-        sigma = self.exner**(cp/Rd)
+        sigma = (self.exner / surface_exner)**(-kappa)
         tao_cond = (sigma - sigmab) / (1 - sigmab)
         newton_freq = 1 / taod + (1/taou - 1/taod) * conditional(ge(0, tao_cond), 0, tao_cond) * cos(lat)**4
         self.forcing = -newton_freq * (self.theta - equilibrium_expr)
@@ -1416,12 +1428,21 @@ class RayleighFriction(PhysicsParametrisation):
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
         self.theta = X.subfunctions[theta_idx]
-        
+        Vt = equation.function_space.sub(theta_idx)
 
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
-        self.rho_averaged = Function(equation.function_space.sub(theta_idx))
+        self.rho_averaged = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged,  boundary_method=boundary_method)
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
+
+        # creates a surface function space which has value 1 on surface and 0 
+        # everywhere else
+        surf = Function(Vt) 
+        bc = DirichletBC(Vt, Constant(1.0), 'bottom' )
+        bc.apply(surf)
+        # applied surface function space to exner to extract the surface exner
+        surface_exner = Function(Vt)
+        surface_exner.interpolate(inner(self.exner, surf))
 
         u = split(X)[u_idx]
         u_hori = u - k*dot(u, k)
@@ -1429,9 +1450,8 @@ class RayleighFriction(PhysicsParametrisation):
         kappa = parameters.kappa
         taofric = 24 * 60 * 60
 
-        sigma = self.exner**-kappa
+        sigma = (self.exner / surface_exner)**-kappa
         # sigma = exner / exner_surf
-
 
         tao_cond = (sigma - sigmab) / (1 - sigmab)
         wind_timescale = conditional(ge(0, tao_cond), 0, tao_cond) / taofric
