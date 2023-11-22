@@ -101,12 +101,12 @@ def run_terminator_toy(dirname):
 
 
 def test_terminator_toy_setup(tmpdir):
-    dirname=str(tmpdir)
+    dirname = str(tmpdir)
     stepper, X_steady, X2_steady = run_terminator_toy(dirname)
     X_field = stepper.fields("X")
     X2_field = stepper.fields("X2")
 
-    # Assert that the physics scheme has sufficiently moved 
-    # the species fields near their steady state solutions 
+    # Assert that the physics scheme has sufficiently moved
+    # the species fields near their steady state solutions
     assert errornorm(X_field, X_steady)/norm(X_steady) < 0.25, "The X field is not sufficiently close to the steady state profile"
     assert errornorm(X2_field, X2_steady)/norm(X2_steady) < 0.25, "The X2 field is not sufficiently close to the steady state profile"
