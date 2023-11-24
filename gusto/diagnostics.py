@@ -1702,7 +1702,7 @@ class RelativeVorticity(Vorticity):
 
 
 class CompressibleVorticity(DiagnosticField):
-    """ Base diagnostic Field for three dimensional Vorticity """
+    u""" Base diagnostic Field for three dimensional Vorticity """
     
     def setup(self, domain, state_fields, vorticity_type=None):
         """
@@ -1739,12 +1739,16 @@ class CompressibleVorticity(DiagnosticField):
             n = FacetNormal(domain.mesh)
             w = TestFunction(VCurl)
             a = inner(omega, w) * dx
-            L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * dx
+            L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * ds
+            if vorticity_type != 'relative':
+                f = state_fields('coriolis')
+                L +=  inner(f, curl(w)) * dx - jump(cross(w, f), n) * ds
+
             problem = LinearVariationalProblem(a, L, self.field)
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={'ksp_type': 'cg'})
 
 class CompressibleRelativeVorticity(CompressibleVorticity):
-    u""" Diagnostic field for compreesible euler relative vorticity  """
+    u""" Diagnostic field for compressible euler relative vorticity  """
     name = 'CompressibleRelativeVorticity'
 
     def __init__(self, space=None, method='solve'):
@@ -1769,6 +1773,33 @@ class CompressibleRelativeVorticity(CompressibleVorticity):
             state_fields (:class:`StateFields`): the model's field container.
         """
         super().setup(domain, state_fields, vorticity_type='relative')
+
+class CompressibleAbsoluteVorticity(CompressibleVorticity):
+    u""" Diagnostic field for compressible euler absolute vorticity  """
+    name = 'CompressibleAbsoluteVorticity'
+
+    def __init__(self, space=None, method='solve'):
+        u"""
+        Args:
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'solve'.
+        """
+        self.solve_implemented = True
+        super().__init__(space=space, method=method, required_fields=('u', 'coriolis'))
+    
+    def setup(self, domain, state_fields):
+        u"""
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        super().setup(domain, state_fields, vorticity_type='absolute')
 
 class TracerDensity(DiagnosticField):
     """Diagnostic for computing the density of a tracer. This is
