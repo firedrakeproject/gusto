@@ -2423,6 +2423,14 @@ class IMEX_SDC(SDC):
         self.U01 = Function(W)
         self.Un = Function(W)
         self.Q_ = Function(W)
+        try:
+            #bcs = equation.bcs['u']
+            self.bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
+        except KeyError:
+            self.bcs = None
+        # set up RHS evaluation
+        self.Urhs = Function(W)
+        self.Uin = Function(W)
 
     @property
     def res_rhs(self):
@@ -2438,7 +2446,7 @@ class IMEX_SDC(SDC):
     @property
     def res_SDC(self):
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    map_if_false=lambda t: dt*t)
+                                    map_if_false=lambda t: self.dt*t)
 
         F_imp = F.label_map(lambda t: any(t.has_label(time_derivative, implicit)),
                             replace_subject(self.U_SDC, old_idx=self.idx),
