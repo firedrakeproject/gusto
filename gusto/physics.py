@@ -8,7 +8,6 @@ with "evaluate" methods.
 """
 
 from abc import ABCMeta, abstractmethod
-from symbol import parameters
 from firedrake import (
     Interpolator, conditional, Function, dx, sqrt, dot, min_value,
     max_value, Constant, pi, Projector, grad, TestFunctions, split,
@@ -187,7 +186,7 @@ class Relaxation(PhysicsParametrisation):
         X = self.X
         theta_idx = equation.field_names.index('theta')
         self.theta = X.subfunctions[theta_idx]
-        Vt = equation.function_space.sub(theta_idx)
+        Vt = equation.domain.spaces('theta')
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
 
@@ -197,9 +196,10 @@ class Relaxation(PhysicsParametrisation):
         self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
 
-        # interpolates exner into a Vt function space, not sure if needed
-        self.exner_field = Function(Vt).interpolate(self.exner)
-        self.exner_field_map = self.exner_field.cell_node_map()
+        # creates horizontal function spaces 
+        horizontal_element = Vt._ufl_element.sub_elements()[0]
+        Vtflat = TensorProductElement(horizontal_element, FiniteElement('Real', interval, 0))
+        Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
 
         #extracts the bottom values into a flat function space with same propertes
         self.exner_surface = Function(Vflat)
@@ -253,10 +253,9 @@ class Relaxation(PhysicsParametrisation):
         self.X.assign(x_in)
         self.rho_recoverer.project()
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        # Extracts new surface values
+        self.exner_field.interpolate(self.exner)
         self.exner_surface.data.data[self.exner_surface.cell_node_map().values] =  \
                   self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
-        # Updates sigma field with new surface values
         self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
 
 class SaturationAdjustment(PhysicsParametrisation):
@@ -1435,12 +1434,6 @@ class RayleighFriction(PhysicsParametrisation):
         self.theta = X.subfunctions[theta_idx]
       
         Vt = equation.domain.spaces('theta')
-        
-        Ve = TensorProductElement(FiniteElement("DQ", quadrilateral, 1), FiniteElement("P", interval, 1))
-        V = FunctionSpace(equation.domain.mesh, Ve)
-        Vtflat = TensorProductElement(Ve.sub_elements()[0], FiniteElement('Real', interval, 0))
-        Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
-
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
         self.rho_averaged = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged,  boundary_method=boundary_method)
@@ -1450,9 +1443,14 @@ class RayleighFriction(PhysicsParametrisation):
         self.exner_field = Function(Vt).interpolate(self.exner)
         self.exner_field_map = self.exner_field.cell_node_map()
 
+        # creates horizontal function spaces 
+        horizontal_element = Vt._ufl_element.sub_elements()[0]
+        Vtflat = TensorProductElement(horizontal_element, FiniteElement('Real', interval, 0))
+        Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
+
         #extracts the bottom values into a flat function space with same propertes
         self.exner_surface = Function(Vflat)
-        self.exner_surface_mask = V.finat_element.entity_dofs()[(0, 2)][0]
+        self.exner_surface_mask = Vt.finat_element.entity_dofs()[(0, 2)][0]
         self.exner_surface.data.data[self.exner_surface.cell_node_map().values] =  \
                   self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
         
@@ -1494,12 +1492,10 @@ class RayleighFriction(PhysicsParametrisation):
         # Updates exner and exner field
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
         self.exner_field.interpolate(self.exner)
-        # Extracts new surface values
         self.exner_surface.data.data[self.exner_surface.cell_node_map().values] =  \
                   self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
-        # Updates sigma field with new surface values
         self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
-        ic()
+
 
 
 class WindDrag(PhysicsParametrisation):
