@@ -1725,11 +1725,11 @@ class CompressibleVorticity(DiagnosticField):
         space = domain.spaces('HCurl')
 
         u = state_fields('u')
-        f = state_fields('coriolis')
         if self.method != 'solve':
             if vorticity_type == 'relative':
                 self.expression = curl(u)
             elif vorticity_type == 'absolute': 
+                f = state_fields('coriolis')
                 self.expression = curl(u + f)
         super().setup(domain, state_fields, space=space)
 
@@ -1739,10 +1739,10 @@ class CompressibleVorticity(DiagnosticField):
             n = FacetNormal(domain.mesh)
             w = TestFunction(VCurl)
             a = inner(omega, w) * dx
-            L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * ds
+            L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * dS_v
             if vorticity_type != 'relative':
                 f = state_fields('coriolis')
-                L +=  inner(f, curl(w)) * dx - jump(cross(w, f), n) * ds
+                L +=  inner(f, curl(w)) * dx - jump(cross(w, f), n) * dS_v 
 
             problem = LinearVariationalProblem(a, L, self.field)
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={'ksp_type': 'cg'})
