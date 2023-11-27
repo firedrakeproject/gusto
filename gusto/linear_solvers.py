@@ -591,7 +591,9 @@ class ThermalSWSolver(TimesteppingSolver):
 
         # Split up the rhs vector (symbolically)
         self.xrhs = Function(self.equations.function_space)
-        u_in, D_in, b_in = split(self.xrhs)
+        u_in = split(self.xrhs)[0]
+        D_in = split(self.xrhs)[1]
+        b_in = split(self.xrhs)[2]
 
         # Build the reduced function space for u, D
         M = MixedFunctionSpace((Vu, VD))
@@ -674,7 +676,9 @@ class ThermalSWSolver(TimesteppingSolver):
             self.uD_solver.solve()
 
         u1, D1 = self.uD.subfunctions
-        u, D, b = dy.subfunctions
+        u = dy.subfunctions[0]
+        D = dy.subfunctions[1]
+        b = dy.subfunctions[2]
         u.assign(u1)
         D.assign(D1)
 
