@@ -41,16 +41,16 @@ class LimitMidpoints():
                   <float64> min_value = 0.0
                   for i
                       for j
-                          field_hat[i*3+2*j] = field_DG1[i*2+j]
+                          field_hat[i*3+j] = field_DG1[i*2+j]
                       end
                       max_value = fmax(field_DG1[i*2], field_DG1[i*2+1])
                       min_value = fmin(field_DG1[i*2], field_DG1[i*2+1])
-                      if field_old[i*3+1] > max_value
-                          field_hat[i*3+1] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
-                      elif field_old[i*3+1] < min_value
-                          field_hat[i*3+1] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
+                      if field_old[i*3+2] > max_value
+                          field_hat[i*3+2] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
+                      elif field_old[i*3+2] < min_value
+                          field_hat[i*3+2] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
                       else
-                          field_hat[i*3+1] = field_old[i*3+1]
+                          field_hat[i*3+2] = field_old[i*3+2]
                       end
                   end
                   """)

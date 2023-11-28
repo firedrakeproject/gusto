@@ -253,9 +253,9 @@ def is_cg(V):
     if isinstance(ele, BrokenElement):
         return False
     elif type(ele) == VectorElement:
-        return all([e.sobolev_space().name == "H1" for e in ele._sub_elements])
+        return all([e.sobolev_space.name == "H1" for e in ele._sub_elements])
     else:
-        return V.ufl_element().sobolev_space().name == "H1"
+        return V.ufl_element().sobolev_space.name == "H1"
 
 
 class SUPGWrapper(Wrapper):
@@ -293,7 +293,7 @@ class SUPGWrapper(Wrapper):
             if is_cg(self.function_space):
                 vals = default_vals
             else:
-                space = self.function_space.ufl_element().sobolev_space()
+                space = self.function_space.ufl_element().sobolev_space
                 if space.name in ["HDiv", "DirectionalH"]:
                     vals = [default_vals[i] if space[i].name == "H1"
                             else 0. for i in range(dim)]
