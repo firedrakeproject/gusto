@@ -72,7 +72,7 @@ class VerticalHybridizationPC(PCBase):
         for i, Vi in enumerate(V):
 
             # Vector-valued spaces will have a non-empty value_shape
-            if Vi.ufl_element().value_shape():
+            if Vi.ufl_element().value_shape:
                 self.vidx = i
             else:
                 self.pidx = i
@@ -88,11 +88,11 @@ class VerticalHybridizationPC(PCBase):
         deg, _ = Vv.ufl_element().degree()
 
         # Assumes a tensor product cell (quads, triangular-prisms, cubes)
-        if not isinstance(Vp.ufl_element().cell(), TensorProductCell):
+        if not isinstance(Vp.ufl_element().cell, TensorProductCell):
             raise NotImplementedError("Currently only implemented for tensor product discretizations")
 
         # Only want the horizontal cell
-        cell, _ = Vp.ufl_element().cell()._cells
+        cell, _ = Vp.ufl_element().cell._cells
 
         DG = FiniteElement("DG", cell, deg)
         CG = FiniteElement("CG", interval, 1)
