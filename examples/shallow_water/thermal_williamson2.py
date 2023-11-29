@@ -6,7 +6,7 @@ import sys
 # Test case parameters
 # ----------------------------------------------------------------- #
 
-dt = 500
+dt = 4000
 
 if '--running-tests' in sys.argv:
     tmax = dt
@@ -42,7 +42,7 @@ fexpr = 2*Omega*x[2]/R
 eqns = ShallowWaterEquations(domain, params, fexpr=fexpr, u_transport_option='vector_advection_form', thermal=True)
 
 # IO
-dirname = "thermal_williamson2_SIQN_Tues"
+dirname = "thermal_williamson2"
 output = OutputParameters(
     dirname=dirname,
     dumpfreq=dumpfreq,
@@ -73,7 +73,6 @@ linear_solver = ThermalSWSolver(eqns)
 stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                   transport_methods,
                                   linear_solver=linear_solver)
-# stepper = Timestepper(eqns, RK4(domain), io, spatial_methods=transport_methods)
 
 # ----------------------------------------------------------------- #
 # Initial conditions
@@ -107,7 +106,6 @@ b0.interpolate(bexpr)
 # Set reference profiles
 Dbar = Function(D0.function_space()).assign(H)
 bbar = Function(b0.function_space()).interpolate(bexpr)
-ref_g = Function(b0.function_space()).assign(g)
 stepper.set_reference_profiles([('D', Dbar), ('b', bbar)])
 
 # ----------------------------------------------------------------- #
