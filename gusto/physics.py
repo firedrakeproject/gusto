@@ -25,6 +25,8 @@ from gusto.equations import CompressibleEulerEquations
 from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognostic
 from gusto.logging import logger
 from gusto import thermodynamics
+from numpy import (linspace, around)
+from math import floor 
 import ufl
 import math
 from enum import Enum
@@ -35,6 +37,48 @@ __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain"
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
            "SourceSink", "Relaxation", "SurfaceFluxes", "WindDrag","RayleighFriction",
            "StaticAdjustment", "SuppressVerticalWind", "BoundaryLayerMixing"]
+
+def heightSimgaInterpolation(z):
+    u"""
+    Linear interpolation to get a sigma value from a height coordinate, interpolation
+    is done from a data table which can be found in N. J. Mayne, et. al 2013, 
+    Using the UM dynamical cores to reproduce idealised 3-D flows
+    Args:
+        z (class: float) z = r - a where r is the radial co-ordinate and a is 
+                             the radius of the earth.
+
+    Returns:
+        interpolated sigma value based on provided data points  
+
+    """
+    sigma_vals = linspace(1.0 , 0.01, 33)
+    sigma_vals = around(sigma_vals, 2)
+    eta_vals = [0.0, 0.009072, 0.018111, 0.027506, 0.036901, 0.046295, 0.056433, 
+                0.066764,0.077094, 0.088103, 0.099467, 0.110896, 0.123099, 0.135626, 
+                0.148539, 0.162260, 0.176303, 0.191251, 0.206780, 0.223245, 0.240613,
+                0.259112, 0.278935, 0.300371, 0.323584, 0.349379, 0.378563, 0.412365,
+                0.453010, 0.504310, 0.574851, 0.687780, 1.00]
+    sigma_eta_coords = [(sigma, eta) for sigma, eta in zip(sigma_vals, eta_vals)]
+
+    H = 30975.0
+    new_eta = z / H
+    # do a binary search to quickly find the correct interval.
+    L = 0
+    R = len(eta_vals) - 1
+    while L <= R:
+        m = floor((L + R) / 2)
+        if new_eta < eta_vals[m]:
+            R = m - 1
+        elif new_eta > eta_vals[m+1]:
+            L = m + 1
+        else:
+            sigma0, eta0 = sigma_eta_coords[m]
+            sigma1, eta1 = sigma_eta_coords[m+1]
+            interpolated_sigma = (sigma0 * (eta1 - new_eta) + sigma1*(new_eta - eta0)) / (eta1 - eta0)
+            return interpolated_sigma
+
+    #if new x is outside the range of x_vals, raise exception
+    raise ValueError("new eta is outside range of x_vals")
 
 
 class PhysicsParametrisation(object, metaclass=ABCMeta):
@@ -197,18 +241,18 @@ class Relaxation(PhysicsParametrisation):
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
 
         # creates horizontal function spaces 
-        horizontal_element = Vt._ufl_element.sub_elements()[0]
-        Vtflat = TensorProductElement(horizontal_element, FiniteElement('Real', interval, 0))
-        Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
+        #horizontal_element = Vt._ufl_element.sub_elements()[0]
+        #Vtflat = TensorProductElement(horizontal_element, FiniteElement('Real', interval, 0))
+        #Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
 
         #extracts the bottom values into a flat function space with same propertes
-        self.exner_surface = Function(Vflat)
-        self.exner_surface_mask = Vt.finat_element.entity_dofs()[(0, 2)][0]
-        self.exner_surface.data.data[self.exner_surface.cell_node_map().values] =  \
-                  self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
+       # self.exner_surface = Function(Vflat)
+       # self.exner_surface_mask = Vt.finat_element.entity_dofs()[(2, 0)][0]
+       # self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
+         #         self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
         
         # interpolate exener_field / exner_surface into a sigma space 
-        self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
+        #self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
         
         # -----------
         # Parameters and equilibirum expression
@@ -221,10 +265,12 @@ class Relaxation(PhysicsParametrisation):
         d = 24 * 60 * 60 
         taod = 40 * d
         taou = 4 * d
+        a = 6.371229e6  # radius of earth
 
         mesh = equation.domain.mesh
         x, y, z = SpatialCoordinate(mesh)
-        _, lat, _ = lonlatr_from_xyz(x, y, z)
+        _, lat, r = lonlatr_from_xyz(x, y, z)
+        self.sigma = heightSimgaInterpolation(r - a)
 
         T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner) * cos(lat)**2 / kappa) * self.exner
         Teq = conditional(ge(T0stra, T_condition), T0stra, T_condition)
@@ -253,10 +299,10 @@ class Relaxation(PhysicsParametrisation):
         self.X.assign(x_in)
         self.rho_recoverer.project()
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        self.exner_field.interpolate(self.exner)
-        self.exner_surface.data.data[self.exner_surface.cell_node_map().values] =  \
-                  self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
-        self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
+        #self.exner_field.interpolate(self.exner)
+        #self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
+                 # self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]  
+        #self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
 
 class SaturationAdjustment(PhysicsParametrisation):
     """
@@ -1440,22 +1486,26 @@ class RayleighFriction(PhysicsParametrisation):
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
  
         # interpolates exner into a Vt function space, not sure if needed
-        self.exner_field = Function(Vt).interpolate(self.exner)
-        self.exner_field_map = self.exner_field.cell_node_map()
+        #self.exner_field = Function(Vt).interpolate(self.exner)
+        #self.exner_field_map = self.exner_field.cell_node_map()
 
         # creates horizontal function spaces 
-        horizontal_element = Vt._ufl_element.sub_elements()[0]
-        Vtflat = TensorProductElement(horizontal_element, FiniteElement('Real', interval, 0))
-        Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
+        #horizontal_element = Vt._ufl_element.sub_elements()[0]
+        #Vtflat = TensorProductElement(horizontal_element, FiniteElement('Real', interval, 0))
+        #Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
 
         #extracts the bottom values into a flat function space with same propertes
-        self.exner_surface = Function(Vflat)
-        self.exner_surface_mask = Vt.finat_element.entity_dofs()[(0, 2)][0]
-        self.exner_surface.data.data[self.exner_surface.cell_node_map().values] =  \
-                  self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
+        #self.exner_surface = Function(Vflat)
+        #self.exner_surface_mask = Vt.finat_element.entity_dofs()[(2, 0)][0]
+        #self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
+         #         self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
         
+        x, y, z = SpatialCoordinate(equation.domain.mesh)
+        _, _, r = lonlatr_from_xyz(x, y, z)
+        a = 6.371229e6 # radius of earth
+        self.sigma = heightSimgaInterpolation(r - a)
         # interpolate exener_field / exner_surface into a sigma space 
-        self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
+       # self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
 
         u = split(X)[u_idx]
         u_hori = u - k*dot(u, k)
@@ -1463,7 +1513,6 @@ class RayleighFriction(PhysicsParametrisation):
         self.kappa = self.parameters.kappa
         taofric = 24 * 60 * 60
 
-        # sigma = exner / exner_surf
 
         tao_cond = (self.sigma - sigmab) / (1 - sigmab)
         wind_timescale = conditional(ge(0, tao_cond), 0, tao_cond) / taofric
@@ -1491,10 +1540,10 @@ class RayleighFriction(PhysicsParametrisation):
         self.rho_recoverer.project()
         # Updates exner and exner field
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        self.exner_field.interpolate(self.exner)
-        self.exner_surface.data.data[self.exner_surface.cell_node_map().values] =  \
-                  self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
-        self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
+       # self.exner_field.interpolate(self.exner)
+       # self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
+         #         self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
+        #self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
 
 
 
