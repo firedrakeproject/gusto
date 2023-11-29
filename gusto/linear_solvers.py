@@ -9,7 +9,7 @@ from firedrake import (
     split, LinearVariationalProblem, Constant, LinearVariationalSolver,
     TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
     rhs, FacetNormal, div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b,
-    ds_tb, dS, inner, action, dot, grad, Function, VectorSpaceBasis,
+    ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis,
     BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC
 )
 from firedrake.fml import Term, drop
@@ -589,7 +589,7 @@ class ThermalSWSolver(TimesteppingSolver):
         # Store time-stepping coefficients as UFL Constants
         beta = Constant(beta_)
 
-        # Split up the rhs vector (symbolically)
+        # Split up the rhs vector
         self.xrhs = Function(self.equations.function_space)
         u_in = split(self.xrhs)[0]
         D_in = split(self.xrhs)[1]
@@ -607,8 +607,6 @@ class ThermalSWSolver(TimesteppingSolver):
         # Approximate elimination of b
         b = -dot(u, grad(bbar))*beta + b_in
 
-        n = FacetNormal(equation.domain.mesh)
-        H = Dbar
         eqn = (
             inner(w, (u - u_in)) * dx
             - beta * (D - Dbar) * div(w*bbar) * dx
@@ -626,8 +624,6 @@ class ThermalSWSolver(TimesteppingSolver):
         self.uD = Function(M)
 
         # Boundary conditions
-        # TODO: this is taken from the IncompressibleSolver - does it assume an
-        # extruded mesh?
         bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, D
