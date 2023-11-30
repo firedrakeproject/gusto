@@ -24,7 +24,7 @@ from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognostic
 from gusto.logging import logger
-from gusto import thermodynamics
+from gusto import thermodynamics, linearinterpolator
 from numpy import (linspace, around)
 from math import floor 
 import ufl
@@ -37,49 +37,6 @@ __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain"
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
            "SourceSink", "Relaxation", "SurfaceFluxes", "WindDrag","RayleighFriction",
            "StaticAdjustment", "SuppressVerticalWind", "BoundaryLayerMixing"]
-
-def heightSimgaInterpolation(z):
-    u"""
-    Linear interpolation to get a sigma value from a height coordinate, interpolation
-    is done from a data table which can be found in N. J. Mayne, et. al 2013, 
-    Using the UM dynamical cores to reproduce idealised 3-D flows
-    Args:
-        z (class: float) z = r - a where r is the radial co-ordinate and a is 
-                             the radius of the earth.
-
-    Returns:
-        interpolated sigma value based on provided data points  
-
-    """
-    sigma_vals = linspace(1.0 , 0.01, 33)
-    sigma_vals = around(sigma_vals, 2)
-    eta_vals = [0.0, 0.009072, 0.018111, 0.027506, 0.036901, 0.046295, 0.056433, 
-                0.066764,0.077094, 0.088103, 0.099467, 0.110896, 0.123099, 0.135626, 
-                0.148539, 0.162260, 0.176303, 0.191251, 0.206780, 0.223245, 0.240613,
-                0.259112, 0.278935, 0.300371, 0.323584, 0.349379, 0.378563, 0.412365,
-                0.453010, 0.504310, 0.574851, 0.687780, 1.00]
-    sigma_eta_coords = [(sigma, eta) for sigma, eta in zip(sigma_vals, eta_vals)]
-
-    H = 30975.0
-    new_eta = z / H
-    # do a binary search to quickly find the correct interval.
-    L = 0
-    R = len(eta_vals) - 1
-    while L <= R:
-        m = floor((L + R) / 2)
-        if new_eta < eta_vals[m]:
-            R = m - 1
-        elif new_eta > eta_vals[m+1]:
-            L = m + 1
-        else:
-            sigma0, eta0 = sigma_eta_coords[m]
-            sigma1, eta1 = sigma_eta_coords[m+1]
-            interpolated_sigma = (sigma0 * (eta1 - new_eta) + sigma1*(new_eta - eta0)) / (eta1 - eta0)
-            return interpolated_sigma
-
-    #if new x is outside the range of x_vals, raise exception
-    raise ValueError("new eta is outside range of x_vals")
-
 
 class PhysicsParametrisation(object, metaclass=ABCMeta):
     """
@@ -256,6 +213,14 @@ class Relaxation(PhysicsParametrisation):
         
         # -----------
         # Parameters and equilibirum expression
+        sigma_vals = linspace(1.0 , 0.01, 33)
+        sigma_vals = around(sigma_vals, 2)
+        eta_vals = [0.0, 0.009072, 0.018111, 0.027506, 0.036901, 0.046295, 0.056433, 
+                    0.066764,0.077094, 0.088103, 0.099467, 0.110896, 0.123099, 0.135626, 
+                    0.148539, 0.162260, 0.176303, 0.191251, 0.206780, 0.223245, 0.240613,
+                    0.259112, 0.278935, 0.300371, 0.323584, 0.349379, 0.378563, 0.412365,
+                    0.453010, 0.504310, 0.574851, 0.687780, 1.00]
+
         T0stra = 200 # Stratosphere temp
         T0surf = 315 # Surface temperature at equator
         T0horiz = 60 # Equator to pole temperature difference
@@ -266,11 +231,15 @@ class Relaxation(PhysicsParametrisation):
         taod = 40 * d
         taou = 4 * d
         a = 6.371229e6  # radius of earth
+        H = 30975.0
 
         mesh = equation.domain.mesh
         x, y, z = SpatialCoordinate(mesh)
         _, lat, r = lonlatr_from_xyz(x, y, z)
-        self.sigma = heightSimgaInterpolation(r - a)
+        self.sigma=Function(Vt)
+        self.sigma_interpolator = linearinterpolator(eta_vals, sigma_vals)
+        self.r_Vt = Function(Vt).interpolate((r-a) / H)
+        self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
 
         T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner) * cos(lat)**2 / kappa) * self.exner
         Teq = conditional(ge(T0stra, T_condition), T0stra, T_condition)
@@ -299,6 +268,7 @@ class Relaxation(PhysicsParametrisation):
         self.X.assign(x_in)
         self.rho_recoverer.project()
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
+        self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
         #self.exner_field.interpolate(self.exner)
         #self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
                  # self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]  
