@@ -1470,10 +1470,21 @@ class RayleighFriction(PhysicsParametrisation):
         #self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
          #         self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
         
+        sigma_vals = linspace(1.0 , 0.01, 33)
+        sigma_vals = around(sigma_vals, 2)
+        eta_vals = [0.0, 0.009072, 0.018111, 0.027506, 0.036901, 0.046295, 0.056433, 
+                    0.066764,0.077094, 0.088103, 0.099467, 0.110896, 0.123099, 0.135626, 
+                    0.148539, 0.162260, 0.176303, 0.191251, 0.206780, 0.223245, 0.240613,
+                    0.259112, 0.278935, 0.300371, 0.323584, 0.349379, 0.378563, 0.412365,
+                    0.453010, 0.504310, 0.574851, 0.687780, 1.00]
+        H = 30975.0
         x, y, z = SpatialCoordinate(equation.domain.mesh)
         _, _, r = lonlatr_from_xyz(x, y, z)
         a = 6.371229e6 # radius of earth
-        self.sigma = heightSimgaInterpolation(r - a)
+        self.sigma = Function(Vt)
+        self.sigma_interpolator = linearinterpolator(eta_vals, sigma_vals)
+        self.r_Vt = Function(Vt).interpolate((r-a) / H)
+        self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
         # interpolate exener_field / exner_surface into a sigma space 
        # self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
 
@@ -1510,6 +1521,7 @@ class RayleighFriction(PhysicsParametrisation):
         self.rho_recoverer.project()
         # Updates exner and exner field
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
+        self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
        # self.exner_field.interpolate(self.exner)
        # self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
          #         self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
