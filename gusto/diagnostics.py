@@ -1081,11 +1081,35 @@ class SteadyStateError(Difference):
             field1 = state_fields(self.field_name1)
             field2 = state_fields(self.field_name2, space=field1.function_space(),
                                   pick_up=True, dump=False)
+            # Attach state fields to self so that we can pick it up in compute
+            self.state_fields = state_fields
+            # The initial value for fields may not have already been set yet so we
+            # postpone setting it until the compute method is called
+            self.init_field_set = False
+        else:
+            field1 = state_fields(self.field_name1)
+            field2 = state_fields(self.field_name2, space=field1.function_space(),
+                                  pick_up=True, dump=False)
             # By default set this new field to the current value
             # This may be overwritten if picking up from a checkpoint
             field2.assign(field1)
+            self.state_fields = state_fields
+            self.init_field_set = True
 
         super().setup(domain, state_fields)
+
+    def compute(self):
+        # The first time the compute method is called we set the initial field.
+        # We do not want to do this if picking up from a checkpoint
+        if not self.init_field_set:
+            # Set initial field
+            full_field = self.state_fields(self.field_name1)
+            init_field = self.state_fields(self.field_name2)
+            init_field.assign(full_field)
+
+            self.init_field_set = True
+
+        super().compute()
 
     @property
     def name(self):
@@ -1248,7 +1272,10 @@ class PotentialEnergy(ThermodynamicDiagnostic):
             state_fields (:class:`StateFields`): the model's field container.
         """
         x = SpatialCoordinate(domain.mesh)
-        self.expr = self.rho_averaged * (1 + self.r_t) * self.parameters.g * dot(x, domain.k)
+        self._setup_thermodynamics(domain, state_fields)
+        z = Function(self.rho_averaged.function_space())
+        z.interpolate(dot(x, domain.k))
+        self.expr = self.rho_averaged * (1 + self.r_t) * self.parameters.g * z
         super().setup(domain, state_fields, space=domain.spaces("DG"))
 
 
@@ -1291,6 +1318,7 @@ class ThermodynamicKineticEnergy(ThermodynamicDiagnostic):
             state_fields (:class:`StateFields`): the model's field container.
         """
         u = state_fields('u')
+        self._setup_thermodynamics(domain, state_fields)
         self.expr = 0.5 * self.rho_averaged * (1 + self.r_t) * dot(u, u)
         super().setup(domain, state_fields, space=domain.spaces("DG"))
 
