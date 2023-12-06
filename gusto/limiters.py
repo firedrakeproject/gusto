@@ -181,14 +181,16 @@ class NoLimiter(object):
 
 
 class MixedFSLimiter(object):
-    """An object to hold a dictionary that defines limiters for transported prognostic
-    variables. Different limiters may be applied to different fields and not every transported variable needs a defined limiter.
+    """
+    An object to hold a dictionary that defines limiters for transported prognostic
+    variables. Different limiters may be applied to different fields and not every
+    transported variable needs a defined limiter.
     """
 
     def __init__(self, equation, sublimiters):
         """
         Args:
-            equation (:class: 'PrognosticEquationSet'): the prognostic equation(s)
+            equation (:class: `PrognosticEquationSet`): the prognostic equation(s)
             sublimiters (dict): A dictionary holding limiters defined for individual prognostic variables
         Raises:
             ValueError: If a limiter is defined for a field that is not in the prognostic variable set
