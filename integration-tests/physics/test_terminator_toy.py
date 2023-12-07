@@ -62,7 +62,7 @@ def run_terminator_toy(dirname):
 
     # Set up a non-divergent, time-varying, velocity field
     def u_t(t):
-      return as_vector((Constant(0)*lamda, Constant(0)*lamda, Constant(0)*lamda))
+        return as_vector([Constant(0)*lamda,Constant(0)*lamda,Constant(0)*lamda])
 
     X_T_0 = 4e-6
     X_0 = X_T_0 + 0*lamda
