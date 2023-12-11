@@ -24,14 +24,14 @@ from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognostic
 from gusto.logging import logger
-from gusto import thermodynamics, linearinterpolator
+from gusto import thermodynamics
 from gusto.linear_interpolator import linearinterpolator
 from numpy import (linspace, around)
 import ufl
 import math
 from enum import Enum
 from types import FunctionType
-from icecream import ic
+
 
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
@@ -2051,7 +2051,3 @@ class TerminatorToy(PhysicsParametrisation):
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
 
         pass
->>>>>>> 1708e31fd69d17968dc252866fb6da4963b746e0
-=======
-        self.rho_recoverer.project()
->>>>>>> 03ab5e37085843facaab35824b8f596f48f6e1d5
