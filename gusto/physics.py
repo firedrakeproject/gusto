@@ -1977,8 +1977,6 @@ class BoundaryLayerMixing(PhysicsParametrisation):
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
 
         self.X.assign(x_in)
-<<<<<<< HEAD
-=======
         self.rho_recoverer.project()
 
 
@@ -2054,3 +2052,6 @@ class TerminatorToy(PhysicsParametrisation):
 
         pass
 >>>>>>> 1708e31fd69d17968dc252866fb6da4963b746e0
+=======
+        self.rho_recoverer.project()
+>>>>>>> 03ab5e37085843facaab35824b8f596f48f6e1d5
