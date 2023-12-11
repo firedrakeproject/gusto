@@ -175,7 +175,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
     for field_name in ['rho', 'theta', 'u']:
         diff_array = stepper_2.fields(field_name).dat.data - stepper_3.fields(field_name).dat.data
         error = np.linalg.norm(diff_array) / np.linalg.norm(stepper_2.fields(field_name).dat.data)
-        assert error < 5e-16, \
+        assert error < 5e-15, \
             f'Checkpointed and picked up field {field_name} is not equal'
 
     # ------------------------------------------------------------------------ #

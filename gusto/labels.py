@@ -90,6 +90,8 @@ class PhysicsLabel(Label):
 # ---------------------------------------------------------------------------- #
 
 time_derivative = Label("time_derivative")
+implicit = Label("implicit")
+explicit = Label("explicit")
 transport = Label("transport", validator=lambda value: type(value) == TransportEquationType)
 diffusion = Label("diffusion")
 transporting_velocity = Label("transporting_velocity", validator=lambda value: type(value) in [Function, ufl.tensors.ListTensor])
