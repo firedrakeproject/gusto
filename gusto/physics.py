@@ -27,7 +27,6 @@ from gusto.logging import logger
 from gusto import thermodynamics, linearinterpolator
 from gusto.linear_interpolator import linearinterpolator
 from numpy import (linspace, around)
-from math import floor 
 import ufl
 import math
 from enum import Enum
