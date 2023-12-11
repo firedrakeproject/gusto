@@ -44,7 +44,7 @@ class DG1Limiter(object):
 
         # check that space is DG1
         degree = space.ufl_element().degree()
-        if (space.ufl_element().sobolev_space().name != 'L2'
+        if (space.ufl_element().sobolev_space.name != 'L2'
             or ((type(degree) is tuple and np.any([deg != 1 for deg in degree]))
                 and degree != 1)):
             raise ValueError('DG1 limiter can only be applied to DG1 space')
@@ -111,7 +111,7 @@ class ThetaLimiter(object):
             raise ValueError('The Theta Limiter can only be used on an extruded mesh')
 
         # check that horizontal degree is 1 and vertical degree is 2
-        sub_elements = space.ufl_element().sub_elements()
+        sub_elements = space.ufl_element().sub_elements
         if (sub_elements[0].family() not in ['Discontinuous Lagrange', 'DQ']
                 or sub_elements[1].family() != 'Lagrange'
                 or space.ufl_element().degree() != (1, 2)):

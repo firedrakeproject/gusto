@@ -59,7 +59,7 @@ output = OutputParameters(
     checkpoint=False
 )
 diagnostic_fields = [RelativeHumidity(eqns), Perturbation('theta'),
-                     Perturbation('water_vapour'), Perturbation('rho')]
+                     Perturbation('water_vapour'), Perturbation('rho'), Perturbation('RelativeHumidity')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes -- specify options for using recovery wrapper

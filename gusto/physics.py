@@ -1978,3 +1978,4 @@ class BoundaryLayerMixing(PhysicsParametrisation):
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
 
         self.X.assign(x_in)
+        self.rho_recoverer.project()
