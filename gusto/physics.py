@@ -25,6 +25,7 @@ from gusto.equations import CompressibleEulerEquations
 from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognostic
 from gusto.logging import logger
 from gusto import thermodynamics, linearinterpolator
+from gusto.linear_interpolator import linearinterpolator
 from numpy import (linspace, around)
 from math import floor 
 import ufl
@@ -197,29 +198,40 @@ class Relaxation(PhysicsParametrisation):
         self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
 
-        # creates horizontal function spaces 
-        #horizontal_element = Vt._ufl_element.sub_elements()[0]
-        #Vtflat = TensorProductElement(horizontal_element, FiniteElement('Real', interval, 0))
-        #Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
+        # switch to determine if sigma is calculated by a surface term or direct
+        # interpolation
+        self.sigma_method = 'interpolation'
+        if self.sigma_method == 'interpolation':
+            # interpolation data for height to sigma co-ords
+            sigma_vals = linspace(1.0 , 0.01, 33)
+            sigma_vals = around(sigma_vals, 2)
+            eta_vals = [0.0, 0.009072, 0.018111, 0.027506, 0.036901, 0.046295, 0.056433, 
+                        0.066764,0.077094, 0.088103, 0.099467, 0.110896, 0.123099, 0.135626, 
+                        0.148539, 0.162260, 0.176303, 0.191251, 0.206780, 0.223245, 0.240613,
+                        0.259112, 0.278935, 0.300371, 0.323584, 0.349379, 0.378563, 0.412365,
+                        0.453010, 0.504310, 0.574851, 0.687780, 1.00]
+            
+            self.sigma=Function(Vt)
+            self.sigma_interpolator = linearinterpolator(eta_vals, sigma_vals)
+            self.r_Vt = Function(Vt).interpolate((r-a) / H)
+            self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
 
-        #extracts the bottom values into a flat function space with same propertes
-       # self.exner_surface = Function(Vflat)
-       # self.exner_surface_mask = Vt.finat_element.entity_dofs()[(2, 0)][0]
-       # self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
-         #         self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
-        
-        # interpolate exener_field / exner_surface into a sigma space 
-        #self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
-        
-        # -----------
-        # Parameters and equilibirum expression
-        sigma_vals = linspace(1.0 , 0.01, 33)
-        sigma_vals = around(sigma_vals, 2)
-        eta_vals = [0.0, 0.009072, 0.018111, 0.027506, 0.036901, 0.046295, 0.056433, 
-                    0.066764,0.077094, 0.088103, 0.099467, 0.110896, 0.123099, 0.135626, 
-                    0.148539, 0.162260, 0.176303, 0.191251, 0.206780, 0.223245, 0.240613,
-                    0.259112, 0.278935, 0.300371, 0.323584, 0.349379, 0.378563, 0.412365,
-                    0.453010, 0.504310, 0.574851, 0.687780, 1.00]
+        elif self.sigma_method =='calculation':
+            # creates horizontal function spaces
+            self.exner_field = Function(Vt).interpolate(self.exner) 
+            horizontal_element = Vt._ufl_element.sub_elements()[0]
+            Vtflat = TensorProductElement(horizontal_element, FiniteElement('Real', interval, 0))
+            Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
+
+            #extracts the bottom values into a flat function space with same propertes
+            self.exner_surface = Function(Vflat)
+            self.exner_surface_mask = Vt.finat_element.entity_dofs()[(2, 0)][0]
+            self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
+            self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
+            # calculates sigma in the field
+            self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
+        else:
+            raise NotImplementedError(f'sigma calculation method is not interpolation or calculation')
 
         T0stra = 200 # Stratosphere temp
         T0surf = 315 # Surface temperature at equator
@@ -236,24 +248,20 @@ class Relaxation(PhysicsParametrisation):
         mesh = equation.domain.mesh
         x, y, z = SpatialCoordinate(mesh)
         _, lat, r = lonlatr_from_xyz(x, y, z)
-        self.sigma=Function(Vt)
-        self.sigma_interpolator = linearinterpolator(eta_vals, sigma_vals)
-        self.r_Vt = Function(Vt).interpolate((r-a) / H)
-        self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
 
-        T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner) * cos(lat)**2 / kappa) * self.exner
+        T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner) * cos(lat)**2 / self.kappa) * self.exner
         Teq = conditional(ge(T0stra, T_condition), T0stra, T_condition)
         equilibrium_expr = Teq / self.exner
         
         # timescale of temperature forcing
         tao_cond = (self.sigma - sigmab) / (1 - sigmab)
         newton_freq = 1 / taod + (1/taou - 1/taod) * conditional(ge(0, tao_cond), 0, tao_cond) * cos(lat)**4
-        self.forcing = -newton_freq * (self.theta - equilibrium_expr)
+        forcing = -newton_freq * (self.theta - equilibrium_expr)
 
         # Add relaxation term to residual
         test = equation.tests[theta_idx]
         dx_reduced = dx(degree=4)
-        forcing_expr = test * self.forcing * dx_reduced
+        forcing_expr = test * forcing * dx_reduced
         equation.residual -= self.label(subject(prognostic(forcing_expr, 'theta'), X), self.evaluate)
         
     def evaluate(self, x_in, dt):
@@ -268,11 +276,14 @@ class Relaxation(PhysicsParametrisation):
         self.X.assign(x_in)
         self.rho_recoverer.project()
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
-        #self.exner_field.interpolate(self.exner)
-        #self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
-                 # self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]  
-        #self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
+
+        if self.sigma_method == 'interpolation':
+            self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
+        elif self.sigma_method =='calculation':
+            self.exner_field.interpolate(self.exner)
+            self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
+                    self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]  
+            self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
 
 class SaturationAdjustment(PhysicsParametrisation):
     """
@@ -1454,39 +1465,40 @@ class RayleighFriction(PhysicsParametrisation):
         self.rho_averaged = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged,  boundary_method=boundary_method)
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
- 
-        # interpolates exner into a Vt function space, not sure if needed
-        #self.exner_field = Function(Vt).interpolate(self.exner)
-        #self.exner_field_map = self.exner_field.cell_node_map()
+        self.sigma_method = 'interpolate'
+        # self.sigma_method = 'interpolation'
+        if self.sigma_method == 'interpolation':
+            # interpolation data for height to sigma co-ords
+            sigma_vals = linspace(1.0 , 0.01, 33)
+            sigma_vals = around(sigma_vals, 2)
+            eta_vals = [0.0, 0.009072, 0.018111, 0.027506, 0.036901, 0.046295, 0.056433, 
+                        0.066764,0.077094, 0.088103, 0.099467, 0.110896, 0.123099, 0.135626, 
+                        0.148539, 0.162260, 0.176303, 0.191251, 0.206780, 0.223245, 0.240613,
+                        0.259112, 0.278935, 0.300371, 0.323584, 0.349379, 0.378563, 0.412365,
+                        0.453010, 0.504310, 0.574851, 0.687780, 1.00]
+            
+            self.sigma=Function(Vt)
+            self.sigma_interpolator = linearinterpolator(eta_vals, sigma_vals)
+            self.r_Vt = Function(Vt).interpolate((r-a) / H)
+            self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
 
-        # creates horizontal function spaces 
-        #horizontal_element = Vt._ufl_element.sub_elements()[0]
-        #Vtflat = TensorProductElement(horizontal_element, FiniteElement('Real', interval, 0))
-        #Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
+        elif self.sigma_method =='calculation':
+            # creates horizontal function spaces
+            self.exner_field = Function(Vt).interpolate(self.exner) 
+            horizontal_element = Vt._ufl_element.sub_elements()[0]
+            Vtflat = TensorProductElement(horizontal_element, FiniteElement('Real', interval, 0))
+            Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
 
-        #extracts the bottom values into a flat function space with same propertes
-        #self.exner_surface = Function(Vflat)
-        #self.exner_surface_mask = Vt.finat_element.entity_dofs()[(2, 0)][0]
-        #self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
-         #         self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
-        
-        sigma_vals = linspace(1.0 , 0.01, 33)
-        sigma_vals = around(sigma_vals, 2)
-        eta_vals = [0.0, 0.009072, 0.018111, 0.027506, 0.036901, 0.046295, 0.056433, 
-                    0.066764,0.077094, 0.088103, 0.099467, 0.110896, 0.123099, 0.135626, 
-                    0.148539, 0.162260, 0.176303, 0.191251, 0.206780, 0.223245, 0.240613,
-                    0.259112, 0.278935, 0.300371, 0.323584, 0.349379, 0.378563, 0.412365,
-                    0.453010, 0.504310, 0.574851, 0.687780, 1.00]
-        H = 30975.0
-        x, y, z = SpatialCoordinate(equation.domain.mesh)
-        _, _, r = lonlatr_from_xyz(x, y, z)
-        a = 6.371229e6 # radius of earth
-        self.sigma = Function(Vt)
-        self.sigma_interpolator = linearinterpolator(eta_vals, sigma_vals)
-        self.r_Vt = Function(Vt).interpolate((r-a) / H)
-        self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
-        # interpolate exener_field / exner_surface into a sigma space 
-       # self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
+            #extracts the bottom values into a flat function space with same propertes
+            self.exner_surface = Function(Vflat)
+            self.exner_surface_mask = Vt.finat_element.entity_dofs()[(2, 0)][0]
+            self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
+            self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
+            # calculates sigma in the field
+            self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
+        else:
+            raise NotImplementedError(f'sigma calculation method is not interpolation or calculation')
+
 
         u = split(X)[u_idx]
         u_hori = u - k*dot(u, k)
@@ -1519,13 +1531,15 @@ class RayleighFriction(PhysicsParametrisation):
         """
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        # Updates exner and exner field
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
-       # self.exner_field.interpolate(self.exner)
-       # self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
-         #         self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
-        #self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
+
+        if self.sigma_method == 'interpolation':
+            self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
+        elif self.sigma_method =='calculation':
+            self.exner_field.interpolate(self.exner)
+            self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
+                    self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]  
+            self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
 
 
 
