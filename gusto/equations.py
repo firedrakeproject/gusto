@@ -450,15 +450,11 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             tracer_prog = split(self.X)[idx]
             tracer_test = self.tests[idx]
             if tracer.transport_eqn == TransportEquationType.tracer_conservative:
-                if tracer.variable_type == TracerVariableType.density:
-                    mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
-                elif tracer.variable_type == TracerVariableType.mixing_ratio:
-                    ref_density_idx = self.field_names.index(tracer.density_name)
-                    ref_density = split(self.X)[ref_density_idx]
-                    q = tracer_prog*ref_density
-                    mass = subject(prognostic(inner(q, test)*dx, field_name), self.X)
-                else:
-                    ValueError(f'Tracer type {tracer.tracer_type} is not currently implemented with tracer_conservative transport')
+                ref_density_idx = self.field_names.index(tracer.density_name)
+                ref_density = split(self.X)[ref_density_idx]
+                q = tracer_prog*ref_density
+                mass = subject(prognostic(inner(q, test)*dx, field_name), self.X)
+                
             if i == 0:
                 mass_form = time_derivative(mass)
             else:
@@ -510,19 +506,12 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                         continuity_form(tracer_test, tracer_prog, u),
                         tracer.name)
                 elif tracer.transport_eqn == TransportEquationType.tracer_conservative:
-                    if tracer.variable_type == TracerVariableType.density:
-                        tracer_adv = prognostic(
-                            tracer_conservative_form(tracer_test, tracer_prog, u),
-                            tracer.name)
-                    elif tracer.variable_type == TracerVariableType.mixing_ratio:
-                        ref_density_idx = self.field_names.index(tracer.density_name)
-                        ref_density = split(self.X)[ref_density_idx]
-                        q = tracer_prog*ref_density
-                        tracer_adv = prognostic(
-                            tracer_conservative_form(tracer_test, q, u),
-                            tracer.name)
-                    else:
-                        ValueError(f'Tracer type {tracer.tracer_type} is not currently implemented with tracer_conservative transport')
+                    ref_density_idx = self.field_names.index(tracer.density_name)
+                    ref_density = split(self.X)[ref_density_idx]
+                    q = tracer_prog*ref_density
+                    tracer_adv = prognostic(
+                        tracer_conservative_form(tracer_test, q, u),
+                        tracer.name)
                     
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')

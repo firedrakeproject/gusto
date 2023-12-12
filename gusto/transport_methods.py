@@ -4,7 +4,7 @@ Defines TransportMethod objects, which are used to solve a transport problem.
 
 from firedrake import (
     dx, dS, dS_v, dS_h, ds_t, ds_b, ds_v, dot, inner, outer, jump,
-    grad, div, FacetNormal, Function, sign, avg, cross, curl
+    grad, div, FacetNormal, Function, sign, avg, cross, curl, split
 )
 from firedrake.fml import Term, keep, drop
 from gusto.configuration import IntegrateByParts, TransportEquationType
@@ -35,6 +35,16 @@ class TransportMethod(SpatialMethod):
         super().__init__(equation, variable, transport)
 
         self.transport_equation_type = self.original_form.terms[0].get(transport)
+        
+        if self.transport_equation_type == TransportEquationType.tracer_conservative:
+            # Extract associated density variable:
+            tracer_idx = self.equation.field_names.index(variable)
+            print(tracer_idx)
+            tracer = self.equation.active_tracers[tracer_idx]
+            density_idx = self.equation.field_names.index(tracer.density_name)
+            print(density_idx)
+            X = self.equation.X
+            self.conservative_density = split(self.equation.X)[density_idx]
 
     def replace_form(self, equation):
         """
@@ -175,17 +185,12 @@ class DGUpwind(TransportMethod):
             form = upwind_vector_invariant_form(self.domain, self.test, self.field, ibp=ibp)
 
         elif self.transport_equation_type == TransportEquationType.tracer_conservative:
-            # Can use the conservative equation, but ensuring the correct field
-            # for a mixing ratio.
-            if self.field.variable_type == TracerVariableType.density:
-                form = upwind_conservative_form(self.domain, self.test, self.field, ibp=ibp)
-            elif self.field.variable_type == TracerVariableType.mixing_ratio:
-                ref_density_idx = self.eqn.field_names.index(tracer.density_name)
-                ref_density = split(self.X)[ref_density_idx]
-                q = self.field*ref_density
-                form = upwind_conservative_form(self.domain, self.test, q, ibp=ibp)
-        
-            form = upwind_conservative_form(self.domain, self.test, self.field, ibp=ibp)
+            # Can use the conservative equation for the tracer multiplied
+            # by the associated density
+            #ref_density_idx = self.equation.field_names.index(variable.density_name)
+            #ref_density = split(self.X)[self.density_idx]
+            q = self.field*self.conservative_density
+            form = upwind_continuity_form(self.domain, self.test, q, ibp=ibp)
         else:
             raise NotImplementedError('Upwind transport scheme has not been '
                                       + 'implemented for this transport equation type')

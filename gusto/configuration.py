@@ -31,7 +31,8 @@ class TransportEquationType(Enum):
     conservative: ∂q/∂t + ∇.(u*q) = 0                                         \n
     vector_invariant: ∂q/∂t + (∇×q)×u + (1/2)∇(q.u) + (1/2)[(∇q).u -(∇u).q)] = 0
     circulation: ∂q/∂t + (∇×q)×u + non-transport terms = 0
-    tracer_conservative: to fill in.
+    tracer_conservative: to fill in. for transporting a tracer that obeys an
+    advection equation in a conservative manner.
     """
 
     no_transport = 702

@@ -87,6 +87,9 @@ class ActiveTracer(object):
         if (variable_type == TracerVariableType.density and transport_eqn == TransportEquationType.advective):
             logger.warning('Active tracer initialised which describes a '
                            + 'density but solving the advective transport eqn')
+                           
+        if (transport_eqn == TransportEquationType.tracer_conservative and density_name == None):
+            raise ValueError(f'Active tracer {name} using tracer conservative transport needs an associated density.')
 
 
 class WaterVapour(ActiveTracer):
