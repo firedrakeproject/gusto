@@ -53,6 +53,7 @@ class ActiveTracer(object):
     """
     def __init__(self, name, space, variable_type,
                  transport_eqn=TransportEquationType.advective,
+                 density_name=None,
                  phase=Phases.gas, chemical=None):
         """
         Args:
@@ -62,7 +63,10 @@ class ActiveTracer(object):
                 the type of tracer variable (e.g. mixing ratio or density).
             transport_eqn (:class:`TransportEquationType`, optional): enumerator
                 indicating the type of transport equation to be solved (e.g.
-                advective). Defaults to `TransportEquationType.advective`.
+                advective). Defaults to `TransportEquationType.advective`.#
+            density_name (str): the name of the associated density for a mixing
+                ratio when using the tracer_conservative transport. 
+                Defaults to None.
             phase (:class:`Phases`, optional): enumerator indicating the phase
                 of the tracer variable. Defaults to `Phases.gas`.
             chemical (str, optional): string to describe the chemical that this
@@ -75,6 +79,7 @@ class ActiveTracer(object):
         self.name = name
         self.space = space
         self.transport_eqn = transport_eqn
+        self.density_name = density_name
         self.variable_type = variable_type
         self.phase = phase
         self.chemical = chemical

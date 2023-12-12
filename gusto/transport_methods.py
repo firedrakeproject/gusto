@@ -174,6 +174,18 @@ class DGUpwind(TransportMethod):
                 raise NotImplementedError('Outflow not implemented for upwind vector invariant')
             form = upwind_vector_invariant_form(self.domain, self.test, self.field, ibp=ibp)
 
+        elif self.transport_equation_type == TransportEquationType.tracer_conservative:
+            # Can use the conservative equation, but ensuring the correct field
+            # for a mixing ratio.
+            if self.field.variable_type == TracerVariableType.density:
+                form = upwind_conservative_form(self.domain, self.test, self.field, ibp=ibp)
+            elif self.field.variable_type == TracerVariableType.mixing_ratio:
+                ref_density_idx = self.eqn.field_names.index(tracer.density_name)
+                ref_density = split(self.X)[ref_density_idx]
+                q = self.field*ref_density
+                form = upwind_conservative_form(self.domain, self.test, q, ibp=ibp)
+        
+            form = upwind_conservative_form(self.domain, self.test, self.field, ibp=ibp)
         else:
             raise NotImplementedError('Upwind transport scheme has not been '
                                       + 'implemented for this transport equation type')

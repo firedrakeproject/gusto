@@ -12,7 +12,7 @@ from gusto.labels import (transport, transporting_velocity, diffusion,
 __all__ = ["advection_form", "continuity_form", "vector_invariant_form",
            "kinetic_energy_form", "advection_equation_circulation_form",
            "diffusion_form", "linear_advection_form", "linear_continuity_form",
-           "split_continuity_form"]
+           "split_continuity_form", "tracer_conservative_form"]
 
 
 def advection_form(test, q, ubar):
@@ -262,3 +262,26 @@ def split_continuity_form(equation):
                 map_if_true=drop)
 
     return equation
+    
+def tracer_conservative_form(test, q, ubar):
+    u"""
+    The form corresponding to the continuity transport operator.
+
+    This describes ∇.(u*q) for transporting velocity u and a 
+    transported tracer, q.
+
+    Args:
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the tracer to be transported. If this
+        is a mixing ratio, q = m*rho. If it is a density, q = rho.
+        ubar (:class:`ufl.Expr`): the transporting velocity.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+    
+    L = inner(test, div(outer(q, ubar)))*dx
+    form = transporting_velocity(L, ubar)
+    
+    return transport(form, TransportEquationType.tracer_conservative)
+    
