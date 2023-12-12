@@ -2007,7 +2007,7 @@ class FE_SDC(SDC):
 
 
     def setup(self, equation, apply_bcs=True, *active_labels):
-        self.base.setup(equation, *active_labels)
+        self.base.setup(equation, apply_bcs, *active_labels)
         self.residual = self.base.residual
 
         # set up SDC form and solver
@@ -2198,11 +2198,10 @@ class BE_SDC(SDC):
         F_imp = F.label_map(all_terms,
                             replace_subject(self.U_SDC, old_idx=self.idx))
 
-        F_exp = F.label_map(lambda t: t.has_label(time_derivative),
-                            replace_subject(self.Un),
-                            drop)
-        F_exp = F_exp.label_map(all_terms,
-                                lambda t: -1*t)
+        F_exp = F.label_map(all_terms, replace_subject(self.Un, old_idx=self.idx))
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t,
+                                drop)
 
         F01 = F.label_map(lambda t: t.has_label(time_derivative),
                             drop,
@@ -2214,7 +2213,7 @@ class BE_SDC(SDC):
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
 
-        F_SDC = F_imp + F_exp + F01 + Q
+        F_SDC = F_imp + F_exp + F01  + Q
         return F_SDC.form
     
     @cached_property
@@ -2258,8 +2257,8 @@ class BE_SDC(SDC):
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
                 self.dt = float(self.dtau[m-1])
-                self.U0.assign(self.Unodes[m-1])
                 self.U01.assign(self.Unodes[m])
+                self.U0.assign(self.Unodes[m-1])
                 self.Un.assign(self.Unodes1[m-1])
                 self.Q_.assign(self.quad[m-1])
                 self.solver_SDC.solve()
