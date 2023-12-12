@@ -1464,7 +1464,7 @@ class RayleighFriction(PhysicsParametrisation):
         self.rho_averaged = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged,  boundary_method=boundary_method)
         self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        self.sigma_method = 'interpolate'
+        self.sigma_method = 'interpolation'
         # self.sigma_method = 'interpolation'
         if self.sigma_method == 'interpolation':
             # interpolation data for height to sigma co-ords
