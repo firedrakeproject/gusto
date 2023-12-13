@@ -271,7 +271,29 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         for i, (test, field_name) in enumerate(zip(self.tests, self.field_names)):
             prog = split(self.X)[i]
+            
+            # Hack for now
+            # I can't be sure that the index of active tracers is the same,
+            # so I need to search for the active_tracer.name == prog
+            #if self.active_tracers[i].transport_eqn == TransportEquationType.tracer_conservative:
+            #    tracer = self.active_tracers[i]
+            #    print(tracer.name)
+            #    ref_density_idx = self.field_names.index(tracer.density_name)
+            #    ref_density = split(self.X)[ref_density_idx]
+            #    q = prog*ref_density
+            #    mass = subject(prognostic(inner(q, test)*dx, field_name), self.X)
+            #print(self.active_tracers[i])
+            
+            #if self.active_tracers.name
+            
+            #if prog.transport_eqn == TransportEquationType.tracer_conservative:
+            #    print('yo')
+            
+            #else:
+            #    mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
+            
             mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
+        
             if i == 0:
                 mass_form = time_derivative(mass)
             else:
@@ -430,7 +452,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             else:
                 raise TypeError(f'Tracers must be ActiveTracer objects, not {type(tracer)}')
 
-    def generate_tracer_mass_terms(self):
+    def generate_tracer_mass_terms(self, active_tracers):
         """
         Builds the weak time derivative terms for the equation set.
 
@@ -445,16 +467,20 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             :class:`LabelledForm`: a labelled form containing the mass terms.
         """
 
-        for _, tracer in enumerate(active_tracers):
+        for i, tracer in enumerate(active_tracers):
             idx = self.field_names.index(tracer.name)
+            #print(idx)
             tracer_prog = split(self.X)[idx]
             tracer_test = self.tests[idx]
             if tracer.transport_eqn == TransportEquationType.tracer_conservative:
                 ref_density_idx = self.field_names.index(tracer.density_name)
                 ref_density = split(self.X)[ref_density_idx]
+                #print(i)
+                #print(ref_density_idx)
                 q = tracer_prog*ref_density
-                mass = subject(prognostic(inner(q, test)*dx, field_name), self.X)
-                
+                mass = subject(prognostic(inner(q, tracer_test)*dx, self.field_name), self.X)
+            else:
+                mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx, self.field_name), self.X)
             if i == 0:
                 mass_form = time_derivative(mass)
             else:
@@ -508,9 +534,9 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 elif tracer.transport_eqn == TransportEquationType.tracer_conservative:
                     ref_density_idx = self.field_names.index(tracer.density_name)
                     ref_density = split(self.X)[ref_density_idx]
-                    q = tracer_prog*ref_density
+                    #q = tracer_prog*ref_density
                     tracer_adv = prognostic(
-                        tracer_conservative_form(tracer_test, q, u),
+                        tracer_conservative_form(tracer_test, tracer_prog, ref_density, u),
                         tracer.name)
                     
                 else:
@@ -664,7 +690,9 @@ class ConservativeCoupledTransportEquation(PrognosticEquationSet):
         self.tests = TestFunctions(W)
         self.X = Function(W)
         
-        mass_form = self.generate_tracer_mass_terms()
+        print(full_field_name)
+        
+        mass_form = self.generate_tracer_mass_terms(active_tracers)
 
         self.residual = subject(mass_form, self.X)
 

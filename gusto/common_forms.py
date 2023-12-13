@@ -263,7 +263,7 @@ def split_continuity_form(equation):
 
     return equation
     
-def tracer_conservative_form(test, q, ubar):
+def tracer_conservative_form(test, q, rho, ubar):
     u"""
     The form corresponding to the continuity transport operator.
 
@@ -272,15 +272,16 @@ def tracer_conservative_form(test, q, ubar):
 
     Args:
         test (:class:`TestFunction`): the test function.
-        q (:class:`ufl.Expr`): the tracer to be transported. If this
-        is a mixing ratio, q = m*rho. If it is a density, q = rho.
+        q (:class:`ufl.Expr`): the tracer to be transported. 
+        rho (:class:`ufl.Expr`): the reference density that is to
+        be multiplied by q before taking the divergence
         ubar (:class:`ufl.Expr`): the transporting velocity.
 
     Returns:
         class:`LabelledForm`: a labelled transport form.
     """
-    
-    L = inner(test, div(outer(q, ubar)))*dx
+    q_rho = q*rho
+    L = inner(test, div(outer(q_rho, ubar)))*dx
     form = transporting_velocity(L, ubar)
     
     return transport(form, TransportEquationType.tracer_conservative)
