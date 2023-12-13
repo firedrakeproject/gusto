@@ -188,8 +188,8 @@ class DGUpwind(TransportMethod):
             # by the associated density
             #ref_density_idx = self.equation.field_names.index(variable.density_name)
             #ref_density = split(self.X)[self.density_idx]
-            q = self.field*self.conservative_density
-            form = upwind_continuity_form(self.domain, self.test, q, ibp=ibp)
+            #q = self.field*self.conservative_density
+            form = upwind_tracer_conservative_form(self.domain, self.test, self.field, self.conservative_density, ibp=ibp)
         else:
             raise NotImplementedError('Upwind transport scheme has not been '
                                       + 'implemented for this transport equation type')
@@ -314,6 +314,66 @@ def upwind_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=F
     form = transporting_velocity(L, ubar)
 
     return ibp_label(transport(form, TransportEquationType.conservative), ibp)
+    
+def upwind_tracer_conservative_form(domain, test, q, rho, ibp=IntegrateByParts.ONCE, outflow=False):
+    u"""
+    The form corresponding to the DG upwind continuity transport operator.
+
+    This discretises ∇.(u*q*rho), for transporting velocity u, transported
+    variable q, and its reference density, rho. Although the tracer q obeys an advection
+    equation, the transport term is in a conservative form. 
+
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        rho (:class:`ufl.Expr`): the reference density for the tracer.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+        outflow (bool, optional): whether to include outflow at the domain
+            boundaries, through exterior facet terms. Defaults to False.
+
+    Raises:
+        ValueError: Can only use outflow option when the integration by parts
+            option is not "never".
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    if outflow and ibp == IntegrateByParts.NEVER:
+        raise ValueError("outflow is True and ibp is None are incompatible options")
+    Vu = domain.spaces("HDiv")
+    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    ubar = Function(Vu)
+
+    if ibp == IntegrateByParts.ONCE:
+        L = -inner(grad(test), outer(inner(q,rho), ubar))*dx
+    else:
+        L = inner(test, div(outer(inner(q,rho), ubar)))*dx
+
+    if ibp != IntegrateByParts.NEVER:
+        n = FacetNormal(domain.mesh)
+        un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
+
+        L += dot(jump(test), (un('+')*q('+')*rho('+') - un('-')*q('-')*rho('-')))*dS_
+
+        if ibp == IntegrateByParts.TWICE:
+            L -= (inner(test('+'), dot(ubar('+'), n('+'))*q('+')*rho('+'))
+                  + inner(test('-'), dot(ubar('-'), n('-'))*q('-')*rho('-')))*dS_
+
+    if outflow:
+        n = FacetNormal(domain.mesh)
+        un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
+        L += test*un*q*rho*(ds_v + ds_t + ds_b)
+
+    form = transporting_velocity(L, ubar)
+    
+    print('DGUpwind with tracer conservative, called')
+
+    return ibp_label(transport(form, TransportEquationType.tracer_conservative), ibp)
 
 
 def vector_manifold_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):

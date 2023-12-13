@@ -271,7 +271,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         for i, (test, field_name) in enumerate(zip(self.tests, self.field_names)):
             prog = split(self.X)[i]
-            
+            print(i)
             # Hack for now
             # I can't be sure that the index of active tracers is the same,
             # so I need to search for the active_tracer.name == prog
@@ -294,10 +294,14 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             
             mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
         
+            print(mass)
+        
             if i == 0:
                 mass_form = time_derivative(mass)
             else:
                 mass_form += time_derivative(mass)
+                
+            print(mass_form)
 
         return mass_form
 
@@ -469,22 +473,31 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         for i, tracer in enumerate(active_tracers):
             idx = self.field_names.index(tracer.name)
-            #print(idx)
+            print(idx)
             tracer_prog = split(self.X)[idx]
             tracer_test = self.tests[idx]
+            print(self.field_names[idx])
             if tracer.transport_eqn == TransportEquationType.tracer_conservative:
                 ref_density_idx = self.field_names.index(tracer.density_name)
                 ref_density = split(self.X)[ref_density_idx]
                 #print(i)
                 #print(ref_density_idx)
                 q = tracer_prog*ref_density
-                mass = subject(prognostic(inner(q, tracer_test)*dx, self.field_name), self.X)
+                mass = subject(prognostic(inner(q, tracer_test)*dx, self.field_names[idx]), self.X)
+                #mass = subject(inner(ref_density, prognostic(inner(tracer_prog, tracer_test), self.field_names[idx]))*dx, self.X)
+                #mass = subject(inner(ref_density, prognostic(inner(tracer_prog, tracer_test), tracer.name))*dx, self.X)
+                #mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx, self.field_names[idx]), self.X)
+                #mass = prognostic(inner(q, tracer_test)*dx, tracer.name)
             else:
-                mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx, self.field_name), self.X)
+                mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx, self.field_names[idx]), self.X)
+                #mass = prognostic(inner(tracer_prog, tracer_test)*dx, tracer.name)
+            print(mass)
             if i == 0:
                 mass_form = time_derivative(mass)
             else:
                 mass_form += time_derivative(mass)
+
+            print(mass_form)
 
         return mass_form
 
@@ -628,9 +641,10 @@ class CoupledTransportEquation(PrognosticEquationSet):
         self.tests = TestFunctions(W)
         self.X = Function(W)
 
-        mass_form = self.generate_mass_terms()
+        #mass_form = self.generate_mass_terms()
 
-        self.residual = subject(mass_form, self.X)
+        #self.residual = subject(mass_form, self.X)
+        self.residual = self.generate_mass_terms()
 
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)
@@ -691,10 +705,8 @@ class ConservativeCoupledTransportEquation(PrognosticEquationSet):
         self.X = Function(W)
         
         print(full_field_name)
-        
-        mass_form = self.generate_tracer_mass_terms(active_tracers)
 
-        self.residual = subject(mass_form, self.X)
+        self.residual = self.generate_tracer_mass_terms(active_tracers)
 
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)        
