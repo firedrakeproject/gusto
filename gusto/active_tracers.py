@@ -63,10 +63,11 @@ class ActiveTracer(object):
                 the type of tracer variable (e.g. mixing ratio or density).
             transport_eqn (:class:`TransportEquationType`, optional): enumerator
                 indicating the type of transport equation to be solved (e.g.
-                advective). Defaults to `TransportEquationType.advective`.#
+                advective). Defaults to `TransportEquationType.advective`.
             density_name (str): the name of the associated density for a mixing
-                ratio when using the tracer_conservative transport. 
-                Defaults to None.
+                ratio when using the tracer_conservative transport. Defaults to None,
+                but raises an error if tracer_conservative transport is used without
+                a specified density.
             phase (:class:`Phases`, optional): enumerator indicating the phase
                 of the tracer variable. Defaults to `Phases.gas`.
             chemical (str, optional): string to describe the chemical that this

@@ -38,11 +38,10 @@ class TransportMethod(SpatialMethod):
         
         if self.transport_equation_type == TransportEquationType.tracer_conservative:
             # Extract associated density variable:
+            # This does assume the same ordering of tracers and fields...
             tracer_idx = self.equation.field_names.index(variable)
-            #print(tracer_idx)
             tracer = self.equation.active_tracers[tracer_idx]
             density_idx = self.equation.field_names.index(tracer.density_name)
-            #print(density_idx)
             self.conservative_density = split(self.equation.X)[density_idx]
 
     def replace_form(self, equation):
@@ -184,11 +183,6 @@ class DGUpwind(TransportMethod):
             form = upwind_vector_invariant_form(self.domain, self.test, self.field, ibp=ibp)
 
         elif self.transport_equation_type == TransportEquationType.tracer_conservative:
-            # Can use the conservative equation for the tracer multiplied
-            # by the associated density
-            #ref_density_idx = self.equation.field_names.index(variable.density_name)
-            #ref_density = split(self.X)[self.density_idx]
-            #q = self.field*self.conservative_density
             form = upwind_tracer_conservative_form(self.domain, self.test, self.field, self.conservative_density, ibp=ibp)
         else:
             raise NotImplementedError('Upwind transport scheme has not been '

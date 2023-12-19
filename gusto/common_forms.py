@@ -267,14 +267,14 @@ def tracer_conservative_form(test, q, rho, ubar):
     u"""
     The form corresponding to the continuity transport operator.
 
-    This describes ∇.(u*q) for transporting velocity u and a 
-    transported tracer, q.
+    This describes ∇.(u*q*rho) for transporting velocity u and a 
+    transported tracer (mixing ratio), q, with an associated density, rho.
 
     Args:
         test (:class:`TestFunction`): the test function.
-        q (:class:`ufl.Expr`): the tracer to be transported. 
-        rho (:class:`ufl.Expr`): the reference density that is to
-        be multiplied by q before taking the divergence
+        q (:class:`ufl.Expr`): the tracer to be transported.
+        rho (:class:`ufl.Expr`): the reference density that will
+        mulitply with q before taking the divergence.
         ubar (:class:`ufl.Expr`): the transporting velocity.
 
     Returns:
