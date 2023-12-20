@@ -87,6 +87,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.courant_max = None
 
         if options is not None:
+            if options.wrapper_type = Mixed:
+                pass
+        else:
             self.wrapper_name = options.name
             if self.wrapper_name == "embedded_dg":
                 self.wrapper = EmbeddedDGWrapper(self, options)

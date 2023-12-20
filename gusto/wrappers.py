@@ -15,7 +15,7 @@ from gusto.recovery import Recoverer, ReversibleRecoverer
 from gusto.labels import transporting_velocity
 import ufl
 
-__all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper"]
+__all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper", "MixedOptions"]
 
 
 class Wrapper(object, metaclass=ABCMeta):
@@ -33,6 +33,7 @@ class Wrapper(object, metaclass=ABCMeta):
         self.time_discretisation = time_discretisation
         self.options = wrapper_options
         self.solver_parameters = None
+        self.field_name = None
 
     @abstractmethod
     def setup(self):
@@ -361,3 +362,44 @@ class SUPGWrapper(Wrapper):
         new_residual = transporting_velocity.update_value(new_residual, self.transporting_velocity)
 
         return new_residual
+        
+
+class MixedOptions(object):
+    """
+    An object to hold a dictionary with different options for different
+    tracers. This means that different tracers can be solved simultaneously
+    using a CoupledTransportEquation, whilst being in different spaces
+    and needing different implementation options. 
+    """
+    
+    def __init__(self, equation, suboptions):
+        """
+        Args:
+            equation (:class: `PrognosticEquationSet`): the prognostic equation(s)
+            sublimiters (dict): A dictionary holding limiters defined for individual prognostic variables
+        Raises:
+            ValueError: If an option is defined for a field that is not in the prognostic variable set
+        """
+    
+    self.suboptions = suboptions
+    self.wrapper_type = Mixed
+    
+    for field, suboption in suboptions:
+        # Check that the field is in the prognostic variable set:
+            if field not in equation.field_names:
+                raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
+            else:
+                # check that a valid wrapper has been given
+                
+                
+                self.suboptions[field].idx = equation.field_names.index(field)
+    
+    
+    def apply(self, fields):
+        """
+        Apply the individual limiters to specific prognostic variables
+        """
+
+        for _, suboption in self.suboptions.items():
+            field = fields.subfunctions[suboption.idx]
+            sublimiter.apply(field)
