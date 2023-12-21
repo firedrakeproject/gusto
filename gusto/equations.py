@@ -14,7 +14,7 @@ from firedrake.fml import (
 from gusto.fields import PrescribedFields
 from gusto.labels import (
     time_derivative, transport, prognostic, hydrostatic, linearisation,
-    pressure_gradient, coriolis
+    pressure_gradient, coriolis, mass_weighted
 )
 from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (
@@ -276,7 +276,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 mass_form = time_derivative(mass)
             else:
                 mass_form += time_derivative(mass)
-                
+
             print(mass_form)
 
         return mass_form
@@ -438,11 +438,11 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         Generates the weak time derivative terms ("mass terms") for all the
         prognostic variables of the equation set.
-        
+
         The mass terms can differ depending on the tracer type. A mixing ratio
         that is being transported conservatively will need its mass form multiplied
         by a reference density.
-        
+
 
         Returns:
             :class:`LabelledForm`: a labelled form containing the mass terms.
@@ -458,7 +458,9 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 ref_density_idx = self.field_names.index(tracer.density_name)
                 ref_density = split(self.X)[ref_density_idx]
                 q = tracer_prog*ref_density
-                mass = subject(prognostic(inner(q, tracer_test)*dx, self.field_names[idx]), self.X)
+                mass = mass_weighted(
+                    subject(prognostic(inner(q, tracer_test)*dx, self.field_names[idx]),
+                            self.X), (ref_density_idx, inner(tracer_prog, tracer_test)*dx))
                 #term1 = ref_density*time_derivative(inner(tracer_prog, tracer_test))
                 #term2 = tracer_prog*time_derivative(inner(ref_density, tracer_test))
                 #mass_1 = subject(prognostic(term1*dx, self.field_names[idx]), self.X)
@@ -473,7 +475,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             else:
                 mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx, self.field_names[idx]), self.X)
                 #mass = prognostic(inner(tracer_prog, tracer_test)*dx, tracer.name)
-            
+
             if i == 0:
                 mass_form = time_derivative(mass)
             else:
@@ -533,7 +535,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                     tracer_adv = prognostic(
                         tracer_conservative_form(tracer_test, tracer_prog, ref_density, u),
                         tracer.name)
-                    
+
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
 
@@ -627,7 +629,7 @@ class CoupledTransportEquation(PrognosticEquationSet):
 
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)
-        
+
 class ConservativeCoupledTransportEquation(PrognosticEquationSet):
     u"""
     Discretises the transport equation,               \n
@@ -682,18 +684,18 @@ class ConservativeCoupledTransportEquation(PrognosticEquationSet):
 
         self.tests = TestFunctions(W)
         self.X = Function(W)
-        
+
         print(full_field_name)
 
         self.residual = self.generate_tracer_mass_terms(active_tracers)
 
         # Add transport of tracers
-        self.residual += self.generate_tracer_transport_terms(active_tracers)      
-        
+        self.residual += self.generate_tracer_transport_terms(active_tracers)
+
         #self.residual = subject(self.generate_tracer_mass_terms(active_tracers),self.X)
 
         # Add transport of tracers
-        #self.residual += subject(self.generate_tracer_transport_terms(active_tracers),self.X)         
+        #self.residual += subject(self.generate_tracer_transport_terms(active_tracers),self.X)
 
 
 

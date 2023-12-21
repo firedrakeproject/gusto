@@ -14,14 +14,14 @@ from firedrake import (
     NonlinearVariationalSolver, DirichletBC, split, Constant
 )
 from firedrake.fml import (
-    replace_subject, replace_test_function, Term, all_terms, drop
+    replace_subject, replace_test_function, Term, all_terms, drop, keep
 )
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.labels import (time_derivative, prognostic, physics_label,
-                          implicit, explicit)
+                          implicit, explicit, mass_weighted)
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 
@@ -519,6 +519,17 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
 
+        # Work out if any sub-functions need special mass weighted handling
+        self.mass_weighted_idxs = []
+        self.density_idxs = []
+        for t in self.residual.terms:
+            if t.has_label(mass_weighted):
+                # Get the index in the mixed function space of this term,
+                # from the prognostic field name
+                idx = self.equation.field_names.index(t.get(prognostic))
+                self.mass_weighted_idxs.append(idx)
+                self.density_idxs.append(t.get(mass_weighted)[0])
+
     @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
@@ -807,7 +818,23 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
     @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
-        return super(ExplicitMultistage, self).lhs
+
+        # Special handling for mass weighted time derivatives
+        # Explicit multi-stage solves for "k", which should be linear increment
+        # in the prognostic variables -- so we need to drop the mass weighted
+        # part to make the LHS linear. The non-mass weighted time derivative is
+        # (for now) stored in the mass weighted label
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(mass_weighted),
+            map_if_true=lambda t: Term(t.get(mass_weighted)[1], t.labels),
+            map_if_false=keep)
+
+        l = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x_out, self.idx),
+            map_if_false=drop)
+
+        return l.form
 
     @cached_property
     def rhs(self):
@@ -835,8 +862,19 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
 
         return r.form
 
+    def print_stats(self, mixed_field, message):
+        min1 = np.min(mixed_field.dat[0].data)
+        max1 = np.max(mixed_field.dat[0].data)
+        min2 = np.min(mixed_field.dat[1].data)
+        max2 = np.max(mixed_field.dat[1].data)
+        logger.info(f'{message}: {min1} {max1} {min2} {max2}')
+
     def solve_stage(self, x0, stage):
         self.x1.assign(x0)
+
+        # Use x0 as a first guess (otherwise may not converge)
+        self.x_out.assign(x0)
+
         for i in range(stage):
             self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
         for evaluate in self.evaluate_source:
@@ -844,6 +882,28 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         if self.limiter is not None:
             self.limiter.apply(self.x1)
         self.solver.solve()
+
+        self.print_stats(self.x1, f'x1 {stage}')
+
+        self.print_stats(self.x_out, 'x_out before')
+
+        # Need to divide by the updated density field if the LHS has a mass
+        # weighted time derivative
+        if len(self.mass_weighted_idxs) > 0:
+            # Loop through mixing ratios and the corresponding densities
+            for rho_idx, m_idx in zip(self.density_idxs, self.mass_weighted_idxs):
+                # Calculate updated density
+                rho = Function(self.fs[rho_idx])
+                rho.assign(x0.subfunctions[rho_idx])
+                for i in range(stage):
+                    rho.assign(rho + self.dt*self.butcher_matrix[stage, i]*self.k[i].subfunctions[rho_idx])
+                rho.assign(rho + self.dt*self.butcher_matrix[stage, stage]*self.x_out.subfunctions[rho_idx])
+                logger.info(f'rho updated: {np.min(rho.dat.data)} {np.max(rho.dat.data)}')
+                # Divide mixing ratio increment by updated density
+                k_m = self.x_out.subfunctions[m_idx]
+                k_m.interpolate(k_m / rho)
+        self.print_stats(self.x_out, 'x_out_after')
+
         self.k[stage].assign(self.x_out)
 
         if (stage == self.nStages - 1):
@@ -854,6 +914,8 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
 
             if self.limiter is not None:
                 self.limiter.apply(self.x1)
+
+            self.print_stats(self.x1, f'x1 end')
 
     def apply_cycle(self, x_out, x_in):
         """
