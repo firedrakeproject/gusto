@@ -87,19 +87,19 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.courant_max = None
 
         if options is not None:
-            if options.wrapper_type = Mixed:
-                pass
-        else:
-            self.wrapper_name = options.name
-            if self.wrapper_name == "embedded_dg":
-                self.wrapper = EmbeddedDGWrapper(self, options)
-            elif self.wrapper_name == "recovered":
-                self.wrapper = RecoveryWrapper(self, options)
-            elif self.wrapper_name == "supg":
-                self.wrapper = SUPGWrapper(self, options)
+            if options.wrapper_type == 'mixed':
+                self.wrapper = options
             else:
-                raise RuntimeError(
-                    f'Time discretisation: wrapper {self.wrapper_name} not implemented')
+                self.wrapper_name = options.name
+                if self.wrapper_name == "embedded_dg":
+                    self.wrapper = EmbeddedDGWrapper(self, options)
+                elif self.wrapper_name == "recovered":
+                    self.wrapper = RecoveryWrapper(self, options)
+                elif self.wrapper_name == "supg":
+                    self.wrapper = SUPGWrapper(self, options)
+                else:
+                    raise RuntimeError(
+                        f'Time discretisation: wrapper {self.wrapper_name} not implemented')
         else:
             self.wrapper = None
             self.wrapper_name = None

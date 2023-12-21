@@ -381,19 +381,38 @@ class MixedOptions(object):
             ValueError: If an option is defined for a field that is not in the prognostic variable set
         """
     
-    self.suboptions = suboptions
-    self.wrapper_type = Mixed
+        self.suboptions = suboptions
+        self.wrapper_type = 'mixed'
+        self.wrappers = []
+        
+        for field, suboption in suboptions:
+            # Check that the field is in the prognostic variable set:
+                if field not in equation.field_names:
+                    raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
+                else:
+                    # check that a valid wrapper has been given
+                    wrapper_name = suboption.name
+                    
+                    if wrapper_name == "embedded_dg":
+                        self.wrappers.append(EmbeddedDGWrapper(self, options))
+                        self.wrapper_fields.append(field)
+                    elif wrapper_name == "recovered":
+                        self.wrappers.append(RecoveryWrapper(self, options))
+                        self.wrapper_fields.append(field)
+                    elif wrapper_name == "supg":
+                        self.wrappers.append(SUPGWrapper(self, options))
+                        self.wrapper_fields.append(field)
+                    else:
+                        raise RuntimeError(
+                        f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
+                    
+                    #Initialise the wrapper and associate with a field:
+                    
+                    self.suboptions[field].idx = equation.field_names.index(field)
     
-    for field, suboption in suboptions:
-        # Check that the field is in the prognostic variable set:
-            if field not in equation.field_names:
-                raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
-            else:
-                # check that a valid wrapper has been given
-                
-                
-                self.suboptions[field].idx = equation.field_names.index(field)
-    
+    def setup(self):
+        # This is done in the suboption wrappers themselves
+        pass
     
     def apply(self, fields):
         """

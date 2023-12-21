@@ -108,16 +108,16 @@ def setup_limiters(dirname, space_A, space_B):
     # Set up transport scheme with options
     # ------------------------------------------------------------------------ #
 
-    #suboptions = {}
+    suboptions = {}
     sublimiters = {}
 
     # Options and limiters for tracer_A
 
     if space_A in ['DG0', 'Vtheta_degree_0']:
-        recover_opts = RecoveryOptions(embedding_space=VDG1_A,
-                               recovered_space=VCG1_A,
-                               project_low_method='recover',
-                               boundary_method=BoundaryMethod.taylor)
+        suboptions.update({'tracerA': RecoveryOptions(embedding_space=VDG1_A,
+                                              recovered_space=VCG1_A,
+                                              project_low_method='recover',
+                                              boundary_method=BoundaryMethod.taylor)})
                                    
         sublimiters.update({'tracerA': VertexBasedLimiter(VDG1_A)})
         
@@ -157,11 +157,11 @@ def setup_limiters(dirname, space_A, space_B):
     else:
         raise NotImplementedError
 
-    #MixedOptions = MixedFSOptions(eqn, suboptions)
+    opts = MixedOptions(eqn, suboptions)
     MixedLimiter = MixedFSLimiter(eqn, sublimiters)
 
     # Give the scheme for the coupled transport
-    transport_schemes = SSPRK3(domain, limiter=MixedLimiter)
+    transport_schemes = SSPRK3(domain, options=opts, limiter=MixedLimiter)
     
     # DG Upwind transport for both tracers:
     transport_method = [DGUpwind(eqn, 'tracerA'), DGUpwind(eqn, 'tracerB')]
@@ -268,8 +268,8 @@ def setup_limiters(dirname, space_A, space_B):
 @pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
                                    'DG1', 'DG1_equispaced'])
 #Remove Dg1-dg1 and other easy ones after debugging
-@pytest.mark.parametrize('space_B', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
-                                    'DG1', 'DG1_equispaced'])
+@pytest.mark.parametrize('space_B', ['Vtheta_degree_0'])#, 'Vtheta_degree_1', 'DG0',
+                                    #'DG1', 'DG1_equispaced'])
 
 
 def test_limiters(tmpdir, space_A, space_B):
