@@ -380,28 +380,33 @@ class MixedOptions(object):
         Raises:
             ValueError: If an option is defined for a field that is not in the prognostic variable set
         """
-    
-        self.suboptions = suboptions
-        self.wrapper_type = 'mixed'
-        self.wrappers = []
+        print(equation.function_space)
+        self.x_in = Function(equation.function_space)
+        self.x_out = Function(equation.function_space)
         
-        for field, suboption in suboptions:
+        print('Initialising MixedOptions')
+        
+        self.suboptions = suboptions
+        
+        print(suboptions.items())
+        
+        self.wrapper = {}
+        
+        for field, suboption in suboptions.items():
             # Check that the field is in the prognostic variable set:
                 if field not in equation.field_names:
                     raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
                 else:
                     # check that a valid wrapper has been given
                     wrapper_name = suboption.name
+                    print(wrapper_name)
                     
                     if wrapper_name == "embedded_dg":
-                        self.wrappers.append(EmbeddedDGWrapper(self, options))
-                        self.wrapper_fields.append(field)
+                        self.wrapper.update({field:EmbeddedDGWrapper(self, suboption)})
                     elif wrapper_name == "recovered":
-                        self.wrappers.append(RecoveryWrapper(self, options))
-                        self.wrapper_fields.append(field)
+                        self.suboptions[field].subwrapper = RecoveryWrapper(self, suboption)
                     elif wrapper_name == "supg":
-                        self.wrappers.append(SUPGWrapper(self, options))
-                        self.wrapper_fields.append(field)
+                        self.suboptions[field].subwrapper = SUPGWrapper(self, suboption)
                     else:
                         raise RuntimeError(
                         f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
@@ -409,16 +414,30 @@ class MixedOptions(object):
                     #Initialise the wrapper and associate with a field:
                     
                     self.suboptions[field].idx = equation.field_names.index(field)
+                    #self.suboptions[field].fs = equation.field_names.function_space(field)
+ #                   self.subwrapper.x_in = Function(self.suboptions[field].fs)
     
     def setup(self):
         # This is done in the suboption wrappers themselves
         pass
     
-    def apply(self, fields):
+    def pre_apply(self, x_in):
         """
-        Apply the individual limiters to specific prognostic variables
+        Perform the pre-applications from all subwrappers
+        """
+
+        for _, subwrapper in self.suboptions.items():
+            print(subwrapper)
+            field = x_in.subfunctions[subwrapper.idx]
+            subwrapper.pre_apply(field)
+            
+    def post_apply(self, x_in):
+        """
+        Perform the post-applications from all subwrappers
         """
 
         for _, suboption in self.suboptions.items():
-            field = fields.subfunctions[suboption.idx]
-            sublimiter.apply(field)
+            print(suboption)
+            field = x_in.subfunctions[suboption.idx]
+            suboption.subwrapper.post_apply(field)
+

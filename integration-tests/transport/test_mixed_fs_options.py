@@ -32,7 +32,7 @@ def setup_limiters(dirname, space_A, space_B):
     # Domain
     m = PeriodicIntervalMesh(20, Ld)
     mesh = ExtrudedMesh(m, layers=20, layer_height=(Ld/20))
-    degree = 0 if space_A in ['DG0', 'Vtheta_degree_0'] or space_B in ['DG0', 'Vtheta_degree_0'] else 1
+    degree = 0 if space_A in ['DG0', 'Vtheta_degree_0'] else 1
 
     domain = Domain(mesh, dt, family="CG", degree=degree)
     
@@ -63,25 +63,28 @@ def setup_limiters(dirname, space_A, space_B):
         raise NotImplementedError
     
     # Tracer B spaces
-    if space_B == 'DG0':
-        VB = domain.spaces('DG')
-        VCG1_B = FunctionSpace(mesh, 'CG', 1)
-        VDG1_B = domain.spaces('DG1_equispaced')
-        space_B_string = 'DG'
-    elif space_B == 'DG1':
-        VB = domain.spaces('DG')
-        space_B_string = 'DG'
-    elif space_B == 'DG1_equispaced':
-        VB = domain.spaces('DG1_equispaced')
-        space_B_string = 'DG1_equispaced'
-    elif space_B == 'Vtheta_degree_0':
-        VB = domain.spaces('theta')
-        VCG1_B = FunctionSpace(mesh, 'CG', 1)
-        VDG1_B = domain.spaces('DG1_equispaced')
-        space_B_string = 'theta'
-    elif space_B == 'Vtheta_degree_1':
-        VB = domain.spaces('theta')
-        space_B_string = 'theta'
+    if space_B == 'DG':
+        if degree == 0:
+            VB = domain.spaces('DG')
+            VCG1_B = FunctionSpace(mesh, 'CG', 1)
+            VDG1_B = domain.spaces('DG1_equispaced')
+            space_B_string = 'DG'
+        elif degree == 1:
+            VB = domain.spaces('DG')
+            space_B_string = 'DG'
+        else:
+            raise NotImplementedError
+    elif space_B == 'Vtheta':
+        if degree == 0: 
+            VB = domain.spaces('theta')
+            VCG1_B = FunctionSpace(mesh, 'CG', 1)
+            VDG1_B = domain.spaces('DG1_equispaced')
+            space_B_string = 'theta'
+        elif degree == 1:
+            VB = domain.spaces('theta')
+            space_B_string = 'theta'
+        else:
+            raise NotImplementedError
     else:
         raise NotImplementedError
         
@@ -128,32 +131,39 @@ def setup_limiters(dirname, space_A, space_B):
         sublimiters.update({'tracerA': VertexBasedLimiter(VA)})
 
     elif space_A == 'Vtheta_degree_1':
-        opts = EmbeddedDGOptions()
+        suboptions.update({'tracerA': EmbeddedDGOptions()})
         sublimiters.update({'tracerA': ThetaLimiter(VA)})
 
     else:
         raise NotImplementedError
         
     # Options and limiters for tracer_B
-
-    if space_B in ['DG0', 'Vtheta_degree_0']:
-        recover_opts = RecoveryOptions(embedding_space=VDG1_B,
-                               recovered_space=VCG1_B,
-                               project_low_method='recover',
-                               boundary_method=BoundaryMethod.taylor)
+    
+    if space_B == 'DG':
+        if degree == 0:
+            suboptions.update({'tracerB': RecoveryOptions(embedding_space=VDG1_B,
+                                              recovered_space=VCG1_B,
+                                              project_low_method='recover',
+                                              boundary_method=BoundaryMethod.taylor)})
                                    
-        sublimiters.update({'tracerB': VertexBasedLimiter(VDG1_B)})
-        
-    elif space_B == 'DG1':
-        sublimiters.update({'tracerB': DG1Limiter(VB)})
-
-    elif space_B == 'DG1_equispaced':
-        sublimiters.update({'tracerB': VertexBasedLimiter(VB)})
-
-    elif space_B == 'Vtheta_degree_1':
-        opts = EmbeddedDGOptions()
-        sublimiters.update({'tracerB': ThetaLimiter(VB)})
-
+            sublimiters.update({'tracerB': VertexBasedLimiter(VDG1_B)})
+        elif degree == 1:
+            sublimiters.update({'tracerB': DG1Limiter(VB)})
+        else:
+            raise NotImplementedError
+    elif space_B == 'Vtheta':
+        if degree == 0: 
+            suboptions.update({'tracerB': RecoveryOptions(embedding_space=VDG1_B,
+                                              recovered_space=VCG1_B,
+                                              project_low_method='recover',
+                                              boundary_method=BoundaryMethod.taylor)})
+                                   
+            sublimiters.update({'tracerB': VertexBasedLimiter(VDG1_B)})
+        elif degree == 1:
+            opts = EmbeddedDGOptions()
+            sublimiters.update({'tracerB': ThetaLimiter(VB)})
+        else:
+            raise NotImplementedError
     else:
         raise NotImplementedError
 
@@ -162,6 +172,7 @@ def setup_limiters(dirname, space_A, space_B):
 
     # Give the scheme for the coupled transport
     transport_schemes = SSPRK3(domain, options=opts, limiter=MixedLimiter)
+    #transport_schemes = SSPRK3(domain, limiter=MixedLimiter)
     
     # DG Upwind transport for both tracers:
     transport_method = [DGUpwind(eqn, 'tracerA'), DGUpwind(eqn, 'tracerB')]
@@ -267,9 +278,8 @@ def setup_limiters(dirname, space_A, space_B):
 
 @pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
                                    'DG1', 'DG1_equispaced'])
-#Remove Dg1-dg1 and other easy ones after debugging
-@pytest.mark.parametrize('space_B', ['Vtheta_degree_0'])#, 'Vtheta_degree_1', 'DG0',
-                                    #'DG1', 'DG1_equispaced'])
+# It only makes sense to use the same degree for tracer B
+@pytest.mark.parametrize('space_B', ['Vtheta', 'DG'])
 
 
 def test_limiters(tmpdir, space_A, space_B):
@@ -288,26 +298,26 @@ def test_limiters(tmpdir, space_A, space_B):
 
     # Check tracer is roughly in the correct place
     assert norm(true_fieldA - final_fieldA) / norm(true_fieldA) < 0.05, \
-        'Something is wrong with the DG space tracer using a mixed limiter'
+        f"Something is wrong with the {space_A} space tracer using a mixed limiter"
 
     # Check tracer is roughly in the correct place
     assert norm(true_fieldB - final_fieldB) / norm(true_fieldB) < 0.05, \
-        'Something is wrong with the DG1 equispaced tracer using a mixed limiter'
+        f"Something is wrong with the {space_B} space tracer using a mixed limiter"
 
     # Check for no new overshoots in A
     assert np.max(final_fieldA.dat.data) <= np.max(true_fieldA.dat.data) + tol, \
-        'Application of the DG space limiter in the mixed limiter has not prevented overshoots'
+        f"Application of the {space_A} space limiter in the mixed limiter has not prevented overshoots"
 
     # Check for no new undershoots in A
     assert np.min(final_fieldA.dat.data) >= np.min(true_fieldA.dat.data) - tol, \
-        'Application of the DG space limiter in the mixed limiter has not prevented undershoots'
+        f"Application of the {space_B} space limiter in the mixed limiter has not prevented undershoots"
 
     # Check for no new overshoots in B
     assert np.max(final_fieldB.dat.data) <= np.max(true_fieldB.dat.data) + tol, \
-        'Application of the DG1 equispaced limiter in the mixed limiter has not prevented overshoots'
+        f"Application of the {space_A} limiter in the mixed limiter has not prevented overshoots"
 
     # Check for no new undershoots in B
     assert np.min(final_fieldB.dat.data) >= np.min(true_fieldB.dat.data) - tol, \
-        'Application of the DG1 equispaced limiter in the mixed limiter has not prevented undershoots'
+        f"Application of the {space_B} equispaced limiter in the mixed limiter has not prevented undershoots"
 
     

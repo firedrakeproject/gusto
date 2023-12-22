@@ -37,6 +37,20 @@ def wrapper_apply(original_apply):
     """Decorator to add steps for using a wrapper around the apply method."""
     def get_apply(self, x_out, x_in):
 
+        #if type(self.wrapper) == MixedOptions:
+        
+            # Subwrappers for different tracers have been defined
+            # Use the apply defined in the MixedOptions object
+            
+         #   print('aha')
+         #   self.wrapper.pre_apply(x_in)
+            
+         #   for _, subwrapper in self.wrapper.suboptions.items(): 
+         #       original_apply(self, self.subwrapper.x_out, self.subwrapper.x_in)
+            
+         #   self.wrapper.post_apply(x_out)
+            
+
         if self.wrapper is not None:
 
             def new_apply(self, x_out, x_in):
@@ -87,8 +101,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.courant_max = None
 
         if options is not None:
-            if options.wrapper_type == 'mixed':
+            if type(options) == MixedOptions:
+                print('jahjah')
                 self.wrapper = options
+                # Or do I need to initialise everything here
+                # like is done for a single wrapper?
             else:
                 self.wrapper_name = options.name
                 if self.wrapper_name == "embedded_dg":
@@ -162,21 +179,28 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # -------------------------------------------------------------------- #
 
         if self.wrapper is not None:
-            self.wrapper.setup()
-            self.fs = self.wrapper.function_space
-            if self.solver_parameters is None:
-                self.solver_parameters = self.wrapper.solver_parameters
-            new_test = TestFunction(self.wrapper.test_space)
-            # SUPG has a special wrapper
-            if self.wrapper_name == "supg":
-                new_test = self.wrapper.test
-
-            # Replace the original test function with the one from the wrapper
-            self.residual = self.residual.label_map(
-                all_terms,
-                map_if_true=replace_test_function(new_test))
-
-            self.residual = self.wrapper.label_terms(self.residual)
+            if type(self.wrapper) == MixedOptions:
+                # Subwrappers are defined.
+                # Set these up with ?
+                for _, subwrapper in self.wrapper.suboptions.items():
+                    print(subwrapper)
+                pass
+            else:
+                self.wrapper.setup()
+                self.fs = self.wrapper.function_space
+                if self.solver_parameters is None:
+                    self.solver_parameters = self.wrapper.solver_parameters
+                new_test = TestFunction(self.wrapper.test_space)
+                # SUPG has a special wrapper
+                if self.wrapper_name == "supg":
+                    new_test = self.wrapper.test
+    
+                # Replace the original test function with the one from the wrapper
+                self.residual = self.residual.label_map(
+                    all_terms,
+                    map_if_true=replace_test_function(new_test))
+    
+                self.residual = self.wrapper.label_terms(self.residual)
 
         # -------------------------------------------------------------------- #
         # Make boundary conditions
