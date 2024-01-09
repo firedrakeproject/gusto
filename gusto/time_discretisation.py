@@ -56,7 +56,10 @@ def wrapper_apply(original_apply):
             def new_apply(self, x_out, x_in):
 
                 self.wrapper.pre_apply(x_in)
-                original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
+                if type(self.wrapper) == MixedOptions:
+                    original_apply(self, x_out, x_in)
+                else:
+                    original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
                 self.wrapper.post_apply(x_out)
 
             return new_apply(self, x_out, x_in)
@@ -103,9 +106,39 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         if options is not None:
             if type(options) == MixedOptions:
                 print('jahjah')
+                print(options)
                 self.wrapper = options
+                #self.subwrappers = {}
                 # Or do I need to initialise everything here
                 # like is done for a single wrapper?
+                for field, suboption in self.wrapper.suboptions.items():
+                    print(field)
+                    print(suboption)
+                    
+                    #Replace options with a wrapper?
+                    
+                    #if suboption.name == 'embedded_dg':
+                    #    self.suboptions[field].wrapper = EmbeddedDGWrapper(self, suboption)
+                    #elif suboption.name == "recovered":
+                    #    self.suboptions[field].wrapper = RecoveryWrapper(self, suboption)
+                    #elif suboption.name == "supg":
+                    #    self.suboptions[field].wrapper = SUPGWrapper(self, suboption)
+                    #else:
+                    #    raise RuntimeError(
+                    #    f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
+                    if suboption.name == 'embedded_dg':
+                        self.wrapper.subwrappers.update({field:EmbeddedDGWrapper(self, suboption)})
+                    elif suboption.name == "recovered":
+                        self.wrapper.subwrappers.update({field:RecoveryWrapper(self, suboption)})
+                    elif suboption.name == "supg":
+                        self.wrapper.subwrappers.update({field:SUPGWrapper(self, suboption)})
+                    else:
+                        raise RuntimeError(
+                        f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
+                print(self.wrapper)
+                print(self.wrapper.suboptions)
+                print(self.wrapper.subwrappers)
+                #self.wrapper_name = 'mixed'
             else:
                 self.wrapper_name = options.name
                 if self.wrapper_name == "embedded_dg":
@@ -180,10 +213,17 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if self.wrapper is not None:
             if type(self.wrapper) == MixedOptions:
+            #if self.wrapper_name == 'mixed':
                 # Subwrappers are defined.
                 # Set these up with ?
-                for _, subwrapper in self.wrapper.suboptions.items():
+                for field, subwrapper in self.wrapper.subwrappers.items():
+                    #Set up field idxs here.
+                    print(field)
                     print(subwrapper)
+                    self.wrapper.subwrappers[field].idx = equation.field_names.index(field)
+                    self.wrapper.subwrappers[field].mixed_options = True
+                    self.wrapper.subwrappers[field].setup()
+                    self.fs = self.wrapper.subwrappers[field].function_space
                 pass
             else:
                 self.wrapper.setup()

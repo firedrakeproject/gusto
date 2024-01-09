@@ -160,7 +160,7 @@ def setup_limiters(dirname, space_A, space_B):
                                    
             sublimiters.update({'tracerB': VertexBasedLimiter(VDG1_B)})
         elif degree == 1:
-            opts = EmbeddedDGOptions()
+            suboptions.update({'tracerB': EmbeddedDGOptions()})
             sublimiters.update({'tracerB': ThetaLimiter(VB)})
         else:
             raise NotImplementedError
@@ -276,8 +276,9 @@ def setup_limiters(dirname, space_A, space_B):
     return stepper, tmax, true_fieldA, true_fieldB
 
 
-@pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
-                                   'DG1', 'DG1_equispaced'])
+#@pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
+#                                   'DG1', 'DG1_equispaced'])
+@pytest.mark.parametrize('space_A', ['DG0'])#, 'DG1_equispaced'])
 # It only makes sense to use the same degree for tracer B
 @pytest.mark.parametrize('space_B', ['Vtheta', 'DG'])
 

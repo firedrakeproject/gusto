@@ -33,7 +33,9 @@ class Wrapper(object, metaclass=ABCMeta):
         self.time_discretisation = time_discretisation
         self.options = wrapper_options
         self.solver_parameters = None
-        self.field_name = None
+        #self.field_name = None
+        self.idx = None
+        self.mixed_options = False
 
     @abstractmethod
     def setup(self):
@@ -162,8 +164,10 @@ class RecoveryWrapper(Wrapper):
     def setup(self):
         """Sets up function spaces and fields needed for this wrapper."""
 
+        print(self.options)
+
         assert isinstance(self.options, RecoveryOptions), \
-            'Embedded DG wrapper can only be used with Recovery Options'
+            'Recovery wrapper can only be used with Recovery Options'
 
         original_space = self.time_discretisation.fs
         domain = self.time_discretisation.domain
@@ -177,6 +181,7 @@ class RecoveryWrapper(Wrapper):
             V_elt = BrokenElement(original_space.ufl_element())
             self.function_space = FunctionSpace(domain.mesh, V_elt)
         else:
+            print('using embedded space')
             self.function_space = self.options.embedding_space
 
         self.test_space = self.function_space
@@ -185,11 +190,23 @@ class RecoveryWrapper(Wrapper):
         # Internal variables to be used
         # -------------------------------------------------------------------- #
 
-        self.x_in_tmp = Function(self.time_discretisation.fs)
+        if self.mixed_options == True:
+            self.x_in_tmp = Function(self.function_space)
+        else:
+            self.x_in_tmp = Function(self.time_discretisation.fs)
+            
+        print(self.function_space)
+        print(self.time_discretisation.fs)
+            
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
+        
+        #self.x_out = Function(equation.function_space)
+        #self.x_out = Function(self.time_discretisation.fs)
+        
         if self.time_discretisation.idx is None:
-            self.x_projected = Function(equation.function_space)
+            #self.x_projected = Function(equation.function_space)
+            self.x_projected = Function(self.function_space)
         else:
             self.x_projected = Function(equation.spaces[self.time_discretisation.idx])
 
@@ -381,18 +398,20 @@ class MixedOptions(object):
             ValueError: If an option is defined for a field that is not in the prognostic variable set
         """
         print(equation.function_space)
-        self.x_in = Function(equation.function_space)
-        self.x_out = Function(equation.function_space)
+        #self.x_in = Function(equation.function_space)
+        #self.x_out = Function(equation.function_space)
         
         print('Initialising MixedOptions')
         
         self.suboptions = suboptions
         
-        print(suboptions.items())
+        #print(suboptions.items())
         
-        self.wrapper = {}
+        self.subwrappers = {}
         
         for field, suboption in suboptions.items():
+                print(field)
+                print(suboption)
             # Check that the field is in the prognostic variable set:
                 if field not in equation.field_names:
                     raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
@@ -401,19 +420,19 @@ class MixedOptions(object):
                     wrapper_name = suboption.name
                     print(wrapper_name)
                     
-                    if wrapper_name == "embedded_dg":
-                        self.wrapper.update({field:EmbeddedDGWrapper(self, suboption)})
-                    elif wrapper_name == "recovered":
-                        self.suboptions[field].subwrapper = RecoveryWrapper(self, suboption)
-                    elif wrapper_name == "supg":
-                        self.suboptions[field].subwrapper = SUPGWrapper(self, suboption)
-                    else:
-                        raise RuntimeError(
-                        f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
+                    #if wrapper_name == "embedded_dg":
+                    #    self.wrapper.update({field:EmbeddedDGWrapper(self, suboption)})
+                    #elif wrapper_name == "recovered":
+                    #    self.suboptions[field].subwrapper = RecoveryWrapper(self, suboption)
+                    #elif wrapper_name == "supg":
+                    #    self.suboptions[field].subwrapper = SUPGWrapper(self, suboption)
+                    #else:
+                    #    raise RuntimeError(
+                    #    f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
                     
                     #Initialise the wrapper and associate with a field:
-                    
-                    self.suboptions[field].idx = equation.field_names.index(field)
+                    #self.suboptions[field].wrapper_name = suboption.name
+                    #self.suboptions[field].idx = equation.field_names.index(field)
                     #self.suboptions[field].fs = equation.field_names.function_space(field)
  #                   self.subwrapper.x_in = Function(self.suboptions[field].fs)
     
@@ -426,8 +445,9 @@ class MixedOptions(object):
         Perform the pre-applications from all subwrappers
         """
 
-        for _, subwrapper in self.suboptions.items():
+        for _, subwrapper in self.subwrappers.items():
             print(subwrapper)
+            print('pre')
             field = x_in.subfunctions[subwrapper.idx]
             subwrapper.pre_apply(field)
             
@@ -436,8 +456,9 @@ class MixedOptions(object):
         Perform the post-applications from all subwrappers
         """
 
-        for _, suboption in self.suboptions.items():
-            print(suboption)
-            field = x_in.subfunctions[suboption.idx]
-            suboption.subwrapper.post_apply(field)
+        for _, subwrapper in self.subwrappers.items():
+            print(subwrapper)
+            print('post')
+            field = x_in.subfunctions[subwrapper.idx]
+            subwrapper.post_apply(field)
 
