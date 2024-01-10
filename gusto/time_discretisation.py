@@ -37,30 +37,21 @@ def wrapper_apply(original_apply):
     """Decorator to add steps for using a wrapper around the apply method."""
     def get_apply(self, x_out, x_in):
 
-        #if type(self.wrapper) == MixedOptions:
-        
-            # Subwrappers for different tracers have been defined
-            # Use the apply defined in the MixedOptions object
-            
-         #   print('aha')
-         #   self.wrapper.pre_apply(x_in)
-            
-         #   for _, subwrapper in self.wrapper.suboptions.items(): 
-         #       original_apply(self, self.subwrapper.x_out, self.subwrapper.x_in)
-            
-         #   self.wrapper.post_apply(x_out)
-            
-
         if self.wrapper is not None:
 
             def new_apply(self, x_out, x_in):
 
                 self.wrapper.pre_apply(x_in)
-                if type(self.wrapper) == MixedOptions:
+                original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
+                
+                #if type(self.wrapper) == MixedOptions:
+                    #print('x_out', x_out)
+                    #print('self.wrapper.x_out', self.wrapper.x_out)
                     #original_apply(self, x_out, x_in)
-                    original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
-                else:
-                    original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
+                #    original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
+                #else:
+                #    original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
+                
                 self.wrapper.post_apply(x_out)
 
             return new_apply(self, x_out, x_in)
@@ -116,17 +107,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     print(field)
                     print(suboption)
                     
-                    #Replace options with a wrapper?
-                    
-                    #if suboption.name == 'embedded_dg':
-                    #    self.suboptions[field].wrapper = EmbeddedDGWrapper(self, suboption)
-                    #elif suboption.name == "recovered":
-                    #    self.suboptions[field].wrapper = RecoveryWrapper(self, suboption)
-                    #elif suboption.name == "supg":
-                    #    self.suboptions[field].wrapper = SUPGWrapper(self, suboption)
-                    #else:
-                    #    raise RuntimeError(
-                    #    f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
                     if suboption.name == 'embedded_dg':
                         self.wrapper.subwrappers.update({field:EmbeddedDGWrapper(self, suboption)})
                     elif suboption.name == "recovered":
@@ -136,9 +116,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     else:
                         raise RuntimeError(
                         f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
-                print(self.wrapper)
-                print(self.wrapper.suboptions)
-                print(self.wrapper.subwrappers)
+                #print(self.wrapper)
+                #print(self.wrapper.suboptions)
+                #print(self.wrapper.subwrappers)
                 #self.wrapper_name = 'mixed'
             else:
                 self.wrapper_name = options.name
@@ -219,35 +199,54 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 # Set these up with ?
                 
                 # Give more than one fs?
-                fields = []
+                #fields = []
                 
                 print(self.wrapper.wrapper_spaces)
                 
                 for field, subwrapper in self.wrapper.subwrappers.items():
-                    # Set up field idxs here.
-                    print(field)
-                    print(subwrapper)
-                    self.wrapper.subwrappers[field].idx = equation.field_names.index(field)
+                    field_idx = equation.field_names.index(field)
+                    self.wrapper.subwrappers[field].idx = field_idx
                     self.wrapper.subwrappers[field].mixed_options = True
                     
                     # Store the original space of the tracer
                     self.wrapper.subwrappers[field].tracer_fs = self.equation.spaces[equation.field_names.index(field)]
+                    
                     self.wrapper.subwrappers[field].setup()
                     
                     # Update the function space to that needed by the wrapper
-                    self.wrapper.wrapper_spaces.update({field: self.wrapper.subwrappers[field].function_space})
-                    fields.append(self.wrapper.subwrappers[field].function_space)
-                    # Append the new function space from the wrapper
-                    #print('self.tracer_fs is', self.wrapper.subwrappers[field].tracer_fs)
-                print(self.wrapper.wrapper_spaces)
-                #Setup the mixed wrapper
-                #yo_spaces = []
-                #for _, space_name in self.wrapper.wrapper_spaces.items():
-                #    yo_spaces.append(self.domain.spaces(space_name))
-                #print(yo_spaces)
-                self.wrapper.wrapper_spaces = fields
+                    self.wrapper.wrapper_spaces[field_idx] = self.wrapper.subwrappers[field].function_space
+                    
+                    # Replace with new test function
+                    # STILL TO SORT OUT.
+                    #new_test = TestFunction(self.wrapper.subwrappers[field].test_space)
+                    
+                    #self.residual = self.residual.label_map(
+                    #    all_terms,
+                    #    map_if_true=replace_test_function(new_test, old_idx=field_idx))
+                    
+                
                 self.wrapper.setup()
-                pass
+                
+                # Check if mixed function spcae has changed:
+                if self.wrapper.function_space == equation.function_space:
+                    print('same')
+                else:
+                    print('different')
+                    
+                self.fs = self.wrapper.function_space
+                
+                # Or replace test functions here??
+                new_test = TestFunction(self.wrapper.test_space)
+                
+                self.residual = self.residual.label_map(
+                        all_terms,
+                        map_if_true=replace_test_function(new_test))
+                
+                # Only call this if with SUPG, so should put this into the 
+                # previous section
+                self.residual = self.wrapper.label_terms(self.residual)
+                
+                
             else:
                 self.wrapper.setup()
                 self.fs = self.wrapper.function_space

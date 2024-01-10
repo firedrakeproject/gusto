@@ -33,7 +33,6 @@ class Wrapper(object, metaclass=ABCMeta):
         self.time_discretisation = time_discretisation
         self.options = wrapper_options
         self.solver_parameters = None
-        #self.field_name = None
         self.idx = None
         self.mixed_options = False
         self.tracer_fs = None
@@ -93,6 +92,7 @@ class EmbeddedDGWrapper(Wrapper):
             #print('self.tracer_fs is', self.tracer_fs)
             #print('self.time_discretisation.fs is', self.time_discretisation.fs)
             original_space = self.tracer_fs
+            #original_space = self.time_discretisation.fs
         else:
             original_space = self.time_discretisation.fs
 
@@ -114,6 +114,7 @@ class EmbeddedDGWrapper(Wrapper):
 
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
+        
         if self.mixed_options == True:
             self.x_projected = Function(self.tracer_fs)
         elif self.time_discretisation.idx is None:
@@ -182,7 +183,8 @@ class RecoveryWrapper(Wrapper):
         equation = self.time_discretisation.equation
         
         if self.mixed_options == True:
-            original_space = self.tracer_fs
+            #original_space = self.tracer_fs
+            original_space = self.time_discretisation.fs
         else:
             original_space = self.time_discretisation.fs
 
@@ -416,9 +418,12 @@ class MixedOptions(object):
         #print(equation.active_tracers)
         #print(equation.active_tracers[0])
         #print(equation.active_tracers[1])
-        print(equation.space_names)
+        #print(equation.space_names)
+        #print(equation.spaces)
         
-        self.wrapper_spaces = equation.space_names
+        #self.wrapper_spaces = equation.space_names
+        self.wrapper_spaces = equation.spaces
+        print(len(equation.spaces))
         
         #self.x_in = Function(equation.function_space)
         #self.x_out = Function(equation.function_space)
@@ -432,8 +437,8 @@ class MixedOptions(object):
         self.subwrappers = {}
         
         for field, suboption in suboptions.items():
-                print(field)
-                print(suboption)
+                #print(field)
+                #print(suboption)
                 
                 # Check that the field is in the prognostic variable set:
                 if field not in equation.field_names:
@@ -465,32 +470,45 @@ class MixedOptions(object):
     def setup(self):
         # This is done in the suboption wrappers themselves
         # Or, determine the new mixed function space
+        
+        #Loop over all active variables?
         self.function_space = MixedFunctionSpace(self.wrapper_spaces)
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space) 
-        
-        
+        self.test_space = self.function_space
         #pass
     
     def pre_apply(self, x_in):
         """
         Perform the pre-applications from all subwrappers
         """
+        #self.x_in.assign(x_in)
+        self.x_in = x_in
 
         for _, subwrapper in self.subwrappers.items():
             print(subwrapper)
             print('pre')
             field = x_in.subfunctions[subwrapper.idx]
             subwrapper.pre_apply(field)
-            print('success')
+            #x_in.subfunctions[subwrapper.idx] = subwrapper.x_in
             
-    def post_apply(self, x_in):
+            x_in_sub = self.x_in.subfunctions[subwrapper.idx]
+            #x_in_sub.assign(subwrapper.x_in)
+            x_in_sub = subwrapper.x_in
+            #self.x_in.subfunctions[subwrapper.idx] = subwrapper.x_in
+            
+            
+    def post_apply(self, x_out):
         """
         Perform the post-applications from all subwrappers
         """
+        x_out.assign(self.x_out)
 
         for _, subwrapper in self.subwrappers.items():
             print(subwrapper)
             print('post')
-            field = x_in.subfunctions[subwrapper.idx]
+            field = x_out.subfunctions[subwrapper.idx]
             subwrapper.post_apply(field)
+            
+            x_out_sub = x_out.subfunctions[subwrapper.idx]
+            x_out_sub.assign(subwrapper.x_out)
