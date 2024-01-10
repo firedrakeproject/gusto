@@ -57,7 +57,8 @@ def wrapper_apply(original_apply):
 
                 self.wrapper.pre_apply(x_in)
                 if type(self.wrapper) == MixedOptions:
-                    original_apply(self, x_out, x_in)
+                    #original_apply(self, x_out, x_in)
+                    original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
                 else:
                     original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
                 self.wrapper.post_apply(x_out)
@@ -105,8 +106,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if options is not None:
             if type(options) == MixedOptions:
-                print('jahjah')
-                print(options)
+                #print('jahjah')
+                #print(options)
                 self.wrapper = options
                 #self.subwrappers = {}
                 # Or do I need to initialise everything here
@@ -216,14 +217,36 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             #if self.wrapper_name == 'mixed':
                 # Subwrappers are defined.
                 # Set these up with ?
+                
+                # Give more than one fs?
+                fields = []
+                
+                print(self.wrapper.wrapper_spaces)
+                
                 for field, subwrapper in self.wrapper.subwrappers.items():
-                    #Set up field idxs here.
+                    # Set up field idxs here.
                     print(field)
                     print(subwrapper)
                     self.wrapper.subwrappers[field].idx = equation.field_names.index(field)
                     self.wrapper.subwrappers[field].mixed_options = True
+                    
+                    # Store the original space of the tracer
+                    self.wrapper.subwrappers[field].tracer_fs = self.equation.spaces[equation.field_names.index(field)]
                     self.wrapper.subwrappers[field].setup()
-                    self.fs = self.wrapper.subwrappers[field].function_space
+                    
+                    # Update the function space to that needed by the wrapper
+                    self.wrapper.wrapper_spaces.update({field: self.wrapper.subwrappers[field].function_space})
+                    fields.append(self.wrapper.subwrappers[field].function_space)
+                    # Append the new function space from the wrapper
+                    #print('self.tracer_fs is', self.wrapper.subwrappers[field].tracer_fs)
+                print(self.wrapper.wrapper_spaces)
+                #Setup the mixed wrapper
+                #yo_spaces = []
+                #for _, space_name in self.wrapper.wrapper_spaces.items():
+                #    yo_spaces.append(self.domain.spaces(space_name))
+                #print(yo_spaces)
+                self.wrapper.wrapper_spaces = fields
+                self.wrapper.setup()
                 pass
             else:
                 self.wrapper.setup()

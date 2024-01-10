@@ -7,7 +7,7 @@ called.
 from abc import ABCMeta, abstractmethod
 from firedrake import (
     FunctionSpace, Function, BrokenElement, Projector, Interpolator,
-    VectorElement, Constant, as_ufl, dot, grad, TestFunction
+    VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace
 )
 from firedrake.fml import Term
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
@@ -36,6 +36,7 @@ class Wrapper(object, metaclass=ABCMeta):
         #self.field_name = None
         self.idx = None
         self.mixed_options = False
+        self.tracer_fs = None
 
     @abstractmethod
     def setup(self):
@@ -84,10 +85,16 @@ class EmbeddedDGWrapper(Wrapper):
 
         assert isinstance(self.options, EmbeddedDGOptions), \
             'Embedded DG wrapper can only be used with Embedded DG Options'
-
-        original_space = self.time_discretisation.fs
+        
         domain = self.time_discretisation.domain
         equation = self.time_discretisation.equation
+        
+        if self.mixed_options == True:
+            #print('self.tracer_fs is', self.tracer_fs)
+            #print('self.time_discretisation.fs is', self.time_discretisation.fs)
+            original_space = self.tracer_fs
+        else:
+            original_space = self.time_discretisation.fs
 
         # -------------------------------------------------------------------- #
         # Set up spaces to be used with wrapper
@@ -107,7 +114,9 @@ class EmbeddedDGWrapper(Wrapper):
 
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
-        if self.time_discretisation.idx is None:
+        if self.mixed_options == True:
+            self.x_projected = Function(self.tracer_fs)
+        elif self.time_discretisation.idx is None:
             self.x_projected = Function(equation.function_space)
         else:
             self.x_projected = Function(equation.spaces[self.time_discretisation.idx])
@@ -169,9 +178,13 @@ class RecoveryWrapper(Wrapper):
         assert isinstance(self.options, RecoveryOptions), \
             'Recovery wrapper can only be used with Recovery Options'
 
-        original_space = self.time_discretisation.fs
         domain = self.time_discretisation.domain
         equation = self.time_discretisation.equation
+        
+        if self.mixed_options == True:
+            original_space = self.tracer_fs
+        else:
+            original_space = self.time_discretisation.fs
 
         # -------------------------------------------------------------------- #
         # Set up spaces to be used with wrapper
@@ -191,12 +204,13 @@ class RecoveryWrapper(Wrapper):
         # -------------------------------------------------------------------- #
 
         if self.mixed_options == True:
-            self.x_in_tmp = Function(self.function_space)
+            self.x_in_tmp = Function(self.tracer_fs)
+            #self.x_in_tmp = Function(equation.spaces[self.idx])
         else:
             self.x_in_tmp = Function(self.time_discretisation.fs)
             
-        print(self.function_space)
-        print(self.time_discretisation.fs)
+        #print(self.function_space)
+        #print(self.time_discretisation.fs)
             
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
@@ -204,9 +218,10 @@ class RecoveryWrapper(Wrapper):
         #self.x_out = Function(equation.function_space)
         #self.x_out = Function(self.time_discretisation.fs)
         
-        if self.time_discretisation.idx is None:
-            #self.x_projected = Function(equation.function_space)
-            self.x_projected = Function(self.function_space)
+        if self.mixed_options == True:
+            self.x_projected = Function(self.tracer_fs)
+        elif self.time_discretisation.idx is None:
+            self.x_projected = Function(equation.function_space)
         else:
             self.x_projected = Function(equation.spaces[self.time_discretisation.idx])
 
@@ -397,7 +412,14 @@ class MixedOptions(object):
         Raises:
             ValueError: If an option is defined for a field that is not in the prognostic variable set
         """
-        print(equation.function_space)
+        #print(equation.function_space)
+        #print(equation.active_tracers)
+        #print(equation.active_tracers[0])
+        #print(equation.active_tracers[1])
+        print(equation.space_names)
+        
+        self.wrapper_spaces = equation.space_names
+        
         #self.x_in = Function(equation.function_space)
         #self.x_out = Function(equation.function_space)
         
@@ -412,13 +434,17 @@ class MixedOptions(object):
         for field, suboption in suboptions.items():
                 print(field)
                 print(suboption)
-            # Check that the field is in the prognostic variable set:
+                
+                # Check that the field is in the prognostic variable set:
                 if field not in equation.field_names:
                     raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
                 else:
                     # check that a valid wrapper has been given
                     wrapper_name = suboption.name
-                    print(wrapper_name)
+                    #print(wrapper_name)
+                    
+                    # Extract the space?
+                    
                     
                     #if wrapper_name == "embedded_dg":
                     #    self.wrapper.update({field:EmbeddedDGWrapper(self, suboption)})
@@ -438,7 +464,13 @@ class MixedOptions(object):
     
     def setup(self):
         # This is done in the suboption wrappers themselves
-        pass
+        # Or, determine the new mixed function space
+        self.function_space = MixedFunctionSpace(self.wrapper_spaces)
+        self.x_in = Function(self.function_space)
+        self.x_out = Function(self.function_space) 
+        
+        
+        #pass
     
     def pre_apply(self, x_in):
         """
@@ -450,6 +482,7 @@ class MixedOptions(object):
             print('pre')
             field = x_in.subfunctions[subwrapper.idx]
             subwrapper.pre_apply(field)
+            print('success')
             
     def post_apply(self, x_in):
         """
@@ -461,4 +494,3 @@ class MixedOptions(object):
             print('post')
             field = x_in.subfunctions[subwrapper.idx]
             subwrapper.post_apply(field)
-

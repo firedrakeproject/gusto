@@ -171,6 +171,7 @@ def setup_limiters(dirname, space_A, space_B):
     MixedLimiter = MixedFSLimiter(eqn, sublimiters)
 
     # Give the scheme for the coupled transport
+    #transport_schemes = SSPRK3(domain, options=opts)
     transport_schemes = SSPRK3(domain, options=opts, limiter=MixedLimiter)
     #transport_schemes = SSPRK3(domain, limiter=MixedLimiter)
     
@@ -276,14 +277,14 @@ def setup_limiters(dirname, space_A, space_B):
     return stepper, tmax, true_fieldA, true_fieldB
 
 
-#@pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
-#                                   'DG1', 'DG1_equispaced'])
-@pytest.mark.parametrize('space_A', ['DG0'])#, 'DG1_equispaced'])
+@pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
+                                   'DG1', 'DG1_equispaced'])
+#@pytest.mark.parametrize('space_A', ['DG0'])#, 'DG1_equispaced'])
 # It only makes sense to use the same degree for tracer B
 @pytest.mark.parametrize('space_B', ['Vtheta', 'DG'])
 
 
-def test_limiters(tmpdir, space_A, space_B):
+def test_mixed_fs_options(tmpdir, space_A, space_B):
 
     # Setup and run
     dirname = str(tmpdir)
