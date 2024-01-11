@@ -216,14 +216,14 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     # Update the function space to that needed by the wrapper
                     self.wrapper.wrapper_spaces[field_idx] = self.wrapper.subwrappers[field].function_space
                     
-                    # Replace with new test function
-                    # STILL TO SORT OUT.
-                    #new_test = TestFunction(self.wrapper.subwrappers[field].test_space)
                     
-                    #self.residual = self.residual.label_map(
-                    #    all_terms,
-                    #    map_if_true=replace_test_function(new_test, old_idx=field_idx))
-                    
+                    # Replace the test function space
+                    # This currently won't work: supg test 
+                    # is a function, not a space
+                    if self.wrapper.suboptions[field].name == "supg":
+                        self.wrapper.test_spaces[field_idx] = self.wrapper.subwrappers[field].test
+                    else:
+                        self.wrapper.test_spaces[field_idx] = self.wrapper.subwrappers[field].test_space
                 
                 self.wrapper.setup()
                 
@@ -244,7 +244,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 
                 # Only call this if with SUPG, so should put this into the 
                 # previous section
-                self.residual = self.wrapper.label_terms(self.residual)
+                # self.residual = self.wrapper.label_terms(self.residual)
                 
                 
             else:

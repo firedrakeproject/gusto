@@ -423,6 +423,7 @@ class MixedOptions(object):
         
         #self.wrapper_spaces = equation.space_names
         self.wrapper_spaces = equation.spaces
+        self.test_spaces = equation.spaces
         print(len(equation.spaces))
         
         #self.x_in = Function(equation.function_space)
@@ -475,8 +476,7 @@ class MixedOptions(object):
         self.function_space = MixedFunctionSpace(self.wrapper_spaces)
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space) 
-        self.test_space = self.function_space
-        #pass
+        self.test_space = MixedFunctionSpace(self.test_spaces)
     
     def pre_apply(self, x_in):
         """
