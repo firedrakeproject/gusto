@@ -12,7 +12,7 @@ from gusto.kernels import LimitMidpoints
 
 import numpy as np
 
-__all__ = ["DG1Limiter", "ThetaLimiter", "NoLimiter"]
+__all__ = ["DG1Limiter", "ThetaLimiter", "NoLimiter", "MixedFSLimiter"]
 
 
 class DG1Limiter(object):
@@ -44,7 +44,7 @@ class DG1Limiter(object):
 
         # check that space is DG1
         degree = space.ufl_element().degree()
-        if (space.ufl_element().sobolev_space().name != 'L2'
+        if (space.ufl_element().sobolev_space.name != 'L2'
             or ((type(degree) is tuple and np.any([deg != 1 for deg in degree]))
                 and degree != 1)):
             raise ValueError('DG1 limiter can only be applied to DG1 space')
@@ -111,7 +111,7 @@ class ThetaLimiter(object):
             raise ValueError('The Theta Limiter can only be used on an extruded mesh')
 
         # check that horizontal degree is 1 and vertical degree is 2
-        sub_elements = space.ufl_element().sub_elements()
+        sub_elements = space.ufl_element().sub_elements
         if (sub_elements[0].family() not in ['Discontinuous Lagrange', 'DQ']
                 or sub_elements[1].family() != 'Lagrange'
                 or space.ufl_element().degree() != (1, 2)):
@@ -178,3 +178,37 @@ class NoLimiter(object):
                 applied, if this was not a blank limiter.
         """
         pass
+
+
+class MixedFSLimiter(object):
+    """
+    An object to hold a dictionary that defines limiters for transported prognostic
+    variables. Different limiters may be applied to different fields and not every
+    transported variable needs a defined limiter.
+    """
+
+    def __init__(self, equation, sublimiters):
+        """
+        Args:
+            equation (:class: `PrognosticEquationSet`): the prognostic equation(s)
+            sublimiters (dict): A dictionary holding limiters defined for individual prognostic variables
+        Raises:
+            ValueError: If a limiter is defined for a field that is not in the prognostic variable set
+        """
+        self.sublimiters = sublimiters
+
+        for field, sublimiter in sublimiters.items():
+            # Check that the field is in the prognostic variable set:
+            if field not in equation.field_names:
+                raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
+            else:
+                self.sublimiters[field].idx = equation.field_names.index(field)
+
+    def apply(self, fields):
+        """
+        Apply the individual limiters to specific prognostic variables
+        """
+
+        for _, sublimiter in self.sublimiters.items():
+            field = fields.subfunctions[sublimiter.idx]
+            sublimiter.apply(field)

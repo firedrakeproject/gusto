@@ -645,7 +645,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
             # Default linearisation is time derivatives, pressure gradient and
             # transport term from depth equation. Don't include active tracers
             linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'D'] \
+                t.get(prognostic) in ['u', 'D', 'b'] \
                 and (any(t.has_label(time_derivative, pressure_gradient))
                      or (t.get(prognostic) in ['D', 'b'] and t.has_label(transport)))
         super().__init__(field_names, domain, space_names,
