@@ -414,39 +414,21 @@ class MixedOptions(object):
         Raises:
             ValueError: If an option is defined for a field that is not in the prognostic variable set
         """
-        #print(equation.function_space)
-        #print(equation.active_tracers)
-        #print(equation.active_tracers[0])
-        #print(equation.active_tracers[1])
-        #print(equation.space_names)
-        #print(equation.spaces)
-        
-        #self.wrapper_spaces = equation.space_names
         self.wrapper_spaces = equation.spaces
         self.test_spaces = equation.spaces
-        print(len(equation.spaces))
-        
-        #self.x_in = Function(equation.function_space)
-        #self.x_out = Function(equation.function_space)
-        
-        print('Initialising MixedOptions')
-        
+        self.field_names = equation.field_names
         self.suboptions = suboptions
-        
-        #print(suboptions.items())
-        
         self.subwrappers = {}
         
         for field, suboption in suboptions.items():
-                #print(field)
-                #print(suboption)
                 
                 # Check that the field is in the prognostic variable set:
                 if field not in equation.field_names:
                     raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
-                else:
+                #else:
                     # check that a valid wrapper has been given
-                    wrapper_name = suboption.name
+                
+               #    wrapper_name = suboption.name
                     #print(wrapper_name)
                     
                     # Extract the space?
@@ -469,10 +451,8 @@ class MixedOptions(object):
  #                   self.subwrapper.x_in = Function(self.suboptions[field].fs)
     
     def setup(self):
-        # This is done in the suboption wrappers themselves
-        # Or, determine the new mixed function space
         
-        #Loop over all active variables?
+        # Compute the new mixed function space
         self.function_space = MixedFunctionSpace(self.wrapper_spaces)
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space) 
@@ -480,35 +460,64 @@ class MixedOptions(object):
     
     def pre_apply(self, x_in):
         """
-        Perform the pre-applications from all subwrappers
+        Perform the pre-applications for all fields
+        with an associated subwrapper.
         """
-        #self.x_in.assign(x_in)
-        self.x_in = x_in
-
-        for _, subwrapper in self.subwrappers.items():
-            print(subwrapper)
-            print('pre')
-            field = x_in.subfunctions[subwrapper.idx]
-            subwrapper.pre_apply(field)
-            #x_in.subfunctions[subwrapper.idx] = subwrapper.x_in
             
-            x_in_sub = self.x_in.subfunctions[subwrapper.idx]
-            #x_in_sub.assign(subwrapper.x_in)
-            x_in_sub = subwrapper.x_in
-            #self.x_in.subfunctions[subwrapper.idx] = subwrapper.x_in
+        for field_name in self.field_names:
+            #print(field_name)
+            #print(self.subwrappers)
+            
+            field_idx = self.field_names.index(field_name)
+            #print(field_idx)
+            
+            field = x_in.subfunctions[field_idx]
+            x_in_sub = self.x_in.subfunctions[field_idx]
+            
+            if field_name in self.subwrappers:
+                subwrapper = self.subwrappers[field_name]
+                print(subwrapper)
+                print('pre')
+                #field = x_in.subfunctions[subwrapper.idx]
+                subwrapper.pre_apply(field)
+                #x_in.subfunctions[subwrapper.idx] = subwrapper.x_in
+            
+                #x_in_sub = self.x_in.subfunctions[subwrapper.idx]
+                x_in_sub.assign(subwrapper.x_in)
+                #x_in_sub = subwrapper.x_in
+                #self.x_in.subfunctions[subwrapper.idx] = subwrapper.x_in
+            else:
+                x_in_sub.assign(field)        
             
             
     def post_apply(self, x_out):
         """
-        Perform the post-applications from all subwrappers
+        Perform the post-applications for all fields
+        with an associated subwrapper.
         """
-        x_out.assign(self.x_out)
+        #x_out.assign(self.x_out)
 
-        for _, subwrapper in self.subwrappers.items():
-            print(subwrapper)
-            print('post')
-            field = x_out.subfunctions[subwrapper.idx]
-            subwrapper.post_apply(field)
+        #for _, subwrapper in self.subwrappers.items():
+        #    print(subwrapper)
+        #    print('post')
+        #    field = x_out.subfunctions[subwrapper.idx]
+        #    subwrapper.post_apply(field)
             
-            x_out_sub = x_out.subfunctions[subwrapper.idx]
-            x_out_sub.assign(subwrapper.x_out)
+        #    x_out_sub = x_out.subfunctions[subwrapper.idx]
+        #    x_out_sub.assign(subwrapper.x_out)
+            
+        for field_name in self.field_names:
+        
+            field_idx = self.field_names.index(field_name)
+            
+            field = self.x_out.subfunctions[field_idx]
+            x_out_sub = x_out.subfunctions[field_idx]
+            
+            if field_name in self.subwrappers:
+                subwrapper = self.subwrappers[field_name]
+                print(subwrapper)
+                print('post')
+                subwrapper.post_apply(field)
+                x_out_sub.assign(subwrapper.x_out)
+            else:
+                x_out_sub.assign(field)  

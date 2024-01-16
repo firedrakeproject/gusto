@@ -64,25 +64,23 @@ def setup_limiters(dirname, space_A, space_B):
     
     # Tracer B spaces
     if space_B == 'DG':
+        space_B_string = 'DG'
         if degree == 0:
             VB = domain.spaces('DG')
             VCG1_B = FunctionSpace(mesh, 'CG', 1)
             VDG1_B = domain.spaces('DG1_equispaced')
-            space_B_string = 'DG'
         elif degree == 1:
             VB = domain.spaces('DG')
-            space_B_string = 'DG'
         else:
             raise NotImplementedError
     elif space_B == 'Vtheta':
+        space_B_string = 'theta'
         if degree == 0: 
             VB = domain.spaces('theta')
             VCG1_B = FunctionSpace(mesh, 'CG', 1)
             VDG1_B = domain.spaces('DG1_equispaced')
-            space_B_string = 'theta'
         elif degree == 1:
             VB = domain.spaces('theta')
-            space_B_string = 'theta'
         else:
             raise NotImplementedError
     else:
@@ -177,6 +175,9 @@ def setup_limiters(dirname, space_A, space_B):
     
     # DG Upwind transport for both tracers:
     transport_method = [DGUpwind(eqn, 'tracerA'), DGUpwind(eqn, 'tracerB')]
+    
+    # Need to give SUPG options to the above, if using supg ...
+    # Need to test SUPG here!
     
     # Build time stepper
     stepper = PrescribedTransport(eqn, transport_schemes, io, transport_method)
@@ -279,7 +280,6 @@ def setup_limiters(dirname, space_A, space_B):
 
 @pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
                                    'DG1', 'DG1_equispaced'])
-#@pytest.mark.parametrize('space_A', ['DG0'])#, 'DG1_equispaced'])
 # It only makes sense to use the same degree for tracer B
 @pytest.mark.parametrize('space_B', ['Vtheta', 'DG'])
 

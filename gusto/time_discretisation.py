@@ -21,7 +21,7 @@ from firedrake.utils import cached_property
 
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.labels import (time_derivative, prognostic, physics_label,
-                          implicit, explicit)
+                          implicit, explicit, transport)
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 
@@ -43,15 +43,6 @@ def wrapper_apply(original_apply):
 
                 self.wrapper.pre_apply(x_in)
                 original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
-                
-                #if type(self.wrapper) == MixedOptions:
-                    #print('x_out', x_out)
-                    #print('self.wrapper.x_out', self.wrapper.x_out)
-                    #original_apply(self, x_out, x_in)
-                #    original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
-                #else:
-                #    original_apply(self, self.wrapper.x_out, self.wrapper.x_in)
-                
                 self.wrapper.post_apply(x_out)
 
             return new_apply(self, x_out, x_in)
@@ -97,12 +88,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if options is not None:
             if type(options) == MixedOptions:
-                #print('jahjah')
-                #print(options)
                 self.wrapper = options
-                #self.subwrappers = {}
-                # Or do I need to initialise everything here
-                # like is done for a single wrapper?
+                
                 for field, suboption in self.wrapper.suboptions.items():
                     print(field)
                     print(suboption)
@@ -116,10 +103,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     else:
                         raise RuntimeError(
                         f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
-                #print(self.wrapper)
-                #print(self.wrapper.suboptions)
-                #print(self.wrapper.subwrappers)
-                #self.wrapper_name = 'mixed'
+                        
             else:
                 self.wrapper_name = options.name
                 if self.wrapper_name == "embedded_dg":
@@ -194,58 +178,61 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if self.wrapper is not None:
             if type(self.wrapper) == MixedOptions:
-            #if self.wrapper_name == 'mixed':
-                # Subwrappers are defined.
-                # Set these up with ?
-                
-                # Give more than one fs?
-                #fields = []
-                
-                print(self.wrapper.wrapper_spaces)
+            
+                #print(self.wrapper.wrapper_spaces)
                 
                 for field, subwrapper in self.wrapper.subwrappers.items():
                     field_idx = equation.field_names.index(field)
-                    self.wrapper.subwrappers[field].idx = field_idx
-                    self.wrapper.subwrappers[field].mixed_options = True
+                    
+                    subwrapper.idx = field_idx
+                    subwrapper.mixed_options = True
                     
                     # Store the original space of the tracer
-                    self.wrapper.subwrappers[field].tracer_fs = self.equation.spaces[equation.field_names.index(field)]
+                    subwrapper.tracer_fs = self.equation.spaces[field_idx]
                     
-                    self.wrapper.subwrappers[field].setup()
+                    subwrapper.setup()
                     
                     # Update the function space to that needed by the wrapper
-                    self.wrapper.wrapper_spaces[field_idx] = self.wrapper.subwrappers[field].function_space
+                    self.wrapper.wrapper_spaces[field_idx] = subwrapper.function_space
                     
+                    # Store test space?
+                    #self.wrapper.test_spaces[field_idx] = subwrapper.function_space
                     
                     # Replace the test function space
-                    # This currently won't work: supg test 
-                    # is a function, not a space
                     if self.wrapper.suboptions[field].name == "supg":
-                        self.wrapper.test_spaces[field_idx] = self.wrapper.subwrappers[field].test
+                        new_test = subwrapper.test
                     else:
-                        self.wrapper.test_spaces[field_idx] = self.wrapper.subwrappers[field].test_space
+                        new_test = TestFunction(subwrapper.test_space)
+                        
+                    self.residual = self.residual.label_map(
+                        lambda t: t.has_label(transport) and t.get(prognostic) == field,
+                        map_if_true=replace_test_function(new_test, old_idx=field_idx))
+                        
+                    self.residual = subwrapper.label_terms(self.residual)
+
+                    # Currently can only use one set of solver parameters ...
+                    if self.solver_parameters is None:
+                        self.solver_parameters = subwrapper.solver_parameters
                 
                 self.wrapper.setup()
-                
-                # Check if mixed function spcae has changed:
-                if self.wrapper.function_space == equation.function_space:
-                    print('same')
-                else:
-                    print('different')
                     
                 self.fs = self.wrapper.function_space
                 
-                # Or replace test functions here??
-                new_test = TestFunction(self.wrapper.test_space)
-                
-                self.residual = self.residual.label_map(
-                        all_terms,
-                        map_if_true=replace_test_function(new_test))
-                
-                # Only call this if with SUPG, so should put this into the 
-                # previous section
-                # self.residual = self.wrapper.label_terms(self.residual)
-                
+                #new_test_mixed = TestFunction(self.fs)
+
+                #for field, subwrapper in self.wrapper.subwrappers.items():
+                #    field_idx = equation.field_names.index(field)
+
+                #   if self.wrapper.suboptions[field].name == "supg":
+                #        new_test_mixed[field_idx] = subwrapper.test
+                        
+                #    self.residual = self.residual.label_map(
+                #        lambda t: t.has_label(transport) and t.get(prognostic) == field,
+                #        map_if_true=replace_test_function(new_test_mixed[field_idx], old_idx=field_idx))
+                        
+                #    self.residual = subwrapper.label_terms(self.residual)
+                    
+                    
                 
             else:
                 self.wrapper.setup()
