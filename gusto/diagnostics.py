@@ -1722,8 +1722,8 @@ class CompressibleVorticity(DiagnosticField):
                 raise ValueError('Potential vorticity has not yet been implemented')
             else:
                 raise ValueError(f'vorticity type must be one of {vorticity_types}, not {vorticity_type}')
+        
         space = domain.spaces('HCurl')
-
         u = state_fields('u')
         if self.method != 'solve':
             if vorticity_type == 'relative':
@@ -1733,11 +1733,11 @@ class CompressibleVorticity(DiagnosticField):
                 self.expression = curl(u + f)
         super().setup(domain, state_fields, space=space)
 
-        if self.method =='solve':
-            VCurl = domain.spaces('HCurl')        
-            omega = TrialFunction(VCurl)
+        if self.method =='solve':     
+            omega = TrialFunction(space)
+            w = TestFunction(space)
             n = FacetNormal(domain.mesh)
-            w = TestFunction(VCurl)
+            breakpoint()
             a = inner(omega, w) * dx
             L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * dS_h
             if vorticity_type != 'relative':
