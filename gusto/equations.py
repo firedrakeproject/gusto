@@ -426,8 +426,6 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 else:
                     self.space_names[tracer.name] = tracer.space
                 self.spaces.append(domain.spaces(tracer.space))
-                #print('self.spaces is', self.spaces)
-                print(len(self.spaces))
             else:
                 raise TypeError(f'Tracers must be ActiveTracer objects, not {type(tracer)}')
 

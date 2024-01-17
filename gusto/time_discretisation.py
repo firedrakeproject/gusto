@@ -10,7 +10,7 @@ import math
 import numpy as np
 
 from firedrake import (
-    Function, TestFunction, NonlinearVariationalProblem,
+    Function, TestFunction, TestFunctions, NonlinearVariationalProblem,
     NonlinearVariationalSolver, DirichletBC, split, Constant
 )
 from firedrake.fml import (
@@ -199,38 +199,52 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     #self.wrapper.test_spaces[field_idx] = subwrapper.function_space
                     
                     # Replace the test function space
-                    if self.wrapper.suboptions[field].name == "supg":
-                        new_test = subwrapper.test
-                    else:
-                        new_test = TestFunction(subwrapper.test_space)
+                    #if self.wrapper.suboptions[field].name == "supg":
+                    #    new_test = subwrapper.test
+                    #else:
+                    #    new_test = TestFunction(subwrapper.test_space)
                         
-                    self.residual = self.residual.label_map(
-                        lambda t: t.has_label(transport) and t.get(prognostic) == field,
-                        map_if_true=replace_test_function(new_test, old_idx=field_idx))
+                    #self.residual = self.residual.label_map(
+                    #    lambda t: t.has_label(transport) and t.get(prognostic) == field,
+                    #    map_if_true=replace_test_function(new_test, old_idx=field_idx))
                         
-                    self.residual = subwrapper.label_terms(self.residual)
-
-                    # Currently can only use one set of solver parameters ...
-                    if self.solver_parameters is None:
-                        self.solver_parameters = subwrapper.solver_parameters
+                    #self.residual = subwrapper.label_terms(self.residual)
                 
                 self.wrapper.setup()
                     
                 self.fs = self.wrapper.function_space
                 
-                #new_test_mixed = TestFunction(self.fs)
+                new_test_mixed = TestFunctions(self.fs)
+
+                # If use supg, then change the required test function
+
+                # Replace one-by-one in this case?
 
                 #for field, subwrapper in self.wrapper.subwrappers.items():
-                #    field_idx = equation.field_names.index(field)
-
-                #   if self.wrapper.suboptions[field].name == "supg":
-                #        new_test_mixed[field_idx] = subwrapper.test
+                #    if self.wrapper.suboptions[field].name == "supg":
+                #        field_idx = equation.field_names.index(field)
+                #        test_list = list(new_test_mixed)
+                #        test_list[field_idx] = subwrapper.test
+                #        new_test_mixed = tuple(test_list)
                         
+                # Change test functions with the new space:
+                #for field, subwrapper in self.wrapper.subwrappers.items():        
                 #    self.residual = self.residual.label_map(
                 #        lambda t: t.has_label(transport) and t.get(prognostic) == field,
                 #        map_if_true=replace_test_function(new_test_mixed[field_idx], old_idx=field_idx))
                         
                 #    self.residual = subwrapper.label_terms(self.residual)
+                    
+                # Or, all-at-once:
+                #self.residual = self.residual.label_map(
+                #        lambda t: t.has_label(transport),
+                #        map_if_true=replace_test_function(new_test_mixed))
+                        
+                self.residual = self.residual.label_map(
+                        all_terms,
+                        map_if_true=replace_test_function(new_test_mixed))
+                        
+                
                     
                     
                 

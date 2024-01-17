@@ -203,8 +203,6 @@ class MixedFSLimiter(object):
                 raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
             else:
                 self.sublimiters[field].idx = equation.field_names.index(field)
-                
-                # Give the sublimiter a subspace?
 
     def apply(self, fields):
         """

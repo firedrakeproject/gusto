@@ -89,10 +89,7 @@ class EmbeddedDGWrapper(Wrapper):
         equation = self.time_discretisation.equation
         
         if self.mixed_options == True:
-            #print('self.tracer_fs is', self.tracer_fs)
-            #print('self.time_discretisation.fs is', self.time_discretisation.fs)
             original_space = self.tracer_fs
-            #original_space = self.time_discretisation.fs
         else:
             original_space = self.time_discretisation.fs
 
@@ -207,18 +204,11 @@ class RecoveryWrapper(Wrapper):
 
         if self.mixed_options == True:
             self.x_in_tmp = Function(self.tracer_fs)
-            #self.x_in_tmp = Function(equation.spaces[self.idx])
         else:
             self.x_in_tmp = Function(self.time_discretisation.fs)
             
-        #print(self.function_space)
-        #print(self.time_discretisation.fs)
-            
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
-        
-        #self.x_out = Function(equation.function_space)
-        #self.x_out = Function(self.time_discretisation.fs)
         
         if self.mixed_options == True:
             self.x_projected = Function(self.tracer_fs)
@@ -306,9 +296,23 @@ class SUPGWrapper(Wrapper):
             'SUPG wrapper can only be used with SUPG Options'
 
         domain = self.time_discretisation.domain
+        
+        #if self.mixed_options == True:
+        #    self.function_space = self.tracer_fs
+        #else:
+        #    self.function_space = self.time_discretisation.fs
+            
         self.function_space = self.time_discretisation.fs
-        self.test_space = self.function_space
-        self.x_out = Function(self.function_space)
+        
+        if self.mixed_options == True:
+            self.test_space = self.tracer_fs
+            self.x_out = Function(self.tracer_fs)
+        else:
+            self.test_space = self.function_space
+            self.x_out = Function(self.function_space)
+        
+        #self.test_space = self.function_space
+        #self.x_out = Function(self.function_space)
 
         # -------------------------------------------------------------------- #
         # Work out SUPG parameter
@@ -415,40 +419,15 @@ class MixedOptions(object):
             ValueError: If an option is defined for a field that is not in the prognostic variable set
         """
         self.wrapper_spaces = equation.spaces
-        self.test_spaces = equation.spaces
+        #self.test_spaces = equation.spaces
         self.field_names = equation.field_names
         self.suboptions = suboptions
         self.subwrappers = {}
         
         for field, suboption in suboptions.items():
-                
                 # Check that the field is in the prognostic variable set:
                 if field not in equation.field_names:
                     raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
-                #else:
-                    # check that a valid wrapper has been given
-                
-               #    wrapper_name = suboption.name
-                    #print(wrapper_name)
-                    
-                    # Extract the space?
-                    
-                    
-                    #if wrapper_name == "embedded_dg":
-                    #    self.wrapper.update({field:EmbeddedDGWrapper(self, suboption)})
-                    #elif wrapper_name == "recovered":
-                    #    self.suboptions[field].subwrapper = RecoveryWrapper(self, suboption)
-                    #elif wrapper_name == "supg":
-                    #    self.suboptions[field].subwrapper = SUPGWrapper(self, suboption)
-                    #else:
-                    #    raise RuntimeError(
-                    #    f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
-                    
-                    #Initialise the wrapper and associate with a field:
-                    #self.suboptions[field].wrapper_name = suboption.name
-                    #self.suboptions[field].idx = equation.field_names.index(field)
-                    #self.suboptions[field].fs = equation.field_names.function_space(field)
- #                   self.subwrapper.x_in = Function(self.suboptions[field].fs)
     
     def setup(self):
         
@@ -456,7 +435,7 @@ class MixedOptions(object):
         self.function_space = MixedFunctionSpace(self.wrapper_spaces)
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space) 
-        self.test_space = MixedFunctionSpace(self.test_spaces)
+        #self.test_space = MixedFunctionSpace(self.test_spaces)
     
     def pre_apply(self, x_in):
         """
@@ -476,16 +455,8 @@ class MixedOptions(object):
             
             if field_name in self.subwrappers:
                 subwrapper = self.subwrappers[field_name]
-                print(subwrapper)
-                print('pre')
-                #field = x_in.subfunctions[subwrapper.idx]
                 subwrapper.pre_apply(field)
-                #x_in.subfunctions[subwrapper.idx] = subwrapper.x_in
-            
-                #x_in_sub = self.x_in.subfunctions[subwrapper.idx]
                 x_in_sub.assign(subwrapper.x_in)
-                #x_in_sub = subwrapper.x_in
-                #self.x_in.subfunctions[subwrapper.idx] = subwrapper.x_in
             else:
                 x_in_sub.assign(field)        
             
@@ -495,16 +466,6 @@ class MixedOptions(object):
         Perform the post-applications for all fields
         with an associated subwrapper.
         """
-        #x_out.assign(self.x_out)
-
-        #for _, subwrapper in self.subwrappers.items():
-        #    print(subwrapper)
-        #    print('post')
-        #    field = x_out.subfunctions[subwrapper.idx]
-        #    subwrapper.post_apply(field)
-            
-        #    x_out_sub = x_out.subfunctions[subwrapper.idx]
-        #    x_out_sub.assign(subwrapper.x_out)
             
         for field_name in self.field_names:
         
@@ -515,9 +476,7 @@ class MixedOptions(object):
             
             if field_name in self.subwrappers:
                 subwrapper = self.subwrappers[field_name]
-                print(subwrapper)
-                print('post')
-                subwrapper.post_apply(field)
-                x_out_sub.assign(subwrapper.x_out)
+                subwrapper.x_out.assign(field)
+                subwrapper.post_apply(x_out_sub)
             else:
                 x_out_sub.assign(field)  

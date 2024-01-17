@@ -59,6 +59,12 @@ def setup_limiters(dirname, space_A, space_B):
     elif space_A == 'Vtheta_degree_1':
         VA = domain.spaces('theta')
         space_A_string = 'theta'
+    elif space_A == 'HDiv':
+        VA = domain.spaces('HDiv')
+        space_A_string = 'HDiv'
+    #elif space_A == 'CG1'
+        #VA = FunctionSpace(mesh, 'CG', 1)
+        #space_A_string = 'CG'
     else:
         raise NotImplementedError
     
@@ -131,7 +137,9 @@ def setup_limiters(dirname, space_A, space_B):
     elif space_A == 'Vtheta_degree_1':
         suboptions.update({'tracerA': EmbeddedDGOptions()})
         sublimiters.update({'tracerA': ThetaLimiter(VA)})
-
+    elif space_A == 'HDiv':
+        ibp_A = IntegrateByParts.TWICE
+        suboptions.update({'tracerA': SUPGOptions(ibp=ibp_A)})
     else:
         raise NotImplementedError
         
@@ -174,7 +182,13 @@ def setup_limiters(dirname, space_A, space_B):
     #transport_schemes = SSPRK3(domain, limiter=MixedLimiter)
     
     # DG Upwind transport for both tracers:
-    transport_method = [DGUpwind(eqn, 'tracerA'), DGUpwind(eqn, 'tracerB')]
+    if space_A == 'HDiv':
+        transport_method_A = DGUpwind(eqn, 'tracerA', ibp=ibp_A)
+    else: 
+        transport_method_A = DGUpwind(eqn, 'tracerA')
+    transport_method_B = DGUpwind(eqn, 'tracerB')
+    
+    transport_method = [transport_method_A, transport_method_B]
     
     # Need to give SUPG options to the above, if using supg ...
     # Need to test SUPG here!
@@ -278,8 +292,9 @@ def setup_limiters(dirname, space_A, space_B):
     return stepper, tmax, true_fieldA, true_fieldB
 
 
+#@pytest.mark.parametrize('space_A', ['HDiv'])#, 
 @pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
-                                   'DG1', 'DG1_equispaced'])
+                                     'DG1', 'DG1_equispaced', 'HDiv'])
 # It only makes sense to use the same degree for tracer B
 @pytest.mark.parametrize('space_B', ['Vtheta', 'DG'])
 
