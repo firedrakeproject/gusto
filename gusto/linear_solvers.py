@@ -605,7 +605,10 @@ class ThermalSWSolver(TimesteppingSolver):
         u, D = TrialFunctions(M)
 
         # Get background buoyancy and depth
-        bbar = split(equation.X_ref)[2]
+        _bbar = split(equation.X_ref)[2]
+        VH1 = equation.domain.spaces("H1")
+        bbar = Function(VH1).interpolate(_bbar)
+
         Dbar = split(equation.X_ref)[1]
 
         # Approximate elimination of b
@@ -733,7 +736,8 @@ class LinearTimesteppingSolver(object):
             drop)
 
         dt = equation.domain.dt
-        W = equation.function_space
+        _W = equation.function_space
+        W = MixedFunctionSpace((_W.sub(0), _W.sub(1)))
         beta = dt*alpha
 
         # Split up the rhs vector (symbolically)
@@ -751,6 +755,10 @@ class LinearTimesteppingSolver(object):
 
         # Solver
         bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
+        print("this is the length of self.xrhs:")
+        print(len(self.xrhs))
+        print("this is the length of self.dy:")
+        print(len(self.dy))
         problem = LinearVariationalProblem(aeqn.form,
                                            action(Leqn.form, self.xrhs),
                                            self.dy, bcs=bcs)
@@ -770,6 +778,13 @@ class LinearTimesteppingSolver(object):
             dy (:class:`Function`): the resulting field in the appropriate
                 :class:`MixedFunctionSpace`.
         """
-        self.xrhs.assign(xrhs)
+        u, D = self.xrhs.split()
+        uin, Din, _ = xrhs.split()
+        u.assign(uin)
+        D.assign(Din)
         self.solver.solve()
-        dy.assign(self.dy)
+        # dy.assign(self.dy)
+        dy1, dy2 = self.dy.split()
+        dy1in, dy2in, _ = dy.split()
+        dy1.assign(dy1in)
+        dy2.assign(dy2in)
