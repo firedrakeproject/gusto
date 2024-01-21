@@ -90,7 +90,7 @@ class PhysicsLabel(Label):
 # ---------------------------------------------------------------------------- #
 
 time_derivative = Label("time_derivative")
-mass_weighted = Label("mass_weighted", validator=lambda value: type(value) == tuple)
+mass_weighted = Label("mass_weighted", validator=lambda value: type(value) == str)
 implicit = Label("implicit")
 explicit = Label("explicit")
 transport = Label("transport", validator=lambda value: type(value) == TransportEquationType)

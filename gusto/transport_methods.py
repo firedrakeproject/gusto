@@ -35,7 +35,7 @@ class TransportMethod(SpatialMethod):
         super().__init__(equation, variable, transport)
 
         self.transport_equation_type = self.original_form.terms[0].get(transport)
-        
+
         if self.transport_equation_type == TransportEquationType.tracer_conservative:
             # Extract associated density variable:
             # This does assume the same ordering of tracers and fields...
@@ -308,14 +308,14 @@ def upwind_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=F
     form = transporting_velocity(L, ubar)
 
     return ibp_label(transport(form, TransportEquationType.conservative), ibp)
-    
+
 def upwind_tracer_conservative_form(domain, test, q, rho, ibp=IntegrateByParts.ONCE, outflow=False):
     u"""
     The form corresponding to the DG upwind continuity transport operator.
 
     This discretises ∇.(u*q*rho), for transporting velocity u, transported
     variable q, and its reference density, rho. Although the tracer q obeys an advection
-    equation, the transport term is in a conservative form. 
+    equation, the transport term is in a conservative form.
 
     Args:
         domain (:class:`Domain`): the model's domain object, containing the
@@ -364,8 +364,6 @@ def upwind_tracer_conservative_form(domain, test, q, rho, ibp=IntegrateByParts.O
         L += test*un*q*rho*(ds_v + ds_t + ds_b)
 
     form = transporting_velocity(L, ubar)
-    
-    print('DGUpwind with tracer conservative, called')
 
     return ibp_label(transport(form, TransportEquationType.tracer_conservative), ibp)
 

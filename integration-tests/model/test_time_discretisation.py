@@ -8,8 +8,10 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parametrize("scheme", ["ssprk", "TrapeziumRule", "ImplicitMidpoint", "QinZhang",
-                                    "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth", "Leapfrog", "AdamsMoulton"])
+@pytest.mark.parametrize("scheme",
+    ["ssprk3_increment", "TrapeziumRule", "ImplicitMidpoint", "QinZhang", "RK4",
+     "Heun", "BDF2", "TR_BDF2", "AdamsBashforth", "Leapfrog", "AdamsMoulton",
+     "ssprk3_predictor"])
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
     if (scheme == "AdamsBashforth"):
         # Tighter stability constraints
@@ -25,8 +27,10 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         V = domain.spaces("DG")
         eqn = AdvectionEquation(domain, V, "f")
 
-    if scheme == "ssprk":
-        transport_scheme = SSPRK3(domain)
+    if scheme == "ssprk3_increment":
+        transport_scheme = SSPRK3(domain, increment_form=True)
+    elif scheme == "ssprk3_predictor":
+        transport_scheme = SSPRK3(domain, increment_form=False)
     elif scheme == "TrapeziumRule":
         transport_scheme = TrapeziumRule(domain)
     elif scheme == "ImplicitMidpoint":
