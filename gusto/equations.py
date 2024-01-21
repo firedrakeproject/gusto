@@ -514,10 +514,9 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 elif tracer.transport_eqn == TransportEquationType.tracer_conservative:
                     ref_density_idx = self.field_names.index(tracer.density_name)
                     ref_density = split(self.X)[ref_density_idx]
-                    #q = tracer_prog*ref_density
                     tracer_adv = prognostic(
-                        tracer_conservative_form(tracer_test, tracer_prog, ref_density, u),
-                        tracer.name)
+                        tracer_conservative_form(tracer_test, tracer_prog,
+                                                 ref_density, u), tracer.name)
 
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
@@ -613,18 +612,17 @@ class CoupledTransportEquation(PrognosticEquationSet):
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)
 
+
 class ConservativeCoupledTransportEquation(PrognosticEquationSet):
     u"""
-    Discretises the transport equation,               \n
-    ∂q/∂t + (u.∇)q = F,
-    with the application of active tracers.
-    As there are multiple tracers or species that are
-    interacting, q and F are vectors.
-    This equation can be enhanced through the addition of
-    sources or sinks (F) by applying it with physics schemes.
-    This takes in tracers that might obey different forms
-    of the transport equation (i.e. advective, conservative)
-    but will evolve all the fields in a conservative manner.
+    Discretises the transport equation,                                       \n
+    ∂q/∂t + (u.∇)q = F,                                                       \n
+    with the application of active tracers. As there are multiple tracers or
+    species that are interacting, q and F are vectors. This equation can be
+    enhanced through the addition of sources or sinks (F) by applying it with
+    physics schemes. This takes in tracers that might obey different forms of
+    the transport equation (i.e. advective, conservative) but will evolve all
+    the fields in a conservative manner.
     """
     def __init__(self, domain, active_tracers, Vu=None):
         """
@@ -674,11 +672,9 @@ class ConservativeCoupledTransportEquation(PrognosticEquationSet):
         self.residual += self.generate_tracer_transport_terms(active_tracers)
 
 
-
 # ============================================================================ #
 # Specified Equation Sets
 # ============================================================================ #
-
 
 class ShallowWaterEquations(PrognosticEquationSet):
     u"""

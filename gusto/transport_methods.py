@@ -309,7 +309,9 @@ def upwind_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=F
 
     return ibp_label(transport(form, TransportEquationType.conservative), ibp)
 
-def upwind_tracer_conservative_form(domain, test, q, rho, ibp=IntegrateByParts.ONCE, outflow=False):
+
+def upwind_tracer_conservative_form(domain, test, q, rho,
+                                    ibp=IntegrateByParts.ONCE, outflow=False):
     u"""
     The form corresponding to the DG upwind continuity transport operator.
 
@@ -344,9 +346,9 @@ def upwind_tracer_conservative_form(domain, test, q, rho, ibp=IntegrateByParts.O
     ubar = Function(Vu)
 
     if ibp == IntegrateByParts.ONCE:
-        L = -inner(grad(test), outer(inner(q,rho), ubar))*dx
+        L = -inner(grad(test), outer(inner(q, rho), ubar))*dx
     else:
-        L = inner(test, div(outer(inner(q,rho), ubar)))*dx
+        L = inner(test, div(outer(inner(q, rho), ubar)))*dx
 
     if ibp != IntegrateByParts.NEVER:
         n = FacetNormal(domain.mesh)

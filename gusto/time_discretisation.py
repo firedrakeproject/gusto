@@ -823,13 +823,15 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
 
             for stage in range(self.nStages):
                 # setup linear solver using lhs and rhs defined in derived class
-                problem = NonlinearVariationalProblem(self.lhs[stage].form - self.rhs[stage].form, self.field_i[stage+1], bcs=self.bcs)
+                problem = NonlinearVariationalProblem(
+                    self.lhs[stage].form - self.rhs[stage].form,
+                    self.field_i[stage+1], bcs=self.bcs)
                 solver_name = self.field_name+self.__class__.__name__+str(stage)
-                solver =  NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
-                                                     options_prefix=solver_name)
+                solver = NonlinearVariationalSolver(
+                    problem, solver_parameters=self.solver_parameters,
+                    options_prefix=solver_name)
                 solver_list.append(solver)
             return solver_list
-
 
     @cached_property
     def lhs(self):
@@ -854,7 +856,6 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
 
             return lhs_list
 
-
     @cached_property
     def rhs(self):
         """Set up the time discretisation's right hand side."""
@@ -873,7 +874,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             # So that we can still do xnp1 = xn, put in a zero term here
             if self.increment_form and len(r.terms) == 0:
                 logger.warning('No terms detected for RHS of explicit problem. '
-                            + 'Adding a zero term to avoid failure.')
+                               + 'Adding a zero term to avoid failure.')
                 null_term = Constant(0.0)*self.residual.label_map(
                     lambda t: t.has_label(time_derivative),
                     # Drop label from this
@@ -962,7 +963,6 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                 self.x1.assign(self.field_i[stage+1])
                 if self.limiter is not None:
                     self.limiter.apply(self.x1)
-
 
     def apply_cycle(self, x_out, x_in):
         """

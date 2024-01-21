@@ -262,12 +262,13 @@ def split_continuity_form(equation):
                 map_if_true=drop)
 
     return equation
-    
+
+
 def tracer_conservative_form(test, q, rho, ubar):
     u"""
     The form corresponding to the continuity transport operator.
 
-    This describes ∇.(u*q*rho) for transporting velocity u and a 
+    This describes ∇.(u*q*rho) for transporting velocity u and a
     transported tracer (mixing ratio), q, with an associated density, rho.
 
     Args:
@@ -280,9 +281,9 @@ def tracer_conservative_form(test, q, rho, ubar):
     Returns:
         class:`LabelledForm`: a labelled transport form.
     """
+
     q_rho = q*rho
     L = inner(test, div(outer(q_rho, ubar)))*dx
     form = transporting_velocity(L, ubar)
-    
+
     return transport(form, TransportEquationType.tracer_conservative)
-    
