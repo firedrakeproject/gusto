@@ -180,8 +180,7 @@ class RecoveryWrapper(Wrapper):
         equation = self.time_discretisation.equation
         
         if self.mixed_options == True:
-            #original_space = self.tracer_fs
-            original_space = self.time_discretisation.fs
+            original_space = self.tracer_fs
         else:
             original_space = self.time_discretisation.fs
 
@@ -302,7 +301,9 @@ class SUPGWrapper(Wrapper):
         #else:
         #    self.function_space = self.time_discretisation.fs
             
+        # But this will create some problems when defining the new mixed space...
         self.function_space = self.time_discretisation.fs
+        #self.function_space = self.tracer_fs
         
         if self.mixed_options == True:
             self.test_space = self.tracer_fs
@@ -444,12 +445,8 @@ class MixedOptions(object):
         """
             
         for field_name in self.field_names:
-            #print(field_name)
-            #print(self.subwrappers)
-            
+        
             field_idx = self.field_names.index(field_name)
-            #print(field_idx)
-            
             field = x_in.subfunctions[field_idx]
             x_in_sub = self.x_in.subfunctions[field_idx]
             

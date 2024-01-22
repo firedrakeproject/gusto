@@ -542,7 +542,6 @@ class CoupledTransportEquation(PrognosticEquationSet):
         # Build finite element spaces
         self.spaces = []
 
-
         # Add active tracers to the list of prognostics
         if active_tracers is None:
             active_tracers = []

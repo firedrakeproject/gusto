@@ -21,7 +21,7 @@ from firedrake.utils import cached_property
 
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.labels import (time_derivative, prognostic, physics_label,
-                          implicit, explicit, transport)
+                          implicit, explicit)
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 
@@ -89,21 +89,21 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         if options is not None:
             if type(options) == MixedOptions:
                 self.wrapper = options
-                
+
                 for field, suboption in self.wrapper.suboptions.items():
                     print(field)
                     print(suboption)
-                    
+
                     if suboption.name == 'embedded_dg':
-                        self.wrapper.subwrappers.update({field:EmbeddedDGWrapper(self, suboption)})
+                        self.wrapper.subwrappers.update({field: EmbeddedDGWrapper(self, suboption)})
                     elif suboption.name == "recovered":
-                        self.wrapper.subwrappers.update({field:RecoveryWrapper(self, suboption)})
+                        self.wrapper.subwrappers.update({field: RecoveryWrapper(self, suboption)})
                     elif suboption.name == "supg":
-                        self.wrapper.subwrappers.update({field:SUPGWrapper(self, suboption)})
+                        self.wrapper.subwrappers.update({field: SUPGWrapper(self, suboption)})
                     else:
                         raise RuntimeError(
-                        f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
-                        
+                            f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
+
             else:
                 self.wrapper_name = options.name
                 if self.wrapper_name == "embedded_dg":
@@ -178,23 +178,21 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if self.wrapper is not None:
             if type(self.wrapper) == MixedOptions:
-            
-                #print(self.wrapper.wrapper_spaces)
-                
+
                 for field, subwrapper in self.wrapper.subwrappers.items():
                     field_idx = equation.field_names.index(field)
-                    
+
                     subwrapper.idx = field_idx
                     subwrapper.mixed_options = True
-                    
+
                     # Store the original space of the tracer
                     subwrapper.tracer_fs = self.equation.spaces[field_idx]
-                    
+
                     subwrapper.setup()
-                    
+
                     # Update the function space to that needed by the wrapper
                     self.wrapper.wrapper_spaces[field_idx] = subwrapper.function_space
-                    
+
                     # Store test space?
                     #self.wrapper.test_spaces[field_idx] = subwrapper.function_space
                     
@@ -219,13 +217,21 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 # If use supg, then change the required test function
 
                 # Replace one-by-one in this case?
+                print(type(new_test_mixed))
 
-                #for field, subwrapper in self.wrapper.subwrappers.items():
-                #    if self.wrapper.suboptions[field].name == "supg":
-                #        field_idx = equation.field_names.index(field)
-                #        test_list = list(new_test_mixed)
-                #        test_list[field_idx] = subwrapper.test
-                #        new_test_mixed = tuple(test_list)
+                for field, subwrapper in self.wrapper.subwrappers.items():
+                    if self.wrapper.suboptions[field].name == "supg":
+                        field_idx = equation.field_names.index(field)
+                        test_list = list(new_test_mixed)
+                        test_list[field_idx] = subwrapper.test
+                        new_test_mixed2 = tuple(test_list)
+                        
+                print(type(new_test_mixed2))
+                        
+                if new_test_mixed == new_test_mixed2:
+                    print('same')
+                else:
+                    print('different')
                         
                 # Change test functions with the new space:
                 #for field, subwrapper in self.wrapper.subwrappers.items():        

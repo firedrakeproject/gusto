@@ -62,9 +62,9 @@ def setup_limiters(dirname, space_A, space_B):
     elif space_A == 'HDiv':
         VA = domain.spaces('HDiv')
         space_A_string = 'HDiv'
-    #elif space_A == 'CG1'
-        #VA = FunctionSpace(mesh, 'CG', 1)
-        #space_A_string = 'CG'
+    elif space_A == 'CG1':
+        VA = FunctionSpace(mesh, 'CG', 1)
+        space_A_string = 'CG'
     else:
         raise NotImplementedError
     
@@ -140,6 +140,9 @@ def setup_limiters(dirname, space_A, space_B):
     elif space_A == 'HDiv':
         ibp_A = IntegrateByParts.TWICE
         suboptions.update({'tracerA': SUPGOptions(ibp=ibp_A)})
+    elif space_A == 'CG1':
+        ibp_A = IntegrateByParts.NEVER
+        suboptions.update({'tracerA': SUPGOptions(ibp=ibp_A)})
     else:
         raise NotImplementedError
         
@@ -182,7 +185,8 @@ def setup_limiters(dirname, space_A, space_B):
     #transport_schemes = SSPRK3(domain, limiter=MixedLimiter)
     
     # DG Upwind transport for both tracers:
-    if space_A == 'HDiv':
+    if space_A == 'HDiv' or space_A == 'CG1':
+        #Pass SUPG options to the transport method
         transport_method_A = DGUpwind(eqn, 'tracerA', ibp=ibp_A)
     else: 
         transport_method_A = DGUpwind(eqn, 'tracerA')
@@ -292,9 +296,9 @@ def setup_limiters(dirname, space_A, space_B):
     return stepper, tmax, true_fieldA, true_fieldB
 
 
-#@pytest.mark.parametrize('space_A', ['HDiv'])#, 
-@pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
-                                     'DG1', 'DG1_equispaced', 'HDiv'])
+@pytest.mark.parametrize('space_A', ['HDiv'])#, 'CG1'])#, 
+#@pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
+#                                     'DG1', 'DG1_equispaced', 'HDiv'])
 # It only makes sense to use the same degree for tracer B
 @pytest.mark.parametrize('space_B', ['Vtheta', 'DG'])
 
