@@ -91,16 +91,13 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 self.wrapper = options
 
                 for field, suboption in self.wrapper.suboptions.items():
-                    print(field)
-                    print(suboption)
-
                     if suboption.name == 'embedded_dg':
                         self.wrapper.subwrappers.update({field: EmbeddedDGWrapper(self, suboption)})
                     elif suboption.name == "recovered":
                         self.wrapper.subwrappers.update({field: RecoveryWrapper(self, suboption)})
                     elif suboption.name == "supg":
                         raise RuntimeError(
-                            f'Time discretisation: suboption SUPG is currently not implemented within MixedOptions')
+                            'Time discretisation: suboption SUPG is currently not implemented within MixedOptions')
                     else:
                         raise RuntimeError(
                             f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
@@ -201,8 +198,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 # Replace the original test function with one from the new
                 # function space defined by the subwrappers
                 self.residual = self.residual.label_map(
-                        all_terms,
-                        map_if_true=replace_test_function(new_test_mixed))
+                    all_terms,
+                    map_if_true=replace_test_function(new_test_mixed))
 
             else:
                 self.wrapper.setup()
@@ -213,12 +210,12 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 # SUPG has a special wrapper
                 if self.wrapper_name == "supg":
                     new_test = self.wrapper.test
-    
+
                 # Replace the original test function with the one from the wrapper
                 self.residual = self.residual.label_map(
                     all_terms,
                     map_if_true=replace_test_function(new_test))
-    
+
                 self.residual = self.wrapper.label_terms(self.residual)
 
         # -------------------------------------------------------------------- #

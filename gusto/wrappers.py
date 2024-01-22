@@ -84,10 +84,10 @@ class EmbeddedDGWrapper(Wrapper):
 
         assert isinstance(self.options, EmbeddedDGOptions), \
             'Embedded DG wrapper can only be used with Embedded DG Options'
-        
+
         domain = self.time_discretisation.domain
         equation = self.time_discretisation.equation
-        
+
         if self.mixed_options == True:
             original_space = self.tracer_fs
         else:
@@ -111,8 +111,8 @@ class EmbeddedDGWrapper(Wrapper):
 
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
-        
-        if self.mixed_options == True:
+
+        if self.mixed_options:
             self.x_projected = Function(self.tracer_fs)
         elif self.time_discretisation.idx is None:
             self.x_projected = Function(equation.function_space)
@@ -178,7 +178,7 @@ class RecoveryWrapper(Wrapper):
 
         domain = self.time_discretisation.domain
         equation = self.time_discretisation.equation
-        
+
         if self.mixed_options == True:
             original_space = self.tracer_fs
         else:

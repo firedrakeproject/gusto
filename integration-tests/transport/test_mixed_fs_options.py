@@ -317,5 +317,3 @@ def test_mixed_fs_options(tmpdir, space_A, space_B):
     # Check for no new undershoots in B
     assert np.min(final_fieldB.dat.data) >= np.min(true_fieldB.dat.data) - tol, \
         f"Application of the {space_B} equispaced limiter in the mixed limiter has not prevented undershoots"
-
-    
