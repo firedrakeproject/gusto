@@ -32,7 +32,7 @@ def setup_limiters(dirname, space_A, space_B):
     # Domain
     m = PeriodicIntervalMesh(20, Ld)
     mesh = ExtrudedMesh(m, layers=20, layer_height=(Ld/20))
-    degree = 0 if space_A in ['DG0', 'Vtheta_degree_0'] else 1
+    degree = 0 if space_A in ['DG0', 'Vtheta_degree_0', 'Hdiv'] else 1
 
     domain = Domain(mesh, dt, family="CG", degree=degree)
     
@@ -59,12 +59,6 @@ def setup_limiters(dirname, space_A, space_B):
     elif space_A == 'Vtheta_degree_1':
         VA = domain.spaces('theta')
         space_A_string = 'theta'
-    elif space_A == 'HDiv':
-        VA = domain.spaces('HDiv')
-        space_A_string = 'HDiv'
-    elif space_A == 'CG1':
-        VA = FunctionSpace(mesh, 'CG', 1)
-        space_A_string = 'CG'
     else:
         raise NotImplementedError
     
@@ -137,12 +131,6 @@ def setup_limiters(dirname, space_A, space_B):
     elif space_A == 'Vtheta_degree_1':
         suboptions.update({'tracerA': EmbeddedDGOptions()})
         sublimiters.update({'tracerA': ThetaLimiter(VA)})
-    elif space_A == 'HDiv':
-        ibp_A = IntegrateByParts.TWICE
-        suboptions.update({'tracerA': SUPGOptions(ibp=ibp_A)})
-    elif space_A == 'CG1':
-        ibp_A = IntegrateByParts.NEVER
-        suboptions.update({'tracerA': SUPGOptions(ibp=ibp_A)})
     else:
         raise NotImplementedError
         
@@ -176,27 +164,16 @@ def setup_limiters(dirname, space_A, space_B):
     else:
         raise NotImplementedError
 
+    # Create the mixed options and mixed limiter objects
     opts = MixedOptions(eqn, suboptions)
     MixedLimiter = MixedFSLimiter(eqn, sublimiters)
 
     # Give the scheme for the coupled transport
-    #transport_schemes = SSPRK3(domain, options=opts)
     transport_schemes = SSPRK3(domain, options=opts, limiter=MixedLimiter)
-    #transport_schemes = SSPRK3(domain, limiter=MixedLimiter)
-    
-    # DG Upwind transport for both tracers:
-    if space_A == 'HDiv' or space_A == 'CG1':
-        #Pass SUPG options to the transport method
-        transport_method_A = DGUpwind(eqn, 'tracerA', ibp=ibp_A)
-    else: 
-        transport_method_A = DGUpwind(eqn, 'tracerA')
-    transport_method_B = DGUpwind(eqn, 'tracerB')
-    
-    transport_method = [transport_method_A, transport_method_B]
-    
-    # Need to give SUPG options to the above, if using supg ...
-    # Need to test SUPG here!
-    
+
+    # DG Upwind transport for both tracers:    
+    transport_method = [DGUpwind(eqn, 'tracerA'), DGUpwind(eqn, 'tracerB')]
+
     # Build time stepper
     stepper = PrescribedTransport(eqn, transport_schemes, io, transport_method)
 
@@ -296,9 +273,9 @@ def setup_limiters(dirname, space_A, space_B):
     return stepper, tmax, true_fieldA, true_fieldB
 
 
-@pytest.mark.parametrize('space_A', ['HDiv'])#, 'CG1'])#, 
-#@pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
-#                                     'DG1', 'DG1_equispaced', 'HDiv'])
+
+@pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
+                                     'DG1', 'DG1_equispaced'])
 # It only makes sense to use the same degree for tracer B
 @pytest.mark.parametrize('space_B', ['Vtheta', 'DG'])
 

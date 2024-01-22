@@ -99,7 +99,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     elif suboption.name == "recovered":
                         self.wrapper.subwrappers.update({field: RecoveryWrapper(self, suboption)})
                     elif suboption.name == "supg":
-                        self.wrapper.subwrappers.update({field: SUPGWrapper(self, suboption)})
+                        raise RuntimeError(
+                            f'Time discretisation: suboption SUPG is currently not implemented within MixedOptions')
                     else:
                         raise RuntimeError(
                             f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
@@ -180,10 +181,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             if type(self.wrapper) == MixedOptions:
 
                 for field, subwrapper in self.wrapper.subwrappers.items():
-                    field_idx = equation.field_names.index(field)
 
-                    subwrapper.idx = field_idx
                     subwrapper.mixed_options = True
+
+                    field_idx = equation.field_names.index(field)
 
                     # Store the original space of the tracer
                     subwrapper.tracer_fs = self.equation.spaces[field_idx]
@@ -193,67 +194,16 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     # Update the function space to that needed by the wrapper
                     self.wrapper.wrapper_spaces[field_idx] = subwrapper.function_space
 
-                    # Store test space?
-                    #self.wrapper.test_spaces[field_idx] = subwrapper.function_space
-                    
-                    # Replace the test function space
-                    #if self.wrapper.suboptions[field].name == "supg":
-                    #    new_test = subwrapper.test
-                    #else:
-                    #    new_test = TestFunction(subwrapper.test_space)
-                        
-                    #self.residual = self.residual.label_map(
-                    #    lambda t: t.has_label(transport) and t.get(prognostic) == field,
-                    #    map_if_true=replace_test_function(new_test, old_idx=field_idx))
-                        
-                    #self.residual = subwrapper.label_terms(self.residual)
-                
                 self.wrapper.setup()
-                    
                 self.fs = self.wrapper.function_space
-                
                 new_test_mixed = TestFunctions(self.fs)
 
-                # If use supg, then change the required test function
-
-                # Replace one-by-one in this case?
-                print(type(new_test_mixed))
-
-                for field, subwrapper in self.wrapper.subwrappers.items():
-                    if self.wrapper.suboptions[field].name == "supg":
-                        field_idx = equation.field_names.index(field)
-                        test_list = list(new_test_mixed)
-                        test_list[field_idx] = subwrapper.test
-                        new_test_mixed2 = tuple(test_list)
-                        
-                print(type(new_test_mixed2))
-                        
-                if new_test_mixed == new_test_mixed2:
-                    print('same')
-                else:
-                    print('different')
-                        
-                # Change test functions with the new space:
-                #for field, subwrapper in self.wrapper.subwrappers.items():        
-                #    self.residual = self.residual.label_map(
-                #        lambda t: t.has_label(transport) and t.get(prognostic) == field,
-                #        map_if_true=replace_test_function(new_test_mixed[field_idx], old_idx=field_idx))
-                        
-                #    self.residual = subwrapper.label_terms(self.residual)
-                    
-                # Or, all-at-once:
-                #self.residual = self.residual.label_map(
-                #        lambda t: t.has_label(transport),
-                #        map_if_true=replace_test_function(new_test_mixed))
-                        
+                # Replace the original test function with one from the new
+                # function space defined by the subwrappers
                 self.residual = self.residual.label_map(
                         all_terms,
                         map_if_true=replace_test_function(new_test_mixed))
-                        
-                
-                    
-                    
-                
+
             else:
                 self.wrapper.setup()
                 self.fs = self.wrapper.function_space

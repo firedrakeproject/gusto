@@ -295,25 +295,9 @@ class SUPGWrapper(Wrapper):
             'SUPG wrapper can only be used with SUPG Options'
 
         domain = self.time_discretisation.domain
-        
-        #if self.mixed_options == True:
-        #    self.function_space = self.tracer_fs
-        #else:
-        #    self.function_space = self.time_discretisation.fs
-            
-        # But this will create some problems when defining the new mixed space...
         self.function_space = self.time_discretisation.fs
-        #self.function_space = self.tracer_fs
-        
-        if self.mixed_options == True:
-            self.test_space = self.tracer_fs
-            self.x_out = Function(self.tracer_fs)
-        else:
-            self.test_space = self.function_space
-            self.x_out = Function(self.function_space)
-        
-        #self.test_space = self.function_space
-        #self.x_out = Function(self.function_space)
+        self.test_space = self.function_space
+        self.x_out = Function(self.function_space)
 
         # -------------------------------------------------------------------- #
         # Work out SUPG parameter
@@ -332,8 +316,11 @@ class SUPGWrapper(Wrapper):
             # so that we don't apply supg in that direction
             if is_cg(self.function_space):
                 vals = default_vals
+                print('is cg')
             else:
+                print('is not cg')
                 space = self.function_space.ufl_element().sobolev_space
+                print(space.name)
                 if space.name in ["HDiv", "DirectionalH"]:
                     vals = [default_vals[i] if space[i].name == "H1"
                             else 0. for i in range(dim)]
@@ -415,12 +402,11 @@ class MixedOptions(object):
         """
         Args:
             equation (:class: `PrognosticEquationSet`): the prognostic equation(s)
-            sublimiters (dict): A dictionary holding limiters defined for individual prognostic variables
+            suboptions (dict): A dictionary holding options defined for individual prognostic variables
         Raises:
             ValueError: If an option is defined for a field that is not in the prognostic variable set
         """
         self.wrapper_spaces = equation.spaces
-        #self.test_spaces = equation.spaces
         self.field_names = equation.field_names
         self.suboptions = suboptions
         self.subwrappers = {}
@@ -431,49 +417,45 @@ class MixedOptions(object):
                     raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
     
     def setup(self):
-        
-        # Compute the new mixed function space
+        """ Compute the new mixed function space from the subwrappers """
+
         self.function_space = MixedFunctionSpace(self.wrapper_spaces)
         self.x_in = Function(self.function_space)
-        self.x_out = Function(self.function_space) 
-        #self.test_space = MixedFunctionSpace(self.test_spaces)
-    
+        self.x_out = Function(self.function_space)
+
     def pre_apply(self, x_in):
         """
         Perform the pre-applications for all fields
         with an associated subwrapper.
         """
-            
+
         for field_name in self.field_names:
-        
             field_idx = self.field_names.index(field_name)
             field = x_in.subfunctions[field_idx]
             x_in_sub = self.x_in.subfunctions[field_idx]
-            
+
             if field_name in self.subwrappers:
                 subwrapper = self.subwrappers[field_name]
                 subwrapper.pre_apply(field)
                 x_in_sub.assign(subwrapper.x_in)
             else:
-                x_in_sub.assign(field)        
-            
-            
+                x_in_sub.assign(field)
+
+
     def post_apply(self, x_out):
         """
         Perform the post-applications for all fields
         with an associated subwrapper.
         """
-            
+
         for field_name in self.field_names:
-        
             field_idx = self.field_names.index(field_name)
-            
             field = self.x_out.subfunctions[field_idx]
             x_out_sub = x_out.subfunctions[field_idx]
-            
+
             if field_name in self.subwrappers:
                 subwrapper = self.subwrappers[field_name]
                 subwrapper.x_out.assign(field)
                 subwrapper.post_apply(x_out_sub)
             else:
-                x_out_sub.assign(field)  
+                x_out_sub.assign(field)
