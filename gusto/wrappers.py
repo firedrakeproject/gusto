@@ -88,7 +88,7 @@ class EmbeddedDGWrapper(Wrapper):
         domain = self.time_discretisation.domain
         equation = self.time_discretisation.equation
 
-        if self.mixed_options == True:
+        if self.mixed_options:
             original_space = self.tracer_fs
         else:
             original_space = self.time_discretisation.fs
@@ -179,7 +179,7 @@ class RecoveryWrapper(Wrapper):
         domain = self.time_discretisation.domain
         equation = self.time_discretisation.equation
 
-        if self.mixed_options == True:
+        if self.mixed_options:
             original_space = self.tracer_fs
         else:
             original_space = self.time_discretisation.fs
@@ -201,15 +201,15 @@ class RecoveryWrapper(Wrapper):
         # Internal variables to be used
         # -------------------------------------------------------------------- #
 
-        if self.mixed_options == True:
+        if self.mixed_options:
             self.x_in_tmp = Function(self.tracer_fs)
         else:
             self.x_in_tmp = Function(self.time_discretisation.fs)
-            
+
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
-        
-        if self.mixed_options == True:
+
+        if self.mixed_options:
             self.x_projected = Function(self.tracer_fs)
         elif self.time_discretisation.idx is None:
             self.x_projected = Function(equation.function_space)
@@ -388,16 +388,16 @@ class SUPGWrapper(Wrapper):
         new_residual = transporting_velocity.update_value(new_residual, self.transporting_velocity)
 
         return new_residual
-        
+
 
 class MixedOptions(object):
     """
     An object to hold a dictionary with different options for different
     tracers. This means that different tracers can be solved simultaneously
     using a CoupledTransportEquation, whilst being in different spaces
-    and needing different implementation options. 
+    and needing different implementation options.
     """
-    
+
     def __init__(self, equation, suboptions):
         """
         Args:
@@ -410,12 +410,12 @@ class MixedOptions(object):
         self.field_names = equation.field_names
         self.suboptions = suboptions
         self.subwrappers = {}
-        
+
         for field, suboption in suboptions.items():
                 # Check that the field is in the prognostic variable set:
                 if field not in equation.field_names:
                     raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
-    
+
     def setup(self):
         """ Compute the new mixed function space from the subwrappers """
 
