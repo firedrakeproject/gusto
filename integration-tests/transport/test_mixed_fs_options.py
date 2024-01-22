@@ -101,7 +101,7 @@ def setup_limiters(dirname, space_A, space_B):
     eqn = CoupledTransportEquation(domain, active_tracers=tracers, Vu=V)
     output = OutputParameters(dirname=dirname+'/limiters', dumpfreq=1,
                               dumplist=['u', 'tracerA', 'tracerB', 'true_tracerA', 'true_tracerB'])
-    
+
     io = IO(domain, output)
 
     # ------------------------------------------------------------------------ #
@@ -128,7 +128,7 @@ def setup_limiters(dirname, space_A, space_B):
         sublimiters.update({'tracerA': ThetaLimiter(VA)})
     else:
         raise NotImplementedError
-        
+
     # Options and limiters for tracer_B
     if space_B == 'DG':
         if degree == 0:
@@ -142,12 +142,11 @@ def setup_limiters(dirname, space_A, space_B):
         else:
             raise NotImplementedError
     elif space_B == 'Vtheta':
-        if degree == 0: 
+        if degree == 0:
             suboptions.update({'tracerB': RecoveryOptions(embedding_space=VDG1_B,
-                                              recovered_space=VCG1_B,
-                                              project_low_method='recover',
-                                              boundary_method=BoundaryMethod.taylor)})
-                                   
+                                                          recovered_space=VCG1_B,
+                                                          project_low_method='recover',
+                                                          boundary_method=BoundaryMethod.taylor)})
             sublimiters.update({'tracerB': VertexBasedLimiter(VDG1_B)})
         elif degree == 1:
             suboptions.update({'tracerB': EmbeddedDGOptions()})
@@ -164,7 +163,7 @@ def setup_limiters(dirname, space_A, space_B):
     # Give the scheme for the coupled transport
     transport_schemes = SSPRK3(domain, options=opts, limiter=MixedLimiter)
 
-    # DG Upwind transport for both tracers:    
+    # DG Upwind transport for both tracers:
     transport_method = [DGUpwind(eqn, 'tracerA'), DGUpwind(eqn, 'tracerB')]
 
     # Build time stepper
@@ -178,7 +177,7 @@ def setup_limiters(dirname, space_A, space_B):
     tracerB_0 = stepper.fields('tracerB', space=VB)
     true_fieldA = stepper.fields('true_tracerA', space=VA)
     true_fieldB = stepper.fields('true_tracerB', space=VB)
-    
+
     x, z = SpatialCoordinate(mesh)
 
     tracer_min = 12.6
