@@ -412,9 +412,9 @@ class MixedOptions(object):
         self.subwrappers = {}
 
         for field, suboption in suboptions.items():
-                # Check that the field is in the prognostic variable set:
-                if field not in equation.field_names:
-                    raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
+            # Check that the field is in the prognostic variable set:
+            if field not in equation.field_names:
+                raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
 
     def setup(self):
         """ Compute the new mixed function space from the subwrappers """
@@ -440,7 +440,6 @@ class MixedOptions(object):
                 x_in_sub.assign(subwrapper.x_in)
             else:
                 x_in_sub.assign(field)
-
 
     def post_apply(self, x_out):
         """
