@@ -35,10 +35,10 @@ def setup_limiters(dirname, space_A, space_B):
     degree = 0 if space_A in ['DG0', 'Vtheta_degree_0', 'Hdiv'] else 1
 
     domain = Domain(mesh, dt, family="CG", degree=degree)
-    
+
     # Transporting velocity space
     V = domain.spaces('HDiv')
-    
+
     # Tracer A spaces
     if space_A == 'DG0':
         VA = domain.spaces('DG')
@@ -61,7 +61,7 @@ def setup_limiters(dirname, space_A, space_B):
         space_A_string = 'theta'
     else:
         raise NotImplementedError
-    
+
     # Tracer B spaces
     if space_B == 'DG':
         space_B_string = 'DG'
@@ -75,7 +75,7 @@ def setup_limiters(dirname, space_A, space_B):
             raise NotImplementedError
     elif space_B == 'Vtheta':
         space_B_string = 'theta'
-        if degree == 0: 
+        if degree == 0:
             VB = domain.spaces('theta')
             VCG1_B = FunctionSpace(mesh, 'CG', 1)
             VDG1_B = domain.spaces('DG1_equispaced')
@@ -85,23 +85,22 @@ def setup_limiters(dirname, space_A, space_B):
             raise NotImplementedError
     else:
         raise NotImplementedError
-        
-    Vpsi = domain.spaces('H1')     
-        
+
+    Vpsi = domain.spaces('H1')
+
     tracerA = ActiveTracer(name='tracerA', space=space_A_string,
-                               variable_type=TracerVariableType.mixing_ratio,
-                               transport_eqn=TransportEquationType.advective)
-    
+                           variable_type=TracerVariableType.mixing_ratio,
+                           transport_eqn=TransportEquationType.advective)
+
     tracerB = ActiveTracer(name='tracerB', space=space_B_string,
-                               variable_type=TracerVariableType.mixing_ratio,
-                               transport_eqn=TransportEquationType.advective)
-        
-        
+                           variable_type=TracerVariableType.mixing_ratio,
+                           transport_eqn=TransportEquationType.advective)
+
     tracers = [tracerA, tracerB]
 
     eqn = CoupledTransportEquation(domain, active_tracers=tracers, Vu=V)
     output = OutputParameters(dirname=dirname+'/limiters', dumpfreq=1,
-                                  dumplist=['u', 'tracerA', 'tracerB', 'true_tracerA', 'true_tracerB'])
+                              dumplist=['u', 'tracerA', 'tracerB', 'true_tracerA', 'true_tracerB'])
     
     io = IO(domain, output)
 
@@ -113,21 +112,17 @@ def setup_limiters(dirname, space_A, space_B):
     sublimiters = {}
 
     # Options and limiters for tracer_A
-
     if space_A in ['DG0', 'Vtheta_degree_0']:
         suboptions.update({'tracerA': RecoveryOptions(embedding_space=VDG1_A,
-                                              recovered_space=VCG1_A,
-                                              project_low_method='recover',
-                                              boundary_method=BoundaryMethod.taylor)})
-                                   
+                                                      recovered_space=VCG1_A,
+                                                      project_low_method='recover',
+                                                      boundary_method=BoundaryMethod.taylor)})
+
         sublimiters.update({'tracerA': VertexBasedLimiter(VDG1_A)})
-        
     elif space_A == 'DG1':
         sublimiters.update({'tracerA': DG1Limiter(VA)})
-
     elif space_A == 'DG1_equispaced':
         sublimiters.update({'tracerA': VertexBasedLimiter(VA)})
-
     elif space_A == 'Vtheta_degree_1':
         suboptions.update({'tracerA': EmbeddedDGOptions()})
         sublimiters.update({'tracerA': ThetaLimiter(VA)})
@@ -135,14 +130,12 @@ def setup_limiters(dirname, space_A, space_B):
         raise NotImplementedError
         
     # Options and limiters for tracer_B
-    
     if space_B == 'DG':
         if degree == 0:
             suboptions.update({'tracerB': RecoveryOptions(embedding_space=VDG1_B,
-                                              recovered_space=VCG1_B,
-                                              project_low_method='recover',
-                                              boundary_method=BoundaryMethod.taylor)})
-                                   
+                                                          recovered_space=VCG1_B,
+                                                          project_low_method='recover',
+                                                          boundary_method=BoundaryMethod.taylor)})
             sublimiters.update({'tracerB': VertexBasedLimiter(VDG1_B)})
         elif degree == 1:
             sublimiters.update({'tracerB': DG1Limiter(VB)})
@@ -273,13 +266,9 @@ def setup_limiters(dirname, space_A, space_B):
     return stepper, tmax, true_fieldA, true_fieldB
 
 
-
 @pytest.mark.parametrize('space_A', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
                                      'DG1', 'DG1_equispaced'])
-# It only makes sense to use the same degree for tracer B
 @pytest.mark.parametrize('space_B', ['Vtheta', 'DG'])
-
-
 def test_mixed_fs_options(tmpdir, space_A, space_B):
 
     # Setup and run
