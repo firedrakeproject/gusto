@@ -21,7 +21,7 @@ from firedrake.utils import cached_property
 
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.labels import (time_derivative, prognostic, physics_label,
-                          implicit, explicit, mass_weighted)
+                          implicit, explicit)
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 
@@ -519,17 +519,6 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
 
-        # Work out if any sub-functions need special mass weighted handling
-        self.mass_weighted_idxs = []
-        self.density_idxs = []
-        for t in self.residual.terms:
-            if t.has_label(mass_weighted):
-                # Get the index in the mixed function space of this term,
-                # from the prognostic field name
-                idx = self.equation.field_names.index(t.get(prognostic))
-                self.mass_weighted_idxs.append(idx)
-                self.density_idxs.append(t.get(mass_weighted)[0])
-
     @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
@@ -761,8 +750,9 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
     #  [ b_0  b_1  .       b_s]
     # ---------------------------------------------------------------------------
 
-    def __init__(self, domain, butcher_matrix, field_name=None, fixed_subcycles=None,
-                 subcycle_by_courant=None, solver_parameters=None,
+    def __init__(self, domain, butcher_matrix, field_name=None,
+                 fixed_subcycles=None, subcycle_by_courant=None,
+                 increment_form=True, solver_parameters=None,
                  limiter=None, options=None):
         """
         Args:
@@ -781,6 +771,9 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                 for one sub-cycle. Defaults to None, in which case adaptive
                 sub-cycling is not used. This option cannot be specified with the
                 `fixed_subcycles` argument.
+            increment_form (bool, optional): whether to write the RK scheme in
+                "increment form", solving for increments rather than updated
+                fields. Defaults to True.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -797,6 +790,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                          limiter=limiter, options=options)
         self.butcher_matrix = butcher_matrix
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
+        self.increment_form = increment_form
 
     @property
     def nStages(self):
@@ -813,109 +807,162 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         """
         super().setup(equation, apply_bcs, *active_labels)
 
-        self.k = [Function(self.fs) for i in range(self.nStages)]
+        if not self.increment_form:
+            self.field_i = [Function(self.fs) for i in range(self.nStages+1)]
+        else:
+            self.k = [Function(self.fs) for i in range(self.nStages)]
+
+    @cached_property
+    def solver(self):
+        if self.increment_form:
+            return super().solver
+        else:
+            # In this case, don't set snes_type to ksp only, as we do want the
+            # outer Newton iteration
+            solver_list = []
+
+            for stage in range(self.nStages):
+                # setup linear solver using lhs and rhs defined in derived class
+                problem = NonlinearVariationalProblem(
+                    self.lhs[stage].form - self.rhs[stage].form,
+                    self.field_i[stage+1], bcs=self.bcs)
+                solver_name = self.field_name+self.__class__.__name__+str(stage)
+                solver = NonlinearVariationalSolver(
+                    problem, solver_parameters=self.solver_parameters,
+                    options_prefix=solver_name)
+                solver_list.append(solver)
+            return solver_list
 
     @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
 
-        # Special handling for mass weighted time derivatives
-        # Explicit multi-stage solves for "k", which should be linear increment
-        # in the prognostic variables -- so we need to drop the mass weighted
-        # part to make the LHS linear. The non-mass weighted time derivative is
-        # (for now) stored in the mass weighted label
-        self.residual = self.residual.label_map(
-            lambda t: t.has_label(mass_weighted),
-            map_if_true=lambda t: Term(t.get(mass_weighted)[1], t.labels),
-            map_if_false=keep)
+        if self.increment_form:
+            l = self.residual.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=replace_subject(self.x_out, self.idx),
+                map_if_false=drop)
 
-        l = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x_out, self.idx),
-            map_if_false=drop)
+            return l.form
 
-        return l.form
+        else:
+            lhs_list = []
+            for stage in range(self.nStages):
+                l = self.residual.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    map_if_true=replace_subject(self.field_i[stage+1], self.idx),
+                    map_if_false=drop)
+                lhs_list.append(l)
+
+            return lhs_list
 
     @cached_property
     def rhs(self):
         """Set up the time discretisation's right hand side."""
-        r = self.residual.label_map(
-            all_terms,
-            map_if_true=replace_subject(self.x1, old_idx=self.idx))
 
-        r = r.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_true=drop,
-            map_if_false=lambda t: -1*t)
+        if self.increment_form:
+            r = self.residual.label_map(
+                all_terms,
+                map_if_true=replace_subject(self.x1, old_idx=self.idx))
 
-        # If there are no active labels, we may have no terms at this point
-        # So that we can still do xnp1 = xn, put in a zero term here
-        if len(r.terms) == 0:
-            logger.warning('No terms detected for RHS of explicit problem. '
-                           + 'Adding a zero term to avoid failure.')
-            null_term = Constant(0.0)*self.residual.label_map(
+            r = r.label_map(
                 lambda t: t.has_label(time_derivative),
-                # Drop label from this
-                map_if_true=lambda t: time_derivative.remove(t),
-                map_if_false=drop)
-            r += null_term
+                map_if_true=drop,
+                map_if_false=lambda t: -1*t)
 
-        return r.form
+            # If there are no active labels, we may have no terms at this point
+            # So that we can still do xnp1 = xn, put in a zero term here
+            if self.increment_form and len(r.terms) == 0:
+                logger.warning('No terms detected for RHS of explicit problem. '
+                               + 'Adding a zero term to avoid failure.')
+                null_term = Constant(0.0)*self.residual.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    # Drop label from this
+                    map_if_true=lambda t: time_derivative.remove(t),
+                    map_if_false=drop)
+                r += null_term
 
-    def print_stats(self, mixed_field, message):
-        min1 = np.min(mixed_field.dat[0].data)
-        max1 = np.max(mixed_field.dat[0].data)
-        min2 = np.min(mixed_field.dat[1].data)
-        max2 = np.max(mixed_field.dat[1].data)
-        logger.info(f'{message}: {min1} {max1} {min2} {max2}')
+            return r.form
+
+        else:
+            rhs_list = []
+
+            for stage in range(self.nStages):
+                r = self.residual.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    map_if_true=replace_subject(self.field_i[0], old_idx=self.idx),
+                    map_if_false=replace_subject(self.field_i[0], old_idx=self.idx))
+
+                r = r.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    map_if_true=keep,
+                    map_if_false=lambda t: -self.butcher_matrix[stage, 0]*self.dt*t)
+
+                for i in range(1, stage+1):
+                    r_i = self.residual.label_map(
+                        lambda t: t.has_label(time_derivative),
+                        map_if_true=drop,
+                        map_if_false=replace_subject(self.field_i[i], old_idx=self.idx)
+                    )
+
+                    r -= self.butcher_matrix[stage, i]*self.dt*r_i
+
+                rhs_list.append(r)
+
+            return rhs_list
 
     def solve_stage(self, x0, stage):
-        self.x1.assign(x0)
 
-        # Use x0 as a first guess (otherwise may not converge)
-        self.x_out.assign(x0)
-
-        for i in range(stage):
-            self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
-        for evaluate in self.evaluate_source:
-            evaluate(self.x1, self.dt)
-        if self.limiter is not None:
-            self.limiter.apply(self.x1)
-        self.solver.solve()
-
-        self.print_stats(self.x1, f'x1 {stage}')
-
-        self.print_stats(self.x_out, 'x_out before')
-
-        # Need to divide by the updated density field if the LHS has a mass
-        # weighted time derivative
-        if len(self.mass_weighted_idxs) > 0:
-            # Loop through mixing ratios and the corresponding densities
-            for rho_idx, m_idx in zip(self.density_idxs, self.mass_weighted_idxs):
-                # Calculate updated density
-                rho = Function(self.fs[rho_idx])
-                rho.assign(x0.subfunctions[rho_idx])
-                for i in range(stage):
-                    rho.assign(rho + self.dt*self.butcher_matrix[stage, i]*self.k[i].subfunctions[rho_idx])
-                rho.assign(rho + self.dt*self.butcher_matrix[stage, stage]*self.x_out.subfunctions[rho_idx])
-                logger.info(f'rho updated: {np.min(rho.dat.data)} {np.max(rho.dat.data)}')
-                # Divide mixing ratio increment by updated density
-                k_m = self.x_out.subfunctions[m_idx]
-                k_m.interpolate(k_m / rho)
-        self.print_stats(self.x_out, 'x_out_after')
-
-        self.k[stage].assign(self.x_out)
-
-        if (stage == self.nStages - 1):
+        if self.increment_form:
             self.x1.assign(x0)
-            for i in range(self.nStages):
-                self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage, i]*self.k[i])
-            self.x1.assign(self.x1)
 
+            # Use x0 as a first guess (otherwise may not converge)
+            self.x_out.assign(x0)
+
+            for i in range(stage):
+                self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
+            for evaluate in self.evaluate_source:
+                evaluate(self.x1, self.dt)
             if self.limiter is not None:
                 self.limiter.apply(self.x1)
+            self.solver.solve()
 
-            self.print_stats(self.x1, f'x1 end')
+            self.k[stage].assign(self.x_out)
+
+            if (stage == self.nStages - 1):
+                self.x1.assign(x0)
+                for i in range(self.nStages):
+                    self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage, i]*self.k[i])
+                self.x1.assign(self.x1)
+
+                if self.limiter is not None:
+                    self.limiter.apply(self.x1)
+
+        else:
+            # Set initial field
+            if stage == 0:
+                self.field_i[0].assign(x0)
+
+            # Use x0 as a first guess (otherwise may not converge)
+            self.field_i[stage+1].assign(x0)
+
+            # Update field_i for physics / limiters
+            for evaluate in self.evaluate_source:
+                # TODO: not implemented! Here we need to evaluate the m-th term
+                # in the i-th RHS with field_m
+                raise NotImplementedError(
+                    'Physics not implemented with RK schemes that do not use '
+                    + 'the increment form')
+            if self.limiter is not None:
+                self.limiter.apply(self.field_i[stage])
+
+            # Obtain field_ip1 = field_n - dt* sum_m{c_im*F[field_m]}
+            self.solver[stage].solve()
+
+            if (stage == self.nStages - 1):
+                self.x1.assign(self.field_i[stage+1])
+                if self.limiter is not None:
+                    self.limiter.apply(self.x1)
 
     def apply_cycle(self, x_out, x_in):
         """
@@ -944,8 +991,8 @@ class ForwardEuler(ExplicitMultistage):
     y^(n+1) = y^n + dt*k0                                                       \n
     """
     def __init__(self, domain, field_name=None, fixed_subcycles=None,
-                 subcycle_by_courant=None, solver_parameters=None,
-                 limiter=None, options=None):
+                 subcycle_by_courant=None, increment_form=True,
+                 solver_parameters=None, limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -961,6 +1008,9 @@ class ForwardEuler(ExplicitMultistage):
                 for one sub-cycle. Defaults to None, in which case adaptive
                 sub-cycling is not used. This option cannot be specified with the
                 `fixed_subcycles` argument.
+            increment_form (bool, optional): whether to write the RK scheme in
+                "increment form", solving for increments rather than updated
+                fields. Defaults to True.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -974,6 +1024,7 @@ class ForwardEuler(ExplicitMultistage):
         super().__init__(domain, butcher_matrix, field_name=field_name,
                          fixed_subcycles=fixed_subcycles,
                          subcycle_by_courant=subcycle_by_courant,
+                         increment_form=increment_form,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
@@ -989,8 +1040,8 @@ class SSPRK3(ExplicitMultistage):
     y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + 4*k2)                                 \n
     """
     def __init__(self, domain, field_name=None, fixed_subcycles=None,
-                 subcycle_by_courant=None, solver_parameters=None,
-                 limiter=None, options=None):
+                 subcycle_by_courant=None, increment_form=True,
+                 solver_parameters=None, limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -1006,6 +1057,9 @@ class SSPRK3(ExplicitMultistage):
                 for one sub-cycle. Defaults to None, in which case adaptive
                 sub-cycling is not used. This option cannot be specified with the
                 `fixed_subcycles` argument.
+            increment_form (bool, optional): whether to write the RK scheme in
+                "increment form", solving for increments rather than updated
+                fields. Defaults to True.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -1016,9 +1070,11 @@ class SSPRK3(ExplicitMultistage):
                 recovery method. Defaults to None.
         """
         butcher_matrix = np.array([[1., 0., 0.], [1./4., 1./4., 0.], [1./6., 1./6., 2./3.]])
+
         super().__init__(domain, butcher_matrix, field_name=field_name,
                          fixed_subcycles=fixed_subcycles,
                          subcycle_by_courant=subcycle_by_courant,
+                         increment_form=increment_form,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
@@ -1039,7 +1095,8 @@ class RK4(ExplicitMultistage):
     where superscripts indicate the time-level.                               \n
     """
     def __init__(self, domain, field_name=None, fixed_subcycles=None,
-                 subcycle_by_courant=None, solver_parameters=None,
+                 subcycle_by_courant=None, increment_form=True,
+                 solver_parameters=None,
                  limiter=None, options=None):
         """
         Args:
@@ -1056,6 +1113,9 @@ class RK4(ExplicitMultistage):
                 for one sub-cycle. Defaults to None, in which case adaptive
                 sub-cycling is not used. This option cannot be specified with the
                 `fixed_subcycles` argument.
+            increment_form (bool, optional): whether to write the RK scheme in
+                "increment form", solving for increments rather than updated
+                fields. Defaults to True.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -1069,6 +1129,7 @@ class RK4(ExplicitMultistage):
         super().__init__(domain, butcher_matrix, field_name=field_name,
                          fixed_subcycles=fixed_subcycles,
                          subcycle_by_courant=subcycle_by_courant,
+                         increment_form=increment_form,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
@@ -1087,8 +1148,8 @@ class Heun(ExplicitMultistage):
     number.
     """
     def __init__(self, domain, field_name=None, fixed_subcycles=None,
-                 subcycle_by_courant=None, solver_parameters=None,
-                 limiter=None, options=None):
+                 subcycle_by_courant=None, increment_form=True,
+                 solver_parameters=None, limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -1104,6 +1165,9 @@ class Heun(ExplicitMultistage):
                 for one sub-cycle. Defaults to None, in which case adaptive
                 sub-cycling is not used. This option cannot be specified with the
                 `fixed_subcycles` argument.
+            increment_form (bool, optional): whether to write the RK scheme in
+                "increment form", solving for increments rather than updated
+                fields. Defaults to True.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -1117,6 +1181,7 @@ class Heun(ExplicitMultistage):
         super().__init__(domain, butcher_matrix, field_name=field_name,
                          fixed_subcycles=fixed_subcycles,
                          subcycle_by_courant=subcycle_by_courant,
+                         increment_form=increment_form,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
@@ -1919,7 +1984,6 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         """
         if self.initial_timesteps < self.nlevels-1:
             self.initial_timesteps += 1
-            print(self.initial_timesteps)
             solver = self.solver0
         else:
             solver = self.solver

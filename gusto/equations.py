@@ -14,7 +14,7 @@ from firedrake.fml import (
 from gusto.fields import PrescribedFields
 from gusto.labels import (
     time_derivative, transport, prognostic, hydrostatic, linearisation,
-    pressure_gradient, coriolis, mass_weighted
+    pressure_gradient, coriolis
 )
 from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (
@@ -277,8 +277,6 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             else:
                 mass_form += time_derivative(mass)
 
-            print(mass_form)
-
         return mass_form
 
     # ======================================================================== #
@@ -450,38 +448,23 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         for i, tracer in enumerate(active_tracers):
             idx = self.field_names.index(tracer.name)
-            print(idx)
             tracer_prog = split(self.X)[idx]
             tracer_test = self.tests[idx]
-            print(self.field_names[idx])
+
             if tracer.transport_eqn == TransportEquationType.tracer_conservative:
                 ref_density_idx = self.field_names.index(tracer.density_name)
                 ref_density = split(self.X)[ref_density_idx]
                 q = tracer_prog*ref_density
-                mass = mass_weighted(
-                    subject(prognostic(inner(q, tracer_test)*dx, self.field_names[idx]),
-                            self.X), (ref_density_idx, inner(tracer_prog, tracer_test)*dx))
-                #term1 = ref_density*time_derivative(inner(tracer_prog, tracer_test))
-                #term2 = tracer_prog*time_derivative(inner(ref_density, tracer_test))
-                #mass_1 = subject(prognostic(term1*dx, self.field_names[idx]), self.X)
-                #mass_2 = subject(prognostic(term2*dx, self.field_names[idx]), self.X)
-                #if i == 0:
-                #    mass_form = mass_1
-                #    mass_form += mass_2
-                #else:
-                #    mass_form += mass_1
-                #    mass_form += mass_2
-
+                mass = subject(prognostic(inner(q, tracer_test)*dx,
+                                          self.field_names[idx]), self.X)
             else:
-                mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx, self.field_names[idx]), self.X)
-                #mass = prognostic(inner(tracer_prog, tracer_test)*dx, tracer.name)
+                mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx,
+                                          self.field_names[idx]), self.X)
 
             if i == 0:
                 mass_form = time_derivative(mass)
             else:
                 mass_form += time_derivative(mass)
-
-            print(mass_form)
 
         return mass_form
 
@@ -531,10 +514,9 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 elif tracer.transport_eqn == TransportEquationType.tracer_conservative:
                     ref_density_idx = self.field_names.index(tracer.density_name)
                     ref_density = split(self.X)[ref_density_idx]
-                    #q = tracer_prog*ref_density
                     tracer_adv = prognostic(
-                        tracer_conservative_form(tracer_test, tracer_prog, ref_density, u),
-                        tracer.name)
+                        tracer_conservative_form(tracer_test, tracer_prog,
+                                                 ref_density, u), tracer.name)
 
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
@@ -630,18 +612,17 @@ class CoupledTransportEquation(PrognosticEquationSet):
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)
 
+
 class ConservativeCoupledTransportEquation(PrognosticEquationSet):
     u"""
-    Discretises the transport equation,               \n
-    ∂q/∂t + (u.∇)q = F,
-    with the application of active tracers.
-    As there are multiple tracers or species that are
-    interacting, q and F are vectors.
-    This equation can be enhanced through the addition of
-    sources or sinks (F) by applying it with physics schemes.
-    This takes in tracers that might obey different forms
-    of the transport equation (i.e. advective, conservative)
-    but will evolve all the fields in a conservative manner.
+    Discretises the transport equation,                                       \n
+    ∂q/∂t + (u.∇)q = F,                                                       \n
+    with the application of active tracers. As there are multiple tracers or
+    species that are interacting, q and F are vectors. This equation can be
+    enhanced through the addition of sources or sinks (F) by applying it with
+    physics schemes. This takes in tracers that might obey different forms of
+    the transport equation (i.e. advective, conservative) but will evolve all
+    the fields in a conservative manner.
     """
     def __init__(self, domain, active_tracers, Vu=None):
         """
@@ -685,24 +666,15 @@ class ConservativeCoupledTransportEquation(PrognosticEquationSet):
         self.tests = TestFunctions(W)
         self.X = Function(W)
 
-        print(full_field_name)
-
         self.residual = self.generate_tracer_mass_terms(active_tracers)
 
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)
 
-        #self.residual = subject(self.generate_tracer_mass_terms(active_tracers),self.X)
-
-        # Add transport of tracers
-        #self.residual += subject(self.generate_tracer_transport_terms(active_tracers),self.X)
-
-
 
 # ============================================================================ #
 # Specified Equation Sets
 # ============================================================================ #
-
 
 class ShallowWaterEquations(PrognosticEquationSet):
     u"""
