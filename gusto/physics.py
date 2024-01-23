@@ -1127,6 +1127,19 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
+        for source in self.source:
+            print("source in evaluate:")
+            print(source.dat.data.max())
+            print(source.dat.data.min())
+        print("the values after adding sources:")
+        print("vapour max:")
+        print(self.water_v.dat.data.max())
+        print("vapour min")
+        print(self.water_v.dat.data.min())
+        print("cloud max:")
+        print(self.cloud.dat.data.max())
+        print("cloud min:")
+        print(self.cloud.dat.data.min())
 
 
 class SurfaceFluxes(PhysicsParametrisation):

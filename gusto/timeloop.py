@@ -719,6 +719,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     logger.info(f'SIQN: Transport {outer}: {name}')
                     # transports a field from xstar and puts result in xp
                     scheme.apply(xp(name), xstar(name))
+                    print("max:")
+                    print(xp(name).dat.data.max())
+                    print("min")
+                    print(xp(name).dat.data.min())
 
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:
