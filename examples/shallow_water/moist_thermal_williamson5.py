@@ -32,9 +32,8 @@ EQ = 30*epsilon
 NP = -20*epsilon
 mu1 = 0.05
 mu2 = 0.98
-L_v = 10
 q0 = 135  # chosen to give an initial max vapour of approx 0.02
-beta2 = 1
+beta2 = 10
 qprecip = 10e-4
 gamma_r = 10e-3
 # topography parameters
@@ -94,10 +93,10 @@ def sat_func(x_in):
 def gamma_v(x_in):
     h = x_in.split()[1]
     b = x_in.split()[2]
-    return (1 + L_v*(20*q0/(g*h + g*tpexpr) * exp(20*(1 - b/g))))**(-1)
+    return (1 + beta2*(20*q0/(g*h + g*tpexpr) * exp(20*(1 - b/g))))**(-1)
 
 
-SWSaturationAdjustment(eqns, sat_func, L_v, time_varying_saturation=True,
+SWSaturationAdjustment(eqns, sat_func, time_varying_saturation=True,
                        parameters=parameters, thermal_feedback=True,
                        beta2=beta2, gamma_v=gamma_v,
                        time_varying_gamma_v=True)
