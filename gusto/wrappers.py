@@ -192,7 +192,6 @@ class RecoveryWrapper(Wrapper):
             V_elt = BrokenElement(original_space.ufl_element())
             self.function_space = FunctionSpace(domain.mesh, V_elt)
         else:
-            print('using embedded space')
             self.function_space = self.options.embedding_space
 
         self.test_space = self.function_space
@@ -316,11 +315,8 @@ class SUPGWrapper(Wrapper):
             # so that we don't apply supg in that direction
             if is_cg(self.function_space):
                 vals = default_vals
-                print('is cg')
             else:
-                print('is not cg')
                 space = self.function_space.ufl_element().sobolev_space
-                print(space.name)
                 if space.name in ["HDiv", "DirectionalH"]:
                     vals = [default_vals[i] if space[i].name == "H1"
                             else 0. for i in range(dim)]
