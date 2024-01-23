@@ -970,7 +970,8 @@ class SWSaturationAdjustment(PhysicsParametrisation):
                 affect the buoyancy equation. Defaults to False.
             beta2 (float, optional): Condensation proportionality constant
                 for thermal feedback. Defaults to None, but must be specified
-                if thermal_feedback is True.
+                if thermal_feedback is True. This is equivalent to the L_v
+                parameter in Zerroukat and Allen (2015).
             gamma_v (ufl expression or :class: `function`): The proportion of
                 moist species that is converted when a conversion between
                 vapour and cloud is taking place. Defaults to one, in which
