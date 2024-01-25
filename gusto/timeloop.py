@@ -658,6 +658,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         apply_bcs = True
         self.setup_equation(self.equation)
         for _, scheme in self.active_transport:
+            print("the limiter for each scheme")
+            print(scheme.limiter)
             scheme.setup(self.equation, apply_bcs, transport)
             self.setup_transporting_velocity(scheme)
             scheme.courant_max = self.io.courant_max
@@ -719,10 +721,18 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     logger.info(f'SIQN: Transport {outer}: {name}')
                     # transports a field from xstar and puts result in xp
                     scheme.apply(xp(name), xstar(name))
-                    print("max:")
-                    print(xp(name).dat.data.max())
-                    print("min")
-                    print(xp(name).dat.data.min())
+
+                    # printing to track down negative moisture
+                    # # # # # # # # # # # # # # # # # # # # # # # #
+                    if name == 'water_vapour' or name == 'cloud_water':
+                        print(name)
+                        print("min, max of xstar:")
+                        print(xstar(name).dat.data.min(),
+                              xstar(name).dat.data.max())
+                        print("min, max of xp:")
+                        print(xp(name).dat.data.min(),
+                              xp(name).dat.data.max())
+                    # # # # # # # # # # # # # # # # # # # # # # # #
 
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:

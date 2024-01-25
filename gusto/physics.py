@@ -1125,21 +1125,31 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         self.cloud.assign(x_in.split()[self.Vc_idx])
         if self.time_varying_gamma_v:
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
+
+        # printing to track down negative moisture
+        # # # # # # # # # # # # # # # # # # # # # # # #
+        print("values of moisture variables before adding sources:")
+        print("vapour (min, max) =", self.water_v.dat.data.min(), ",",
+              self.water_v.dat.data.max())
+        print("cloud (min, max) =", self.cloud.dat.data.min(), ",",
+              self.cloud.dat.data.max())
+        print("source terms in evaluate:")
+        for source in self.source:
+            print("source (min, max) =", source.dat.data.min(), ",",
+                  source.dat.data.max())
+        # # # # # # # # # # # # # # # # # # # # # # # #
+
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
-        for source in self.source:
-            print("source in evaluate:")
-            print(source.dat.data.max())
-            print(source.dat.data.min())
-        print("the values after adding sources:")
-        print("vapour max:")
-        print(self.water_v.dat.data.max())
-        print("vapour min")
-        print(self.water_v.dat.data.min())
-        print("cloud max:")
-        print(self.cloud.dat.data.max())
-        print("cloud min:")
-        print(self.cloud.dat.data.min())
+
+        # printing to track down negative moisture
+        # # # # # # # # # # # # # # # # # # # # # # # #
+        print("values of moisture variables after adding sources:")
+        print("vapour (min, max) =", self.water_v.dat.data.min(), ",",
+              self.water_v.dat.data.max())
+        print("cloud (min, max) =", self.cloud.dat.data.min(), ",",
+              self.cloud.dat.data.max())
+        # # # # # # # # # # # # # # # # # # # # # # # #
 
 
 class SurfaceFluxes(PhysicsParametrisation):
