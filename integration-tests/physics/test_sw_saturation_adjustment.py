@@ -30,8 +30,7 @@ def run_sw_cond_evap(dirname, process):
     theta_c = pi
     lamda_c = pi/2
     rc = R/4
-    L_v = 10
-    beta2 = 1
+    beta2 = 10
 
     # Domain
     mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=2)
@@ -61,7 +60,7 @@ def run_sw_cond_evap(dirname, process):
             diagnostic_fields=[Sum('water_vapour', 'cloud_water')])
 
     # Physics schemes
-    physics_schemes = [(SWSaturationAdjustment(eqns, sat, L_v=L_v,
+    physics_schemes = [(SWSaturationAdjustment(eqns, sat,
                                                parameters=parameters,
                                                thermal_feedback=True,
                                                beta2=beta2),
@@ -89,7 +88,7 @@ def run_sw_cond_evap(dirname, process):
         v_true = Function(v0.function_space()).interpolate(sat*(0.96+0.005*pert))
         c_true = Function(c0.function_space()).interpolate(Constant(0.0))
         # gain buoyancy
-        factor = parameters.g*L_v
+        factor = parameters.g*beta2
         sat_adj_expr = (v0 - sat) / dt
         sat_adj_expr = conditional(sat_adj_expr < 0,
                                    max_value(sat_adj_expr, -c0 / dt),
@@ -104,7 +103,7 @@ def run_sw_cond_evap(dirname, process):
         v_true = Function(v0.function_space()).interpolate(Constant(sat))
         c_true = Function(c0.function_space()).interpolate(v0 - sat)
         # lose buoyancy
-        factor = parameters.g*L_v
+        factor = parameters.g*beta2
         sat_adj_expr = (v0 - sat) / dt
         sat_adj_expr = conditional(sat_adj_expr < 0,
                                    max_value(sat_adj_expr, -c0 / dt),
