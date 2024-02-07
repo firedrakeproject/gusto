@@ -111,14 +111,15 @@ lat = theta
 sinlat = sin(lat)
 coslat = cos(lat)
 
-# need to find the correct weighting function for the integrals as lat not necessarily equally spaced
-da = coslat * pi
+# need to find the correct weighting function for the integrals as lat not necessarily equally spaced - 
+# or da = coslat if the numerical integrator deals with the random lat spacing (as np.sum wouldn't)
+da = coslat
 
 
 
 f = twomega * sinlat
 
-# not sure if this works in gusto?
+# not sure if this works in gusto? - hn just needs to initially be an 1 at every latitude point
 hn = [1] * len(lat)
 
 rlat1 = pi / 180. * 45.
@@ -128,16 +129,21 @@ qt0 = twomega * sinlat / hbart
 qt = qt0
 
 
-# not really sure what this conditional bit is meant to be doing
+# not really sure what the correct formatting is for this - Dan said I can't use np.where but I'm not sure the actual name of what to use instead
 qt = condit(lat > 0., 0.3*qp,
         condit(lat > rlat1, 1.6*qp,
             condit(lat > rlat2, qp, qt0)))
 
+
+totintegral = NumericalIntegral(-pi/2, pi/2)
+
 # iteration loop
 k=0
 while k<50:
-    ctop = totintegral(qt*hn*da)
-    cbot = totintegral(hn*da)
+    ctopint = totintegral.tabulate(qt*hn*da)
+    ctop = ctopint.evaluate_at(pi/2)
+    cbotint = totintegral.tabulate(hn*da)
+    cbot = cbotint.evaluate_at(pi/2)
 
     coff = -ctop/cbot
 
@@ -147,16 +153,26 @@ while k<50:
     if k >= 1:
         zn = alpha * zn + (1 - alpha) * zn0
     
-    un = -cumulintegral(zn * da) * R / coslat
+    unint = - (totintegral.tabulate(zn * da)) * R / coslat
+
+    # not sure how to make this work
+    for point in lat:
+        un[point] = unint.evaluate_at(point)
 
     dhdmu = -(un / coslat + twomegarad) * un * sinlat / (coslat * phibar)
 
-    hn = cumulintegral(dhdmu * da)
+    hnint = totintegral.tabulate(dhdmu * da)
 
-    havgn = totintegral(hn * da)/totintegral(da)
+    for point in lat:
+        hn[point] = hnint.evaluate_at(point)
+
+
+    havgnint = totintegral.tabulate(hn * da)/totintegral.tabulate(da)
+    havgn = havgnint.evaluate_at(pi/2)
     hn = hn - havgn + hbart
 
     k += 1
 
     qn = (f + zn)/hn -coff
-    error = totintegral(sqrt((qn - qt)**2))
+    errorint = totintegral.tabulate(sqrt((qn - qt)**2))
+    error = errorint.evaluate_at(pi/2)
