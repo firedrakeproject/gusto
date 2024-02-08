@@ -1128,27 +1128,28 @@ class SWSaturationAdjustment(PhysicsParametrisation):
 
         # printing to track down negative moisture
         # # # # # # # # # # # # # # # # # # # # # # # #
-        print("values of moisture variables before adding sources:")
-        print("vapour (min, max) =", self.water_v.dat.data.min(), ",",
-              self.water_v.dat.data.max())
-        print("cloud (min, max) =", self.cloud.dat.data.min(), ",",
-              self.cloud.dat.data.max())
-        print("source terms in evaluate:")
-        for source in self.source:
-            print("source (min, max) =", source.dat.data.min(), ",",
-                  source.dat.data.max())
+        # print("values of moisture variables before adding sources:")
+        # print("vapour (min, max) =", self.water_v.dat.data.min(), ",",
+        #       self.water_v.dat.data.max())
+        # print("cloud (min, max) =", self.cloud.dat.data.min(), ",",
+        #       self.cloud.dat.data.max())
+        # print("source terms in evaluate:")
+        # for source in self.source:
+        #     print("source (min, max) =", source.dat.data.min(), ",",
+        #           source.dat.data.max())
         # # # # # # # # # # # # # # # # # # # # # # # #
 
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
+            print("interpolator.interpolate has been called")
 
         # printing to track down negative moisture
         # # # # # # # # # # # # # # # # # # # # # # # #
-        print("values of moisture variables after adding sources:")
-        print("vapour (min, max) =", self.water_v.dat.data.min(), ",",
-              self.water_v.dat.data.max())
-        print("cloud (min, max) =", self.cloud.dat.data.min(), ",",
-              self.cloud.dat.data.max())
+        # print("values of moisture variables after adding sources:")
+        # print("vapour (min, max) =", self.water_v.dat.data.min(), ",",
+        #       self.water_v.dat.data.max())
+        # print("cloud (min, max) =", self.cloud.dat.data.min(), ",",
+        #       self.cloud.dat.data.max())
         # # # # # # # # # # # # # # # # # # # # # # # #
 
 

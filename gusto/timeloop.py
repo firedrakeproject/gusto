@@ -720,19 +720,39 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 for name, scheme in self.active_transport:
                     logger.info(f'SIQN: Transport {outer}: {name}')
                     # transports a field from xstar and puts result in xp
+
+                    # printing to track down negative moisture
+                    # # # # # # # # # # # # # # # # # # # # # # # #
+                    print("calling this transport scheme:")
+                    print(scheme)
+                    # if name == 'water_vapour' or name == 'cloud_water':
+                    #     print(name)
+                    #     print("min, max of xstar:")
+                    #     print(xstar(name).dat.data.min(),
+                    #           xstar(name).dat.data.max())
+                    # print(scheme)
+                    # # # # # # # # # # # # # # # # # # # # # # # #
+
                     scheme.apply(xp(name), xstar(name))
 
                     # printing to track down negative moisture
                     # # # # # # # # # # # # # # # # # # # # # # # #
-                    if name == 'water_vapour' or name == 'cloud_water':
-                        print(name)
-                        print("min, max of xstar:")
-                        print(xstar(name).dat.data.min(),
-                              xstar(name).dat.data.max())
-                        print("min, max of xp:")
-                        print(xp(name).dat.data.min(),
-                              xp(name).dat.data.max())
+                    # if name == 'water_vapour' or name == 'cloud_water':
+                    #     print("min, max of xp:")
+                    #     print(xp(name).dat.data.min(),
+                    #           xp(name).dat.data.max())
                     # # # # # # # # # # # # # # # # # # # # # # # #
+                    # # # # # # # # # # # # # # # # # # # # # # # #
+                    if name == 'b' or name == 'water_vapour' or name == 'cloud_water':
+                        print(name)
+                        if xstar(name).dat.data.min() <= xp(name).dat.data.min():
+                            print("no new min after one transport loop - fine ")
+                        else:
+                            print("new min after one transport loop - NOT fine!")
+                        if xstar(name).dat.data.max() >= xp(name).dat.data.max():
+                            print("no new max after one transport loop - fine")
+                        else:
+                            print("new max after one transport loop - NOT fine!")
 
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:
@@ -777,6 +797,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         if len(self.final_physics_schemes) > 0:
             with timed_stage("Final Physics"):
                 for _, scheme in self.final_physics_schemes:
+                    print("this is final physics")
+                    print(scheme)
                     scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
 
     def run(self, t, tmax, pick_up=False):

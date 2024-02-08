@@ -839,10 +839,87 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         self.x1.assign(x0)
         for i in range(stage):
             self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
+            # try putting limiter here as an experiment
+            # if self.limiter is not None:
+            #     self.limiter.apply(self.x1)
+
+
         for evaluate in self.evaluate_source:
+            print("1. vapour before the evaluate:")
+            v_before_eval = Function(
+                self.x1.split()[3].function_space()).interpolate(
+                    self.x1.split()[3])
+            print(v_before_eval.dat.data.min(), v_before_eval.dat.data.max())
+            print("1. cloud before the evaluate:")
+            c_before_eval = Function(
+                self.x1.split()[4].function_space()).interpolate(
+                    self.x1.split()[4])
+            print(c_before_eval.dat.data.min(), c_before_eval.dat.data.max())
+
             evaluate(self.x1, self.dt)
+
+            print("2. vapour after the evaluate and before the limiter:")
+            v_before_lmtr = Function(
+                self.x1.split()[3].function_space()).interpolate(
+                    self.x1.split()[3])
+            print(v_before_lmtr.dat.data.min(), v_before_lmtr.dat.data.max())
+            print("2. cloud after the evaluate and before the limiter:")
+            c_before_lmtr = Function(
+                self.x1.split()[4].function_space()).interpolate(
+                    self.x1.split()[4])
+            print(c_before_lmtr.dat.data.min(), c_before_lmtr.dat.data.max())
+
+
+        # The function space is a MixedFunctionSpace when doing physics
+        if not len(self.x1.function_space()) > 1:
+            field_before_lmtr = Function(self.x1.function_space()).interpolate(
+                self.x1)
+        else:
+            v_before_lmtr = Function(
+                self.x1.split()[3].function_space()).interpolate(
+                    self.x1.split()[3])
+            c_before_lmtr = Function(
+                self.x1.split()[4].function_space()).interpolate(
+                    self.x1.split()[4])
+
         if self.limiter is not None:
+            print("applying limiter at stage:")
+            print(stage)
             self.limiter.apply(self.x1)
+
+            if len(self.x1.function_space()) > 1: # physics case
+                v_after_lmtr = Function(
+                    self.x1.split()[3].function_space()).interpolate(
+                        self.x1.split()[3])
+                c_after_lmtr = Function(
+                    self.x1.split()[4].function_space()).interpolate(
+                        self.x1.split()[4])
+                print("3. vapour after the evaluate and after the limiter:")
+                print(v_after_lmtr.dat.data.min(), v_after_lmtr.dat.data.max())
+                print("3. cloud after the evaluate and after the limiter:")
+                print(c_after_lmtr.dat.data.min(), c_after_lmtr.dat.data.max())
+
+                if v_before_lmtr.dat.data.min() <= v_after_lmtr.dat.data.min():
+                    print("vapour min is bigger or equal after a solve stage - fine")
+                else:
+                    print("vapour min is smaller after a solve stage - not fine")
+                if v_before_lmtr.dat.data.max() >= v_after_lmtr.dat.data.max():
+                    print("vapour max is smaller or equal after a solve stage - fine")
+                else:
+                    print("vapour max is bigger after a solve stage - not fine")
+
+            else:                   # transport case
+                field_after_lmtr = Function(
+                    self.x1.function_space()).interpolate(self.x1)
+                if field_before_lmtr.dat.data.min() <= field_after_lmtr.dat.data.min():
+                    print("the minimum is bigger or equal after a solve stage - fine")
+                else:
+                    print("the minimum is smaller after a solve stage - not fine")
+                if field_before_lmtr.dat.data.max() >= field_after_lmtr.dat.data.max():
+                    print("the maximum is smaller or equal after a solve stage - fine")
+                else:
+                    print("the maximum is bigger after a solve stage - not fine")
+
         self.solver.solve()
         self.k[stage].assign(self.x_out)
 
