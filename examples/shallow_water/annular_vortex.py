@@ -138,8 +138,9 @@ qt = condit(lat > 0., 0.3*qp,
 totintegral = NumericalIntegral(-pi/2, pi/2)
 
 # iteration loop
+error = 1
 k=0
-while k<50:
+while error > 1e-10:
     ctopint = totintegral.tabulate(qt*hn*da)
     ctop = ctopint.evaluate_at(pi/2)
     cbotint = totintegral.tabulate(hn*da)
