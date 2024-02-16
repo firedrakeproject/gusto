@@ -847,12 +847,12 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         for evaluate in self.evaluate_source:
             print("1. vapour before the evaluate:")
             v_before_eval = Function(
-                self.x1.split()[3].function_space()).interpolate(
+                self.x1.split()[3].function_space()).assign(
                     self.x1.split()[3])
             print(v_before_eval.dat.data.min(), v_before_eval.dat.data.max())
             print("1. cloud before the evaluate:")
             c_before_eval = Function(
-                self.x1.split()[4].function_space()).interpolate(
+                self.x1.split()[4].function_space()).assign(
                     self.x1.split()[4])
             print(c_before_eval.dat.data.min(), c_before_eval.dat.data.max())
 
@@ -860,26 +860,26 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
 
             print("2. vapour after the evaluate and before the limiter:")
             v_before_lmtr = Function(
-                self.x1.split()[3].function_space()).interpolate(
+                self.x1.split()[3].function_space()).assign(
                     self.x1.split()[3])
             print(v_before_lmtr.dat.data.min(), v_before_lmtr.dat.data.max())
             print("2. cloud after the evaluate and before the limiter:")
             c_before_lmtr = Function(
-                self.x1.split()[4].function_space()).interpolate(
+                self.x1.split()[4].function_space()).assign(
                     self.x1.split()[4])
             print(c_before_lmtr.dat.data.min(), c_before_lmtr.dat.data.max())
 
 
         # The function space is a MixedFunctionSpace when doing physics
         if not len(self.x1.function_space()) > 1:
-            field_before_lmtr = Function(self.x1.function_space()).interpolate(
+            field_before_lmtr = Function(self.x1.function_space()).assign(
                 self.x1)
         else:
             v_before_lmtr = Function(
-                self.x1.split()[3].function_space()).interpolate(
+                self.x1.split()[3].function_space()).assign(
                     self.x1.split()[3])
             c_before_lmtr = Function(
-                self.x1.split()[4].function_space()).interpolate(
+                self.x1.split()[4].function_space()).assign(
                     self.x1.split()[4])
 
         if self.limiter is not None:
@@ -889,10 +889,10 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
 
             if len(self.x1.function_space()) > 1: # physics case
                 v_after_lmtr = Function(
-                    self.x1.split()[3].function_space()).interpolate(
+                    self.x1.split()[3].function_space()).assign(
                         self.x1.split()[3])
                 c_after_lmtr = Function(
-                    self.x1.split()[4].function_space()).interpolate(
+                    self.x1.split()[4].function_space()).assign(
                         self.x1.split()[4])
                 print("3. vapour after the evaluate and after the limiter:")
                 print(v_after_lmtr.dat.data.min(), v_after_lmtr.dat.data.max())
@@ -910,7 +910,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
 
             else:                   # transport case
                 field_after_lmtr = Function(
-                    self.x1.function_space()).interpolate(self.x1)
+                    self.x1.function_space()).assign(self.x1)
                 if field_before_lmtr.dat.data.min() <= field_after_lmtr.dat.data.min():
                     print("the minimum is bigger or equal after a solve stage - fine")
                 else:
