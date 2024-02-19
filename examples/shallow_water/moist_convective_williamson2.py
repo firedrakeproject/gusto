@@ -62,7 +62,6 @@ eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
 
 # IO
 dirname = "moist_convective_williamson2"
-dumpfreq = int(tmax / (ndumps*dt))
 output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist_latlon=['D', 'D_error'],
