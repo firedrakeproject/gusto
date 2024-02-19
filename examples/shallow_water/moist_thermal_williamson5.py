@@ -34,8 +34,8 @@ mu1 = 0.05
 mu2 = 0.98
 q0 = 135  # chosen to give an initial max vapour of approx 0.02
 beta2 = 10
-qprecip = 10e-4
-gamma_r = 10e-3
+qprecip = 1e-4
+gamma_r = 1e-3
 # topography parameters
 R0 = pi/9.
 R0sq = R0**2
