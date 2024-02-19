@@ -586,6 +586,10 @@ class ThermalSWSolver(TimesteppingSolver):
         VD = equation.domain.spaces("DG")
         Vb = equation.domain.spaces("DG")
 
+        # Check that the third field is buoyancy
+        if not equation.field_names[2] == 'b':
+            raise NotImplementedError("Field 'b' must exist to use the thermal linear solver in the SIQN scheme")
+
         # Store time-stepping coefficients as UFL Constants
         beta = Constant(beta_)
 
@@ -666,6 +670,13 @@ class ThermalSWSolver(TimesteppingSolver):
                 :class:`MixedFunctionSpace`.
         """
         self.xrhs.assign(xrhs)
+
+        # Check that the b reference profile has been set
+        bbar = split(self.equations.X_ref)[2]
+        b = dy.subfunctions[2]
+        bbar_func = Function(b.function_space()).interpolate(bbar)
+        if bbar_func.dat.data.max() == 0 and bbar_func.dat.data.min() == 0:
+            logger.warning("The reference profile for b in the linear solver is zero. To set a non-zero profile add b to the set_reference_profiles argument.")
 
         with timed_region("Gusto:VelocityDepthSolve"):
             logger.info('Thermal linear solver: mixed solve')
