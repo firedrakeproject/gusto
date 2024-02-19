@@ -605,7 +605,9 @@ class ThermalSWSolver(TimesteppingSolver):
         u, D = TrialFunctions(M)
 
         # Get background buoyancy and depth
-        bbar = split(equation.X_ref)[2]
+        _bbar = split(equation.X_ref)[2]
+        VH1 = equation.domain.spaces("H1")
+        bbar = Function(VH1).interpolate(_bbar)
         Dbar = split(equation.X_ref)[1]
 
         # Approximate elimination of b
