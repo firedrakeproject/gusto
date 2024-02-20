@@ -179,7 +179,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 self.wrapper.field_names = equation.field_names
 
                 for field, subwrapper in self.wrapper.subwrappers.items():
-                
+
                     if field not in equation.field_names:
                         raise ValueError(f"The option defined for {field} is for a field that does not exist in the equation set")
 
