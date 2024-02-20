@@ -87,10 +87,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.courant_max = None
 
         if options is not None:
-            if type(options) == MixedOptions:
-                self.wrapper = options
+            self.wrapper_name = options.name
+            if self.wrapper_name == "mixed_options":
+                self.wrapper = MixedFSWrapper()
 
-                for field, suboption in self.wrapper.suboptions.items():
+                for field, suboption in options.suboptions.items():
                     if suboption.name == 'embedded_dg':
                         self.wrapper.subwrappers.update({field: EmbeddedDGWrapper(self, suboption)})
                     elif suboption.name == "recovered":
@@ -101,18 +102,15 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     else:
                         raise RuntimeError(
                             f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
-
+            elif self.wrapper_name == "embedded_dg":
+                self.wrapper = EmbeddedDGWrapper(self, options)
+            elif self.wrapper_name == "recovered":
+                self.wrapper = RecoveryWrapper(self, options)
+            elif self.wrapper_name == "supg":
+                self.wrapper = SUPGWrapper(self, options)
             else:
-                self.wrapper_name = options.name
-                if self.wrapper_name == "embedded_dg":
-                    self.wrapper = EmbeddedDGWrapper(self, options)
-                elif self.wrapper_name == "recovered":
-                    self.wrapper = RecoveryWrapper(self, options)
-                elif self.wrapper_name == "supg":
-                    self.wrapper = SUPGWrapper(self, options)
-                else:
-                    raise RuntimeError(
-                        f'Time discretisation: wrapper {self.wrapper_name} not implemented')
+                raise RuntimeError(
+                    f'Time discretisation: wrapper {self.wrapper_name} not implemented')
         else:
             self.wrapper = None
             self.wrapper_name = None
@@ -175,11 +173,15 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # -------------------------------------------------------------------- #
 
         if self.wrapper is not None:
-            if type(self.wrapper) == MixedOptions:
+            if self.wrapper_name == "mixed_options":
+            
+                self.wrapper.wrapper_spaces = equation.spaces
+                self.wrapper.field_names = equation.field_names
 
                 for field, subwrapper in self.wrapper.subwrappers.items():
-
-                    subwrapper.mixed_options = True
+                
+                    if field not in equation.field_names:
+                        raise ValueError(f"The option defined for {field} is for a field that does not exist in the equation set")
 
                     field_idx = equation.field_names.index(field)
 

@@ -7,7 +7,7 @@ from firedrake import sqrt, Constant
 __all__ = [
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
     "CompressibleParameters", "ShallowWaterParameters",
-    "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
+    "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions", "MixedFSOptions",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
 ]
 
@@ -170,6 +170,17 @@ class SUPGOptions(WrapperOptions):
     tau = None
     default = 1/sqrt(15)
     ibp = IntegrateByParts.TWICE
+
+
+class MixedFSOptions(WrapperOptions):
+    """Specifies options for a mixed finite element formulation
+    where different suboptions are applied to different
+    prognostic variables."""
+
+    name = "mixed_options"
+    #tracer_fs = None
+    suboptions = {}
+    #subwrappers = {}
 
 
 class SpongeLayerParameters(Configuration):
