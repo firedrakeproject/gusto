@@ -174,7 +174,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if self.wrapper is not None:
             if self.wrapper_name == "mixed_options":
-            
+
                 self.wrapper.wrapper_spaces = equation.spaces
                 self.wrapper.field_names = equation.field_names
 
