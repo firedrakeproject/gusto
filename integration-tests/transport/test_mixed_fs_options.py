@@ -157,7 +157,6 @@ def setup_limiters(dirname, space_A, space_B):
         raise NotImplementedError
 
     # Create the mixed options and mixed limiter objects
-    #opts = MixedFSOptions(eqn, suboptions)
     opts = MixedFSOptions(suboptions=suboptions)
     MixedLimiter = MixedFSLimiter(eqn, sublimiters)
 

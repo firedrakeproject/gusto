@@ -178,9 +178,7 @@ class MixedFSOptions(WrapperOptions):
     prognostic variables."""
 
     name = "mixed_options"
-    #tracer_fs = None
     suboptions = {}
-    #subwrappers = {}
 
 
 class SpongeLayerParameters(Configuration):
