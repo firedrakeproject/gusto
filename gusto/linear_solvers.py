@@ -8,7 +8,7 @@ finite element spaces.
 from firedrake import (
     split, LinearVariationalProblem, Constant, LinearVariationalSolver,
     TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
-    rhs, FacetNormal, div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b,
+    rhs, FacetNormal, div, dx, jump, avg, dS, dS_v, dS_h, ds_v, ds_t, ds_b,
     ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis,
     BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC
 )
@@ -605,20 +605,22 @@ class ThermalSWSolver(TimesteppingSolver):
         u, D = TrialFunctions(M)
 
         # Get background buoyancy and depth
-        _bbar = split(equation.X_ref)[2]
-        VH1 = equation.domain.spaces("H1")
-        bbar = Function(VH1).interpolate(_bbar)
         Dbar = split(equation.X_ref)[1]
+        bbar = split(equation.X_ref)[2]
 
         # Approximate elimination of b
         b = -dot(u, grad(bbar))*beta + b_in
 
+        n = FacetNormal(equation.domain.mesh)
+
         eqn = (
             inner(w, (u - u_in)) * dx
             - beta * (D - Dbar) * div(w*bbar) * dx
-            + beta * 0.5 * Dbar * inner(w, grad(bbar)) * dx
+            + beta * jump(w*bbar, n) * avg(D-Dbar) * dS
+            - beta * 0.5 * Dbar * bbar * div(w) * dx
             - beta * 0.5 * Dbar * b * div(w) * dx
-            + beta * 0.5 * (D - Dbar) * inner(w, grad(bbar)) * dx
+            - beta * 0.5 * bbar * div(w*(D-Dbar)) * dx
+            + beta * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
             + inner(phi, (D - D_in)) * dx
             + beta * phi * Dbar * div(u) * dx
         )
