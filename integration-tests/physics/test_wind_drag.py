@@ -37,7 +37,7 @@ def run_wind_drag(dirname, implicit_formulation):
     eqn = CompressibleEulerEquations(domain, parameters)
 
     # I/O
-    output = OutputParameters(dirname=dirname+"/surface_fluxes",
+    output = OutputParameters(dirname=dirname+"/wind_drag",
                               dumpfreq=1,
                               dumplist=['u'])
     io = IO(domain, output)
