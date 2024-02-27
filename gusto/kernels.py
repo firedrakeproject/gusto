@@ -10,7 +10,7 @@ tested.
 """
 
 from firedrake import dx
-from firedrake.parloops import par_loop, READ, WRITE
+from firedrake.parloops import par_loop, READ, WRITE, RW
 
 
 class LimitMidpoints():
@@ -74,4 +74,41 @@ class LimitMidpoints():
                  {"field_hat": (field_hat, WRITE),
                   "field_DG1": (field_DG1, READ),
                   "field_old": (field_old, READ)},
+                 is_loopy_kernel=True)
+
+
+class ClipZero():
+    """Clips any negative field values to be zero."""
+
+    def __init__(self, V):
+        """
+        Args:
+            V (:class:`FunctionSpace`): The space of the field to be clipped.
+        """
+        shapes = {'nDOFs': V.finat_element.space_dimension()}
+        domain = "{{[i]: 0 <= i < {nDOFs}}}".format(**shapes)
+
+        instrs = ("""
+                  for i
+                      if field_in[i] < 0.0
+                          field[i] = 0.0
+                      else
+                          field[i] = field_in[i]
+                      end
+                  end
+                  """)
+
+        self._kernel = (domain, instrs)
+
+    def apply(self, field, field_in):
+        """
+        Performs the par loop.
+
+        Args:
+            field (:class:`Function`): The field to be written to.
+            field_in (:class:`Function`): The field to be clipped.
+        """
+        par_loop(self._kernel, dx,
+                 {"field": (field, WRITE),
+                  "field_in": (field_in, READ)},
                  is_loopy_kernel=True)
