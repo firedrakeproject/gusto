@@ -4,7 +4,10 @@ Set up Martian annular vortex experiment!
 
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, pi, sqrt, min_value, sin, cos)
+                       as_vector, pi, sqrt, min_value, sin, cos,
+                       interpolate)
+import numpy as np
+import matplotlib.pyplot as plt
 
 # ---------------------------------------------------------------------------- #
 # Test case parameters
@@ -18,13 +21,12 @@ tmax = day
 dt = 450.
 
 # setup shallow water parameters
-#R = 6371220.    ### radius of Earth - change for Mars!
 R = 3389500.    # Mars value (3389500)
-#H = 5960.      ### probably this changes too!
 H = 17000.      # Will's Mars value
+Omega = 2*pi/88774
 
 ### setup shallow water parameters - can also change g and Omega as required
-parameters = ShallowWaterParameters(H=H)
+parameters = ShallowWaterParameters(H=H, Omega=Omega)
 # ------------------------------------------------------------------------ #
 # Set up model objects
 # ------------------------------------------------------------------------ #
@@ -36,26 +38,13 @@ x = SpatialCoordinate(mesh)
 domain = Domain(mesh, dt, 'BDM', 1)
 
 # Equation, including mountain given by bexpr
-#Omega = parameters.Omega
-Omega = 2*pi/88774
 fexpr = 2*Omega*x[2]/R
-lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
-R0 = pi/9.
-R0sq = R0**2
-lamda_c = -pi/2.
-lsq = (lamda - lamda_c)**2
-theta_c = pi/6.
-thsq = (theta - theta_c)**2
-rsq = min_value(R0sq, lsq+thsq)
-r = sqrt(rsq)
-bexpr = 2000 * (1 - r/R0)
-#bexpr = 0.
-eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
+eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
 # I/O (input/output)
-dirname = "annular_vortex_mars_no_u"
+dirname = "annular_vortex_mars"
 output = OutputParameters(dirname=dirname)
-diagnostic_fields = [Sum('D', 'topography')]
+diagnostic_fields = [PotentialVorticity()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
@@ -72,17 +61,165 @@ stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_method
 
 u0 = stepper.fields('u')
 D0 = stepper.fields('D')
-#u_max = 20.   # Maximum amplitude of the zonal wind (m/s)
-u_max = 0.1
-uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-g = 3.71
-#g = parameters.g
-Rsq = R**2
-Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
-#Dexpr = 0.
 
-u0.project(uexpr)
-D0.interpolate(Dexpr)
+def initial_profiles(omega, radius):
+
+    # set numerical method parameters
+    ny = 100000
+    tol = 1e-10
+    alpha = 0.5
+
+    # target hbart and phibar - set to 1 to match Richard Scott?
+    hbart = 1
+    phibar = 17000
+
+
+    # set up latitude array, and sin and cos of lat
+    rlat = np.linspace(-np.pi/2, np.pi/2, num=ny)[1:-1]
+    sinlat = np.sin(rlat)
+    coslat = np.cos(rlat)
+    da = coslat * np.pi/ny
+    hn = np.ones(len(rlat))
+    f = 2 * omega * sinlat
+
+    #setup different initial PV profiles
+    rlat1 = np.radians(45)
+    rlat2 = np.radians(50)
+    qp = 2 * omega / hbart
+    qt0 = 2 * omega * sinlat / hbart
+    qt = qt0
+
+    # Will setup - annulus
+    qt = np.where(rlat > 0., 0.3 * qp, qt)
+    qt = np.where(rlat > rlat1, 1.6 * qp, qt)
+    qt = np.where(rlat > rlat2, qp, qt)
+
+    # annulus smoothing - linearly for +-1.5deg around each boundary
+    def lat_in_rlat(val, rlat):
+        x = np.where(rlat > val, rlat, np.nan)
+        x = x[~np.isnan(x)]
+        return x[0]
+
+    def q_at_lat(val, q):
+        x = np.where(rlat == val, q, np.nan)
+        x = x[~np.isnan(x)]
+        return x[0]
+
+    lim = np.radians(1.5)
+    rlat0l = lat_in_rlat(-lim, rlat)
+    rlat0u = lat_in_rlat(lim, rlat)
+    rlat1l = lat_in_rlat(rlat1 - lim, rlat)
+    rlat1u = lat_in_rlat(rlat1 + lim, rlat)
+    rlat2l = lat_in_rlat(rlat2 - lim, rlat)
+    rlat2u = lat_in_rlat(rlat2 + lim, rlat)
+
+    q_smooth0 = np.interp(rlat, [rlat0l, rlat0u], [q_at_lat(rlat0l, qt), q_at_lat(rlat0u, qt)])
+    q_smooth1 = np.interp(rlat, [rlat1l, rlat1u], [q_at_lat(rlat1l, qt), q_at_lat(rlat1u, qt)])
+    q_smooth2 = np.interp(rlat, [rlat2l, rlat2u], [q_at_lat(rlat2l, qt), q_at_lat(rlat2u, qt)])
+
+    qt = np.where((rlat0l <= rlat) & (rlat <= rlat0u), q_smooth0, qt)
+    qt = np.where((rlat1l <= rlat) & (rlat <= rlat1u), q_smooth1, qt)
+    qt = np.where((rlat2l <= rlat) & (rlat <= rlat2u), q_smooth2, qt)
+
+    # Scott Liu setup
+    #qt = np.where(rlat > 0., 0.3*qp, qt)
+    #qt = np.where(rlat > 60 * np.pi/180, 2.3*qp, qt)
+
+    count = 0
+    error = 1
+    while error > tol:
+
+        # constant for global zeta integral to be 0
+        ctop = np.sum(qt * hn * da)
+        cbot = np.sum(hn * da)
+
+        coff = -ctop / cbot
+
+        # calculate zeta
+        if count >= 1:
+            zn0 = zn
+        zn = (coff + qt) * hn - f
+        if count >= 1:
+            zn = alpha * zn + (1 - alpha) * zn0
+
+        # u as an integral of zeta
+        un = - np.cumsum(zn * da) * radius / coslat
+
+        # dh/dmu (mu = sinlat) from calculated u
+        dhdmu = - (un / coslat + 2 * omega * radius) * un * sinlat / (coslat * phibar)
+
+        # h as an integral of dh/dhmu
+        hn = np.cumsum(dhdmu * da)
+
+        # change average value of h to match the target average value
+        havgn = np.sum(hn * da) / (np.sum(da))
+        hn = hn - havgn + hbart
+
+        # numerical PV value from newly calculated values, with correction constant
+        qn = (f + zn)/hn - coff
+
+        # compare PV profiles and compare to tolerance threshold
+        error = np.sum(np.sqrt((qn - qt)**2))
+        count += 1
+        print(count, error)
+
+    # final values and constants corrected
+    thini = (hn - hbart) * phibar
+    vorini = zn + f
+    uini = un
+
+    fig, axs = plt.subplots(3, 1, sharex=True, figsize = (6,9))
+    axs[0].plot(rlat, qt0, '--', color = 'black', alpha = 0.5)
+    axs[0].plot(rlat, qt, color = 'blue', label = 'target')
+    axs[0].plot(rlat, qn, '--', color='red', label = 'numerical')
+    axs[0].legend()
+    axs[0].set_ylabel('q')
+    axs[1].plot(rlat, [0]*len(rlat), '--', color = 'black', alpha = 0.5)
+    axs[1].plot(rlat, thini/phibar, color = 'blue')
+    axs[1].set_ylabel('h/H-1')
+    axs[2].plot(rlat, [0]*len(rlat), '--', color = 'black', alpha = 0.5)
+    axs[2].plot(rlat, un, color = 'blue')
+    axs[2].set_ylabel('u')
+    fig.tight_layout()
+    plt.show()
+
+    return rlat, uini, thini
+
+rlat, uini, hini = initial_profiles(Omega, R)
+
+def initial_u(X):
+    lats = []
+    for X0 in X:
+        x, y, z = X0
+        _, lat, _ = lonlatr_from_xyz(x, y, z)
+        lats.append(lat)
+    return np.interp(np.array(lats), rlat, uini)
+
+def initial_D(X):
+    lats = []
+    for X0 in X:
+        x, y, z = X0
+        _, lat, _ = lonlatr_from_xyz(x, y, z)
+        lats.append(lat)
+    return np.interp(np.array(lats), rlat, hini)
+
+
+Vu = FunctionSpace(mesh, "DG", 2)
+uzonal = Function(Vu)
+umesh = Vu.mesh()
+Wu = VectorFunctionSpace(umesh, Vu.ufl_element())
+Xu = interpolate(umesh.coordinates, Wu)
+uzonal.dat.data[:] = initial_u(Xu.dat.data_ro)
+X = SpatialCoordinate(mesh)
+u0.project(xyz_vector_from_lonlatr(uzonal, Constant(0), Constant(0), X))
+
+VD = D0.function_space()
+Dmesh = VD.mesh()
+WD = VectorFunctionSpace(umesh, VD.ufl_element())
+XD = interpolate(Dmesh.coordinates, WD)
+D0.dat.data[:] = initial_D(XD.dat.data_ro)
+
+D0 += H
 
 Dbar = Function(D0.function_space()).assign(H)
 stepper.set_reference_profiles([('D', Dbar)])
@@ -92,88 +229,3 @@ stepper.set_reference_profiles([('D', Dbar)])
 # ------------------------------------------------------------------------ #
 
 stepper.run(t=0, tmax=tmax)
-
-
-# this bit is solving for the initial conditions
-
-# need to setup totintegral to be an integral in latitude from -pi/2 to +pi/2
-# and cumulintegral to be an integral in latitude from -pi/2 to current latitude
-
-twomega = 2 * Omega
-twomegarad = twomega * radius
-
-alpha = 0.5
-
-hbart = 1
-phibar = H
-
-lat = theta
-sinlat = sin(lat)
-coslat = cos(lat)
-
-# need to find the correct weighting function for the integrals as lat not necessarily equally spaced - 
-# or da = coslat if the numerical integrator deals with the random lat spacing (as np.sum wouldn't)
-da = coslat
-
-
-
-f = twomega * sinlat
-
-# not sure if this works in gusto? - hn just needs to initially be an 1 at every latitude point
-hn = [1] * len(lat)
-
-rlat1 = pi / 180. * 45.
-rlat2 = pi / 180. * 50.
-qp = twomega / hbart
-qt0 = twomega * sinlat / hbart
-qt = qt0
-
-
-# not really sure what the correct formatting is for this - Dan said I can't use np.where but I'm not sure the actual name of what to use instead
-qt = condit(lat > 0., 0.3*qp,
-        condit(lat > rlat1, 1.6*qp,
-            condit(lat > rlat2, qp, qt0)))
-
-
-totintegral = NumericalIntegral(-pi/2, pi/2)
-
-# iteration loop
-error = 1
-k=0
-while error > 1e-10:
-    ctopint = totintegral.tabulate(qt*hn*da)
-    ctop = ctopint.evaluate_at(pi/2)
-    cbotint = totintegral.tabulate(hn*da)
-    cbot = cbotint.evaluate_at(pi/2)
-
-    coff = -ctop/cbot
-
-    if k >= 1:
-        zn0 = zn
-    zn = (coff + qt) * hn - f
-    if k >= 1:
-        zn = alpha * zn + (1 - alpha) * zn0
-    
-    unint = - (totintegral.tabulate(zn * da)) * R / coslat
-
-    # not sure how to make this work
-    for point in lat:
-        un[point] = unint.evaluate_at(point)
-
-    dhdmu = -(un / coslat + twomegarad) * un * sinlat / (coslat * phibar)
-
-    hnint = totintegral.tabulate(dhdmu * da)
-
-    for point in lat:
-        hn[point] = hnint.evaluate_at(point)
-
-
-    havgnint = totintegral.tabulate(hn * da)/totintegral.tabulate(da)
-    havgn = havgnint.evaluate_at(pi/2)
-    hn = hn - havgn + hbart
-
-    k += 1
-
-    qn = (f + zn)/hn -coff
-    errorint = totintegral.tabulate(sqrt((qn - qt)**2))
-    error = errorint.evaluate_at(pi/2)
