@@ -10,7 +10,7 @@ tested.
 """
 
 from firedrake import dx
-from firedrake.parloops import par_loop, READ, WRITE, RW
+from firedrake.parloops import par_loop, READ, WRITE
 
 
 class LimitMidpoints():
