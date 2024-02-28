@@ -8,7 +8,6 @@ operator F.
 from abc import ABCMeta, abstractmethod, abstractproperty
 import math
 import numpy as np
-
 from firedrake import (
     Function, TestFunction, NonlinearVariationalProblem,
     NonlinearVariationalSolver, DirichletBC, split, Constant
@@ -24,7 +23,6 @@ from gusto.labels import (time_derivative, prognostic, physics_label,
                           implicit, explicit)
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
-import numpy as np
 import scipy
 from scipy.special import legendre
 
@@ -1871,16 +1869,18 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
 class SDC(object, metaclass=ABCMeta):
 
-    def __init__(self, domain, M, maxk, field_name=None):
+    def __init__(self, domain, M, maxk, quadrature, field_name=None, final_update=True):
         self.field_name=field_name
         self.domain = domain
-        self.dt = domain.dt
+        self.dt_coarse = domain.dt
         self.M = M
         self.maxk = maxk
+        self.final_update=final_update
 
-        self.rnw_r(domain.dt)
+        self.create_nodes(self.dt_coarse, quadrature)
         self.Qmatrix()
         self.Smatrix()
+        self.Qfinal()
         self.dtau = Constant(np.diff(np.append(0, self.nodes)))
 
     @property
@@ -1891,24 +1891,32 @@ class SDC(object, metaclass=ABCMeta):
     def setup(self, equation):
         pass
 
-    def rnw_r(self, b, A=-1, B=1):
-        # nodes and weights for gauss - radau IIA quadrature
-        # See Abramowitz & Stegun p 888
+    def create_nodes(self, b, quadrature, A=-1, B=1):
         M = self.M
-        a = 0
+        a = 0.
         nodes = np.zeros(M)
-        nodes[0] = A
-        p = np.poly1d([1, 1])
-        pn = legendre(M)
-        pn1 = legendre(M-1)
-        poly, remainder = (pn + pn1)/p  # [1] returns remainder from polynomial division
-        nodes[1:] = np.sort(poly.roots)
-        weights = 1/M**2 * (1-nodes[1:])/(pn1(nodes[1:]))**2
-        weights = np.append(2/M**2, weights)
+        if quadrature == "gauss-radau":
+            # nodes and weights for gauss - radau IIA quadrature
+            # See Abramowitz & Stegun p 888
+            nodes[0] = A
+            p = np.poly1d([1, 1])
+            pn = legendre(M)
+            pn1 = legendre(M-1)
+            poly, remainder = (pn + pn1)/p  # [1] returns remainder from polynomial division
+            nodes[1:] = np.sort(poly.roots)
+        elif quadrature == "gauss-lobatto":
+            pn = legendre(M-1)
+            pn_d=pn.deriv()
+            nodes[0] = A
+            nodes[-1]= B
+            nodes[1:-1] = np.sort(pn_d.roots)
+        elif quadrature == "gauss-legendre":
+            pn = legendre(M)
+            nodes = np.sort(pn.roots)
+
+        # rescale to be between [a,b] instead of [A,B]
         nodes = ((b - a) * nodes + a * B - b * A) / (B - A)
-        weights = (b - a)/(B - A)*weights
         self.nodes = ((b + a) - nodes)[::-1]  # reverse nodes
-        self.weights = weights[::-1]  # reverse weights
 
     def NewtonVM(self, t):
         """
@@ -1975,6 +1983,18 @@ class SDC(object, metaclass=ABCMeta):
         for m in np.arange(M):
             w = self.get_weights(self.nodes[m])
             self.Q[m, 0:] = w
+    
+    def Qfinal(self):
+        """
+        Final Update Integration Vector
+        """
+        M = self.M
+        self.Qfin = np.zeros(M)
+
+        # Get weights for the interval [0,dt]
+        w = self.get_weights(self.dt_coarse)
+        
+        self.Qfin[:] = w
 
     def Smatrix(self):
         """
@@ -1993,6 +2013,11 @@ class SDC(object, metaclass=ABCMeta):
             self.quad[j].assign(0.)
             for k in range(self.M):
                 self.quad[j] += float(self.S[j, k])*self.fUnodes[k]
+    
+    def compute_quad_final(self):
+        self.quad_final.assign(0.)
+        for k in range(self.M):
+            self.quad_final += float(self.Qfin[k])*self.fUnodes[k]
 
     @abstractmethod
     def apply(self, x_out, x_in):
@@ -2001,8 +2026,8 @@ class SDC(object, metaclass=ABCMeta):
 
 class FE_SDC(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, field_name=None):
-        super().__init__(domain, M, maxk, field_name=field_name)
+    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None, final_update=True):
+        super().__init__(domain, M, maxk, quadrature, field_name=field_name, final_update=final_update)
         self.base = base_scheme
 
 
@@ -2018,7 +2043,7 @@ class FE_SDC(SDC):
             self.field_name = equation.field_name
             W = equation.function_space
             self.idx = None
-        dt = self.dt
+
         self.W = W
         self.Unodes = [Function(W) for _ in range(self.M+1)]
         self.Unodes1 = [Function(W) for _ in range(self.M+1)]
@@ -2029,6 +2054,8 @@ class FE_SDC(SDC):
         self.U0 = Function(W)
         self.Un = Function(W)
         self.Q_ = Function(W)
+        self.quad_final = Function(W)
+        self.U_fin = Function(W)
 
         try:
             #bcs = equation.bcs['u']
@@ -2076,6 +2103,37 @@ class FE_SDC(SDC):
 
         F_SDC = a + F_exp + F0 + Q
         return F_SDC.form
+
+    @property
+    def res_fin(self):
+
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                        replace_subject(self.U_fin, old_idx=self.idx),
+                        drop)
+
+        F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                            replace_subject(self.Un, old_idx=self.idx),
+                            drop)
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
+
+
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.quad_final, old_idx=self.idx),
+                                    drop)
+
+        F_fin = a + F_exp + Q
+        return F_fin.form
+    
+    @cached_property
+    def solver_fin(self):
+        """Set up the problem and the solver."""
+        # setup linear solver using lhs and rhs defined in derived class
+        prob_fin = NonlinearVariationalProblem(self.res_fin, self.U_fin, bcs=self.bcs)
+        #solver_name = self.field_name+self.__class__.__name__+"_SDC"
+        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
+        #self.solver_parameters.setdefault('snes_type', 'ksponly')
+        return NonlinearVariationalSolver(prob_fin)
     
     @cached_property
     def solver_SDC(self):
@@ -2129,7 +2187,17 @@ class FE_SDC(SDC):
 
             self.Un.assign(self.Unodes1[-1])
         if self.maxk > 0:
-            x_out.assign(self.Un)
+            if self.final_update:
+                for m in range(1, self.M+1):
+                    self.Uin.assign(self.Unodes1[m])
+                    self.solver_rhs.solve()
+                    self.fUnodes[m-1].assign(self.Urhs)
+                self.Un.assign(x_in)
+                self.compute_quad_final()
+                self.solver_fin.solve()
+                x_out.assign(self.U_fin)
+            else:
+                x_out.assign(self.Unodes1[-1])
         else:
             x_out.assign(self.Unodes[-1])
             
@@ -2137,16 +2205,14 @@ class FE_SDC(SDC):
 
 class BE_SDC(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, field_name=None):
-        super().__init__(domain, M, maxk, field_name=field_name)
+    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None, final_update=True):
+        super().__init__(domain, M, maxk, quadrature, field_name=field_name, final_update=final_update)
         self.base = base_scheme
 
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         self.base.setup(equation, *active_labels)
         self.residual = self.base.residual
-
-        #uadv = self.state.fields("u")
 
 
         # set up SDC form and solver
@@ -2168,9 +2234,10 @@ class BE_SDC(SDC):
         self.U01 = Function(W)
         self.Un = Function(W)
         self.Q_ = Function(W)
+        self.U_fin = Function(W)
+        self.quad_final = Function(W)
 
         try:
-            #bcs = equation.bcs['u']
             self.bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
         except KeyError:
             self.bcs = None
@@ -2215,6 +2282,36 @@ class BE_SDC(SDC):
 
         F_SDC = F_imp + F_exp + F01  + Q
         return F_SDC.form
+    @property
+    def res_fin(self):
+
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                        replace_subject(self.U_fin, old_idx=self.idx),
+                        drop)
+
+        F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                            replace_subject(self.Un, old_idx=self.idx),
+                            drop)
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
+
+
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.quad_final, old_idx=self.idx),
+                                    drop)
+
+        F_fin = a + F_exp + Q
+        return F_fin.form
+    
+    @cached_property
+    def solver_fin(self):
+        """Set up the problem and the solver."""
+        # setup linear solver using lhs and rhs defined in derived class
+        prob_fin = NonlinearVariationalProblem(self.res_fin, self.U_fin, bcs=self.bcs)
+        #solver_name = self.field_name+self.__class__.__name__+"_SDC"
+        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
+        #self.solver_parameters.setdefault('snes_type', 'ksponly')
+        return NonlinearVariationalSolver(prob_fin)
     
     @cached_property
     def solver_SDC(self):
@@ -2268,136 +2365,29 @@ class BE_SDC(SDC):
 
             self.Un.assign(self.Unodes1[-1])
         if self.maxk > 0:
-            x_out.assign(self.Un)
+            if self.final_update:
+                for m in range(1, self.M+1):
+                    self.Uin.assign(self.Unodes1[m])
+                    self.solver_rhs.solve()
+                    self.fUnodes[m-1].assign(self.Urhs)
+                self.Un.assign(x_in)
+                self.compute_quad_final()
+                self.solver_fin.solve()
+                x_out.assign(self.U_fin)
+            else:
+                x_out.assign(self.Unodes1[-1])
         else:
             x_out.assign(self.Unodes[-1])
-
-
-class IM_SDC(SDC):
-
-    def setup(self, equation):
-
-        self.base = ImplicitMidpoint(self.domain)
-
-        #uadv = self.state.fields("u")
-
-        self.base.setup(equation)
-        self.residual = self.base.residual
-
-        # set up SDC form and solver
-        W = equation.function_space
-        self.W = W
-        self.Unodes = [Function(W) for _ in range(self.M+1)]
-        self.Unodes1 = [Function(W) for _ in range(self.M+1)]
-        self.fUnodes = [Function(W) for _ in range(self.M+1)]
-        self.quad = [Function(W) for _ in range(self.M+1)]
-
-        self.U_SDC = Function(W)
-        self.U0 = Function(W)
-        self.U01 = Function(W)
-        self.Un = Function(W)
-        self.Q_ = Function(W)
-
-        F = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    map_if_false=lambda t: 0.5*self.dt*t)
-
-        F_imp = F.label_map(all_terms,
-                            replace_subject(self.U_SDC))
-
-        F_exp = F.label_map(lambda t: t.has_label(time_derivative),
-                            replace_subject(self.Un),
-                            drop)
-        F_exp = F_exp.label_map(all_terms,
-                                lambda t: -1*t)
-
-        F01 = F.label_map(lambda t: t.has_label(time_derivative),
-                          drop,
-                          replace_subject(self.U01))
-
-        F01 = F01.label_map(all_terms, lambda t: -0.5*t)
-
-        F0 = F.label_map(lambda t: t.has_label(time_derivative),
-                         drop,
-                         replace_subject(self.U0))
-        F0 = F0.label_map(all_terms,
-                          lambda t: -0.5*t)
-
-        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Q_),
-                                    drop)
-
-        F_SDC = F_imp + F_exp + F01 + F0 + Q
-
-        try:
-            #bcs = equation.bcs['u']
-            bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
-        except KeyError:
-            bcs = None
-        prob_SDC = NonlinearVariationalProblem(F_SDC.form, self.U_SDC, bcs=bcs)
-        self.solver_SDC = NonlinearVariationalSolver(prob_SDC)
-
-        # set up RHS evaluation
-        self.Urhs = Function(W)
-        self.Uin = Function(W)
-        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Urhs),
-                                    drop)
-        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    drop,
-                                    replace_subject(self.Uin))
-        Frhs = a - L
-        prob_rhs = NonlinearVariationalProblem(Frhs.form, self.Urhs, bcs=bcs)
-        self.solver_rhs = NonlinearVariationalSolver(prob_rhs)
-
-    def apply(self, x_out, x_in):
-        self.Un.assign(x_in)
-
-        self.Unodes[0].assign(self.Un)
-        for m in range(self.M):
-            self.base.dt = self.dtau[m]
-            self.base.apply(self.Unodes[m+1], self.Unodes[m])
-
-        k = 0
-        while k < self.maxk:
-            k += 1
-
-            for m in range(1, self.M+1):
-                self.Uin.assign(self.Unodes[m])
-                self.solver_rhs.solve()
-                self.fUnodes[m-1].assign(self.Urhs)
-
-            self.compute_quad()
-
-            self.Unodes1[0].assign(self.Unodes[0])
-            for m in range(1, self.M+1):
-                self.dt = self.dtau[m-1]
-                self.U0.assign(self.Unodes[m-1])
-                self.U01.assign(self.Unodes[m])
-                self.Un.assign(self.Unodes1[m-1])
-                self.Q_.assign(self.quad[m-1])
-                self.solver_SDC.solve()
-                self.Unodes1[m].assign(self.U_SDC)
-            for m in range(1, self.M+1):
-                self.Unodes[m].assign(self.Unodes1[m])
-
-            self.Un.assign(self.Unodes1[-1])
-        if self.maxk > 0:
-            x_out.assign(self.Un)
-        else:
-            x_out.assign(self.Unodes[-1])
-
 
 class IMEX_SDC(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, field_name=None):
-        super().__init__(domain, M, maxk, field_name=field_name)
+    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,final_update=True):
+        super().__init__(domain, M, maxk, quadrature, field_name=field_name,final_update=final_update)
         self.base = base_scheme
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         self.base.setup(equation, *active_labels)
         self.residual = self.base.residual
-
-        #uadv = self.state.fields("u")
 
 
         # set up SDC form and solver
@@ -2410,7 +2400,6 @@ class IMEX_SDC(SDC):
             self.idx = None
 
         # set up SDC form and solver
-        dt = self.dt
         self.W = W
         self.Unodes = [Function(W) for _ in range(self.M+1)]
         self.Unodes1 = [Function(W) for _ in range(self.M+1)]
@@ -2422,6 +2411,9 @@ class IMEX_SDC(SDC):
         self.U01 = Function(W)
         self.Un = Function(W)
         self.Q_ = Function(W)
+        self.U_fin = Function(W)
+        self.quad_final = Function(W)
+
         try:
             #bcs = equation.bcs['u']
             self.bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
@@ -2475,6 +2467,37 @@ class IMEX_SDC(SDC):
         F_SDC = F_imp + F_exp + F01 + F0 + Q
         return F_SDC.form
     
+    @property
+    def res_fin(self):
+
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                        replace_subject(self.U_fin, old_idx=self.idx),
+                        drop)
+
+        F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                            replace_subject(self.Un, old_idx=self.idx),
+                            drop)
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
+
+
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.quad_final, old_idx=self.idx),
+                                    drop)
+
+        F_fin = a + F_exp + Q
+        return F_fin.form
+    
+    @cached_property
+    def solver_fin(self):
+        """Set up the problem and the solver."""
+        # setup linear solver using lhs and rhs defined in derived class
+        prob_fin = NonlinearVariationalProblem(self.res_fin, self.U_fin, bcs=self.bcs)
+        #solver_name = self.field_name+self.__class__.__name__+"_SDC"
+        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
+        #self.solver_parameters.setdefault('snes_type', 'ksponly')
+        return NonlinearVariationalSolver(prob_fin)
+    
     @cached_property
     def solver_SDC(self):
         """Set up the problem and the solver."""
@@ -2528,7 +2551,17 @@ class IMEX_SDC(SDC):
 
             self.Un.assign(self.Unodes1[-1])
         if self.maxk > 0:
-            x_out.assign(self.Un)
+            if self.final_update:
+                for m in range(1, self.M+1):
+                    self.Uin.assign(self.Unodes1[m])
+                    self.solver_rhs.solve()
+                    self.fUnodes[m-1].assign(self.Urhs)
+                self.Un.assign(x_in)
+                self.compute_quad_final()
+                self.solver_fin.solve()
+                x_out.assign(self.U_fin)
+            else:
+                x_out.assign(self.Unodes1[-1])
         else:
             x_out.assign(self.Unodes[-1])
 
