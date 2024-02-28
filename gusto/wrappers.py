@@ -33,14 +33,27 @@ class Wrapper(object, metaclass=ABCMeta):
         self.time_discretisation = time_discretisation
         self.options = wrapper_options
         self.solver_parameters = None
+        self.original_space = None
 
     @abstractmethod
-    def setup(self):
+    def setup(self, original_space=None):
         """
-        Performs standard set up routines, and is to be called by the setup
-        method of the underlying time discretisation.
+        Store the original function space of the prognostic variable.
+
+        Within each child wrapper, setup performs standard set up routines,
+        and is to be called by the setup method of the underlying
+        time discretisation.
+
+        Args:
+            original_space (:class:`FunctionSpace`): the space that the
+        prognostic variable is defined on. This is a subset space of
+        a mixed function space when using a MixedFSWrapper. Defaults
+        to None, when not using a MixedFSWrapper.
         """
-        pass
+        if original_space is not None:
+            self.original_space = original_space
+        else:
+            self.original_space = self.time_discretisation.fs
 
     @abstractmethod
     def pre_apply(self):
@@ -76,26 +89,23 @@ class EmbeddedDGWrapper(Wrapper):
     the original space.
     """
 
-    def setup(self, previous_space=None):
+    def setup(self, original_space=None):
         """Sets up function spaces and fields needed for this wrapper."""
 
         assert isinstance(self.options, EmbeddedDGOptions), \
             'Embedded DG wrapper can only be used with Embedded DG Options'
 
+        super().setup(original_space)
+
         domain = self.time_discretisation.domain
         equation = self.time_discretisation.equation
-
-        if previous_space is not None:
-            original_space = previous_space
-        else:
-            original_space = self.time_discretisation.fs
 
         # -------------------------------------------------------------------- #
         # Set up spaces to be used with wrapper
         # -------------------------------------------------------------------- #
 
         if self.options.embedding_space is None:
-            V_elt = BrokenElement(original_space.ufl_element())
+            V_elt = BrokenElement(self.original_space.ufl_element())
             self.function_space = FunctionSpace(domain.mesh, V_elt)
         else:
             self.function_space = self.options.embedding_space
@@ -109,10 +119,8 @@ class EmbeddedDGWrapper(Wrapper):
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
 
-        if previous_space is not None:
-            self.x_projected = Function(previous_space)
-        elif self.time_discretisation.idx is None:
-            self.x_projected = Function(equation.function_space)
+        if self.time_discretisation.idx is None:
+            self.x_projected = Function(self.original_space)
         else:
             self.x_projected = Function(equation.spaces[self.time_discretisation.idx])
 
@@ -165,26 +173,23 @@ class RecoveryWrapper(Wrapper):
     field is then returned to the original space.
     """
 
-    def setup(self, previous_space=None):
+    def setup(self, original_space=None):
         """Sets up function spaces and fields needed for this wrapper."""
 
         assert isinstance(self.options, RecoveryOptions), \
             'Recovery wrapper can only be used with Recovery Options'
 
+        super().setup(original_space)
+
         domain = self.time_discretisation.domain
         equation = self.time_discretisation.equation
-
-        if previous_space is not None:
-            original_space = previous_space
-        else:
-            original_space = self.time_discretisation.fs
 
         # -------------------------------------------------------------------- #
         # Set up spaces to be used with wrapper
         # -------------------------------------------------------------------- #
 
         if self.options.embedding_space is None:
-            V_elt = BrokenElement(original_space.ufl_element())
+            V_elt = BrokenElement(self.original_space.ufl_element())
             self.function_space = FunctionSpace(domain.mesh, V_elt)
         else:
             self.function_space = self.options.embedding_space
@@ -195,18 +200,12 @@ class RecoveryWrapper(Wrapper):
         # Internal variables to be used
         # -------------------------------------------------------------------- #
 
-        if previous_space is not None:
-            self.x_in_tmp = Function(previous_space)
-        else:
-            self.x_in_tmp = Function(self.time_discretisation.fs)
-
+        self.x_in_tmp = Function(self.original_space)
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
 
-        if previous_space is not None:
-            self.x_projected = Function(previous_space)
-        elif self.time_discretisation.idx is None:
-            self.x_projected = Function(equation.function_space)
+        if self.time_discretisation.idx is None:
+            self.x_projected = Function(self.original_space)
         else:
             self.x_projected = Function(equation.spaces[self.time_discretisation.idx])
 
