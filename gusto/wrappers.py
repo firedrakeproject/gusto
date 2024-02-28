@@ -33,7 +33,6 @@ class Wrapper(object, metaclass=ABCMeta):
         self.time_discretisation = time_discretisation
         self.options = wrapper_options
         self.solver_parameters = None
-        self.tracer_fs = None
 
     @abstractmethod
     def setup(self):
@@ -77,7 +76,7 @@ class EmbeddedDGWrapper(Wrapper):
     the original space.
     """
 
-    def setup(self):
+    def setup(self, previous_space=None):
         """Sets up function spaces and fields needed for this wrapper."""
 
         assert isinstance(self.options, EmbeddedDGOptions), \
@@ -86,8 +85,8 @@ class EmbeddedDGWrapper(Wrapper):
         domain = self.time_discretisation.domain
         equation = self.time_discretisation.equation
 
-        if self.tracer_fs is not None:
-            original_space = self.tracer_fs
+        if previous_space is not None:
+            original_space = previous_space
         else:
             original_space = self.time_discretisation.fs
 
@@ -110,8 +109,8 @@ class EmbeddedDGWrapper(Wrapper):
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
 
-        if self.tracer_fs is not None:
-            self.x_projected = Function(self.tracer_fs)
+        if previous_space is not None:
+            self.x_projected = Function(previous_space)
         elif self.time_discretisation.idx is None:
             self.x_projected = Function(equation.function_space)
         else:
@@ -166,10 +165,8 @@ class RecoveryWrapper(Wrapper):
     field is then returned to the original space.
     """
 
-    def setup(self):
+    def setup(self, previous_space=None):
         """Sets up function spaces and fields needed for this wrapper."""
-
-        print(self.options)
 
         assert isinstance(self.options, RecoveryOptions), \
             'Recovery wrapper can only be used with Recovery Options'
@@ -177,8 +174,8 @@ class RecoveryWrapper(Wrapper):
         domain = self.time_discretisation.domain
         equation = self.time_discretisation.equation
 
-        if self.tracer_fs is not None:
-            original_space = self.tracer_fs
+        if previous_space is not None:
+            original_space = previous_space
         else:
             original_space = self.time_discretisation.fs
 
@@ -198,16 +195,16 @@ class RecoveryWrapper(Wrapper):
         # Internal variables to be used
         # -------------------------------------------------------------------- #
 
-        if self.tracer_fs is not None:
-            self.x_in_tmp = Function(self.tracer_fs)
+        if previous_space is not None:
+            self.x_in_tmp = Function(previous_space)
         else:
             self.x_in_tmp = Function(self.time_discretisation.fs)
 
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
 
-        if self.tracer_fs is not None:
-            self.x_projected = Function(self.tracer_fs)
+        if previous_space is not None:
+            self.x_projected = Function(previous_space)
         elif self.time_discretisation.idx is None:
             self.x_projected = Function(equation.function_space)
         else:

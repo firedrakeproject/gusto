@@ -184,11 +184,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         raise ValueError(f"The option defined for {field} is for a field that does not exist in the equation set")
 
                     field_idx = equation.field_names.index(field)
-
-                    # Store the original space of the tracer
-                    subwrapper.tracer_fs = self.equation.spaces[field_idx]
-
-                    subwrapper.setup()
+                    subwrapper.setup(self.equation.spaces[field_idx])
 
                     # Update the function space to that needed by the wrapper
                     self.wrapper.wrapper_spaces[field_idx] = subwrapper.function_space
