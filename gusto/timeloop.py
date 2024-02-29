@@ -479,7 +479,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  auxiliary_equations_and_schemes=None, linear_solver=None,
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
-                 alpha=Constant(0.5), num_outer=4, num_inner=1):
+                 alpha=Constant(0.5), num_outer=2, num_inner=2):
 
         """
         Args:
@@ -518,12 +518,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 corresponds to fully explicit. Defaults to Constant(0.5).
             num_outer (int, optional): number of outer iterations in the semi-
                 implicit algorithm. The outer loop includes transport and any
-                fast physics schemes. Defaults to 4. Note that default used by
+                fast physics schemes. Defaults to 2. Note that default used by
                 the Met Office's ENDGame and GungHo models is 2.
             num_inner (int, optional): number of inner iterations in the semi-
                 implicit algorithm. The inner loop includes the evaluation of
                 implicit forcing (pressure gradient and Coriolis) terms, and the
-                linear solve. Defaults to 1. Note that default used by the Met
+                linear solve. Defaults to 2. Note that default used by the Met
                 Office's ENDGame and GungHo models is 2.
         """
 
