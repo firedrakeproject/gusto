@@ -47,7 +47,7 @@ class Wrapper(object, metaclass=ABCMeta):
         Args:
             original_space (:class:`FunctionSpace`): the space that the
         prognostic variable is defined on. This is a subset space of
-        a mixed function space when using a MixedFSWrapper. 
+        a mixed function space when using a MixedFSWrapper.
         """
         self.original_space = original_space
 
