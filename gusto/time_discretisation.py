@@ -184,7 +184,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         raise ValueError(f"The option defined for {field} is for a field that does not exist in the equation set")
 
                     field_idx = equation.field_names.index(field)
-                    subwrapper.setup(self.equation.spaces[field_idx])
+                    subwrapper.setup(equation.spaces[field_idx])
 
                     # Update the function space to that needed by the wrapper
                     self.wrapper.wrapper_spaces[field_idx] = subwrapper.function_space
@@ -200,7 +200,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     map_if_true=replace_test_function(new_test_mixed))
 
             else:
-                self.wrapper.setup()
+                if self.wrapper_name == "supg":
+                    self.wrapper.setup()
+                else:
+                    self.wrapper.setup(self.fs)
                 self.fs = self.wrapper.function_space
                 if self.solver_parameters is None:
                     self.solver_parameters = self.wrapper.solver_parameters

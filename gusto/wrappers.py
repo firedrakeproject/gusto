@@ -36,7 +36,7 @@ class Wrapper(object, metaclass=ABCMeta):
         self.original_space = None
 
     @abstractmethod
-    def setup(self, original_space=None):
+    def setup(self, original_space):
         """
         Store the original function space of the prognostic variable.
 
@@ -47,13 +47,9 @@ class Wrapper(object, metaclass=ABCMeta):
         Args:
             original_space (:class:`FunctionSpace`): the space that the
         prognostic variable is defined on. This is a subset space of
-        a mixed function space when using a MixedFSWrapper. Defaults
-        to None, when not using a MixedFSWrapper.
+        a mixed function space when using a MixedFSWrapper. 
         """
-        if original_space is not None:
-            self.original_space = original_space
-        else:
-            self.original_space = self.time_discretisation.fs
+        self.original_space = original_space
 
     @abstractmethod
     def pre_apply(self):
@@ -89,7 +85,7 @@ class EmbeddedDGWrapper(Wrapper):
     the original space.
     """
 
-    def setup(self, original_space=None):
+    def setup(self, original_space):
         """Sets up function spaces and fields needed for this wrapper."""
 
         assert isinstance(self.options, EmbeddedDGOptions), \
@@ -173,7 +169,7 @@ class RecoveryWrapper(Wrapper):
     field is then returned to the original space.
     """
 
-    def setup(self, original_space=None):
+    def setup(self, original_space):
         """Sets up function spaces and fields needed for this wrapper."""
 
         assert isinstance(self.options, RecoveryOptions), \
