@@ -24,9 +24,10 @@ dt = 450.
 R = 3389500.    # Mars value (3389500)
 H = 17000.      # Will's Mars value
 Omega = 2*pi/88774
+g = 3.71
 
 ### setup shallow water parameters - can also change g and Omega as required
-parameters = ShallowWaterParameters(H=H, Omega=Omega)
+parameters = ShallowWaterParameters(g=g, H=H, Omega=Omega)
 # ------------------------------------------------------------------------ #
 # Set up model objects
 # ------------------------------------------------------------------------ #
