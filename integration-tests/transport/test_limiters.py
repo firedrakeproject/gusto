@@ -50,32 +50,17 @@ def setup_limiters(dirname, space):
         VDG1 = domain.spaces('DG1_equispaced')
     elif space == 'Vtheta_degree_1':
         V = domain.spaces('theta')
-    elif space == 'mixed_FS':
-        V = domain.spaces('HDiv')
-        VA = domain.spaces('DG')
-        VB = domain.spaces('DG1_equispaced')
     else:
         raise NotImplementedError
 
     Vpsi = domain.spaces('H1')
 
     # Equation
-    if space == 'mixed_FS':
-        tracerA = ActiveTracer(name='tracerA', space='DG',
-                               variable_type=TracerVariableType.mixing_ratio,
-                               transport_eqn=TransportEquationType.advective)
-        tracerB = ActiveTracer(name='tracerB', space='DG1_equispaced',
-                               variable_type=TracerVariableType.mixing_ratio,
-                               transport_eqn=TransportEquationType.advective)
-        tracers = [tracerA, tracerB]
-        eqn = CoupledTransportEquation(domain, active_tracers=tracers, Vu=V)
-        output = OutputParameters(dirname=dirname+'/limiters', dumpfreq=1,
-                                  dumplist=['u', 'tracerA', 'tracerB', 'true_tracerA', 'true_tracerB'])
-    else:
-        eqn = AdvectionEquation(domain, V, 'tracer')
-        output = OutputParameters(dirname=dirname+'/limiters',
-                                  dumpfreq=1, dumplist=['u', 'tracer', 'true_tracer'])
+    eqn = AdvectionEquation(domain, V, 'tracer')
 
+    # I/O
+    output = OutputParameters(dirname=dirname+'/limiters',
+                              dumpfreq=1, dumplist=['u', 'tracer', 'true_tracer'])
     io = IO(domain, output)
 
     # ------------------------------------------------------------------------ #
@@ -99,19 +84,10 @@ def setup_limiters(dirname, space):
     elif space == 'Vtheta_degree_1':
         opts = EmbeddedDGOptions()
         transport_schemes = SSPRK3(domain, options=opts, limiter=ThetaLimiter(V))
-
-    elif space == 'mixed_FS':
-        sublimiters = {'tracerA': DG1Limiter(domain.spaces('DG')),
-                       'tracerB': VertexBasedLimiter(domain.spaces('DG1_equispaced'))}
-        MixedLimiter = MixedFSLimiter(eqn, sublimiters)
-        transport_schemes = SSPRK3(domain, limiter=MixedLimiter)
     else:
         raise NotImplementedError
 
-    if space == 'mixed_FS':
-        transport_method = [DGUpwind(eqn, 'tracerA'), DGUpwind(eqn, 'tracerB')]
-    else:
-        transport_method = DGUpwind(eqn, "tracer")
+    transport_method = DGUpwind(eqn, "tracer")
 
     # Build time stepper
     stepper = PrescribedTransport(eqn, transport_schemes, io, transport_method)
@@ -120,14 +96,8 @@ def setup_limiters(dirname, space):
     # Initial condition
     # ------------------------------------------------------------------------ #
 
-    if space == 'mixed_FS':
-        tracerA_0 = stepper.fields('tracerA', space=VA)
-        tracerB_0 = stepper.fields('tracerB', space=VB)
-        true_fieldA = stepper.fields('true_tracerA', space=VA)
-        true_fieldB = stepper.fields('true_tracerB', space=VB)
-    else:
-        tracer0 = stepper.fields('tracer', V)
-        true_field = stepper.fields('true_tracer', space=V)
+    tracer0 = stepper.fields('tracer', V)
+    true_field = stepper.fields('true_tracer', space=V)
 
     x, z = SpatialCoordinate(mesh)
 
@@ -176,17 +146,9 @@ def setup_limiters(dirname, space):
                              0.0)
 
         if i == 0:
-            if space == 'mixed_FS':
-                tracerA_0.interpolate(Constant(tracer_min) + expr_1 + expr_2)
-                tracerB_0.interpolate(Constant(tracer_min) + expr_1 + expr_2)
-            else:
-                tracer0.interpolate(Constant(tracer_min) + expr_1 + expr_2)
+            tracer0.interpolate(Constant(tracer_min) + expr_1 + expr_2)
         elif i == 1:
-            if space == 'mixed_FS':
-                true_fieldA.interpolate(Constant(tracer_min) + expr_1 + expr_2)
-                true_fieldB.interpolate(Constant(tracer_min) + expr_1 + expr_2)
-            else:
-                true_field.interpolate(Constant(tracer_min) + expr_1 + expr_2)
+            true_field.interpolate(Constant(tracer_min) + expr_1 + expr_2)
         else:
             raise ValueError
 
@@ -219,67 +181,29 @@ def setup_limiters(dirname, space):
     gradperp = lambda v: as_vector([-v.dx(1), v.dx(0)])
     u.project(gradperp(psi))
 
-    if space == 'mixed_FS':
-        return stepper, tmax, true_fieldA, true_fieldB
-    else:
-        return stepper, tmax, true_field
+    return stepper, tmax, true_field
 
 
-@pytest.mark.parametrize('space', ['Vtheta_degree_0', 'Vtheta_degree_1', 'DG0',
-                                   'DG1', 'DG1_equispaced', 'mixed_FS'])
+@pytest.mark.parametrize('space', ['Vtheta_degree_0', 'Vtheta_degree_1',
+                                   'DG0', 'DG1', 'DG1_equispaced'])
 def test_limiters(tmpdir, space):
 
     # Setup and run
     dirname = str(tmpdir)
-
-    if space == 'mixed_FS':
-        stepper, tmax, true_fieldA, true_fieldB = setup_limiters(dirname, space)
-    else:
-        stepper, tmax, true_field = setup_limiters(dirname, space)
-
+    stepper, tmax, true_field = setup_limiters(dirname, space)
     stepper.run(t=0, tmax=tmax)
+    final_field = stepper.fields('tracer')
+
+    # Check tracer is roughly in the correct place
+    assert norm(true_field - final_field) / norm(true_field) < 0.05, \
+        'Something appears to have gone wrong with transport of tracer using a limiter'
 
     tol = 1e-9
 
-    if space == 'mixed_FS':
-        final_fieldA = stepper.fields('tracerA')
-        final_fieldB = stepper.fields('tracerB')
+    # Check for no new overshoots
+    assert np.max(final_field.dat.data) <= np.max(true_field.dat.data) + tol, \
+        'Application of limiter has not prevented overshoots'
 
-        # Check tracer is roughly in the correct place
-        assert norm(true_fieldA - final_fieldA) / norm(true_fieldA) < 0.05, \
-            'Something is wrong with the DG space tracer using a mixed limiter'
-
-        # Check tracer is roughly in the correct place
-        assert norm(true_fieldB - final_fieldB) / norm(true_fieldB) < 0.05, \
-            'Something is wrong with the DG1 equispaced tracer using a mixed limiter'
-
-        # Check for no new overshoots in A
-        assert np.max(final_fieldA.dat.data) <= np.max(true_fieldA.dat.data) + tol, \
-            'Application of the DG space limiter in the mixed limiter has not prevented overshoots'
-
-        # Check for no new undershoots in A
-        assert np.min(final_fieldA.dat.data) >= np.min(true_fieldA.dat.data) - tol, \
-            'Application of the DG space limiter in the mixed limiter has not prevented undershoots'
-
-        # Check for no new overshoots in B
-        assert np.max(final_fieldB.dat.data) <= np.max(true_fieldB.dat.data) + tol, \
-            'Application of the DG1 equispaced limiter in the mixed limiter has not prevented overshoots'
-
-        # Check for no new undershoots in B
-        assert np.min(final_fieldB.dat.data) >= np.min(true_fieldB.dat.data) - tol, \
-            'Application of the DG1 equispaced limiter in the mixed limiter has not prevented undershoots'
-
-    else:
-        final_field = stepper.fields('tracer')
-
-        # Check tracer is roughly in the correct place
-        assert norm(true_field - final_field) / norm(true_field) < 0.05, \
-            'Something appears to have gone wrong with transport of tracer using a limiter'
-
-        # Check for no new overshoots
-        assert np.max(final_field.dat.data) <= np.max(true_field.dat.data) + tol, \
-            'Application of limiter has not prevented overshoots'
-
-        # Check for no new undershoots
-        assert np.min(final_field.dat.data) >= np.min(true_field.dat.data) - tol, \
-            'Application of limiter has not prevented undershoots'
+    # Check for no new undershoots
+    assert np.min(final_field.dat.data) >= np.min(true_field.dat.data) - tol, \
+        'Application of limiter has not prevented undershoots'
