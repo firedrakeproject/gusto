@@ -645,7 +645,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
             # Default linearisation is time derivatives, pressure gradient and
             # transport term from depth equation. Don't include active tracers
             linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'D'] \
+                t.get(prognostic) in ['u', 'D', 'b'] \
                 and (any(t.has_label(time_derivative, pressure_gradient))
                      or (t.get(prognostic) in ['D', 'b'] and t.has_label(transport)))
         super().__init__(field_names, domain, space_names,
@@ -985,7 +985,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(Term(g*inner(domain.k, w)*dx), 'u'), self.X)
+        gravity_form = name_label(subject(prognostic(Term(g*inner(domain.k, w)*dx),
+                                                     'u'), self.X), "gravity")
 
         residual = (mass_form + adv_form + pressure_gradient_form + gravity_form)
 
