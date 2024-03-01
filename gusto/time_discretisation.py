@@ -10,7 +10,7 @@ import math
 import numpy as np
 
 from firedrake import (
-    Function, TestFunction, NonlinearVariationalProblem,
+    Function, TestFunction, TestFunctions, NonlinearVariationalProblem,
     NonlinearVariationalSolver, DirichletBC, split, Constant
 )
 from firedrake.fml import (
@@ -88,7 +88,21 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if options is not None:
             self.wrapper_name = options.name
-            if self.wrapper_name == "embedded_dg":
+            if self.wrapper_name == "mixed_options":
+                self.wrapper = MixedFSWrapper()
+
+                for field, suboption in options.suboptions.items():
+                    if suboption.name == 'embedded_dg':
+                        self.wrapper.subwrappers.update({field: EmbeddedDGWrapper(self, suboption)})
+                    elif suboption.name == "recovered":
+                        self.wrapper.subwrappers.update({field: RecoveryWrapper(self, suboption)})
+                    elif suboption.name == "supg":
+                        raise RuntimeError(
+                            'Time discretisation: suboption SUPG is currently not implemented within MixedOptions')
+                    else:
+                        raise RuntimeError(
+                            f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
+            elif self.wrapper_name == "embedded_dg":
                 self.wrapper = EmbeddedDGWrapper(self, options)
             elif self.wrapper_name == "recovered":
                 self.wrapper = RecoveryWrapper(self, options)
@@ -159,21 +173,51 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # -------------------------------------------------------------------- #
 
         if self.wrapper is not None:
-            self.wrapper.setup()
-            self.fs = self.wrapper.function_space
-            if self.solver_parameters is None:
-                self.solver_parameters = self.wrapper.solver_parameters
-            new_test = TestFunction(self.wrapper.test_space)
-            # SUPG has a special wrapper
-            if self.wrapper_name == "supg":
-                new_test = self.wrapper.test
+            if self.wrapper_name == "mixed_options":
 
-            # Replace the original test function with the one from the wrapper
-            self.residual = self.residual.label_map(
-                all_terms,
-                map_if_true=replace_test_function(new_test))
+                self.wrapper.wrapper_spaces = equation.spaces
+                self.wrapper.field_names = equation.field_names
 
-            self.residual = self.wrapper.label_terms(self.residual)
+                for field, subwrapper in self.wrapper.subwrappers.items():
+
+                    if field not in equation.field_names:
+                        raise ValueError(f"The option defined for {field} is for a field that does not exist in the equation set")
+
+                    field_idx = equation.field_names.index(field)
+                    subwrapper.setup(equation.spaces[field_idx])
+
+                    # Update the function space to that needed by the wrapper
+                    self.wrapper.wrapper_spaces[field_idx] = subwrapper.function_space
+
+                self.wrapper.setup()
+                self.fs = self.wrapper.function_space
+                new_test_mixed = TestFunctions(self.fs)
+
+                # Replace the original test function with one from the new
+                # function space defined by the subwrappers
+                self.residual = self.residual.label_map(
+                    all_terms,
+                    map_if_true=replace_test_function(new_test_mixed))
+
+            else:
+                if self.wrapper_name == "supg":
+                    self.wrapper.setup()
+                else:
+                    self.wrapper.setup(self.fs)
+                self.fs = self.wrapper.function_space
+                if self.solver_parameters is None:
+                    self.solver_parameters = self.wrapper.solver_parameters
+                new_test = TestFunction(self.wrapper.test_space)
+                # SUPG has a special wrapper
+                if self.wrapper_name == "supg":
+                    new_test = self.wrapper.test
+
+                # Replace the original test function with the one from the wrapper
+                self.residual = self.residual.label_map(
+                    all_terms,
+                    map_if_true=replace_test_function(new_test))
+
+                self.residual = self.wrapper.label_terms(self.residual)
 
         # -------------------------------------------------------------------- #
         # Make boundary conditions
