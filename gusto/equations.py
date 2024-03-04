@@ -375,7 +375,8 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 + 'when there is a variable called "u" and none was found')
 
         Vu = domain.spaces("HDiv")
-        if Vu.extruded:
+        # we only apply no normal-flow BCs when extruded mesh is non periodic
+        if Vu.extruded and not Vu.ufl_domain().topology.extruded_periodic:
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
         for id in no_normal_flow_bc_ids:
