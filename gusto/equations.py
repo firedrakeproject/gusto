@@ -986,7 +986,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(Term(g*inner(domain.k, w)*dx), 'u'), self.X)
+        gravity_form = name_label(subject(prognostic(Term(g*inner(domain.k, w)*dx),
+                                                     'u'), self.X), "gravity")
 
         residual = (mass_form + adv_form + pressure_gradient_form + gravity_form)
 

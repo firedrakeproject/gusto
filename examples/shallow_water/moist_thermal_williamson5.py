@@ -34,8 +34,8 @@ mu1 = 0.05
 mu2 = 0.98
 q0 = 135  # chosen to give an initial max vapour of approx 0.02
 beta2 = 10
-qprecip = 10e-4
-gamma_r = 10e-3
+qprecip = 1e-4
+gamma_r = 1e-3
 # topography parameters
 R0 = pi/9.
 R0sq = R0**2
@@ -104,8 +104,10 @@ SWSaturationAdjustment(eqns, sat_func, time_varying_saturation=True,
 InstantRain(eqns, qprecip, vapour_name="cloud_water", rain_name="rain",
             gamma_r=gamma_r)
 
+transport_methods = [DGUpwind(eqns, field_name) for field_name in eqns.field_names]
+
 # Timestepper
-stepper = Timestepper(eqns, RK4(domain), io)
+stepper = Timestepper(eqns, RK4(domain), io, spatial_methods=transport_methods)
 
 # ----------------------------------------------------------------- #
 # Initial conditions
