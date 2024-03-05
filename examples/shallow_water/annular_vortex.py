@@ -43,9 +43,9 @@ fexpr = 2*Omega*x[2]/R
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
 # I/O (input/output)
-dirname = "annular_vortex_mars"
+dirname = "annular_vortex_mars_60-70"
 output = OutputParameters(dirname=dirname)
-diagnostic_fields = [PotentialVorticity()]
+diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
@@ -66,7 +66,7 @@ D0 = stepper.fields('D')
 def initial_profiles(omega, radius):
 
     # set numerical method parameters
-    ny = 100000
+    ny = 1000000
     tol = 1e-10
     alpha = 0.5
 
@@ -84,8 +84,9 @@ def initial_profiles(omega, radius):
     f = 2 * omega * sinlat
 
     #setup different initial PV profiles
-    rlat1 = np.radians(45)
-    rlat2 = np.radians(50)
+    smoothing = True
+    rlat1 = np.radians(60)
+    rlat2 = np.radians(70)
     qp = 2 * omega / hbart
     qt0 = 2 * omega * sinlat / hbart
     qt = qt0
@@ -94,33 +95,34 @@ def initial_profiles(omega, radius):
     qt = np.where(rlat > 0., 0.3 * qp, qt)
     qt = np.where(rlat > rlat1, 1.6 * qp, qt)
     qt = np.where(rlat > rlat2, qp, qt)
+    
+    if smoothing:
+        # annulus smoothing - linearly for +-1.5deg around each boundary
+        def lat_in_rlat(val, rlat):
+            x = np.where(rlat > val, rlat, np.nan)
+            x = x[~np.isnan(x)]
+            return x[0]
 
-    # annulus smoothing - linearly for +-1.5deg around each boundary
-    def lat_in_rlat(val, rlat):
-        x = np.where(rlat > val, rlat, np.nan)
-        x = x[~np.isnan(x)]
-        return x[0]
+        def q_at_lat(val, q):
+            x = np.where(rlat == val, q, np.nan)
+            x = x[~np.isnan(x)]
+            return x[0]
 
-    def q_at_lat(val, q):
-        x = np.where(rlat == val, q, np.nan)
-        x = x[~np.isnan(x)]
-        return x[0]
+        lim = np.radians(1.5)
+        rlat0l = lat_in_rlat(-lim, rlat)
+        rlat0u = lat_in_rlat(lim, rlat)
+        rlat1l = lat_in_rlat(rlat1 - lim, rlat)
+        rlat1u = lat_in_rlat(rlat1 + lim, rlat)
+        rlat2l = lat_in_rlat(rlat2 - lim, rlat)
+        rlat2u = lat_in_rlat(rlat2 + lim, rlat)
 
-    lim = np.radians(1.5)
-    rlat0l = lat_in_rlat(-lim, rlat)
-    rlat0u = lat_in_rlat(lim, rlat)
-    rlat1l = lat_in_rlat(rlat1 - lim, rlat)
-    rlat1u = lat_in_rlat(rlat1 + lim, rlat)
-    rlat2l = lat_in_rlat(rlat2 - lim, rlat)
-    rlat2u = lat_in_rlat(rlat2 + lim, rlat)
+        q_smooth0 = np.interp(rlat, [rlat0l, rlat0u], [q_at_lat(rlat0l, qt), q_at_lat(rlat0u, qt)])
+        q_smooth1 = np.interp(rlat, [rlat1l, rlat1u], [q_at_lat(rlat1l, qt), q_at_lat(rlat1u, qt)])
+        q_smooth2 = np.interp(rlat, [rlat2l, rlat2u], [q_at_lat(rlat2l, qt), q_at_lat(rlat2u, qt)])
 
-    q_smooth0 = np.interp(rlat, [rlat0l, rlat0u], [q_at_lat(rlat0l, qt), q_at_lat(rlat0u, qt)])
-    q_smooth1 = np.interp(rlat, [rlat1l, rlat1u], [q_at_lat(rlat1l, qt), q_at_lat(rlat1u, qt)])
-    q_smooth2 = np.interp(rlat, [rlat2l, rlat2u], [q_at_lat(rlat2l, qt), q_at_lat(rlat2u, qt)])
-
-    qt = np.where((rlat0l <= rlat) & (rlat <= rlat0u), q_smooth0, qt)
-    qt = np.where((rlat1l <= rlat) & (rlat <= rlat1u), q_smooth1, qt)
-    qt = np.where((rlat2l <= rlat) & (rlat <= rlat2u), q_smooth2, qt)
+        qt = np.where((rlat0l <= rlat) & (rlat <= rlat0u), q_smooth0, qt)
+        qt = np.where((rlat1l <= rlat) & (rlat <= rlat1u), q_smooth1, qt)
+        qt = np.where((rlat2l <= rlat) & (rlat <= rlat2u), q_smooth2, qt)
 
     # Scott Liu setup
     #qt = np.where(rlat > 0., 0.3*qp, qt)
