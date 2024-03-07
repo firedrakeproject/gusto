@@ -483,7 +483,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  auxiliary_equations_and_schemes=None, linear_solver=None,
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
-                 alpha=Constant(0.5), num_outer=4, num_inner=1):
+                 alpha=Constant(0.5), num_outer=2, num_inner=2):
 
         """
         Args:

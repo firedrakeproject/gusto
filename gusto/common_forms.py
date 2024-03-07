@@ -3,7 +3,7 @@ Provides some basic forms for discretising various common terms in equations for
 geophysical fluid dynamics."""
 
 from firedrake import (dx, dot, grad, div, inner, outer, cross, curl, split,
-                       TestFunction, TestFunctions, TrialFunction)
+                       TestFunction, TestFunctions, TrialFunctions)
 from firedrake.fml import subject, drop
 from gusto.configuration import TransportEquationType
 from gusto.labels import (transport, transporting_velocity, diffusion,
@@ -243,16 +243,16 @@ def split_continuity_form(equation):
             adv_term = prognostic(advection_form(test, q, uadv), prognostic_field_name)
             div_term = prognostic(test*q*div(uadv)*dx, prognostic_field_name)
 
-            # # Add linearisations of new terms if required
-            # if (t.has_label(linearisation)):
-            #     u_trial = TrialFunction(W)[u_idx]
-            #     qbar = split(equation.X_ref)[idx]
-            #     # Add linearisation to adv_term
-            #     linear_adv_term = linear_advection_form(test, qbar, u_trial)
-            #     adv_term = linearisation(adv_term, linear_adv_term)
-            #     # Add linearisation to div_term
-            #     linear_div_term = transporting_velocity(qbar*test*div(u_trial)*dx, u_trial)
-            #     div_term = linearisation(div_term, linear_div_term)
+            # Add linearisations of new terms if required
+            if (t.has_label(linearisation)):
+                u_trial = TrialFunctions(W)[u_idx]
+                qbar = split(equation.X_ref)[idx]
+                # Add linearisation to adv_term
+                linear_adv_term = linear_advection_form(test, qbar, u_trial)
+                adv_term = linearisation(adv_term, linear_adv_term)
+                # Add linearisation to div_term
+                linear_div_term = transporting_velocity(qbar*test*div(u_trial)*dx, u_trial)
+                div_term = linearisation(div_term, linear_div_term)
 
             # Add new terms onto residual
             equation.residual += subject(adv_term + div_term, subj)

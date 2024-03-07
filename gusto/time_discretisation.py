@@ -25,6 +25,7 @@ from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 import scipy
 from scipy.special import legendre
+from firedrake.petsc import PETSc
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage",
@@ -433,7 +434,10 @@ class IMEXMultistage(TimeDiscretisation):
             # setup solver using residual defined in derived class
             problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
-            solvers.append(NonlinearVariationalSolver(problem, options_prefix=solver_name))
+            solver_parameters = {'ksp_type': 'gmres',
+                                'pc_type': 'bjacobi',
+                                'sub_pc_type': 'ilu'}
+            solvers.append(NonlinearVariationalSolver(problem,  solver_parameters=solver_parameters, options_prefix=solver_name))
         return solvers
 
     @cached_property
@@ -442,10 +446,11 @@ class IMEXMultistage(TimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem,  solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     def apply(self, x_out, x_in):
         self.x1.assign(x_in)
+        self.x_out.assign(x_in)
         solver_list = self.solvers
 
         for stage in range(self.nStages):
@@ -1870,18 +1875,19 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 class SDC(object, metaclass=ABCMeta):
 
     def __init__(self, domain, M, maxk, quadrature, field_name=None, final_update=True):
-        self.field_name=field_name
-        self.domain = domain
-        self.dt_coarse = domain.dt
-        self.M = M
-        self.maxk = maxk
-        self.final_update=final_update
+        with PETSc.Log.Event("SDC_init"):
+            self.field_name=field_name
+            self.domain = domain
+            self.dt_coarse = domain.dt
+            self.M = M
+            self.maxk = maxk
+            self.final_update=final_update
 
-        self.create_nodes(self.dt_coarse, quadrature)
-        self.Qmatrix()
-        self.Smatrix()
-        self.Qfinal()
-        self.dtau = Constant(np.diff(np.append(0, self.nodes)))
+            self.create_nodes(self.dt_coarse, quadrature)
+            self.Qmatrix()
+            self.Smatrix()
+            self.Qfinal()
+            self.dtau = Constant(np.diff(np.append(0, self.nodes)))
 
     @property
     def nlevels(self):
@@ -1892,31 +1898,32 @@ class SDC(object, metaclass=ABCMeta):
         pass
 
     def create_nodes(self, b, quadrature, A=-1, B=1):
-        M = self.M
-        a = 0.
-        nodes = np.zeros(M)
-        if quadrature == "gauss-radau":
-            # nodes and weights for gauss - radau IIA quadrature
-            # See Abramowitz & Stegun p 888
-            nodes[0] = A
-            p = np.poly1d([1, 1])
-            pn = legendre(M)
-            pn1 = legendre(M-1)
-            poly, remainder = (pn + pn1)/p  # [1] returns remainder from polynomial division
-            nodes[1:] = np.sort(poly.roots)
-        elif quadrature == "gauss-lobatto":
-            pn = legendre(M-1)
-            pn_d=pn.deriv()
-            nodes[0] = A
-            nodes[-1]= B
-            nodes[1:-1] = np.sort(pn_d.roots)
-        elif quadrature == "gauss-legendre":
-            pn = legendre(M)
-            nodes = np.sort(pn.roots)
+        with PETSc.Log.Event("SDC_nodes"):
+            M = self.M
+            a = 0.
+            nodes = np.zeros(M)
+            if quadrature == "gauss-radau":
+                # nodes and weights for gauss - radau IIA quadrature
+                # See Abramowitz & Stegun p 888
+                nodes[0] = A
+                p = np.poly1d([1, 1])
+                pn = legendre(M)
+                pn1 = legendre(M-1)
+                poly, remainder = (pn + pn1)/p  # [1] returns remainder from polynomial division
+                nodes[1:] = np.sort(poly.roots)
+            elif quadrature == "gauss-lobatto":
+                pn = legendre(M-1)
+                pn_d=pn.deriv()
+                nodes[0] = A
+                nodes[-1]= B
+                nodes[1:-1] = np.sort(pn_d.roots)
+            elif quadrature == "gauss-legendre":
+                pn = legendre(M)
+                nodes = np.sort(pn.roots)
 
-        # rescale to be between [a,b] instead of [A,B]
-        nodes = ((b - a) * nodes + a * B - b * A) / (B - A)
-        self.nodes = ((b + a) - nodes)[::-1]  # reverse nodes
+            # rescale to be between [a,b] instead of [A,B]
+            nodes = ((b - a) * nodes + a * B - b * A) / (B - A)
+            self.nodes = ((b + a) - nodes)[::-1]  # reverse nodes
 
     def NewtonVM(self, t):
         """
@@ -1961,29 +1968,31 @@ class SDC(object, metaclass=ABCMeta):
     def get_weights(self, b):
         # This calculates for equation 2.4 FWSW - called from Q
         # integrates lagrange polynomials to the points [nodes]
-        M = self.M
-        nodes_m, weights_m = self.gauss_legendre(np.ceil(M/2), b)  # use gauss-legendre quadrature to integrate polynomials
-        weights = np.zeros(M)
-        for j in np.arange(M):
-            coeff = np.zeros(M)
-            coeff[j] = 1.0  # is unity because it needs to be scaled with y_j for interpolation we have  sum y_j*l_j
-            poly_coeffs = scipy.linalg.solve_triangular(self.NewtonVM(self.nodes), coeff, lower=True)
-            eval_newt_poly = self.Horner_newton(poly_coeffs, self.nodes, nodes_m)
-            weights[j] = np.dot(weights_m, eval_newt_poly)
+        with PETSc.Log.Event("SDC_weights"):
+            M = self.M
+            nodes_m, weights_m = self.gauss_legendre(np.ceil(M/2), b)  # use gauss-legendre quadrature to integrate polynomials
+            weights = np.zeros(M)
+            for j in np.arange(M):
+                coeff = np.zeros(M)
+                coeff[j] = 1.0  # is unity because it needs to be scaled with y_j for interpolation we have  sum y_j*l_j
+                poly_coeffs = scipy.linalg.solve_triangular(self.NewtonVM(self.nodes), coeff, lower=True)
+                eval_newt_poly = self.Horner_newton(poly_coeffs, self.nodes, nodes_m)
+                weights[j] = np.dot(weights_m, eval_newt_poly)
         return weights
 
     def Qmatrix(self):
         """
         Integration Matrix
         """
-        M = self.M
-        self.Q = np.zeros([M, M])
+        with PETSc.Log.Event("SDC_Q"):
+            M = self.M
+            self.Q = np.zeros([M, M])
 
-        # for all nodes, get weights for the interval [tleft,node]
-        for m in np.arange(M):
-            w = self.get_weights(self.nodes[m])
-            self.Q[m, 0:] = w
-    
+            # for all nodes, get weights for the interval [tleft,node]
+            for m in np.arange(M):
+                w = self.get_weights(self.nodes[m])
+                self.Q[m, 0:] = w
+        
     def Qfinal(self):
         """
         Final Update Integration Vector
@@ -2009,10 +2018,11 @@ class SDC(object, metaclass=ABCMeta):
             self.S[m, :] = self.Q[m, :] - self.Q[m - 1, :]
 
     def compute_quad(self):
-        for j in range(self.M):
-            self.quad[j].assign(0.)
-            for k in range(self.M):
-                self.quad[j] += float(self.S[j, k])*self.fUnodes[k]
+        with PETSc.Log.Event("SDC_quad"):
+            for j in range(self.M):
+                self.quad[j].assign(0.)
+                for k in range(self.M):
+                    self.quad[j] += float(self.S[j, k])*self.fUnodes[k]
     
     def compute_quad_final(self):
         self.quad_final.assign(0.)
@@ -2180,7 +2190,7 @@ class FE_SDC(SDC):
                 self.U0.assign(self.Unodes[m-1])
                 self.Un.assign(self.Unodes1[m-1])
                 self.Q_.assign(self.quad[m-1])
-                self.solver_SDC.solve()
+                self.solver_SDC.solve(self.Unodes[m-1])
                 self.Unodes1[m].assign(self.U_SDC)
             for m in range(1, self.M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
@@ -2386,42 +2396,44 @@ class IMEX_SDC(SDC):
         self.base = base_scheme
 
     def setup(self, equation, apply_bcs=True, *active_labels):
-        self.base.setup(equation, *active_labels)
-        self.residual = self.base.residual
+        with PETSc.Log.Event("IMEX_SDC_init"):
+            self.base.setup(equation, *active_labels)
+            self.residual = self.base.residual
+            self.ksp_tols=[1e-3,1e-2,1e-1,1e-1]
+            self.snes_tols=[1e-4,1e-3,1e-2,1e-1]
 
+            # set up SDC form and solver
+            if self.field_name is not None and hasattr(equation, "field_names"):
+                self.idx = equation.field_names.index(self.field_name)
+                W = equation.spaces[self.idx]
+            else:
+                self.field_name = equation.field_name
+                W = equation.function_space
+                self.idx = None
 
-        # set up SDC form and solver
-        if self.field_name is not None and hasattr(equation, "field_names"):
-            self.idx = equation.field_names.index(self.field_name)
-            W = equation.spaces[self.idx]
-        else:
-            self.field_name = equation.field_name
-            W = equation.function_space
-            self.idx = None
+            # set up SDC form and solver
+            self.W = W
+            self.Unodes = [Function(W) for _ in range(self.M+1)]
+            self.Unodes1 = [Function(W) for _ in range(self.M+1)]
+            self.fUnodes = [Function(W) for _ in range(self.M+1)]
+            self.quad = [Function(W) for _ in range(self.M+1)]
 
-        # set up SDC form and solver
-        self.W = W
-        self.Unodes = [Function(W) for _ in range(self.M+1)]
-        self.Unodes1 = [Function(W) for _ in range(self.M+1)]
-        self.fUnodes = [Function(W) for _ in range(self.M+1)]
-        self.quad = [Function(W) for _ in range(self.M+1)]
+            self.U_SDC = Function(W)
+            self.U0 = Function(W)
+            self.U01 = Function(W)
+            self.Un = Function(W)
+            self.Q_ = Function(W)
+            self.U_fin = Function(W)
+            self.quad_final = Function(W)
 
-        self.U_SDC = Function(W)
-        self.U0 = Function(W)
-        self.U01 = Function(W)
-        self.Un = Function(W)
-        self.Q_ = Function(W)
-        self.U_fin = Function(W)
-        self.quad_final = Function(W)
-
-        try:
-            #bcs = equation.bcs['u']
-            self.bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
-        except KeyError:
-            self.bcs = None
-        # set up RHS evaluation
-        self.Urhs = Function(W)
-        self.Uin = Function(W)
+            try:
+                #bcs = equation.bcs['u']
+                self.bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
+            except KeyError:
+                self.bcs = None
+            # set up RHS evaluation
+            self.Urhs = Function(W)
+            self.Uin = Function(W)
 
     @property
     def res_rhs(self):
@@ -2493,10 +2505,14 @@ class IMEX_SDC(SDC):
         """Set up the problem and the solver."""
         # setup linear solver using lhs and rhs defined in derived class
         prob_fin = NonlinearVariationalProblem(self.res_fin, self.U_fin, bcs=self.bcs)
+        
         #solver_name = self.field_name+self.__class__.__name__+"_SDC"
         # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
-        #self.solver_parameters.setdefault('snes_type', 'ksponly')
-        return NonlinearVariationalSolver(prob_fin)
+        solver_parameters = {'snes_type': 'ksponly',
+                             'ksp_type': 'cg',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+        return NonlinearVariationalSolver(prob_fin, solver_parameters=solver_parameters)
     
     @cached_property
     def solver_SDC(self):
@@ -2505,8 +2521,20 @@ class IMEX_SDC(SDC):
         prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
         #solver_name = self.field_name+self.__class__.__name__+"_SDC"
         # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
-        #self.solver_parameters.setdefault('snes_type', 'ksponly')
-        return NonlinearVariationalSolver(prob_SDC)
+        solver_parameters = {'snes_type': 'newtonls',
+                             'ksp_type': 'gmres',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+        # solver_parameters= { 'snes_type': 'newtonls',
+        #                      'ksp_type': 'gmres', 
+        #                      "pc_type": "mg",
+        #                     "pc_mg_type": "full",
+        #                     "mg_levels_ksp_type": "chebyshev",
+        #                     "mg_levels_ksp_max_it": 2,
+        #                     "mg_levels_pc_type": "jacobi"
+        #                     }
+        #solver_parameters.setdefault('snes_type', 'ksponly')
+        return NonlinearVariationalSolver(prob_SDC, solver_parameters=solver_parameters)
     
     @cached_property
     def solver_rhs(self):
@@ -2515,27 +2543,30 @@ class IMEX_SDC(SDC):
         prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
         #solver_name = self.field_name+self.__class__.__name__+"_rhs"
         # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
-        #self.solver_parameters.setdefault('snes_type', 'ksponly')
-        return NonlinearVariationalSolver(prob_rhs)
+        solver_parameters = {'snes_type': 'ksponly',
+                             'ksp_type': 'cg',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+        return NonlinearVariationalSolver(prob_rhs, solver_parameters=solver_parameters)
 
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
 
         self.Unodes[0].assign(self.Un)
-
-        for m in range(self.M):
-            self.base.dt = float(self.dtau[m])
-            self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        with PETSc.Log.Event("IMEX_SDC_precon"):
+            for m in range(self.M):
+                self.base.dt = float(self.dtau[m])
+                self.base.apply(self.Unodes[m+1], self.Unodes[m])
 
         k = 0
         while k < self.maxk:
             k += 1
-
-            for m in range(1, self.M+1):
-                self.Uin.assign(self.Unodes[m])
-                self.solver_rhs.solve()
-                self.fUnodes[m-1].assign(self.Urhs)
-            self.compute_quad()
+            with PETSc.Log.Event("IMEX_SDC_rhs_quad"):
+                for m in range(1, self.M+1):
+                    self.Uin.assign(self.Unodes[m])
+                    self.solver_rhs.solve()
+                    self.fUnodes[m-1].assign(self.Urhs)
+                self.compute_quad()
 
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
@@ -2544,8 +2575,14 @@ class IMEX_SDC(SDC):
                 self.U01.assign(self.Unodes[m])
                 self.Un.assign(self.Unodes1[m-1])
                 self.Q_.assign(self.quad[m-1])
-                self.solver_SDC.solve()
-                self.Unodes1[m].assign(self.U_SDC)
+                with PETSc.Log.Event("IMEX_SDC_solve"):
+                    self.U_SDC.assign(self.Unodes[m])
+                    # self.solver_SDC.parameters['ksp_rtol']=self.ksp_tols[k]
+                    # self.solver_SDC.parameters['snes_rtol']=self.snes_tols[k]
+                    # self.solver_SDC.parameters['ksp_atol']=self.ksp_tols[k]
+                    # self.solver_SDC.parameters['snes_atol']=self.snes_tols[k]
+                    self.solver_SDC.solve()
+                    self.Unodes1[m].assign(self.U_SDC)
             for m in range(1, self.M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
 
@@ -2554,11 +2591,13 @@ class IMEX_SDC(SDC):
             if self.final_update:
                 for m in range(1, self.M+1):
                     self.Uin.assign(self.Unodes1[m])
-                    self.solver_rhs.solve()
+                    with PETSc.Log.Event("IMEX_SDC_rhs2"):
+                        self.solver_rhs.solve()
                     self.fUnodes[m-1].assign(self.Urhs)
                 self.Un.assign(x_in)
                 self.compute_quad_final()
-                self.solver_fin.solve()
+                with PETSc.Log.Event("IMEX_SDC_final_solve"):
+                    self.solver_fin.solve()
                 x_out.assign(self.U_fin)
             else:
                 x_out.assign(self.Unodes1[-1])
