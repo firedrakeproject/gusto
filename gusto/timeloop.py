@@ -704,10 +704,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         with timed_stage("Apply forcing terms"):
             logger.info('SIQN: Explicit forcing')
-            # TODO: check if forcing is applied to x_after_slow or xn
             # Put explicit forcing into xstar
-            self.forcing.apply(x_after_slow, x_after_slow, xstar(self.field_name), "explicit")
+            self.forcing.apply(x_after_slow, xn, xstar(self.field_name), "explicit")
 
+        # set xp here so that variables that are not transported have
+        # the correct values
         xp(self.field_name).assign(xstar(self.field_name))
 
         for outer in range(self.num_outer):
