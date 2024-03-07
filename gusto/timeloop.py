@@ -479,7 +479,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  auxiliary_equations_and_schemes=None, linear_solver=None,
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
-                 alpha=Constant(0.5), num_outer=4, num_inner=1):
+                 alpha=Constant(0.5), off_centred_u=False,
+                 num_outer=4, num_inner=1):
 
         """
         Args:
@@ -516,6 +517,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             alpha (`ufl.Constant`, optional): the semi-implicit off-centering
                 parameter. A value of 1 corresponds to fully implicit, while 0
                 corresponds to fully explicit. Defaults to Constant(0.5).
+            off_centred_u (bool, optional): option to offcentre the transporting
+                velocity. Defaults to False, in which case transporting velocity
+                is centred. If True offcentring uses value of alpha.
             num_outer (int, optional): number of outer iterations in the semi-
                 implicit algorithm. The outer loop includes transport and any
                 fast physics schemes. Defaults to 4. Note that default used by
@@ -530,6 +534,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.num_outer = num_outer
         self.num_inner = num_inner
         self.alpha = alpha
+
+        # default is to not offcentre transporting velocity but if it
+        # is offcentred then use the same value as alpha
+        self.alpha_u = Constant(alpha) if off_centred_u else Constant(0.5)
 
         self.spatial_methods = spatial_methods
 
@@ -637,7 +645,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xn = self.x.n
         xnp1 = self.x.np1
         # computes ubar from un and unp1
-        return xn('u') + self.alpha*(xnp1('u')-xn('u'))
+        return xn('u') + self.alpha_u*(xnp1('u')-xn('u'))
 
     def setup_fields(self):
         """Sets up time levels n, star, p and np1"""
