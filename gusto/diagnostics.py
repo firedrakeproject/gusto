@@ -1737,7 +1737,6 @@ class CompressibleVorticity(DiagnosticField):
             omega = TrialFunction(space)
             w = TestFunction(space)
             n = FacetNormal(domain.mesh)
-            breakpoint()
             a = inner(omega, w) * dx
             L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * dS_h
             if vorticity_type != 'relative':
