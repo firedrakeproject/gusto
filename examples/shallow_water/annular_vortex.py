@@ -8,12 +8,13 @@ from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        interpolate)
 import numpy as np
 import matplotlib.pyplot as plt
+#import xarray as xr
 
 # ---------------------------------------------------------------------------- #
 # Test case parameters
 # ---------------------------------------------------------------------------- #
 
-day = 24.*60.*60.
+day = 88774.
 
 ### max runtime currently 1 day
 tmax = day
@@ -21,9 +22,9 @@ tmax = day
 dt = 450.
 
 # setup shallow water parameters
-R = 3389500.    # Mars value (3389500)
+R = 3396000.    # Mars value (3389500)
 H = 17000.      # Will's Mars value
-Omega = 2*pi/88774
+Omega = 2*np.pi/88774.
 g = 3.71
 
 ### setup shallow water parameters - can also change g and Omega as required
@@ -43,8 +44,8 @@ fexpr = 2*Omega*x[2]/R
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
 # I/O (input/output)
-dirname = "annular_vortex_mars_60-70"
-output = OutputParameters(dirname=dirname)
+dirname = "annular_vortex_mars_45-50_new-g"
+output = OutputParameters(dirname=dirname, dump_nc=True)
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
@@ -85,8 +86,8 @@ def initial_profiles(omega, radius):
 
     #setup different initial PV profiles
     smoothing = True
-    rlat1 = np.radians(60)
-    rlat2 = np.radians(70)
+    rlat1 = np.radians(45)
+    rlat2 = np.radians(50)
     qp = 2 * omega / hbart
     qt0 = 2 * omega * sinlat / hbart
     qt = qt0
@@ -149,7 +150,7 @@ def initial_profiles(omega, radius):
         un = - np.cumsum(zn * da) * radius / coslat
 
         # dh/dmu (mu = sinlat) from calculated u
-        dhdmu = - (un / coslat + 2 * omega * radius) * un * sinlat / (coslat * phibar)
+        dhdmu = - (un / coslat + 2 * omega * radius) * un * sinlat / (coslat * phibar) * 1 / g
 
         # h as an integral of dh/dhmu
         hn = np.cumsum(dhdmu * da)
@@ -185,10 +186,14 @@ def initial_profiles(omega, radius):
     axs[2].set_ylabel('u')
     fig.tight_layout()
     plt.show()
+    plt.savefig('/data/home/sh1293/firedrake-real-opt/src/gusto/examples/shallow_water/results/%s.pdf' %(dirname))
 
     return rlat, uini, thini
 
 rlat, uini, hini = initial_profiles(Omega, R)
+
+#ic = xr.Dataset(data_vars=dict(u=(['rlat'], uini), h=(['rlat'], hini)), coords=dict(lat=rlat))
+#ic.to_netcdf('/data/home/sh1293/firedrake-real-opt/src/gusto/examples/shallow_water/results/%s.nc' %(dirname))
 
 def initial_u(X):
     lats = []
@@ -223,6 +228,10 @@ XD = interpolate(Dmesh.coordinates, WD)
 D0.dat.data[:] = initial_D(XD.dat.data_ro)
 
 D0 += H
+#hinit = Function(D0.function_space()).interpolate(D0/H -1)
+#from firedrake import File
+#of = File(f'{dirname}_H/out.pvd')
+#of.write(hinit)
 
 Dbar = Function(D0.function_space()).assign(H)
 stepper.set_reference_profiles([('D', Dbar)])
