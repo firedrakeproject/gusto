@@ -10,6 +10,7 @@ from firedrake import op2, assemble, dot, dx, Function, sqrt, \
 from firedrake.assign import Assigner
 
 from abc import ABCMeta, abstractmethod, abstractproperty
+from gusto import equations
 import gusto.thermodynamics as tde
 from gusto.coord_transforms import rotated_lonlatr_vectors
 from gusto.recovery import Recoverer, BoundaryMethod
@@ -1728,20 +1729,23 @@ class CompressibleVorticity(DiagnosticField):
         if self.method != 'solve':
             if vorticity_type == 'relative':
                 self.expression = curl(u)
-            elif vorticity_type == 'absolute': 
-                f = state_fields('coriolis')
-                self.expression = curl(u + f)
+            elif vorticity_type == 'absolute':
+                omega = Constant(7.292e-5)
+                Omega = as_vector((0, 0, omega)) 
+                self.expression = curl(u + 2*Omega)
         super().setup(domain, state_fields, space=space)
 
         if self.method =='solve':     
-            omega = TrialFunction(space)
+            vort = TrialFunction(space)
             w = TestFunction(space)
             n = FacetNormal(domain.mesh)
-            a = inner(omega, w) * dx
+            a = inner(vort, w) * dx
             L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * dS_h 
             if vorticity_type != 'relative':
-                f = state_fields('coriolis')
-                L +=  inner(f, curl(w)) * dx - jump(cross(w, f), n) * dS_h 
+                # I dont like this being hardcoded 
+                omega = Constant(7.292e-5)
+                Omega = as_vector((0, 0, omega))
+                L +=  inner(2*Omega, curl(w)) * dx - jump(cross(w, 2*Omega), n) * dS_h 
 
             problem = LinearVariationalProblem(a, L, self.field)
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={'ksp_type': 'cg'})
@@ -1788,7 +1792,7 @@ class CompressibleAbsoluteVorticity(CompressibleVorticity):
                 'assign' and 'solve'. Defaults to 'solve'.
         """
         self.solve_implemented = True
-        super().__init__(space=space, method=method, required_fields=('u', 'coriolis'))
+        super().__init__(space=space, method=method, required_fields=('u'))
     
     def setup(self, domain, state_fields):
         u"""

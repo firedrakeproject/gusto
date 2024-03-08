@@ -1027,12 +1027,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Extra Terms (Coriolis, Sponge, Diffusion and others)
         # -------------------------------------------------------------------- #
         if Omega is not None:
-            # TODO: add linearisation and label for this
             coriolis_form = coriolis(subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, "u"), self.X))
             residual += coriolis_form
-        #    coriolis(subject(
-            #    prognostic(f*inner(domain.perp(u), w)*dx, "u"), self.X))
+
 
 
         if sponge is not None:
