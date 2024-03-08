@@ -375,7 +375,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 + 'when there is a variable called "u" and none was found')
 
         Vu = domain.spaces("HDiv")
-        if Vu.extruded:
+        if Vu.extruded and not Vu.ufl_domain().topology.extruded_periodic:
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
         for id in no_normal_flow_bc_ids:
@@ -1028,8 +1028,12 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         if Omega is not None:
             # TODO: add linearisation and label for this
-            residual += subject(prognostic(
-                inner(w, cross(2*Omega, u))*dx, "u"), self.X)
+            coriolis_form = coriolis(subject(prognostic(
+                inner(w, cross(2*Omega, u))*dx, "u"), self.X))
+            residual += coriolis_form
+        #    coriolis(subject(
+            #    prognostic(f*inner(domain.perp(u), w)*dx, "u"), self.X))
+
 
         if sponge is not None:
             W_DG = FunctionSpace(domain.mesh, "DG", 2)

@@ -1738,7 +1738,7 @@ class CompressibleVorticity(DiagnosticField):
             w = TestFunction(space)
             n = FacetNormal(domain.mesh)
             a = inner(omega, w) * dx
-            L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * dS_h
+            L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * dS_h 
             if vorticity_type != 'relative':
                 f = state_fields('coriolis')
                 L +=  inner(f, curl(w)) * dx - jump(cross(w, f), n) * dS_h 
