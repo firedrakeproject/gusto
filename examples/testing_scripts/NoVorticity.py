@@ -34,16 +34,15 @@ domain = Domain(mesh, dt, "RTCF", degree=degree)
 # my concern is that whilst i can hard code this value (earths) if a user wanted to change it 
 # im unsure how it would pass to the diagnostics
 omega = Constant(7.292e-5)
-Omega = as_vector((0, 0, omega))
-params = CompressibleParameters()
-eqns = CompressibleEulerEquations(domain, params, Omega=Omega)
+params = CompressibleParameters(Omega=omega)
+eqns = CompressibleEulerEquations(domain, params)
 ic(f'ideal number of processors = {eqns.X.function_space().dim() / 50000}')
 
-dirname = f'both_vorticity_test_c={n}'
+dirname = f'omega_passing'
 output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq, dump_nc = True)
 diagnostic_fields = [CompressibleRelativeVorticity(), MeridionalComponent('CompressibleRelativeVorticity'), 
                      ZonalComponent('CompressibleRelativeVorticity'), RadialComponent('CompressibleRelativeVorticity'),
-                     CompressibleAbsoluteVorticity(), MeridionalComponent('CompressibleAbsoluteVorticity'), 
+                     CompressibleAbsoluteVorticity(params), MeridionalComponent('CompressibleAbsoluteVorticity'), 
                     ZonalComponent('CompressibleAbsoluteVorticity'), RadialComponent('CompressibleAbsoluteVorticity'),
                      ZonalComponent('u'), MeridionalComponent('u'), RadialComponent('u')]
 io=IO(domain, output, diagnostic_fields=diagnostic_fields)
