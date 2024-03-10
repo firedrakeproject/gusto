@@ -11,10 +11,10 @@ from abc import ABCMeta, abstractmethod
 from firedrake import (
     Interpolator, conditional, Function, dx, sqrt, dot, min_value,
     max_value, Constant, pi, Projector, grad, TestFunctions, split,
-    inner, TestFunction, exp, avg, outer, FacetNormal, sin, cos, ge, ln, 
+    inner, TestFunction, exp, avg, outer, FacetNormal, sin, cos, ge, ln,
     SpatialCoordinate, dS_v, NonlinearVariationalProblem,
     NonlinearVariationalSolver, TensorProductElement, FunctionSpace,
-    FiniteElement, interval, quadrilateral
+    FiniteElement, interval
 )
 from firedrake.fml import identity, Term, subject
 from gusto.active_tracers import Phases, TracerVariableType
@@ -26,7 +26,7 @@ from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognos
 from gusto.logging import logger
 from gusto import thermodynamics
 from gusto.linear_interpolator import linearinterpolator
-from numpy import (linspace, around)
+import numpy as np
 import ufl
 import math
 from enum import Enum
@@ -40,7 +40,7 @@ __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain"
 
 class PhysicsParametrisation(object, metaclass=ABCMeta):
     """
-    Base class for the parametrisation of physical processes for Gusto."""  
+    Base class for the parametrisation of physical processes for Gusto."""
 
     def __init__(self, equation, label_name, parameters=None):
         """
@@ -170,19 +170,29 @@ class SourceSink(PhysicsParametrisation):
 
 class Relaxation(PhysicsParametrisation):
     """
-    Relaxation term for Held Suarez 
+    Relaxation term for Held Suarez
     """
 
-    def __init__(self, equation, variable_name, parameters=None):
+    def __init__(self, equation):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
             variable_name (str): the name of the variable
 
         """
-        label_name = f'relaxation_{variable_name}'
+        label_name = 'held_suarez_relaxation'
         super().__init__(equation, label_name, parameters=None)
-        self.parameters = equation.parameters
+        domain = equation.domain
+        self.domain = domain
+
+        if domain.on_sphere:
+            x, y, z = SpatialCoordinate(domain.mesh)
+            _, lat, _ = lonlatr_from_xyz(x, y, z)
+        else:
+            # TODO: this could be determined some other way
+            # Take a mid-latitude
+            lat = pi / 4
+
         self.X = Function(equation.X.function_space())
         X = self.X
         theta_idx = equation.field_names.index('theta')
@@ -191,67 +201,34 @@ class Relaxation(PhysicsParametrisation):
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
 
-
-        boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
-        self.rho_averaged = Function(Vt)
-        self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-
-        # switch to determine if sigma is calculated by a surface term or direct
-        # interpolation
-        self.sigma_method = 'interpolation'
-        if self.sigma_method == 'interpolation':
-            # interpolation data for height to sigma co-ords
-            sigma_vals = linspace(1.0 , 0.01, 33)
-            sigma_vals = around(sigma_vals, 2)
-            eta_vals = [0.0, 0.009072, 0.018111, 0.027506, 0.036901, 0.046295, 0.056433, 
-                        0.066764,0.077094, 0.088103, 0.099467, 0.110896, 0.123099, 0.135626, 
-                        0.148539, 0.162260, 0.176303, 0.191251, 0.206780, 0.223245, 0.240613,
-                        0.259112, 0.278935, 0.300371, 0.323584, 0.349379, 0.378563, 0.412365,
-                        0.453010, 0.504310, 0.574851, 0.687780, 1.00]
-            
-            self.sigma=Function(Vt)
-            self.sigma_interpolator = linearinterpolator(eta_vals, sigma_vals)
-            self.r_Vt = Function(Vt).interpolate((r-a) / H)
-            self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
-
-        elif self.sigma_method =='calculation':
-            # creates horizontal function spaces
-            self.exner_field = Function(Vt).interpolate(self.exner) 
-            horizontal_element = Vt._ufl_element.sub_elements()[0]
-            Vtflat = TensorProductElement(horizontal_element, FiniteElement('Real', interval, 0))
-            Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
-
-            #extracts the bottom values into a flat function space with same propertes
-            self.exner_surface = Function(Vflat)
-            self.exner_surface_mask = Vt.finat_element.entity_dofs()[(2, 0)][0]
-            self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
-            self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
-            # calculates sigma in the field
-            self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
-        else:
-            raise NotImplementedError(f'sigma calculation method is not interpolation or calculation')
-
+        # Held-Suarez parameters
+        # TODO: these should be captured in a parameters object
         T0stra = 200 # Stratosphere temp
         T0surf = 315 # Surface temperature at equator
         T0horiz = 60 # Equator to pole temperature difference
         T0vert = 10 # Stability parameter
-        self.kappa = self.parameters.kappa
+        kappa = equation.parameters.kappa
         sigmab = 0.7
-        d = 24 * 60 * 60 
+        d = 24 * 60 * 60
         taod = 40 * d
         taou = 4 * d
-        a = 6.371229e6  # radius of earth
-        H = 30975.0
 
-        mesh = equation.domain.mesh
-        x, y, z = SpatialCoordinate(mesh)
-        _, lat, r = lonlatr_from_xyz(x, y, z)
+        # Set up fields for determining sigma = exner / exner_surf
+        boundary_method = BoundaryMethod.extruded if domain.vertical_degree == 0 else None
+        self.rho_averaged = Function(Vt)
+        self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
+        self.exner = Function(Vt)
+        self.exner_interpolator = Interpolator(
+            thermodynamics.exner_pressure(equation.parameters,
+                                          self.rho_averaged, self.theta), self.exner)
+        self.sigma = Function(Vt)
 
-        T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner) * cos(lat)**2 / self.kappa) * self.exner
+        # TODO: check if this is correct
+        # Should we pass in an expression for temperature instead?
+        T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner) * cos(lat)**2 / kappa) * self.exner
         Teq = conditional(ge(T0stra, T_condition), T0stra, T_condition)
         equilibrium_expr = Teq / self.exner
-        
+
         # timescale of temperature forcing
         tao_cond = (self.sigma - sigmab) / (1 - sigmab)
         newton_freq = 1 / taod + (1/taou - 1/taod) * conditional(ge(0, tao_cond), 0, tao_cond) * cos(lat)**4
@@ -262,27 +239,28 @@ class Relaxation(PhysicsParametrisation):
         dx_reduced = dx(degree=4)
         forcing_expr = test * forcing * dx_reduced
         equation.residual -= self.label(subject(prognostic(forcing_expr, 'theta'), X), self.evaluate)
-        
+
     def evaluate(self, x_in, dt):
         """
         Evalutes the source term generated by the physics.
 
         Args:
-            x_in: (:class:`Function`): the (mixed) field to be evolved. 
+            x_in: (:class:`Function`): the (mixed) field to be evolved.
             dt: (:class:`Constant`): the timestep, which can be the time
-                interval for the scheme. 
-        """ 
+                interval for the scheme.
+        """
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
+        self.exner_interpolator.interpolate()
 
-        if self.sigma_method == 'interpolation':
-            self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
-        elif self.sigma_method =='calculation':
-            self.exner_field.interpolate(self.exner)
-            self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
-                    self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]  
-            self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
+        # Determine sigma:= exner / exner_surf
+        exner_columnwise, index_data = self.domain.coords.get_column_data(self.exner, self.domain)
+        sigma_columnwise = np.zeros_like(exner_columnwise)
+        for col in range(len(exner_columnwise[:,0])):
+            sigma_columnwise[col,:] = exner_columnwise[col,:] / exner_columnwise[col,0]
+        self.domain.coords.set_field_from_column_data(self.sigma, sigma_columnwise, index_data)
+
+
 
 class SaturationAdjustment(PhysicsParametrisation):
     """
@@ -1436,87 +1414,59 @@ class SurfaceFluxes(PhysicsParametrisation):
 
 class RayleighFriction(PhysicsParametrisation):
     """
-    Forcing term on the velocity of the form 
+    Forcing term on the velocity of the form
     F_u = -u / a,
     where a is some friction factor
-    """  
-    def __init__(self, equation, parameters=None):
+    """
+    def __init__(self, equation):
         """
          Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
-            forcing_coeff (:class:`unsure what to put here`): the coefficient 
+            forcing_coeff (:class:`unsure what to put here`): the coefficient
             determining rate of friction
         """
         label_name = 'rayleigh_friction'
         super().__init__(equation, label_name, parameters=None)
-        self.parameters = equation.parameters
+        domain = equation.domain
+        self.domain = domain
+
         self.X = Function(equation.X.function_space())
         X = self.X
-        k = equation.domain.k
+        k = domain.k
         u_idx = equation.field_names.index('u')
+        u = split(X)[u_idx]
         theta_idx = equation.field_names.index('theta')
+        self.theta = X.subfunctions[theta_idx]
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
-        self.theta = X.subfunctions[theta_idx]
-      
         Vt = equation.domain.spaces('theta')
-        boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
-        self.rho_averaged = Function(Vt)
-        self.rho_recoverer = Recoverer(rho, self.rho_averaged,  boundary_method=boundary_method)
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        self.sigma_method = 'interpolation'
-        # self.sigma_method = 'interpolation'
-        if self.sigma_method == 'interpolation':
-            # interpolation data for height to sigma co-ords
-            sigma_vals = linspace(1.0 , 0.01, 33)
-            sigma_vals = around(sigma_vals, 2)
-            eta_vals = [0.0, 0.009072, 0.018111, 0.027506, 0.036901, 0.046295, 0.056433, 
-                        0.066764,0.077094, 0.088103, 0.099467, 0.110896, 0.123099, 0.135626, 
-                        0.148539, 0.162260, 0.176303, 0.191251, 0.206780, 0.223245, 0.240613,
-                        0.259112, 0.278935, 0.300371, 0.323584, 0.349379, 0.378563, 0.412365,
-                        0.453010, 0.504310, 0.574851, 0.687780, 1.00]
-            
-            self.sigma=Function(Vt)
-            self.sigma_interpolator = linearinterpolator(eta_vals, sigma_vals)
-            self.r_Vt = Function(Vt).interpolate((r-a) / H)
-            self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
-
-        elif self.sigma_method =='calculation':
-            # creates horizontal function spaces
-            self.exner_field = Function(Vt).interpolate(self.exner) 
-            horizontal_element = Vt._ufl_element.sub_elements()[0]
-            Vtflat = TensorProductElement(horizontal_element, FiniteElement('Real', interval, 0))
-            Vflat = FunctionSpace(equation.domain.mesh, Vtflat)
-
-            #extracts the bottom values into a flat function space with same propertes
-            self.exner_surface = Function(Vflat)
-            self.exner_surface_mask = Vt.finat_element.entity_dofs()[(2, 0)][0]
-            self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
-            self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
-            # calculates sigma in the field
-            self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
-        else:
-            raise NotImplementedError(f'sigma calculation method is not interpolation or calculation')
-
-
-        u = split(X)[u_idx]
         u_hori = u - k*dot(u, k)
+
+        # Held-Suarez parameters
+        # TODO: these should be captured in a parameters object
         sigmab = 0.7
-        self.kappa = self.parameters.kappa
         taofric = 24 * 60 * 60
 
+        # Set up fields for determining sigma = exner / exner_surf
+        boundary_method = BoundaryMethod.extruded if domain.vertical_degree == 0 else None
+        self.rho_averaged = Function(Vt)
+        self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
+        self.exner = Function(Vt)
+        self.exner_interpolator = Interpolator(
+            thermodynamics.exner_pressure(equation.parameters,
+                                          self.rho_averaged, self.theta), self.exner)
+        self.sigma = Function(Vt)
 
+        # Expressions for wind forcing
         tao_cond = (self.sigma - sigmab) / (1 - sigmab)
         wind_timescale = conditional(ge(0, tao_cond), 0, tao_cond) / taofric
-        self.forcing_expr = -u_hori * wind_timescale 
+        forcing_expr = - u_hori * wind_timescale
 
         tests = equation.tests
         test = tests[u_idx]
         dx_reduced = dx(degree=4)
-        self.source_expr = inner(test, self.forcing_expr) * dx_reduced
-      #  self.source= Function(HDiv)
-
-        equation.residual -= self.label(subject(prognostic(self.source_expr, 'u'), X), self.evaluate)
+        source_expr = inner(test, forcing_expr) * dx_reduced
+        equation.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -1530,16 +1480,14 @@ class RayleighFriction(PhysicsParametrisation):
         """
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
+        self.exner_interpolator.interpolate()
 
-        if self.sigma_method == 'interpolation':
-            self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
-        elif self.sigma_method =='calculation':
-            self.exner_field.interpolate(self.exner)
-            self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
-                    self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]  
-            self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
-
+        # Determine sigma:= exner / exner_surf
+        exner_columnwise, index_data = self.domain.coords.get_column_data(self.exner, self.domain)
+        sigma_columnwise = np.zeros_like(exner_columnwise)
+        for col in range(len(exner_columnwise[:,0])):
+            sigma_columnwise[col,:] = exner_columnwise[col,:] / exner_columnwise[col,0]
+        self.domain.coords.set_field_from_column_data(self.sigma, sigma_columnwise, index_data)
 
 
 class WindDrag(PhysicsParametrisation):
