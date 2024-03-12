@@ -108,6 +108,7 @@ class CompressibleParameters(Configuration):
     """Physical parameters for the Compressible Euler equations."""
 
     g = 9.810616
+    cs = 340  # speed of sound (m/s)
     N = 0.01  # Brunt-Vaisala frequency (1/s)
     cp = 1004.5  # SHC of dry air at const. pressure (J/kg/K)
     R_d = 287.  # Gas constant for dry air (J/kg/K)
