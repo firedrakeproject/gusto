@@ -13,9 +13,11 @@ from firedrake import (
     max_value, Constant, pi, Projector, grad, TestFunctions, split,
     inner, TestFunction, exp, avg, outer, FacetNormal,
     SpatialCoordinate, dS_v, NonlinearVariationalProblem,
-    NonlinearVariationalSolver
+    NonlinearVariationalSolver, MeshHierarchy, FunctionSpace, assemble, div,
+    prolong, inject, PCG64, RandomGenerator
 )
 from firedrake.fml import identity, Term, subject
+from firedrake.parloops import par_loop, READ, INC, WRITE, RW
 from gusto.active_tracers import Phases, TracerVariableType
 from gusto.configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
@@ -32,7 +34,8 @@ from types import FunctionType
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
            "SourceSink", "SurfaceFluxes", "WindDrag", "StaticAdjustment",
-           "SuppressVerticalWind", "BoundaryLayerMixing", "TerminatorToy"]
+           "SuppressVerticalWind", "BoundaryLayerMixing", "TerminatorToy",
+           "CellularAutomaton"]
 
 
 class PhysicsParametrisation(object, metaclass=ABCMeta):
@@ -1819,3 +1822,226 @@ class TerminatorToy(PhysicsParametrisation):
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
 
         pass
+
+
+class CellularAutomaton(PhysicsParametrisation):
+
+    def __init__(self, equation, maxL):
+
+        self.explicit_only = True
+        self.initialised = False
+        label_name = 'cellular_automaton'
+        super().__init__(equation, label_name)
+
+        self.maxL = Constant(maxL)
+        fluid_mesh = equation.domain.mesh
+        VDG0 = FunctionSpace(fluid_mesh, "DG", 0)
+
+        # create two-level mesh hierarchy to obtain finer mesh for
+        # cellular automaton
+        hierarchy = MeshHierarchy(fluid_mesh, 2, 2)
+        # mesh for cellular automaton is finest mesh
+        ca_mesh = hierarchy[-1]
+
+        # create functions for communicating between cells
+        self.HDiv = FunctionSpace(ca_mesh, "RTCF", 1)
+        self.edge_val = Function(self.HDiv)
+        self.VDG0 = FunctionSpace(ca_mesh, "DG", 0)
+        self.VCG1 = FunctionSpace(ca_mesh, "CG", 1)
+        self.vertex_val = Function(self.VCG1)
+        self.sum_neigh = Function(self.VDG0, name="sum")
+        self.threshold = Function(self.VDG0)
+
+        # create function for div(u)
+        self.X = Function(equation.X.function_space())
+        u_idx = equation.field_names.index("u")
+        self.u = self.X.subfunctions[u_idx]
+        self.divu = Function(VDG0)
+        self.divu_ca = Function(self.VDG0, name="div")
+        self.lifetime = Function(self.VDG0, name="life")
+        self.BFn = Function(self.VDG0)
+        self.BFnp1 = Function(self.VDG0, name="BF")
+        self.sigma = Function(VDG0)
+        self.alpha = Constant(1e-4)
+
+        D_idx = equation.field_names.index("D")
+        test = equation.tests[D_idx]
+        self.source = Function(VDG0)
+        self.area = assemble(1*dx(domain=self.source.ufl_domain()))
+        source_expr = -test * self.source * dx
+
+        equation.residual += self.label(
+            subject(prognostic(source_expr, "D"), self.X), self.evaluate)
+
+        from firedrake import File
+        self.ic_out = File('ic_ca_out.pvd')
+        self.out = File('ca_out.pvd')
+
+    def sum_cells_to_edge(self):
+        self.edge_val.assign(0)
+        shapes = {'nDOFs': self.HDiv.finat_element.space_dimension()}
+        domain = "{{[i]: 0 <= i < {nDOFs}}}".format(**shapes)
+
+        instructions = ("""
+        for i
+            edge_val[i] = edge_val[i] + vol_val[0]
+        end
+        """)
+
+        par_loop((domain, instructions), dx,
+                 {'edge_val' : (self.edge_val, INC),
+                  'vol_val': (self.BFn, READ)})
+
+    def sum_edges_to_vertex(self):
+        self.vertex_val.assign(0)
+        domain = "{[i]: i = 0}"
+
+        instructions = ("""
+        vertex_val[0] = 0.5*vertex_val[0] + 0.25*(edge_val[0] + edge_val[2])
+        vertex_val[1] = 0.5*vertex_val[1] + 0.25*(edge_val[0] + edge_val[3])
+        vertex_val[2] = 0.5*vertex_val[2] + 0.25*(edge_val[2] + edge_val[1])
+        vertex_val[3] = 0.5*vertex_val[3] + 0.25*(edge_val[1] + edge_val[3])
+        """)
+
+        par_loop((domain, instructions), dx,
+                 {'vertex_val' : (self.vertex_val, INC),
+                  'edge_val': (self.edge_val, READ)})
+
+    def vertex_to_cell(self):
+        self.sum_neigh.assign(0)
+        shapes = {'n_vert_DOFs': self.VCG1.finat_element.space_dimension(),
+                  'n_edge_DOFs': self.HDiv.finat_element.space_dimension()}
+        domain = "{{[j, k]: 0 <= j < {n_vert_DOFs} and 0 <= k < {n_edge_DOFs}}}".format(**shapes)
+
+        instructions = ("""
+        for j
+            sum[0] = sum[0] + vertex[j]
+        end
+        for k
+            sum[0] = sum[0] - edge[k]
+        end
+        """)
+
+        par_loop((domain, instructions), dx,
+                 {'sum' : (self.sum_neigh, WRITE),
+                  'vertex': (self.vertex_val, READ),
+                  'edge': (self.edge_val, READ)})
+
+    def sum_cell_neighbours(self):
+        self.sum_cells_to_edge()
+        self.sum_edges_to_vertex()
+        self.vertex_to_cell()
+
+    def adjust_background_field(self):
+
+        self.sum_cell_neighbours()
+
+        domain = "{[i]: 0 <= i < 1}"
+
+        if not self.initialised:
+            instructions = ("""
+            if BFn[0] == 1
+                if sum[0] < 2
+                    BFnp1[0] = 0
+                elif sum[0] < 4
+                    BFnp1[0] = 1
+                else
+                    BFnp1[0] = 0
+                end
+            else
+                if sum[0] == 3
+                    BFnp1[0] = 1
+                else
+                    BFnp1[0] = 0
+                end
+            end
+            """)
+
+            par_loop((domain, instructions), dx,
+                     {'BFnp1' : (self.BFnp1, WRITE),
+                      'sum': (self.sum_neigh, READ),
+                      'BFn': (self.BFn, READ)})
+        else:
+            instructions = ("""
+            <float64> Lval = L[0]
+            if Lval > 0
+                L[0] = L[0] - 1
+                if Lval > 1
+                    BFnp1[0] = 1
+                else
+                    BFnp1[0] = 0
+                end
+            else
+                if divu[0] < threshold[0]
+                    if BFn[0] == 1
+                        if sum[0] < 2
+                            L[0] = 0
+                            BFnp1[0] = 0
+                        elif sum[0] < 4
+                            L[0] = 10
+                            BFnp1[0] = 1
+                        else
+                            L[0] = 0
+                            BFnp1[0] = 0
+                        end
+                    else
+                        if sum[0] == 3
+                            BFnp1[0] = 1
+                        else
+                            BFnp1[0] = 0
+                        end
+                    end
+                else
+                    L[0] = 0
+                    BFnp1[0] = 0
+                end
+            end
+            """)
+            par_loop((domain, instructions), dx,
+                     {'BFnp1' : (self.BFnp1, WRITE),
+                      'BFn' : (self.BFn, READ),
+                      'sum': (self.sum_neigh, READ),
+                      'L': (self.lifetime, RW),
+                      'divu': (self.divu_ca, READ),
+                      'threshold': (self.threshold, READ)})
+
+    def initialise(self):
+        pcg = PCG64(seed=123456789)
+        rg = RandomGenerator(pcg)
+        B = rg.normal(self.VDG0)
+        self.BFn.interpolate(conditional(B < 0 , 0, 1))
+        # self.ic_out.write(self.BFn)
+        for i in range(2000):
+            self.adjust_background_field()
+            self.BFn.assign(self.BFnp1)
+            # self.ic_out.write(self.BFn)
+        pcg2 = PCG64(seed=99876541)
+        rg2 = RandomGenerator(pcg)
+        l = rg2.normal(self.VDG0)
+        self.lifetime.interpolate(conditional(self.divu_ca < self.threshold, conditional(l < 0, 0, self.maxL), 0))
+        self.ic_out.write(self.BFn, self.lifetime, self.divu_ca, self.threshold)
+        self.initialised = True
+        
+    def evaluate(self, x_in, dt):
+        # get divergence on fluid mesh (coarse)
+        self.X.assign(x_in)
+        self.divu.interpolate(div(self.u))
+        # prolong divergence to cellular automaton mesh
+        prolong(self.divu, self.divu_ca)
+        self.threshold.interpolate(Constant(0.2*self.divu.dat.data.max()))
+        print("threshold: ", self.threshold.dat.data.min(), self.threshold.dat.data.max())
+        print("divu: ", self.divu.dat.data.min(), self.divu.dat.data.max())
+        assert(self.threshold.dat.data.min() > self.divu.dat.data.min())
+
+        if not self.initialised:
+            self.initialise()
+
+        self.adjust_background_field()
+        inject(self.BFnp1, self.sigma)
+        self.BFn.assign(self.BFnp1)
+        self.source.assign(self.alpha * self.sigma)
+        mean = sqrt(assemble(inner(self.source, self.source)*dx)/self.area)
+        self.source -= mean
+        self.out.write(self.BFnp1, self.lifetime, self.divu_ca, self.sum_neigh)
+        print("source: ", self.source.dat.data.min(), self.source.dat.data.max())
+        
