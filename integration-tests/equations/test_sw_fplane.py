@@ -44,7 +44,9 @@ def run_sw_fplane(tmpdir):
                          DGUpwind(eqns, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                      transport_methods,
+                                      num_outer=4, num_inner=1)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

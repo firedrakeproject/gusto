@@ -50,7 +50,8 @@ def run_incompressible(tmpdir):
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
                                       transport_methods,
-                                      linear_solver=linear_solver)
+                                      linear_solver=linear_solver,
+                                      num_outer=4, num_inner=1)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
