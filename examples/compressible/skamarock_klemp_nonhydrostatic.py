@@ -29,7 +29,7 @@ if '--running-tests' in sys.argv:
 else:
     nlayers = 10
     columns = 150
-    tmax = 3600.
+    tmax = 3600
     dumpfreq = int(tmax / (2*dt))
 
 # ---------------------------------------------------------------------------- #
@@ -73,9 +73,9 @@ else:
         dumplist=['u'],
     )
 
-diagnostic_fields = [CourantNumber(), Gradient("u"), Perturbation('theta'),
-                     Gradient("theta_perturbation"), Perturbation('rho'),
-                     RichardsonNumber("theta", parameters.g/Tsurf), Gradient("theta")]
+diagnostic_fields = [CourantNumber(), Gradient('u'), Perturbation('theta'),
+                     Gradient('theta_perturbation'), Perturbation('rho'),
+                     RichardsonNumber('theta', parameters.g/Tsurf), Gradient('theta')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes

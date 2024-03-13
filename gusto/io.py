@@ -7,7 +7,7 @@ import sys
 import time
 from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.meshes import get_flat_latlon_mesh
-from firedrake import (Function, functionspaceimpl, File,
+from firedrake import (Function, functionspaceimpl, File, Constant,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 from pyop2.mpi import MPI
 import numpy as np
@@ -233,6 +233,9 @@ class IO(object):
         self.dumpfile = None
         self.to_pick_up = None
 
+        if output.log_courant:
+            self.courant_max = Constant(0.0)
+
     def log_parameters(self, equation):
         """
         Logs an equation's physical parameters that take non-default values.
@@ -308,6 +311,13 @@ class IO(object):
                 logger.info(f'Max Courant: {courant_max:.2e}')
             else:
                 logger.info(f'Max Courant {message}: {courant_max:.2e}')
+
+            if component == 'whole':
+                # TODO: this will update the Courant number more than we need to
+                # and possibly with the wrong Courant number
+                # we could make self.courant_max a dict with keys depending on
+                # the field to take the Courant number of
+                self.courant_max.assign(courant_max)
 
     def setup_diagnostics(self, state_fields):
         """
@@ -630,6 +640,11 @@ class IO(object):
             self.output.checkpoint_pickup_filename = None
         else:
             raise ValueError("Must set checkpoint True if picking up")
+
+        # Prevent any steady-state diagnostics overwriting their original fields
+        for diagnostic_field in self.diagnostic_fields:
+            if hasattr(diagnostic_field, "init_field_set"):
+                diagnostic_field.init_field_set = True
 
         return t, reference_profiles, step, initial_steps
 

@@ -14,6 +14,7 @@ from gusto.coord_transforms import rotated_lonlatr_vectors
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.active_tracers import TracerVariableType, Phases
+from gusto.logging import logger
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
@@ -25,7 +26,7 @@ __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
            "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
-           "TracerDensity"]
+           "BruntVaisalaFrequencySquared", "TracerDensity"]
 
 
 class Diagnostics(object):
@@ -220,6 +221,8 @@ class DiagnosticField(object, metaclass=ABCMeta):
 
     def compute(self):
         """Compute the diagnostic field from the current state."""
+
+        logger.debug(f'Computing diagnostic {self.name} with {self.method} method')
 
         if self.method == 'interpolate':
             self.evaluator.interpolate()
@@ -944,6 +947,51 @@ class Exner(DiagnosticField):
         super().setup(domain, state_fields)
 
 
+class BruntVaisalaFrequencySquared(DiagnosticField):
+    """The diagnostic for the Brunt-Väisälä frequency."""
+    name = "Brunt-Vaisala_squared"
+
+    def __init__(self, equations, space=None, method='interpolate'):
+        """
+        Args:
+            equations (:class:`PrognosticEquationSet`): the equation set being
+                solved by the model.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.parameters = equations.parameters
+        # Work out required fields
+        if isinstance(equations, CompressibleEulerEquations):
+            required_fields = ['theta']
+            if equations.active_tracers is not None and len(equations.active_tracers) > 1:
+                # TODO: I think theta here should be theta_e, which would be
+                # easiest if this is a ThermodynamicDiagnostic. But in the dry
+                # case, our numerical theta_e does not reduce to the numerical
+                # dry theta
+                raise NotImplementedError(
+                    'Brunt-Vaisala diagnostic not implemented for moist equations')
+        else:
+            raise NotImplementedError(
+                f'Brunt-Vaisala diagnostic not implemented for {type(equations)}')
+        super().__init__(space=space, method=method, required_fields=tuple(required_fields))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        theta = state_fields('theta')
+        self.expr = self.parameters.g/theta * dot(domain.k, grad(theta))
+        super().setup(domain, state_fields)
+
+
 class Sum(DiagnosticField):
     """Base diagnostic for computing the sum of two fields."""
     def __init__(self, field_name1, field_name2):
@@ -1033,11 +1081,35 @@ class SteadyStateError(Difference):
             field1 = state_fields(self.field_name1)
             field2 = state_fields(self.field_name2, space=field1.function_space(),
                                   pick_up=True, dump=False)
+            # Attach state fields to self so that we can pick it up in compute
+            self.state_fields = state_fields
+            # The initial value for fields may not have already been set yet so we
+            # postpone setting it until the compute method is called
+            self.init_field_set = False
+        else:
+            field1 = state_fields(self.field_name1)
+            field2 = state_fields(self.field_name2, space=field1.function_space(),
+                                  pick_up=True, dump=False)
             # By default set this new field to the current value
             # This may be overwritten if picking up from a checkpoint
             field2.assign(field1)
+            self.state_fields = state_fields
+            self.init_field_set = True
 
         super().setup(domain, state_fields)
+
+    def compute(self):
+        # The first time the compute method is called we set the initial field.
+        # We do not want to do this if picking up from a checkpoint
+        if not self.init_field_set:
+            # Set initial field
+            full_field = self.state_fields(self.field_name1)
+            init_field = self.state_fields(self.field_name2)
+            init_field.assign(full_field)
+
+            self.init_field_set = True
+
+        super().compute()
 
     @property
     def name(self):
@@ -1200,7 +1272,10 @@ class PotentialEnergy(ThermodynamicDiagnostic):
             state_fields (:class:`StateFields`): the model's field container.
         """
         x = SpatialCoordinate(domain.mesh)
-        self.expr = self.rho_averaged * (1 + self.r_t) * self.parameters.g * dot(x, domain.k)
+        self._setup_thermodynamics(domain, state_fields)
+        z = Function(self.rho_averaged.function_space())
+        z.interpolate(dot(x, domain.k))
+        self.expr = self.rho_averaged * (1 + self.r_t) * self.parameters.g * z
         super().setup(domain, state_fields, space=domain.spaces("DG"))
 
 
@@ -1243,6 +1318,7 @@ class ThermodynamicKineticEnergy(ThermodynamicDiagnostic):
             state_fields (:class:`StateFields`): the model's field container.
         """
         u = state_fields('u')
+        self._setup_thermodynamics(domain, state_fields)
         self.expr = 0.5 * self.rho_averaged * (1 + self.r_t) * dot(u, u)
         super().setup(domain, state_fields, space=domain.spaces("DG"))
 
