@@ -17,6 +17,7 @@ def run(timestepper, tmax, f_end):
     norm2 = norm(timestepper.fields("m_X") - f_end) / norm(f_end)
     return norm1, norm2
 
+
 @pytest.mark.parametrize("m_X_space", ['DG', 'theta'])
 def test_coupled_transport_scalar(tmpdir, m_X_space, tracer_setup):
 
@@ -29,9 +30,9 @@ def test_coupled_transport_scalar(tmpdir, m_X_space, tracer_setup):
                          transport_eqn=TransportEquationType.conservative)
 
     m_X = ActiveTracer(name='m_X', space=m_X_space,
-                     variable_type=TracerVariableType.mixing_ratio,
-                     transport_eqn=TransportEquationType.tracer_conservative,
-                     density_name='rho_d')
+                       variable_type=TracerVariableType.mixing_ratio,
+                       transport_eqn=TransportEquationType.tracer_conservative,
+                       density_name='rho_d')
 
     tracers = [rho_d, m_X]
 
@@ -41,13 +42,13 @@ def test_coupled_transport_scalar(tmpdir, m_X_space, tracer_setup):
     if m_X_space == 'theta':
         V_m_X = domain.spaces(m_X_space)
         Vt_brok = FunctionSpace(mesh, BrokenElement(V_m_X.ufl_element()))
-        suboptions = {'rho_d':RecoveryOptions(embedding_space=Vt_brok,
-                                          recovered_space=V_m_X,
-                                          project_low_method='recover'),
+        suboptions = {'rho_d': RecoveryOptions(embedding_space=Vt_brok,
+                                               recovered_space=V_m_X,
+                                               project_low_method='recover'),
                       'm_X': EmbeddedDGOptions()}
         opts = MixedFSOptions(suboptions=suboptions)
 
-        transport_scheme = SSPRK3(domain, options = opts, increment_form=False)
+        transport_scheme = SSPRK3(domain, options=opts, increment_form=False)
 
     transport_scheme = SSPRK3(domain, increment_form=False)
 
