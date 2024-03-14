@@ -6,7 +6,7 @@ compressible Euler equations.
 from gusto import *
 from firedrake import (as_vector, VectorFunctionSpace,
                        PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
-                       exp, pi, cos, Function, conditional, Mesh, op2, sqrt)
+                       exp, pi, cos, Function, conditional, Mesh, sqrt)
 import sys
 
 # ---------------------------------------------------------------------------- #
@@ -157,21 +157,13 @@ compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner,
                                  top=True, exner_boundary=0.5,
                                  params=exner_params)
 
+# Use kernel as a parallel-safe method of computing minimum
+min_kernel = kernels.MinKernel()
 
-def minimum(f):
-    fmin = op2.Global(1, [1000], dtype=float)
-    op2.par_loop(op2.Kernel("""
-static void minify(double *a, double *b) {
-    a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
-}
-        """, "minify"), f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
-    return fmin.data[0]
-
-
-p0 = minimum(exner)
+p0 = min_kernel.apply(exner)
 compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner,
                                  top=True, params=exner_params)
-p1 = minimum(exner)
+p1 = min_kernel.apply(exner)
 alpha = 2.*(p1-p0)
 beta = p1-alpha
 exner_top = (1.-beta)/alpha
