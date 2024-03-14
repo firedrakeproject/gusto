@@ -16,8 +16,13 @@ import matplotlib.pyplot as plt
 
 day = 88774.
 
+# set inner and outer latitude limits of annulus   
+phis = 80
+phin = 85
+
+
 ### max runtime currently 1 day
-tmax = day
+tmax = 20 * day
 ### timestep
 dt = 450.
 
@@ -44,7 +49,7 @@ fexpr = 2*Omega*x[2]/R
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
 # I/O (input/output)
-dirname = "annular_vortex_mars_45-50_new-g"
+dirname = f'annular_vortex_mars_{phis}-{phin}_noise'
 output = OutputParameters(dirname=dirname, dump_nc=True)
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
@@ -86,8 +91,8 @@ def initial_profiles(omega, radius):
 
     #setup different initial PV profiles
     smoothing = True
-    rlat1 = np.radians(45)
-    rlat2 = np.radians(50)
+    rlat1 = np.radians(phis)
+    rlat2 = np.radians(phin)
     qp = 2 * omega / hbart
     qt0 = 2 * omega * sinlat / hbart
     qt = qt0
@@ -171,6 +176,13 @@ def initial_profiles(omega, radius):
     thini = (hn - hbart) * phibar
     vorini = zn + f
     uini = un
+
+
+    # make random noise
+    sd = 1.5e-3 * H
+    noise = np.random.normal(loc=0, scale=sd, size=np.size(sd))
+    thini += noise
+
 
     fig, axs = plt.subplots(3, 1, sharex=True, figsize = (6,9))
     axs[0].plot(rlat, qt0, '--', color = 'black', alpha = 0.5)
