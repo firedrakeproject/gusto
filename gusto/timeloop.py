@@ -102,8 +102,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             for variable in variables:
                 if variable not in method_variables:
                     message = f'Variable {variable} has a {term_label.label} ' \
-                        + 'but no method for this has been specified. Using ' \
-                        + 'default form for this term'
+                        + 'term but no method for this has been specified. ' \
+                        + 'Using default form for this term'
                     logger.warning(message)
 
         # -------------------------------------------------------------------- #
@@ -299,7 +299,8 @@ class Timestepper(BaseTimestepper):
         self.setup_equation(self.equation)
         self.scheme.setup(self.equation)
         self.setup_transporting_velocity(self.scheme)
-        self.scheme.courant_max = self.io.courant_max
+        if self.io.output.log_courant:
+            self.scheme.courant_max = self.io.courant_max
 
     def timestep(self):
         """
