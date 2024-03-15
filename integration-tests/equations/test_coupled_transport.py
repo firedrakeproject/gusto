@@ -90,8 +90,8 @@ def test_conservative_coupled_transport(tmpdir, m_X_space, tracer_setup):
         V_m_X = domain.spaces(m_X_space)
         Vt_brok = FunctionSpace(mesh, BrokenElement(V_m_X.ufl_element()))
         suboptions = {'f1': RecoveryOptions(embedding_space=Vt_brok,
-                                               recovered_space=V_m_X,
-                                               project_low_method='recover'),
+                                            recovered_space=V_m_X,
+                                            project_low_method='recover'),
                       'f2': EmbeddedDGOptions()}
         opts = MixedFSOptions(suboptions=suboptions)
 
