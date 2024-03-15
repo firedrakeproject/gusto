@@ -376,8 +376,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 + 'when there is a variable called "u" and none was found')
 
         Vu = domain.spaces("HDiv")
-        # we only apply no normal-flow BCs when extruded mesh is non periodic
-        if Vu.extruded and not Vu.ufl_domain().topology.extruded_periodic:
+        if Vu.extruded:
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
         for id in no_normal_flow_bc_ids:
@@ -611,9 +610,10 @@ class CoupledTransportEquation(PrognosticEquationSet):
         # Add mass forms for the tracers, which will use
         # mass*density for any tracer_conservative terms
         self.residual = self.generate_tracer_mass_terms(active_tracers)
-        
+
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)
+
 
 # ============================================================================ #
 # Specified Equation Sets
