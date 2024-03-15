@@ -475,7 +475,7 @@ class IMEXMultistage(TimeDiscretisation):
             # setup solver using residual defined in derived class
             problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
-            solvers.append(NonlinearVariationalSolver(problem, options_prefix=solver_name))
+            solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name))
         return solvers
 
     @cached_property
@@ -484,7 +484,7 @@ class IMEXMultistage(TimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
     def apply(self, x_out, x_in):
         self.x1.assign(x_in)

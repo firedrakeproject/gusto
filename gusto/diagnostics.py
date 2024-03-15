@@ -1,6 +1,6 @@
 """Common diagnostic fields."""
 
-from firedrake import op2, assemble, dot, dx, Function, sqrt, \
+from firedrake import assemble, dot, dx, Function, sqrt, \
     TestFunction, TrialFunction, Constant, grad, inner, curl, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
@@ -15,6 +15,7 @@ from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.active_tracers import TracerVariableType, Phases
 from gusto.logging import logger
+from gusto.kernels import MinKernel, MaxKernel
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
@@ -62,39 +63,25 @@ class Diagnostics(object):
 
     @staticmethod
     def min(f):
-        # TODO check that this is correct. Maybe move the kernel elsewhere?
         """
         Finds the global minimum DoF value of a field.
 
         Args:
             f (:class:`Function`): field to compute diagnostic for.
         """
-
-        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=f._comm)
-        op2.par_loop(op2.Kernel("""
-static void minify(double *a, double *b) {
-    a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
-}
-""", "minify"), f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
-        return fmin.data[0]
+        min_kernel = MinKernel()
+        return min_kernel.apply(f)
 
     @staticmethod
     def max(f):
-        # TODO check that this is correct. Maybe move the kernel elsewhere?
         """
         Finds the global maximum DoF value of a field.
 
         Args:
             f (:class:`Function`): field to compute diagnostic for.
         """
-
-        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=f._comm)
-        op2.par_loop(op2.Kernel("""
-static void maxify(double *a, double *b) {
-    a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
-}
-""", "maxify"), f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
-        return fmax.data[0]
+        max_kernel = MaxKernel()
+        return max_kernel.apply(f)
 
     @staticmethod
     def rms(f):
