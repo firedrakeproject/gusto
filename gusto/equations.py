@@ -432,18 +432,17 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
     def generate_tracer_mass_terms(self, active_tracers):
         """
-        Builds the weak time derivative terms for the equation set.
+        Adds the mass forms for the active tracers to the equation set.
 
-        Generates the weak time derivative terms ("mass terms") for all the
-        prognostic variables of the equation set.
-
-        The mass terms can differ depending on the tracer type. A mixing ratio
-        that is being transported conservatively will need its mass form multiplied
-        by a reference density.
-
+        Args:
+            active_tracers (list): A list of :class:`ActiveTracer` objects that
+                encode the metadata for the active tracers.
 
         Returns:
-            :class:`LabelledForm`: a labelled form containing the mass terms.
+            :class:`LabelledForm`: a labelled form containing the mass
+                terms for the active tracers. This is the usual mass form
+                unless using tracer_conservative, where it is multiplied
+                by the reference density.
         """
 
         for i, tracer in enumerate(active_tracers):
