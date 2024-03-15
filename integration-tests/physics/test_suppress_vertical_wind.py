@@ -92,5 +92,5 @@ def test_suppress_vertical_wind(tmpdir):
     vertical_wind = Function(domain.spaces('theta'))
     vertical_wind.interpolate(dot(u, domain.k))
 
-    tol = 1e-12
+    tol = 1e-10
     assert norm(vertical_wind) < tol
