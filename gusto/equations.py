@@ -607,70 +607,12 @@ class CoupledTransportEquation(PrognosticEquationSet):
         self.tests = TestFunctions(W)
         self.X = Function(W)
 
-        self.residual = self.generate_mass_terms()
-
-        # Add transport of tracers
-        self.residual += self.generate_tracer_transport_terms(active_tracers)
-
-
-class ConservativeCoupledTransportEquation(PrognosticEquationSet):
-    u"""
-    Discretises the transport equation,                                       \n
-    ∂q/∂t + (u.∇)q = F,                                                       \n
-    with the application of active tracers. As there are multiple tracers or
-    species that are interacting, q and F are vectors. This equation can be
-    enhanced through the addition of sources or sinks (F) by applying it with
-    physics schemes. This takes in tracers that might obey different forms of
-    the transport equation (i.e. advective, conservative) but will evolve all
-    the fields in a conservative manner.
-    """
-    def __init__(self, domain, active_tracers, Vu=None):
-        """
-        Args:
-            domain (:class:`Domain`): the model's domain object, containing the
-                mesh and the compatible function spaces.
-            active_tracers (list): a list of `ActiveTracer` objects
-                that encode the metadata for any active tracers to be included
-                in the equations. This is required for using this class; if there
-                is only a field to be advected, use the AdvectionEquation
-                instead.
-            Vu (:class:`FunctionSpace`, optional): the function space for the
-                velocity field. If this is not specified, uses the HDiv spaces
-                set up by the domain. Defaults to None.
-        """
-
-        self.active_tracers = active_tracers
-        self.terms_to_linearise = {}
-        self.field_names = []
-        self.space_names = {}
-
-        # Build finite element spaces
-        self.spaces = []
-
-        # Add active tracers to the list of prognostics
-        if active_tracers is None:
-            active_tracers = []
-        self.add_tracers_to_prognostics(domain, active_tracers)
-
-        # Make the full mixed function space
-        W = MixedFunctionSpace(self.spaces)
-
-        full_field_name = "_".join(self.field_names)
-        PrognosticEquation.__init__(self, domain, W, full_field_name)
-
-        if Vu is not None:
-            domain.spaces.add_space("HDiv", Vu, overwrite_space=True)
-        V = domain.spaces("HDiv")
-        _ = self.prescribed_fields("u", V)
-
-        self.tests = TestFunctions(W)
-        self.X = Function(W)
-
+        # Add mass forms for the tracers, which will use
+        # mass*density for any tracer_conservative terms
         self.residual = self.generate_tracer_mass_terms(active_tracers)
-
+        
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)
-
 
 # ============================================================================ #
 # Specified Equation Sets
