@@ -94,7 +94,7 @@ def test_conservative_coupled_transport(tmpdir, m_X_space, tracer_setup):
                                             project_low_method='recover'),
                       'f2': EmbeddedDGOptions()}
         opts = MixedFSOptions(suboptions=suboptions)
-    
+
         transport_scheme = SSPRK3(domain, options=opts, increment_form=False)
     else:
         transport_scheme = SSPRK3(domain, increment_form=False)
