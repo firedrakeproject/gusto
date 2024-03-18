@@ -42,7 +42,6 @@ class TransportMethod(SpatialMethod):
             density_idx = self.equation.field_names.index(tracer.density_name)
             self.conservative_density = split(self.equation.X)[density_idx]
 
-
     def replace_form(self, equation):
         """
         Replaces the form for the transport term in the equation with the
