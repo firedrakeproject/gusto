@@ -5,7 +5,7 @@ Set up Martian annular vortex experiment!
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        as_vector, pi, sqrt, min_value, sin, cos,
-                       interpolate)
+                       interpolate, PCG64, RandomGenerator)
 import numpy as np
 import matplotlib.pyplot as plt
 #import xarray as xr
@@ -17,9 +17,12 @@ import matplotlib.pyplot as plt
 day = 88774.
 
 # set inner and outer latitude limits of annulus   
-phis = 80
-phin = 85
+phis = 60
+phin = 70
 
+
+
+print(f'vortex from {phis}N to {phin}N')
 
 ### max runtime currently 1 day
 tmax = 20 * day
@@ -49,7 +52,7 @@ fexpr = 2*Omega*x[2]/R
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
 # I/O (input/output)
-dirname = f'annular_vortex_mars_{phis}-{phin}_noise'
+dirname = f'annular_vortex_mars_{phis}-{phin}_fdnoise'
 output = OutputParameters(dirname=dirname, dump_nc=True)
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
@@ -179,9 +182,9 @@ def initial_profiles(omega, radius):
 
 
     # make random noise
-    sd = 1.5e-3 * H
-    noise = np.random.normal(loc=0, scale=sd, size=np.size(sd))
-    thini += noise
+    #sd = 1.5e-3 * H
+    #noise = np.random.normal(loc=0, scale=sd, size=np.size(sd))
+    #thini += noise
 
 
     fig, axs = plt.subplots(3, 1, sharex=True, figsize = (6,9))
@@ -244,6 +247,12 @@ D0 += H
 #from firedrake import File
 #of = File(f'{dirname}_H/out.pvd')
 #of.write(hinit)
+pcg =PCG64()
+rg = RandomGenerator(pcg)
+f_normal = rg.normal(VD, 0.0, 1.5e-3*H)
+D0 += f_normal
+print(max(f_normal.dat.data))
+print(min(f_normal.dat.data))
 
 Dbar = Function(D0.function_space()).assign(H)
 stepper.set_reference_profiles([('D', Dbar)])
