@@ -1824,3 +1824,50 @@ class TerminatorToy(PhysicsParametrisation):
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
 
         pass
+
+
+class SWHeightRelax(PhysicsParametrisation):
+    """
+    Setup a relaxation to a specified height profile in the shallow water equations
+
+    The modified mass conservation equation is:
+    Dh/Dt + h nabla.v + (h-H)/tau_r = 0,
+    where H is the specified height profile, and tau_r is the relaxation time
+    """
+
+    def __init__(self, equation, H, tau_r, height_name='D'):
+        """
+        Args:
+            equation: the modification term to the mass conservation equation
+            H: the height profile towards which the relaxation occurs
+            tau_r: the relaxation time constant
+        """
+
+        label_name = 'SWHeightRelax'
+        super().__init__(equation, label_name, parameters=None)
+
+        if height_name not in equation.field_names:
+            raise ValueError(f"Field {height_name} does not exist in the equation set")
+        
+        self.height_above_surface_idx = equation.field_names.index(height_name)
+
+        self.Dq = Function(equation.D.function_space())
+        Dq = self.Dq
+
+
+        test = equation.tests
+
+        height_expr = (Dq - H)/tau_r * dx
+
+        equation.residual += self.label(subject(prognostic(height_expr, 'D'), Dq), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Does something I don't understand
+
+        Args:
+            x_in : the field to be evolved
+            dt : the time interval for the scheme
+        """
+        self.dt.assign(dt)
+        self.D.assign(x_in)
