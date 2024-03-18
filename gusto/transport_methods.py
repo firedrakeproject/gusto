@@ -37,12 +37,11 @@ class TransportMethod(SpatialMethod):
         self.transport_equation_type = self.original_form.terms[0].get(transport)
 
         if self.transport_equation_type == TransportEquationType.tracer_conservative:
-            # Extract associated density variable:
-            # This does assume the same ordering of tracers and fields...
-            tracer_idx = self.equation.field_names.index(variable)
-            tracer = self.equation.active_tracers[tracer_idx]
+            # Extract associated density of the variable
+            tracer = next(x for x in self.equation.active_tracers if x.name == variable)
             density_idx = self.equation.field_names.index(tracer.density_name)
             self.conservative_density = split(self.equation.X)[density_idx]
+
 
     def replace_form(self, equation):
         """
