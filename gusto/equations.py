@@ -20,7 +20,8 @@ from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (
     advection_form, continuity_form, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form,
-    diffusion_form, linear_continuity_form, linear_advection_form
+    diffusion_form, linear_continuity_form, linear_advection_form,
+    tracer_conservative_form
 )
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
 from gusto.configuration import TransportEquationType
@@ -430,6 +431,43 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             else:
                 raise TypeError(f'Tracers must be ActiveTracer objects, not {type(tracer)}')
 
+    def generate_tracer_mass_terms(self, active_tracers):
+        """
+        Adds the mass forms for the active tracers to the equation set.
+
+        Args:
+            active_tracers (list): A list of :class:`ActiveTracer` objects that
+                encode the metadata for the active tracers.
+
+        Returns:
+            :class:`LabelledForm`: a labelled form containing the mass
+                terms for the active tracers. This is the usual mass form
+                unless using tracer_conservative, where it is multiplied
+                by the reference density.
+        """
+
+        for i, tracer in enumerate(active_tracers):
+            idx = self.field_names.index(tracer.name)
+            tracer_prog = split(self.X)[idx]
+            tracer_test = self.tests[idx]
+
+            if tracer.transport_eqn == TransportEquationType.tracer_conservative:
+                ref_density_idx = self.field_names.index(tracer.density_name)
+                ref_density = split(self.X)[ref_density_idx]
+                q = tracer_prog*ref_density
+                mass = subject(prognostic(inner(q, tracer_test)*dx,
+                                          self.field_names[idx]), self.X)
+            else:
+                mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx,
+                                          self.field_names[idx]), self.X)
+
+            if i == 0:
+                mass_form = time_derivative(mass)
+            else:
+                mass_form += time_derivative(mass)
+
+        return mass_form
+
     def generate_tracer_transport_terms(self, active_tracers):
         """
         Adds the transport forms for the active tracers to the equation set.
@@ -473,6 +511,13 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                     tracer_adv = prognostic(
                         continuity_form(tracer_test, tracer_prog, u),
                         tracer.name)
+                elif tracer.transport_eqn == TransportEquationType.tracer_conservative:
+                    ref_density_idx = self.field_names.index(tracer.density_name)
+                    ref_density = split(self.X)[ref_density_idx]
+                    tracer_adv = prognostic(
+                        tracer_conservative_form(tracer_test, tracer_prog,
+                                                 ref_density, u), tracer.name)
+
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
 
@@ -562,9 +607,9 @@ class CoupledTransportEquation(PrognosticEquationSet):
         self.tests = TestFunctions(W)
         self.X = Function(W)
 
-        mass_form = self.generate_mass_terms()
-
-        self.residual = subject(mass_form, self.X)
+        # Add mass forms for the tracers, which will use
+        # mass*density for any tracer_conservative terms
+        self.residual = self.generate_tracer_mass_terms(active_tracers)
 
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)
@@ -573,7 +618,6 @@ class CoupledTransportEquation(PrognosticEquationSet):
 # ============================================================================ #
 # Specified Equation Sets
 # ============================================================================ #
-
 
 class ShallowWaterEquations(PrognosticEquationSet):
     u"""

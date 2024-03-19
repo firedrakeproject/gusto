@@ -31,6 +31,8 @@ class TransportEquationType(Enum):
     conservative: ∂q/∂t + ∇.(u*q) = 0                                         \n
     vector_invariant: ∂q/∂t + (∇×q)×u + (1/2)∇(q.u) + (1/2)[(∇q).u -(∇u).q)] = 0
     circulation: ∂q/∂t + (∇×q)×u + non-transport terms = 0
+    tracer_conservative: ∂(q*rho)/∂t + ∇.(u*q*rho) = 0, for a reference density of rho
+    for the tracer, q.
     """
 
     no_transport = 702
@@ -38,6 +40,7 @@ class TransportEquationType(Enum):
     conservative = 291
     vector_invariant = 9081
     circulation = 512
+    tracer_conservative = 296
 
 
 class Configuration(object):
