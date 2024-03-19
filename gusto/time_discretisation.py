@@ -436,6 +436,8 @@ class IMEXMultistage(TimeDiscretisation):
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
             solver_parameters = {'ksp_type': 'gmres',
                                 'pc_type': 'bjacobi',
+                                'ksp_rtol': 1e-3,
+                                'ksp_atol': 1e-4,
                                 'sub_pc_type': 'ilu'}
             solvers.append(NonlinearVariationalSolver(problem,  solver_parameters=solver_parameters, options_prefix=solver_name))
         return solvers
@@ -2511,6 +2513,8 @@ class IMEX_SDC(SDC):
         solver_parameters = {'snes_type': 'ksponly',
                              'ksp_type': 'cg',
                              'pc_type': 'bjacobi',
+                             'ksp_rtol': 1e-3,
+                             'ksp_atol': 1e-4,
                              'sub_pc_type': 'ilu'}
         return NonlinearVariationalSolver(prob_fin, solver_parameters=solver_parameters)
     
@@ -2524,6 +2528,10 @@ class IMEX_SDC(SDC):
         solver_parameters = {'snes_type': 'newtonls',
                              'ksp_type': 'gmres',
                              'pc_type': 'bjacobi',
+                            'ksp_rtol': 1e-3,
+                             'ksp_atol': 1e-4,
+                              'snes_rtol': 1e-3,
+                             'snes_atol': 1e-4,
                              'sub_pc_type': 'ilu'}
         # solver_parameters= { 'snes_type': 'newtonls',
         #                      'ksp_type': 'gmres', 
@@ -2546,6 +2554,8 @@ class IMEX_SDC(SDC):
         solver_parameters = {'snes_type': 'ksponly',
                              'ksp_type': 'cg',
                              'pc_type': 'bjacobi',
+                              'ksp_rtol': 1e-3,
+                             'ksp_atol': 1e-4,
                              'sub_pc_type': 'ilu'}
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=solver_parameters)
 
@@ -2555,8 +2565,9 @@ class IMEX_SDC(SDC):
         self.Unodes[0].assign(self.Un)
         with PETSc.Log.Event("IMEX_SDC_precon"):
             for m in range(self.M):
-                self.base.dt = float(self.dtau[m])
-                self.base.apply(self.Unodes[m+1], self.Unodes[m])
+                self.Unodes[m+1].assign(self.Un)
+                # self.base.dt = float(self.dtau[m])
+                # self.base.apply(self.Unodes[m+1], self.Unodes[m])
 
         k = 0
         while k < self.maxk:
