@@ -100,7 +100,8 @@ class WaterVapour(ActiveTracer):
     """An object encoding the details of water vapour as a tracer."""
     def __init__(self, name='water_vapour', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
-                 transport_eqn=TransportEquationType.advective):
+                 transport_eqn=TransportEquationType.advective,
+                 density_name=None):
         """
         Args:
             name (str, optional): the variable's name. Defaults to
@@ -115,14 +116,17 @@ class WaterVapour(ActiveTracer):
                 advective). Defaults to `TransportEquationType.advective`.
         """
         super().__init__(f'{name}', space, variable_type,
-                         transport_eqn=transport_eqn, phase=Phases.gas, chemical='H2O')
+                         transport_eqn=transport_eqn,
+                         density_name=density_name,
+                         phase=Phases.gas, chemical='H2O')
 
 
 class CloudWater(ActiveTracer):
     """An object encoding the details of cloud water as a tracer."""
     def __init__(self, name='cloud_water', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
-                 transport_eqn=TransportEquationType.advective):
+                 transport_eqn=TransportEquationType.advective,
+                 density_name=None):
         """
         Args:
             name (str, optional): the variable name. Default is 'cloud_water'.
@@ -136,13 +140,16 @@ class CloudWater(ActiveTracer):
                 advective). Defaults to `TransportEquationType.advective`.
         """
         super().__init__(f'{name}', space, variable_type,
-                         transport_eqn=transport_eqn, phase=Phases.liquid, chemical='H2O')
+                         transport_eqn=transport_eqn,
+                         density_name=density_name,
+                         phase=Phases.liquid, chemical='H2O')
 
 
 class Rain(ActiveTracer):
     """An object encoding the details of rain as a tracer."""
     def __init__(self, name='rain', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
+                 density_name=None,
                  transport_eqn=TransportEquationType.advective):
         """
         Args:
@@ -157,4 +164,6 @@ class Rain(ActiveTracer):
                 advective). Defaults to `TransportEquationType.advective`.
         """
         super().__init__(f'{name}', space, variable_type,
-                         transport_eqn=transport_eqn, phase=Phases.liquid, chemical='H2O')
+                         transport_eqn=transport_eqn,
+                         density_name=density_name,
+                         phase=Phases.liquid, chemical='H2O')
