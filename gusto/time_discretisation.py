@@ -933,9 +933,8 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
 
             for stage in range(self.nStages):
                 r = self.residual.label_map(
-                    lambda t: t.has_label(time_derivative),
-                    map_if_true=replace_subject(self.field_i[0], old_idx=self.idx),
-                    map_if_false=replace_subject(self.field_i[0], old_idx=self.idx))
+                    all_terms,
+                    map_if_true=replace_subject(self.field_i[0], old_idx=self.idx))
 
                 r = r.label_map(
                     lambda t: t.has_label(time_derivative),
@@ -1000,7 +999,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             if self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
 
-            # Obtain field_ip1 = field_n - dt* sum_m{c_im*F[field_m]}
+            # Obtain field_ip1 = field_n - dt* sum_m{a_im*F[field_m]}
             self.solver[stage].solve()
 
             if (stage == self.nStages - 1):
