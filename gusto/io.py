@@ -5,14 +5,19 @@ import itertools
 from netCDF4 import Dataset
 import sys
 import time
-from gusto.diagnostics import Diagnostics
+from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.meshes import get_flat_latlon_mesh
-from firedrake import (Function, functionspaceimpl, File,
+from firedrake import (Function, functionspaceimpl, File, Constant,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
+from pyop2.mpi import MPI
 import numpy as np
 from gusto.logging import logger, update_logfile_location
 
 __all__ = ["pick_up_mesh", "IO"]
+
+
+class GustoIOError(IOError):
+    pass
 
 
 def pick_up_mesh(output, mesh_name):
@@ -72,6 +77,8 @@ class PointDataOutput(object):
         self.field_points = field_points
         self.tolerance = tolerance
         self.comm = comm
+        if self.comm.size > 1:
+            raise GustoIOError("PointDataOutput does not work in parallel")
         if not create:
             return
         if self.comm.rank == 0:
@@ -226,6 +233,9 @@ class IO(object):
         self.dumpfile = None
         self.to_pick_up = None
 
+        if output.log_courant:
+            self.courant_max = Constant(0.0)
+
     def log_parameters(self, equation):
         """
         Logs an equation's physical parameters that take non-default values.
@@ -237,6 +247,77 @@ class IO(object):
         if hasattr(equation, 'parameters') and equation.parameters is not None:
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items()))
+
+    def setup_log_courant(self, state_fields, name='u', component="whole",
+                          expression=None):
+        """
+        Sets up Courant number diagnostics to be logged.
+
+        Args:
+            state_fields (:class:`StateFields`): the model's field container.
+            name (str, optional): the name of the field to log the Courant
+                number of. Defaults to 'u'.
+            component (str, optional): the component of the velocity to use for
+                calculating the Courant number. Valid values are "whole",
+                "horizontal" or "vertical". Defaults to "whole".
+            expression (:class:`ufl.Expr`, optional): expression of velocity
+                field to take Courant number of. Defaults to None, in which case
+                the "name" argument must correspond to an existing field.
+        """
+
+        if self.output.log_courant:
+            diagnostic_names = [diagnostic.name for diagnostic in self.diagnostic_fields]
+            courant_name = None if name == 'u' else name
+
+            # Set up diagnostic if it hasn't already been
+            if courant_name not in diagnostic_names and 'u' in state_fields._field_names:
+                if expression is None:
+                    diagnostic = CourantNumber(to_dump=False, component=component)
+                elif expression is not None:
+                    diagnostic = CourantNumber(velocity=expression, component=component,
+                                               name=courant_name, to_dump=False)
+
+                self.diagnostic_fields.append(diagnostic)
+                diagnostic.setup(self.domain, state_fields)
+                self.diagnostics.register(diagnostic.name)
+
+    def log_courant(self, state_fields, name='u', component="whole", message=None):
+        """
+        Logs the maximum Courant number value.
+
+        Args:
+            state_fields (:class:`StateFields`): the model's field container.
+            name (str, optional): the name of the field to log the Courant
+                number of. Defaults to 'u'.
+            component (str, optional): the component of the velocity to use for
+                calculating the Courant number. Valid values are "whole",
+                "horizontal" or "vertical". Defaults to "whole".
+            message (str, optional): an extra message to be logged. Defaults to
+                None.
+        """
+
+        if self.output.log_courant and 'u' in state_fields._field_names:
+            diagnostic_names = [diagnostic.name for diagnostic in self.diagnostic_fields]
+            courant_name = 'CourantNumber' if name == 'u' else 'CourantNumber_'+name
+            if component != 'whole':
+                courant_name += '_'+component
+            courant_idx = diagnostic_names.index(courant_name)
+            courant_diagnostic = self.diagnostic_fields[courant_idx]
+            courant_diagnostic.compute()
+            courant_field = state_fields(courant_name)
+            courant_max = self.diagnostics.max(courant_field)
+
+            if message is None:
+                logger.info(f'Max Courant: {courant_max:.2e}')
+            else:
+                logger.info(f'Max Courant {message}: {courant_max:.2e}')
+
+            if component == 'whole':
+                # TODO: this will update the Courant number more than we need to
+                # and possibly with the wrong Courant number
+                # we could make self.courant_max a dict with keys depending on
+                # the field to take the Courant number of
+                self.courant_max.assign(courant_max)
 
     def setup_diagnostics(self, state_fields):
         """
@@ -288,9 +369,12 @@ class IO(object):
                 state from a checkpointing file. Defaults to False.
 
         Raises:
-            IOError: if the results directory already exists, and the model is
+            GustoIOError: if the results directory already exists, and the model is
                 not picking up or running in test mode.
         """
+        # Use 0 for okay, 1 for internal exception 2 for external exception
+        raise_parallel_exception = 0
+        error = None
 
         if any([self.output.dump_vtus, self.output.dump_nc,
                 self.output.dumplist_latlon, self.output.dump_diagnostics,
@@ -299,14 +383,30 @@ class IO(object):
             self.dumpdir = path.join("results", self.output.dirname)
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
 
+            # Raising exceptions needs to be done in parallel
             if self.mesh.comm.Get_rank() == 0:
                 # Create results directory if it doesn't already exist
                 if not path.exists(self.dumpdir):
-                    makedirs(self.dumpdir)
+                    try:
+                        makedirs(self.dumpdir)
+                    except OSError as e:
+                        error = e
+                        raise_parallel_exception = 2
                 elif not (running_tests or pick_up):
                     # Throw an error if directory already exists, unless we
                     # are picking up or running tests
-                    raise IOError(f'results directory {self.dumpdir} already exists')
+                    raise_parallel_exception = 1
+
+            # Gather errors from each rank and raise appropriate error everywhere
+            # This allreduce also ensures that all ranks are in sync wrt the results dir
+            raise_exception = self.mesh.comm.allreduce(raise_parallel_exception, op=MPI.MAX)
+            if raise_exception == 1:
+                raise GustoIOError(f'results directory {self.dumpdir} already exists')
+            elif raise_exception == 2:
+                if error:
+                    raise error
+                else:
+                    raise OSError('Check error message on rank 0')
 
             update_logfile_location(self.dumpdir, self.mesh.comm)
 
@@ -316,6 +416,9 @@ class IO(object):
 
         # make dump counter
         self.dumpcount = itertools.count()
+        # if picking-up, don't do initial dump
+        if pick_up:
+            next(self.dumpcount)
 
         if self.output.dump_vtus:
             # setup pvd output file
@@ -336,6 +439,11 @@ class IO(object):
                     nc_field_file = Dataset(self.nc_filename, 'r')
                     self.field_t_idx = len(nc_field_file['time'][:])
                     nc_field_file.close()
+                else:
+                    self.field_t_idx = None
+                # Send information to other processors
+                self.field_t_idx = self.mesh.comm.bcast(self.field_t_idx, root=0)
+
             else:
                 # File needs creating
                 self.create_nc_dump(self.nc_filename, space_names)
@@ -370,6 +478,11 @@ class IO(object):
                                                        self.mesh.comm,
                                                        create=to_create)
 
+            # if picking-up, don't do initial dump
+            self.diagcount = itertools.count()
+            if pick_up:
+                next(self.diagcount)
+
         if len(self.output.point_data) > 0:
             # set up point data output
             pointdata_filename = self.dumpdir+"/point_data.nc"
@@ -384,6 +497,9 @@ class IO(object):
 
             # make point data dump counter
             self.pddumpcount = itertools.count()
+            # if picking-up, don't do initial dump
+            if pick_up:
+                next(self.pddumpcount)
 
             # set frequency of point data output - defaults to
             # dumpfreq if not set by user
@@ -408,10 +524,13 @@ class IO(object):
 
             # make a checkpoint counter
             self.chkptcount = itertools.count()
+            # if picking-up, don't do initial dump
+            if pick_up:
+                next(self.chkptcount)
 
         # dump initial fields
         if not pick_up:
-            self.dump(state_fields, t)
+            self.dump(state_fields, t, step=1)
 
     def pick_up_from_checkpoint(self, state_fields):
         """
@@ -482,8 +601,9 @@ class IO(object):
                     except AttributeError:
                         initial_steps = None
 
-                    # Finally pick up time
+                    # Finally pick up time and step number
                     t = chk.read_attribute("/", "time")
+                    step = chk.read_attribute("/", "step")
 
             else:
                 with CheckpointFile(chkfile, 'r') as chk:
@@ -513,6 +633,7 @@ class IO(object):
 
                     # Finally pick up time
                     t = chk.get_attr("/", "time")
+                    step = chk.get_attr("/", "step")
 
             # If we have picked up from a non-standard file, reset this name
             # so that we will checkpoint using normal file name from now on
@@ -520,9 +641,14 @@ class IO(object):
         else:
             raise ValueError("Must set checkpoint True if picking up")
 
-        return t, reference_profiles, initial_steps
+        # Prevent any steady-state diagnostics overwriting their original fields
+        for diagnostic_field in self.diagnostic_fields:
+            if hasattr(diagnostic_field, "init_field_set"):
+                diagnostic_field.init_field_set = True
 
-    def dump(self, state_fields, t, initial_steps=None):
+        return t, reference_profiles, step, initial_steps
+
+    def dump(self, state_fields, t, step, initial_steps=None):
         """
         Dumps all of the required model output.
 
@@ -533,6 +659,7 @@ class IO(object):
         Args:
             state_fields (:class:`StateFields`): the model's field container.
             t (float): the simulation's current time.
+            step (int): the number of time steps.
             initial_steps (int, optional): the number of initial time steps
                 completed by a multi-level time scheme. Defaults to None.
         """
@@ -543,7 +670,7 @@ class IO(object):
         for field in self.diagnostic_fields:
             field.compute()
 
-        if output.dump_diagnostics:
+        if output.dump_diagnostics and (next(self.diagcount) % output.diagfreq) == 0:
             # Output diagnostic data
             self.diagnostic_output.dump(state_fields, t)
 
@@ -557,6 +684,7 @@ class IO(object):
                 for field_name in self.to_pick_up:
                     self.chkpt.store(state_fields(field_name), name=field_name)
                 self.chkpt.write_attribute("/", "time", t)
+                self.chkpt.write_attribute("/", "step", step)
                 if initial_steps is not None:
                     self.chkpt.write_attribute("/", "initial_steps", initial_steps)
             else:
@@ -565,6 +693,7 @@ class IO(object):
                     for field_name in self.to_pick_up:
                         chk.save_function(state_fields(field_name), name=field_name)
                     chk.set_attr("/", "time", t)
+                    chk.set_attr("/", "step", step)
                     if initial_steps is not None:
                         chk.set_attr("/", "initial_steps", initial_steps)
 

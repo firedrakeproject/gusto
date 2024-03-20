@@ -32,11 +32,10 @@ EQ = 30*epsilon
 NP = -20*epsilon
 mu1 = 0.05
 mu2 = 0.98
-L_v = 10
 q0 = 135  # chosen to give an initial max vapour of approx 0.02
-beta2 = 1
-qprecip = 10e-4
-gamma_r = 10e-3
+beta2 = 10
+qprecip = 1e-4
+gamma_r = 1e-3
 # topography parameters
 R0 = pi/9.
 R0sq = R0**2
@@ -60,7 +59,7 @@ Omega = parameters.Omega
 fexpr = 2*Omega*x[2]/R
 
 # Topography
-phi, lamda = latlon_coords(mesh)
+lamda, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
 lsq = (lamda - lamda_c)**2
 thsq = (phi - phi_c)**2
 rsq = min_value(R0sq, lsq+thsq)
@@ -94,10 +93,10 @@ def sat_func(x_in):
 def gamma_v(x_in):
     h = x_in.split()[1]
     b = x_in.split()[2]
-    return (1 + L_v*(20*q0/(g*h + g*tpexpr) * exp(20*(1 - b/g))))**(-1)
+    return (1 + beta2*(20*q0/(g*h + g*tpexpr) * exp(20*(1 - b/g))))**(-1)
 
 
-SWSaturationAdjustment(eqns, sat_func, L_v, time_varying_saturation=True,
+SWSaturationAdjustment(eqns, sat_func, time_varying_saturation=True,
                        parameters=parameters, thermal_feedback=True,
                        beta2=beta2, gamma_v=gamma_v,
                        time_varying_gamma_v=True)
@@ -105,8 +104,10 @@ SWSaturationAdjustment(eqns, sat_func, L_v, time_varying_saturation=True,
 InstantRain(eqns, qprecip, vapour_name="cloud_water", rain_name="rain",
             gamma_r=gamma_r)
 
+transport_methods = [DGUpwind(eqns, field_name) for field_name in eqns.field_names]
+
 # Timestepper
-stepper = Timestepper(eqns, RK4(domain), io)
+stepper = Timestepper(eqns, RK4(domain), io, spatial_methods=transport_methods)
 
 # ----------------------------------------------------------------- #
 # Initial conditions

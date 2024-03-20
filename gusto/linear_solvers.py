@@ -5,12 +5,14 @@ The linear solvers provided here are used for solving linear problems on mixed
 finite element spaces.
 """
 
-from firedrake import (split, LinearVariationalProblem, Constant,
-                       LinearVariationalSolver, TestFunctions, TrialFunctions,
-                       TestFunction, TrialFunction, lhs, rhs, FacetNormal,
-                       div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner, action,
-                       dot, grad, Function, VectorSpaceBasis, BrokenElement,
-                       FunctionSpace, MixedFunctionSpace, DirichletBC)
+from firedrake import (
+    split, LinearVariationalProblem, Constant, LinearVariationalSolver,
+    TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
+    rhs, FacetNormal, div, dx, jump, avg, dS, dS_v, dS_h, ds_v, ds_t, ds_b,
+    ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis,
+    BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC
+)
+from firedrake.fml import Term, drop
 from firedrake.petsc import flatten_parameters
 from pyop2.profiling import timed_function, timed_region
 
@@ -18,12 +20,11 @@ from gusto.active_tracers import TracerVariableType
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
-from gusto.fml.form_manipulation_language import Term, drop
 from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["IncompressibleSolver", "LinearTimesteppingSolver", "CompressibleSolver"]
+__all__ = ["IncompressibleSolver", "LinearTimesteppingSolver", "CompressibleSolver", "ThermalSWSolver", "MoistConvectiveSWSolver"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -371,12 +372,15 @@ class CompressibleSolver(TimesteppingSolver):
 
         # TODO: can we avoid computing these each time the solver is called?
         with timed_region("Gusto:HybridProjectRhobar"):
+            logger.info('Compressible linear solver: rho average solve')
             self.rho_avg_solver.solve()
 
         with timed_region("Gusto:HybridProjectExnerbar"):
+            logger.info('Compressible linear solver: Exner average solve')
             self.exner_avg_solver.solve()
 
         # Solve the hybridized system
+        logger.info('Compressible linear solver: hybridized solve')
         self.hybridized_solver.solve()
 
         broken_u, rho1, _ = self.urhol0.subfunctions
@@ -386,6 +390,7 @@ class CompressibleSolver(TimesteppingSolver):
         u1.assign(0.0)
 
         with timed_region("Gusto:HybridProjectHDiv"):
+            logger.info('Compressible linear solver: restore continuity')
             self._average_kernel.apply(u1, self._weight, broken_u)
 
         # Reapply bcs to ensure they are satisfied
@@ -399,6 +404,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Reconstruct theta
         with timed_region("Gusto:ThetaRecon"):
+            logger.info('Compressible linear solver: theta solve')
             self.theta_solver.solve()
 
         # Copy into theta cpt of dy
@@ -529,6 +535,7 @@ class IncompressibleSolver(TimesteppingSolver):
         self.xrhs.assign(xrhs)
 
         with timed_region("Gusto:VelocityPressureSolve"):
+            logger.info('Incompressible linear solver: mixed solve')
             self.up_solver.solve()
 
         u1, p1 = self.up.subfunctions
@@ -537,6 +544,157 @@ class IncompressibleSolver(TimesteppingSolver):
         p.assign(p1)
 
         with timed_region("Gusto:BuoyancyRecon"):
+            logger.info('Incompressible linear solver: buoyancy reconstruction')
+            self.b_solver.solve()
+
+        b.assign(self.b)
+
+
+class ThermalSWSolver(TimesteppingSolver):
+    """
+    Linear solver object for the thermal shallow water equations.
+
+    This solves a linear problem for the thermal shallow water equations with
+    prognostic variables u (velocity), D (depth) and b (buoyancy). It follows
+    the following strategy:
+
+    (1) Eliminate b
+    (2) Solve the resulting system for (u, D) using a hybrid-mixed method
+    (3) Reconstruct b
+     """
+
+    solver_parameters = {
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': {'ksp_type': 'cg',
+                          'pc_type': 'gamg',
+                          'ksp_rtol': 1e-8,
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'}}
+    }
+
+    @timed_function("Gusto:SolverSetup")
+    def _setup_solver(self):
+        equation = self.equations      # just cutting down line length a bit
+        dt = self.dt
+        beta_ = dt*self.alpha
+        Vu = equation.domain.spaces("HDiv")
+        VD = equation.domain.spaces("DG")
+        Vb = equation.domain.spaces("DG")
+
+        # Check that the third field is buoyancy
+        if not equation.field_names[2] == 'b':
+            raise NotImplementedError("Field 'b' must exist to use the thermal linear solver in the SIQN scheme")
+
+        # Store time-stepping coefficients as UFL Constants
+        beta = Constant(beta_)
+
+        # Split up the rhs vector
+        self.xrhs = Function(self.equations.function_space)
+        u_in = split(self.xrhs)[0]
+        D_in = split(self.xrhs)[1]
+        b_in = split(self.xrhs)[2]
+
+        # Build the reduced function space for u, D
+        M = MixedFunctionSpace((Vu, VD))
+        w, phi = TestFunctions(M)
+        u, D = TrialFunctions(M)
+
+        # Get background buoyancy and depth
+        Dbar = split(equation.X_ref)[1]
+        bbar = split(equation.X_ref)[2]
+
+        # Approximate elimination of b
+        b = -dot(u, grad(bbar))*beta + b_in
+
+        n = FacetNormal(equation.domain.mesh)
+
+        eqn = (
+            inner(w, (u - u_in)) * dx
+            - beta * (D - Dbar) * div(w*bbar) * dx
+            + beta * jump(w*bbar, n) * avg(D-Dbar) * dS
+            - beta * 0.5 * Dbar * bbar * div(w) * dx
+            - beta * 0.5 * Dbar * b * div(w) * dx
+            - beta * 0.5 * bbar * div(w*(D-Dbar)) * dx
+            + beta * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
+            + inner(phi, (D - D_in)) * dx
+            + beta * phi * Dbar * div(u) * dx
+        )
+
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
+
+        # Place to put results of (u,D) solver
+        self.uD = Function(M)
+
+        # Boundary conditions
+        bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
+
+        # Solver for u, D
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs)
+
+        # Provide callback for the nullspace of the trace system
+        def trace_nullsp(T):
+            return VectorSpaceBasis(constant=True)
+
+        appctx = {"trace_nullspace": trace_nullsp}
+        self.uD_solver = LinearVariationalSolver(uD_problem,
+                                                 solver_parameters=self.solver_parameters,
+                                                 appctx=appctx)
+        # Reconstruction of b
+        b = TrialFunction(Vb)
+        gamma = TestFunction(Vb)
+
+        u, D = self.uD.subfunctions
+        self.b = Function(Vb)
+
+        b_eqn = gamma*(b - b_in + inner(u, grad(bbar))*beta) * dx
+
+        b_problem = LinearVariationalProblem(lhs(b_eqn),
+                                             rhs(b_eqn),
+                                             self.b)
+        self.b_solver = LinearVariationalSolver(b_problem)
+
+        # Log residuals on hybridized solver
+        self.log_ksp_residuals(self.uD_solver.snes.ksp)
+
+    @timed_function("Gusto:LinearSolve")
+    def solve(self, xrhs, dy):
+        """
+        Solve the linear problem.
+
+        Args:
+            xrhs (:class:`Function`): the right-hand side field in the
+                appropriate :class:`MixedFunctionSpace`.
+            dy (:class:`Function`): the resulting field in the appropriate
+                :class:`MixedFunctionSpace`.
+        """
+        self.xrhs.assign(xrhs)
+
+        # Check that the b reference profile has been set
+        bbar = split(self.equations.X_ref)[2]
+        b = dy.subfunctions[2]
+        bbar_func = Function(b.function_space()).interpolate(bbar)
+        if bbar_func.dat.data.max() == 0 and bbar_func.dat.data.min() == 0:
+            logger.warning("The reference profile for b in the linear solver is zero. To set a non-zero profile add b to the set_reference_profiles argument.")
+
+        with timed_region("Gusto:VelocityDepthSolve"):
+            logger.info('Thermal linear solver: mixed solve')
+            self.uD_solver.solve()
+
+        u1, D1 = self.uD.subfunctions
+        u = dy.subfunctions[0]
+        D = dy.subfunctions[1]
+        b = dy.subfunctions[2]
+        u.assign(u1)
+        D.assign(D1)
+
+        with timed_region("Gusto:BuoyancyRecon"):
+            logger.info('Thermal linear solver: buoyancy reconstruction')
             self.b_solver.solve()
 
         b.assign(self.b)
@@ -619,3 +777,107 @@ class LinearTimesteppingSolver(object):
         self.xrhs.assign(xrhs)
         self.solver.solve()
         dy.assign(self.dy)
+
+
+class MoistConvectiveSWSolver(TimesteppingSolver):
+    """
+    Linear solver for the moist convective shallow water equations.
+
+    This solves a linear problem for the shallow water equations with prognostic
+    variables u (velocity) and D (depth). The linear system is solved using a
+    hybridised-mixed method.
+    """
+
+    solver_parameters = {
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': {'ksp_type': 'cg',
+                          'pc_type': 'gamg',
+                          'ksp_rtol': 1e-8,
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'}}
+    }
+
+    @timed_function("Gusto:SolverSetup")
+    def _setup_solver(self):
+        equation = self.equations      # just cutting down line length a bit
+        dt = self.dt
+        beta_ = dt*self.alpha
+        Vu = equation.domain.spaces("HDiv")
+        VD = equation.domain.spaces("DG")
+
+        # Store time-stepping coefficients as UFL Constants
+        beta = Constant(beta_)
+
+        # Split up the rhs vector
+        self.xrhs = Function(self.equations.function_space)
+        u_in = split(self.xrhs)[0]
+        D_in = split(self.xrhs)[1]
+
+        # Build the reduced function space for u, D
+        M = MixedFunctionSpace((Vu, VD))
+        w, phi = TestFunctions(M)
+        u, D = TrialFunctions(M)
+
+        # Get background depth
+        Dbar = split(equation.X_ref)[1]
+
+        g = equation.parameters.g
+
+        eqn = (
+            inner(w, (u - u_in)) * dx
+            - beta * (D - Dbar) * div(w*g) * dx
+            + inner(phi, (D - D_in)) * dx
+            + beta * phi * Dbar * div(u) * dx
+        )
+
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
+
+        # Place to put results of (u,D) solver
+        self.uD = Function(M)
+
+        # Boundary conditions
+        bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
+
+        # Solver for u, D
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs)
+
+        # Provide callback for the nullspace of the trace system
+        def trace_nullsp(T):
+            return VectorSpaceBasis(constant=True)
+
+        appctx = {"trace_nullspace": trace_nullsp}
+        self.uD_solver = LinearVariationalSolver(uD_problem,
+                                                 solver_parameters=self.solver_parameters,
+                                                 appctx=appctx)
+
+        # Log residuals on hybridized solver
+        self.log_ksp_residuals(self.uD_solver.snes.ksp)
+
+    @timed_function("Gusto:LinearSolve")
+    def solve(self, xrhs, dy):
+        """
+        Solve the linear problem.
+
+        Args:
+            xrhs (:class:`Function`): the right-hand side field in the
+                appropriate :class:`MixedFunctionSpace`.
+            dy (:class:`Function`): the resulting field in the appropriate
+                :class:`MixedFunctionSpace`.
+        """
+        self.xrhs.assign(xrhs)
+
+        with timed_region("Gusto:VelocityDepthSolve"):
+            logger.info('Moist convective linear solver: mixed solve')
+            self.uD_solver.solve()
+
+        u1, D1 = self.uD.subfunctions
+        u = dy.subfunctions[0]
+        D = dy.subfunctions[1]
+        u.assign(u1)
+        D.assign(D1)

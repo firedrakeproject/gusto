@@ -8,8 +8,8 @@ __all__ = [
     "Configuration",
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
     "CompressibleParameters", "ShallowWaterParameters",
-    "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions",
-    "SpongeLayerParameters", "DiffusionParameters"
+    "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions", "MixedFSOptions",
+    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
 ]
 
 
@@ -32,6 +32,8 @@ class TransportEquationType(Enum):
     conservative: ∂q/∂t + ∇.(u*q) = 0                                         \n
     vector_invariant: ∂q/∂t + (∇×q)×u + (1/2)∇(q.u) + (1/2)[(∇q).u -(∇u).q)] = 0
     circulation: ∂q/∂t + (∇×q)×u + non-transport terms = 0
+    tracer_conservative: ∂(q*rho)/∂t + ∇.(u*q*rho) = 0, for a reference density of rho
+    for the tracer, q.
     """
 
     no_transport = 702
@@ -39,6 +41,7 @@ class TransportEquationType(Enum):
     conservative = 291
     vector_invariant = 9081
     circulation = 512
+    tracer_conservative = 296
 
 
 class Configuration(object):
@@ -89,11 +92,13 @@ class OutputParameters(Configuration):
     dumplist = None
     dumplist_latlon = []
     dump_diagnostics = True
-    checkpoint = True
+    diagfreq = 1
+    checkpoint = False
     checkpoint_method = 'checkpointfile'
     checkpoint_pickup_filename = None
     chkptfreq = 1
     dirname = None
+    log_courant = True
     #: TODO: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
@@ -171,6 +176,15 @@ class SUPGOptions(WrapperOptions):
     ibp = IntegrateByParts.TWICE
 
 
+class MixedFSOptions(WrapperOptions):
+    """Specifies options for a mixed finite element formulation
+    where different suboptions are applied to different
+    prognostic variables."""
+
+    name = "mixed_options"
+    suboptions = {}
+
+
 class SpongeLayerParameters(Configuration):
     """Specifies parameters describing a 'sponge' (damping) layer."""
 
@@ -184,3 +198,18 @@ class DiffusionParameters(Configuration):
 
     kappa = None
     mu = None
+
+
+class BoundaryLayerParameters(Configuration):
+    """
+    Parameters for the idealised wind drag, surface flux and boundary layer
+    mixing schemes.
+    """
+
+    coeff_drag_0 = 7e-4         # Zeroth drag coefficient (dimensionless)
+    coeff_drag_1 = 6.5e-5       # First drag coefficient (s/m)
+    coeff_drag_2 = 2e-3         # Second drag coefficient (dimensionless)
+    coeff_heat = 1.1e-3         # Dimensionless surface sensible heat coefficient
+    coeff_evap = 1.1e-3         # Dimensionless surface evaporation coefficient
+    height_surface_layer = 75.  # Height (m) of surface level (usually lowest level)
+    mu = 100.                   # Interior penalty coefficient for vertical diffusion

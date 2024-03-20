@@ -1,12 +1,12 @@
 from gusto import *
-from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, sin, cos)
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, sin, cos
 import sys
 
 # ----------------------------------------------------------------- #
 # Test case parameters
 # ----------------------------------------------------------------- #
 
-dt = 100
+dt = 4000
 
 if '--running-tests' in sys.argv:
     tmax = dt
@@ -54,14 +54,25 @@ diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                      ShallowWaterPotentialEnergy(params),
                      ShallowWaterPotentialEnstrophy(),
                      SteadyStateError('u'), SteadyStateError('D'),
-                     MeridionalComponent('u'), ZonalComponent('u')]
+                     SteadyStateError('b'), MeridionalComponent('u'),
+                     ZonalComponent('u')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+
+# Transport schemes
+transported_fields = [TrapeziumRule(domain, "u"),
+                      SSPRK3(domain, "D", fixed_subcycles=2),
+                      SSPRK3(domain, "b", fixed_subcycles=2)]
 transport_methods = [DGUpwind(eqns, "u"),
                      DGUpwind(eqns, "D"),
                      DGUpwind(eqns, "b")]
 
+# Linear solver
+linear_solver = ThermalSWSolver(eqns)
+
 # Time stepper
-stepper = Timestepper(eqns, RK4(domain), io, spatial_methods=transport_methods)
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                  transport_methods,
+                                  linear_solver=linear_solver)
 
 # ----------------------------------------------------------------- #
 # Initial conditions
@@ -71,9 +82,9 @@ u0 = stepper.fields("u")
 D0 = stepper.fields("D")
 b0 = stepper.fields("b")
 
-phi, lamda = latlon_coords(mesh)
+lamda, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
 
-uexpr = sphere_to_cartesian(mesh, u_max*cos(phi), 0)
+uexpr = xyz_vector_from_lonlatr(u_max*cos(phi), 0, 0, x)
 g = params.g
 w = Omega*R*u_max + (u_max**2)/2
 sigma = w/10
@@ -91,6 +102,11 @@ bexpr = params.g * (1 - theta)
 u0.project(uexpr)
 D0.interpolate(Dexpr)
 b0.interpolate(bexpr)
+
+# Set reference profiles
+Dbar = Function(D0.function_space()).assign(H)
+bbar = Function(b0.function_space()).interpolate(bexpr)
+stepper.set_reference_profiles([('D', Dbar), ('b', bbar)])
 
 # ----------------------------------------------------------------- #
 # Run

@@ -177,7 +177,11 @@ def update_logfile_location(new_path, comm):
         fh = fh[0]
         logger.debug("Closing temporary logger and moving logfile")
         old_path = Path(fh.baseFilename)
-        filename = Path(old_path.name.removeprefix("temp-"))
+        # str.removeprefix unavailable for python version <3.9
+        filename_str = old_path.name
+        if filename_str.startswith("temp-"):
+            filename_str = filename_str[5:]
+        filename = Path(filename_str)
         fh.flush()
         fh.close()
         logger.removeHandler(fh)

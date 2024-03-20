@@ -1,7 +1,7 @@
 """
-# This tests the Condensation routine. It creates a bubble of water vapour that
-# is advected by a prescribed velocity. The test passes if the integral
-# of the water mixing ratio is conserved.
+This tests the SaturationAdjustment routine. It creates a bubble of water vapour
+that is advected by a prescribed velocity. The test passes if the integral
+of the water mixing ratio is conserved.
 """
 
 from os import path
@@ -10,6 +10,7 @@ import gusto.thermodynamics as td
 from firedrake import (norm, Constant, PeriodicIntervalMesh,
                        SpatialCoordinate, ExtrudedMesh, Function, sqrt,
                        conditional)
+from firedrake.fml import identity
 from netCDF4 import Dataset
 import pytest
 
@@ -35,8 +36,6 @@ def run_cond_evap(dirname, process):
 
     x, z = SpatialCoordinate(mesh)
 
-    # spaces
-
     # Set up equation
     tracers = [WaterVapour(), CloudWater()]
     parameters = CompressibleParameters()
@@ -60,8 +59,8 @@ def run_cond_evap(dirname, process):
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    Vt = domain.spaces("theta", degree=1)
-    Vr = domain.spaces("DG", "DG", degree=1)
+    Vt = domain.spaces("theta")
+    Vr = domain.spaces("DG")
 
     # Declare prognostic fields
     rho0 = stepper.fields("rho")

@@ -8,7 +8,7 @@ This uses a cubed-sphere mesh.
 from gusto import *
 from firedrake import (CubedSphereMesh, ExtrudedMesh, FunctionSpace,
                        Function, SpatialCoordinate, as_vector)
-from firedrake import exp, acos, cos, sin, pi, sqrt, asin, atan_2
+from firedrake import exp, acos, cos, sin, pi, sqrt, asin, atan2
 import sys
 
 # ---------------------------------------------------------------------------- #
@@ -71,7 +71,7 @@ z_expr = sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a
 z = Function(W_Q1).interpolate(z_expr)
 lat_expr = asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))
 lat = Function(W_Q1).interpolate(lat_expr)
-lon = Function(W_Q1).interpolate(atan_2(x[1], x[0]))
+lon = Function(W_Q1).interpolate(atan2(x[1], x[0]))
 
 # Equation
 eqns = CompressibleEulerEquations(domain, parameters)
@@ -82,13 +82,15 @@ output = OutputParameters(
     dirname=dirname,
     dumpfreq=dumpfreq,
 )
-diagnostic_fields = [Perturbation('theta'), Perturbation('rho'), CompressibleKineticEnergy()]
+diagnostic_fields = [Perturbation('theta'), Perturbation('rho'),
+                     CompressibleKineticEnergy(), PotentialEnergy(eqns)]
+
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
 transported_fields = [TrapeziumRule(domain, "u"),
-                      SSPRK3(domain, "rho", subcycles=2),
-                      SSPRK3(domain, "theta", options=SUPGOptions(), subcycles=2)]
+                      SSPRK3(domain, "rho", fixed_subcycles=2),
+                      SSPRK3(domain, "theta", options=SUPGOptions(), fixed_subcycles=2)]
 transport_methods = [DGUpwind(eqns, field) for field in ["u", "rho", "theta"]]
 
 # Linear solver

@@ -1,22 +1,28 @@
 """Objects describing geophysical fluid equations to be solved in weak form."""
 
 from abc import ABCMeta
-from firedrake import (TestFunction, Function, sin, pi, inner, dx, div, cross,
-                       FunctionSpace, MixedFunctionSpace, TestFunctions,
-                       TrialFunction, FacetNormal, jump, avg, dS_v, dS,
-                       DirichletBC, conditional, SpatialCoordinate,
-                       split, Constant, action)
+from firedrake import (
+    TestFunction, Function, sin, pi, inner, dx, div, cross,
+    FunctionSpace, MixedFunctionSpace, TestFunctions, TrialFunction,
+    FacetNormal, jump, avg, dS_v, dS, DirichletBC, conditional,
+    SpatialCoordinate, split, Constant, action
+)
+from firedrake.fml import (
+    Term, all_terms, keep, drop, Label, subject, name_label,
+    replace_subject, replace_trial_function
+)
 from gusto.fields import PrescribedFields
-from gusto.fml import (Term, all_terms, keep, drop, Label, subject, name,
-                       replace_subject, replace_trial_function)
-from gusto.labels import (time_derivative, transport, prognostic, hydrostatic,
-                          linearisation, pressure_gradient, coriolis)
+from gusto.labels import (
+    time_derivative, transport, prognostic, hydrostatic, linearisation,
+    pressure_gradient, coriolis
+)
 from gusto.thermodynamics import exner_pressure
-from gusto.common_forms import (advection_form, continuity_form,
-                                vector_invariant_form, kinetic_energy_form,
-                                advection_equation_circulation_form,
-                                diffusion_form, linear_continuity_form,
-                                linear_advection_form)
+from gusto.common_forms import (
+    advection_form, continuity_form, vector_invariant_form,
+    kinetic_energy_form, advection_equation_circulation_form,
+    diffusion_form, linear_continuity_form, linear_advection_form,
+    tracer_conservative_form
+)
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
 from gusto.configuration import TransportEquationType
 import ufl
@@ -84,9 +90,8 @@ class AdvectionEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
-        else:
-            V = domain.spaces("HDiv")
+            domain.spaces.add_space("HDiv", Vu, overwrite_space=True)
+        V = domain.spaces("HDiv")
         u = self.prescribed_fields("u", V)
 
         test = self.test
@@ -115,9 +120,8 @@ class ContinuityEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
-        else:
-            V = domain.spaces("HDiv")
+            domain.spaces.add_space("HDiv", Vu, overwrite_space=True)
+        V = domain.spaces("HDiv")
         u = self.prescribed_fields("u", V)
 
         test = self.test
@@ -174,9 +178,8 @@ class AdvectionDiffusionEquation(PrognosticEquation):
         super().__init__(domain, function_space, field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
-        else:
-            V = domain.spaces("HDiv")
+            domain.spaces.add_space("HDiv", Vu, overwrite_space=True)
+        V = domain.spaces("HDiv")
         u = self.prescribed_fields("u", V)
 
         test = self.test
@@ -373,7 +376,8 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 + 'when there is a variable called "u" and none was found')
 
         Vu = domain.spaces("HDiv")
-        if Vu.extruded:
+        # we only apply no normal-flow BCs when extruded mesh is non periodic
+        if Vu.extruded and not Vu.ufl_domain().topology.extruded_periodic:
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
         for id in no_normal_flow_bc_ids:
@@ -427,6 +431,43 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             else:
                 raise TypeError(f'Tracers must be ActiveTracer objects, not {type(tracer)}')
 
+    def generate_tracer_mass_terms(self, active_tracers):
+        """
+        Adds the mass forms for the active tracers to the equation set.
+
+        Args:
+            active_tracers (list): A list of :class:`ActiveTracer` objects that
+                encode the metadata for the active tracers.
+
+        Returns:
+            :class:`LabelledForm`: a labelled form containing the mass
+                terms for the active tracers. This is the usual mass form
+                unless using tracer_conservative, where it is multiplied
+                by the reference density.
+        """
+
+        for i, tracer in enumerate(active_tracers):
+            idx = self.field_names.index(tracer.name)
+            tracer_prog = split(self.X)[idx]
+            tracer_test = self.tests[idx]
+
+            if tracer.transport_eqn == TransportEquationType.tracer_conservative:
+                ref_density_idx = self.field_names.index(tracer.density_name)
+                ref_density = split(self.X)[ref_density_idx]
+                q = tracer_prog*ref_density
+                mass = subject(prognostic(inner(q, tracer_test)*dx,
+                                          self.field_names[idx]), self.X)
+            else:
+                mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx,
+                                          self.field_names[idx]), self.X)
+
+            if i == 0:
+                mass_form = time_derivative(mass)
+            else:
+                mass_form += time_derivative(mass)
+
+        return mass_form
+
     def generate_tracer_transport_terms(self, active_tracers):
         """
         Adds the transport forms for the active tracers to the equation set.
@@ -470,6 +511,13 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                     tracer_adv = prognostic(
                         continuity_form(tracer_test, tracer_prog, u),
                         tracer.name)
+                elif tracer.transport_eqn == TransportEquationType.tracer_conservative:
+                    ref_density_idx = self.field_names.index(tracer.density_name)
+                    ref_density = split(self.X)[ref_density_idx]
+                    tracer_adv = prognostic(
+                        tracer_conservative_form(tracer_test, tracer_prog,
+                                                 ref_density, u), tracer.name)
+
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
 
@@ -552,17 +600,16 @@ class CoupledTransportEquation(PrognosticEquationSet):
         PrognosticEquation.__init__(self, domain, W, full_field_name)
 
         if Vu is not None:
-            V = domain.spaces("HDiv", V=Vu, overwrite_space=True)
-        else:
-            V = domain.spaces("HDiv")
+            domain.spaces.add_space("HDiv", Vu, overwrite_space=True)
+        V = domain.spaces("HDiv")
         _ = self.prescribed_fields("u", V)
 
         self.tests = TestFunctions(W)
         self.X = Function(W)
 
-        mass_form = self.generate_mass_terms()
-
-        self.residual = subject(mass_form, self.X)
+        # Add mass forms for the tracers, which will use
+        # mass*density for any tracer_conservative terms
+        self.residual = self.generate_tracer_mass_terms(active_tracers)
 
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)
@@ -571,7 +618,6 @@ class CoupledTransportEquation(PrognosticEquationSet):
 # ============================================================================ #
 # Specified Equation Sets
 # ============================================================================ #
-
 
 class ShallowWaterEquations(PrognosticEquationSet):
     u"""
@@ -644,7 +690,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
             # Default linearisation is time derivatives, pressure gradient and
             # transport term from depth equation. Don't include active tracers
             linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'D'] \
+                t.get(prognostic) in ['u', 'D', 'b'] \
                 and (any(t.has_label(time_derivative, pressure_gradient))
                      or (t.get(prognostic) in ['D', 'b'] and t.has_label(transport)))
         super().__init__(field_names, domain, space_names,
@@ -681,6 +727,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         # Depth transport term
         D_adv = prognostic(continuity_form(phi, D, u), 'D')
+
         # Transport term needs special linearisation
         if self.linearisation_map(D_adv.terms[0]):
             linear_D_adv = linear_continuity_form(phi, H, u_trial)
@@ -976,14 +1023,15 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 raise NotImplementedError('Only mixing ratio tracers are implemented')
         theta_v = theta / (Constant(1.0) + tracer_mr_total)
 
-        pressure_gradient_form = name(subject(prognostic(
+        pressure_gradient_form = name_label(subject(prognostic(
             cp*(-div(theta_v*w)*exner*dx
                 + jump(theta_v*w, n)*avg(exner)*dS_v), 'u'), self.X), "pressure_gradient")
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(Term(g*inner(domain.k, w)*dx), 'u'), self.X)
+        gravity_form = name_label(subject(prognostic(Term(g*inner(domain.k, w)*dx),
+                                                     'u'), self.X), "gravity")
 
         residual = (mass_form + adv_form + pressure_gradient_form + gravity_form)
 
@@ -1043,7 +1091,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                                  mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
             self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
 
-            residual += name(subject(prognostic(
+            residual += name_label(subject(prognostic(
                 self.mu*inner(w, domain.k)*inner(u, domain.k)*dx, 'u'), self.X), "sponge")
 
         if diffusion_options is not None:
@@ -1148,7 +1196,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
 
         k = self.domain.k
         u = split(self.X)[0]
-        self.residual += name(
+        self.residual += name_label(
             subject(
                 prognostic(
                     -inner(k, self.tests[0]) * inner(k, u) * dx, "u"),
@@ -1313,8 +1361,10 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # The p features here so that the div(u) evaluated in the "forcing" step
         # replaces the whole pressure field, rather than merely providing an
         # increment to it.
-        divergence_form = name(subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
-                               "incompressibility")
+        divergence_form = name_label(
+            subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
+            "incompressibility"
+        )
 
         residual = (mass_form + adv_form + divergence_form
                     + pressure_gradient_form + gravity_form)

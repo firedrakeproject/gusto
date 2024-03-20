@@ -8,8 +8,10 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint",
-                                    "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth", "Leapfrog", "AdamsMoulton"])
+@pytest.mark.parametrize(
+    "scheme", ["ssprk3_increment", "TrapeziumRule", "ImplicitMidpoint",
+               "QinZhang", "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth",
+               "Leapfrog", "AdamsMoulton", "AdamsMoulton", "ssprk3_predictor"])
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
     if (scheme == "AdamsBashforth"):
         # Tighter stability constraints
@@ -25,10 +27,16 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         V = domain.spaces("DG")
         eqn = AdvectionEquation(domain, V, "f")
 
-    if scheme == "ssprk":
-        transport_scheme = SSPRK3(domain)
-    elif scheme == "implicit_midpoint":
+    if scheme == "ssprk3_increment":
+        transport_scheme = SSPRK3(domain, increment_form=True)
+    elif scheme == "ssprk3_predictor":
+        transport_scheme = SSPRK3(domain, increment_form=False)
+    elif scheme == "TrapeziumRule":
         transport_scheme = TrapeziumRule(domain)
+    elif scheme == "ImplicitMidpoint":
+        transport_scheme = ImplicitMidpoint(domain)
+    elif scheme == "QinZhang":
+        transport_scheme = QinZhang(domain)
     elif scheme == "RK4":
         transport_scheme = RK4(domain)
     elif scheme == "Heun":
@@ -39,7 +47,8 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         transport_scheme = TR_BDF2(domain, gamma=0.5)
     elif scheme == "Leapfrog":
         # Leapfrog unstable with DG
-        Vf = domain.spaces("CG", "CG", 1)
+        domain.spaces.create_space("CG1", "CG", 1)
+        Vf = domain.spaces("CG1")
         eqn = AdvectionEquation(domain, Vf, "f")
         transport_scheme = Leapfrog(domain)
     elif scheme == "AdamsBashforth":

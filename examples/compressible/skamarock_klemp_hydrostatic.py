@@ -17,7 +17,7 @@ import sys
 dt = 25.
 if '--running-tests' in sys.argv:
     nlayers = 5  # horizontal layers
-    columns = 50  # number of columns
+    columns = 10  # number of columns
     tmax = dt
     dumpfreq = 1
 else:
