@@ -2444,7 +2444,7 @@ class IMEX_SDC(SDC):
                                     drop)
         L = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     drop,
-                                    replace_subject(self.Uin.split(), old_idx=self.idx))
+                                    replace_subject(self.Uin, old_idx=self.idx))
         Frhs = a - L
         return Frhs.form
     
@@ -2513,8 +2513,6 @@ class IMEX_SDC(SDC):
         solver_parameters = {'snes_type': 'ksponly',
                              'ksp_type': 'cg',
                              'pc_type': 'bjacobi',
-                             'ksp_rtol': 1e-3,
-                             'ksp_atol': 1e-4,
                              'sub_pc_type': 'ilu'}
         return NonlinearVariationalSolver(prob_fin, solver_parameters=solver_parameters)
     
@@ -2528,10 +2526,6 @@ class IMEX_SDC(SDC):
         solver_parameters = {'snes_type': 'newtonls',
                              'ksp_type': 'gmres',
                              'pc_type': 'bjacobi',
-                            'ksp_rtol': 1e-3,
-                             'ksp_atol': 1e-4,
-                              'snes_rtol': 1e-3,
-                             'snes_atol': 1e-4,
                              'sub_pc_type': 'ilu'}
         # solver_parameters= { 'snes_type': 'newtonls',
         #                      'ksp_type': 'gmres', 
@@ -2554,8 +2548,6 @@ class IMEX_SDC(SDC):
         solver_parameters = {'snes_type': 'ksponly',
                              'ksp_type': 'cg',
                              'pc_type': 'bjacobi',
-                              'ksp_rtol': 1e-3,
-                             'ksp_atol': 1e-4,
                              'sub_pc_type': 'ilu'}
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=solver_parameters)
 

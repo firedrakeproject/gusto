@@ -233,8 +233,7 @@ class IO(object):
         self.dumpfile = None
         self.to_pick_up = None
 
-        if output.log_courant:
-            self.courant_max = Constant(0.0)
+        self.courant_max = Constant(0.0)
 
     def log_parameters(self, equation):
         """
