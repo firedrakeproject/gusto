@@ -4,7 +4,7 @@ from firedrake import Function, TrialFunctions, TestFunctions, \
     LinearVariationalProblem, LinearVariationalSolver, MixedFunctionSpace
 from gusto.labels import time_derivative, prognostic, linearisation
 from firedrake.fml import (
-    Term, all_terms, keep, drop, Label, subject, name_label,
+    Term, all_terms, drop, subject,
     replace_subject, replace_test_function, replace_trial_function
 )
 from firedrake.formmanipulation import split_form
