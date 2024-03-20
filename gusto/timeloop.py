@@ -102,8 +102,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             for variable in variables:
                 if variable not in method_variables:
                     message = f'Variable {variable} has a {term_label.label} ' \
-                        + 'but no method for this has been specified. Using ' \
-                        + 'default form for this term'
+                        + 'term but no method for this has been specified. ' \
+                        + 'Using default form for this term'
                     logger.warning(message)
 
         # -------------------------------------------------------------------- #
@@ -299,9 +299,8 @@ class Timestepper(BaseTimestepper):
         self.setup_equation(self.equation)
         self.scheme.setup(self.equation)
         self.setup_transporting_velocity(self.scheme)
-        if hasattr(self.scheme, 'base'):
-                self.setup_transporting_velocity(self.scheme.base)
-        self.scheme.courant_max = self.io.courant_max
+        if self.io.output.log_courant:
+            self.scheme.courant_max = self.io.courant_max
 
     def timestep(self):
         """
@@ -483,7 +482,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  auxiliary_equations_and_schemes=None, linear_solver=None,
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
-                 alpha=Constant(0.5), num_outer=2, num_inner=2):
+                 alpha=Constant(0.5), off_centred_u=False,
+                 num_outer=2, num_inner=2):
 
         """
         Args:
@@ -520,20 +520,27 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             alpha (`ufl.Constant`, optional): the semi-implicit off-centering
                 parameter. A value of 1 corresponds to fully implicit, while 0
                 corresponds to fully explicit. Defaults to Constant(0.5).
+            off_centred_u (bool, optional): option to offcentre the transporting
+                velocity. Defaults to False, in which case transporting velocity
+                is centred. If True offcentring uses value of alpha.
             num_outer (int, optional): number of outer iterations in the semi-
                 implicit algorithm. The outer loop includes transport and any
-                fast physics schemes. Defaults to 4. Note that default used by
+                fast physics schemes. Defaults to 2. Note that default used by
                 the Met Office's ENDGame and GungHo models is 2.
             num_inner (int, optional): number of inner iterations in the semi-
                 implicit algorithm. The inner loop includes the evaluation of
                 implicit forcing (pressure gradient and Coriolis) terms, and the
-                linear solve. Defaults to 1. Note that default used by the Met
+                linear solve. Defaults to 2. Note that default used by the Met
                 Office's ENDGame and GungHo models is 2.
         """
 
         self.num_outer = num_outer
         self.num_inner = num_inner
         self.alpha = alpha
+
+        # default is to not offcentre transporting velocity but if it
+        # is offcentred then use the same value as alpha
+        self.alpha_u = Constant(alpha) if off_centred_u else Constant(0.5)
 
         self.spatial_methods = spatial_methods
 
@@ -643,7 +650,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xn = self.x.n
         xnp1 = self.x.np1
         # computes ubar from un and unp1
-        return xn('u') + self.alpha*(xnp1('u')-xn('u'))
+        return xn('u') + self.alpha_u*(xnp1('u')-xn('u'))
 
     def setup_fields(self):
         """Sets up time levels n, star, p and np1"""
@@ -712,10 +719,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         with timed_stage("Apply forcing terms"):
             logger.info('SIQN: Explicit forcing')
-            # TODO: check if forcing is applied to x_after_slow or xn
             # Put explicit forcing into xstar
-            self.forcing.apply(x_after_slow, x_after_slow, xstar(self.field_name), "explicit")
+            self.forcing.apply(x_after_slow, xn, xstar(self.field_name), "explicit")
 
+        # set xp here so that variables that are not transported have
+        # the correct values
         xp(self.field_name).assign(xstar(self.field_name))
 
         for outer in range(self.num_outer):
@@ -740,9 +748,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
             for inner in range(self.num_inner):
 
+                # TODO: this is where to update the reference state
+
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'SIQN: Implicit forcing {(outer, inner)}')
-                    # TODO: why don't we update xnp1 with a better guess here?
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
 
                 xrhs -= xnp1(self.field_name)
