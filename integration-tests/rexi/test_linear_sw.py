@@ -62,7 +62,8 @@ def run_rexi_sw(tmpdir):
     checkpoint_name = 'linear_sw_wave_rexi_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
     check_output = OutputParameters(dirname=tmpdir+"/linear_sw_wave",
-                                    checkpoint_pickup_filename=new_path)
+                                    checkpoint_pickup_filename=new_path,
+                                    checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
     check_domain = Domain(check_mesh, dt, 'BDM', 1)
     check_eqn = ShallowWaterEquations(check_domain, parameters, fexpr=fexpr)
