@@ -2,11 +2,15 @@ from gusto.rexi.rexi_coefficients import *
 from firedrake import Function, TrialFunctions, TestFunctions, \
     Constant, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver, MixedFunctionSpace
-from gusto import (replace_subject, drop, time_derivative,
-                   all_terms, replace_test_function, prognostic,
-                   Term, NullTerm, linearisation, subject,
-                   replace_trial_function)
+from gusto.labels import time_derivative, prognostic, linearisation
+from firedrake.fml import (
+    Term, all_terms, keep, drop, Label, subject, name_label,
+    replace_subject, replace_test_function, replace_trial_function
+)
 from firedrake.formmanipulation import split_form
+
+
+NullTerm = Term(None)
 
 
 class Rexi(object):
