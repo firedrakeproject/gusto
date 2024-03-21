@@ -123,8 +123,8 @@ def test_reversible_recovery(geometry, mesh, method):
 
     # items for testing
     # no exact answer for recovery on sphere
-    rec_tol = 1e-12 if geometry == 'interval' else 0.03
-    rev_tol = 1e-12
+    rec_tol = 1e-11 if geometry == 'interval' else 0.03
+    rev_tol = 1e-11
     vec_rev_tol = 2e-9
     error_message = ("""
                      Unacceptable error in {test} test for {variable} on

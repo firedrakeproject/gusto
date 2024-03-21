@@ -53,6 +53,7 @@ class ActiveTracer(object):
     """
     def __init__(self, name, space, variable_type,
                  transport_eqn=TransportEquationType.advective,
+                 density_name=None,
                  phase=Phases.gas, chemical=None):
         """
         Args:
@@ -63,6 +64,10 @@ class ActiveTracer(object):
             transport_eqn (:class:`TransportEquationType`, optional): enumerator
                 indicating the type of transport equation to be solved (e.g.
                 advective). Defaults to `TransportEquationType.advective`.
+            density_name (str): the name of the associated density for a mixing
+                ratio when using the tracer_conservative transport. Defaults to None,
+                but raises an error if tracer_conservative transport is used without
+                a specified density.
             phase (:class:`Phases`, optional): enumerator indicating the phase
                 of the tracer variable. Defaults to `Phases.gas`.
             chemical (str, optional): string to describe the chemical that this
@@ -75,13 +80,20 @@ class ActiveTracer(object):
         self.name = name
         self.space = space
         self.transport_eqn = transport_eqn
+        self.density_name = density_name
         self.variable_type = variable_type
         self.phase = phase
         self.chemical = chemical
 
-        if (variable_type == TracerVariableType.density and transport_eqn == TransportEquationType.advective):
+        if (variable_type == TracerVariableType.density
+                and transport_eqn == TransportEquationType.advective):
             logger.warning('Active tracer initialised which describes a '
                            + 'density but solving the advective transport eqn')
+
+        if (transport_eqn == TransportEquationType.tracer_conservative
+                and density_name is None):
+            raise ValueError(f'Active tracer {name} using tracer conservative '
+                             + 'transport needs an associated density.')
 
 
 class WaterVapour(ActiveTracer):
