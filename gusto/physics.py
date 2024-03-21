@@ -32,7 +32,7 @@ from types import FunctionType
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
            "SourceSink", "SurfaceFluxes", "WindDrag", "StaticAdjustment",
-           "SuppressVerticalWind", "BoundaryLayerMixing", "TerminatorToy"]
+           "SuppressVerticalWind", "BoundaryLayerMixing", "TerminatorToy", "SWHeightRelax"]
 
 
 class PhysicsParametrisation(object, metaclass=ABCMeta):
@@ -1835,7 +1835,7 @@ class SWHeightRelax(PhysicsParametrisation):
     where H is the specified height profile, and tau_r is the relaxation time
     """
 
-    def __init__(self, equation, H, tau_r, height_name='D'):
+    def __init__(self, equation, H_rel, tau_r): #, height_name='D'):
         """
         Args:
             equation: the modification term to the mass conservation equation
@@ -1846,20 +1846,22 @@ class SWHeightRelax(PhysicsParametrisation):
         label_name = 'SWHeightRelax'
         super().__init__(equation, label_name, parameters=None)
 
-        if height_name not in equation.field_names:
-            raise ValueError(f"Field {height_name} does not exist in the equation set")
+        # if height_name not in equation.field_names:
+        #    raise ValueError(f"Field {height_name} does not exist in the equation set")
         
-        self.height_above_surface_idx = equation.field_names.index(height_name)
+        self.D_idx = equation.field_names.index('D')
+        
 
-        self.Dq = Function(equation.D.function_space())
-        Dq = self.Dq
+        W = equation.function_space
+        Vd = W.sub(self.D_idx)
+        self.D = Function(Vd)
 
 
-        test = equation.tests
+        test = equation.tests[self.D_idx]
 
-        height_expr = (Dq - H)/tau_r * dx
+        height_expr = test * (self.D - H_rel)/tau_r * dx
 
-        equation.residual += self.label(subject(prognostic(height_expr, 'D'), Dq), self.evaluate)
+        equation.residual += self.label(subject(prognostic(height_expr, 'D'), equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -1869,5 +1871,4 @@ class SWHeightRelax(PhysicsParametrisation):
             x_in : the field to be evolved
             dt : the time interval for the scheme
         """
-        self.dt.assign(dt)
-        self.D.assign(x_in)
+        self.D.assign(x_in.split()[self.D_idx])
