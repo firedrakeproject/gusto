@@ -17,15 +17,15 @@ import matplotlib.pyplot as plt
 day = 88774.
 
 # set inner and outer latitude limits of annulus   
-phis = 60
-phin = 70
+phis = 55
+phin = 80
 
 
 
 print(f'vortex from {phis}N to {phin}N')
 
 ### max runtime currently 1 day
-tmax = 20 * day
+tmax = 30 * day
 ### timestep
 dt = 450.
 
@@ -62,8 +62,14 @@ transported_fields = [TrapeziumRule(domain, "u"),
                       SSPRK3(domain, "D")]
 transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
+D_init = Function(domain.spaces('L2'))
+height_relax = SWHeightRelax(eqns, D_init, 10000)
+
+physics_schemes = [(height_relax, ForwardEuler(domain))]
+
 # Time stepper
-stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods, physics_schemes=physics_schemes,
+                                    num_outer=2, num_inner=2)
 
 # ------------------------------------------------------------------------ #
 # Initial conditions - these need changing!
@@ -247,9 +253,10 @@ D0 += H
 #from firedrake import File
 #of = File(f'{dirname}_H/out.pvd')
 #of.write(hinit)
-pcg =PCG64()
+pcg = PCG64()
 rg = RandomGenerator(pcg)
 f_normal = rg.normal(VD, 0.0, 1.5e-3*H)
+D_init.assign(D0)
 D0 += f_normal
 print(max(f_normal.dat.data))
 print(min(f_normal.dat.data))
@@ -262,3 +269,5 @@ stepper.set_reference_profiles([('D', Dbar)])
 # ------------------------------------------------------------------------ #
 
 stepper.run(t=0, tmax=tmax)
+
+print(f'directory name is {dirname}')
