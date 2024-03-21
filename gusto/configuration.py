@@ -7,7 +7,8 @@ from firedrake import sqrt, Constant
 __all__ = [
     "Configuration",
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
-    "CompressibleParameters", "ShallowWaterParameters",
+    "BoussinesqParameters", "CompressibleParameters",
+    "ShallowWaterParameters",
     "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions", "MixedFSOptions",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
 ]
@@ -106,6 +107,14 @@ class OutputParameters(Configuration):
     # name and points is the points at which to dump them
     point_data = []
     tolerance = None
+
+
+class BoussinesqParameters(Configuration):
+    """Physical parameters for the Boussinesq equations."""
+
+    g = 9.810616
+    N = 0.01  # Brunt-Vaisala frequency (1/s)
+    cs = 340  # sound speed (for compressible case) (m/s)
 
 
 class CompressibleParameters(Configuration):
