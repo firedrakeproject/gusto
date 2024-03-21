@@ -12,16 +12,16 @@ from gusto.logging import logger
 from gusto.recovery import Recoverer, BoundaryMethod
 
 
-__all__ = ["incompressible_hydrostatic_balance",
+__all__ = ["boussinesq_hydrostatic_balance",
            "compressible_hydrostatic_balance", "remove_initial_w",
            "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
 
 
-def incompressible_hydrostatic_balance(equation, b0, p0, top=False, params=None):
+def boussinesq_hydrostatic_balance(equation, b0, p0, top=False, params=None):
     """
-    Gives a pressure field in hydrostatic-balance for the Incompressible eqns.
+    Gives a pressure field in hydrostatic-balance for the Boussinesq eqns.
 
-    Generates the hydrostatically-balanced pressure field for the incompressible
+    Generates the hydrostatically-balanced pressure field for the
     Boussinesq equations, given some buoyancy field and a boundary condition.
     This is solved as a mixed problem for the vertical velocity and the pressure
     with zero flow enforced at one of the boundaries.

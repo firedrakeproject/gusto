@@ -40,12 +40,12 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 domain = Domain(mesh, dt, 'CG', 1)
 
 # Equation
-parameters = CompressibleParameters()
-eqns = IncompressibleBoussinesqEquations(domain, parameters)
+parameters = BoussinesqParameters(cs=300)
+eqns = BoussinesqEquations(domain, parameters)
 
 # I/O
 output = OutputParameters(
-    dirname='skamarock_klemp_incompressible',
+    dirname='skamarock_klemp_compressible',
     dumpfreq=dumpfreq,
     dumplist=['u'],
 )
@@ -56,11 +56,14 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 # Transport schemes
 b_opts = SUPGOptions()
 transported_fields = [TrapeziumRule(domain, "u"),
+                      SSPRK3(domain, "p"),
                       SSPRK3(domain, "b", options=b_opts)]
-transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "b", ibp=b_opts.ibp)]
+transport_methods = [DGUpwind(eqns, "u"),
+                     DGUpwind(eqns, "p"),
+                     DGUpwind(eqns, "b", ibp=b_opts.ibp)]
 
 # Linear solver
-linear_solver = IncompressibleSolver(eqns)
+linear_solver = BoussinesqSolver(eqns)
 
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
@@ -77,6 +80,7 @@ p0 = stepper.fields("p")
 
 # spaces
 Vb = b0.function_space()
+Vp = p0.function_space()
 
 x, z = SpatialCoordinate(mesh)
 
@@ -94,17 +98,17 @@ b_pert = deltab*sin(pi*z/H)/(1 + (x - L/2)**2/a**2)
 # interpolate the expression to the function
 b0.interpolate(b_b + b_pert)
 
-incompressible_hydrostatic_balance(eqns, b_b, p0)
+p_b = Function(Vp)
+boussinesq_hydrostatic_balance(eqns, b_b, p_b)
+p0.assign(p_b)
 
 uinit = (as_vector([20.0, 0.0]))
 u0.project(uinit)
 
 # set the background buoyancy
-stepper.set_reference_profiles([('b', b_b)])
+stepper.set_reference_profiles([('p', p_b), ('b', b_b)])
 
 # ---------------------------------------------------------------------------- #
 # Run
 # ---------------------------------------------------------------------------- #
-
-# Run!
 stepper.run(t=0, tmax=tmax)
