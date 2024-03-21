@@ -480,8 +480,6 @@ class IMEXMultistage(TimeDiscretisation):
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
             solver_parameters = {'ksp_type': 'gmres',
                                 'pc_type': 'bjacobi',
-                                'ksp_rtol': 1e-3,
-                                'ksp_atol': 1e-4,
                                 'sub_pc_type': 'ilu'}
             solvers.append(NonlinearVariationalSolver(problem,  solver_parameters=solver_parameters, options_prefix=solver_name))
         return solvers
@@ -2445,8 +2443,8 @@ class IMEX_SDC(SDC):
         with PETSc.Log.Event("IMEX_SDC_init"):
             self.base.setup(equation, *active_labels)
             self.residual = self.base.residual
-            self.ksp_tols=[1e-3,1e-2,1e-1,1e-1]
-            self.snes_tols=[1e-4,1e-3,1e-2,1e-1]
+            # self.ksp_tols=[1e-3,1e-2,1e-1,1e-1]
+            # self.snes_tols=[1e-4,1e-3,1e-2,1e-1]
 
             # set up SDC form and solver
             if self.field_name is not None and hasattr(equation, "field_names"):
@@ -2601,9 +2599,9 @@ class IMEX_SDC(SDC):
         self.Unodes[0].assign(self.Un)
         with PETSc.Log.Event("IMEX_SDC_precon"):
             for m in range(self.M):
-                self.Unodes[m+1].assign(self.Un)
-                # self.base.dt = float(self.dtau[m])
-                # self.base.apply(self.Unodes[m+1], self.Unodes[m])
+                # self.Unodes[m+1].assign(self.Un)
+                self.base.dt = float(self.dtau[m])
+                self.base.apply(self.Unodes[m+1], self.Unodes[m])
 
         k = 0
         while k < self.maxk:
@@ -2640,14 +2638,14 @@ class IMEX_SDC(SDC):
                     self.Uin.assign(self.Unodes1[m])
                     with PETSc.Log.Event("IMEX_SDC_rhs2"):
                         self.solver_rhs.solve()
-                    self.fUnodes[m-1].assign(self.Urhs)
+                        self.fUnodes[m-1].assign(self.Urhs)
                 self.Un.assign(x_in)
                 self.compute_quad_final()
                 with PETSc.Log.Event("IMEX_SDC_final_solve"):
                     self.solver_fin.solve()
                 x_out.assign(self.U_fin)
             else:
-                x_out.assign(self.Unodes1[-1])
+                x_out.assign(self.Un)
         else:
             x_out.assign(self.Unodes[-1])
 
