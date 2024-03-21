@@ -1312,8 +1312,10 @@ class BoussinesqEquations(PrognosticEquationSet):
             # Don't include active tracers
             linearisation_map = lambda t: \
                 t.get(prognostic) in ['u', 'p', 'b'] \
-                and (t.has_label(time_derivative)
-                     or (t.get(prognostic) not in ['u', 'p'] and t.has_label(transport)))
+                and (
+                    any(t.has_label(time_derivative, pressure_gradient))
+                    or t.get(name_label) in ["sound", "gravity"]
+                    or (t.get(prognostic) not in ['u'] and t.has_label(transport)))
 
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
@@ -1325,7 +1327,7 @@ class BoussinesqEquations(PrognosticEquationSet):
 
         w, phi, gamma = self.tests[0:3]
         u, p, b = split(self.X)
-        u_trial = split(self.trials)[0]
+        u_trial, p_trial, b_trial = split(self.trials)
         _, p_bar, b_bar = split(self.X_ref)
 
         # -------------------------------------------------------------------- #
@@ -1370,12 +1372,14 @@ class BoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
-        pressure_gradient_form = subject(prognostic(-div(w)*p*dx, 'u'), self.X)
+        linear_pg = pressure_gradient(subject(prognostic(-div(w)*p_trial*dx, 'u'), self.X))
+        pressure_gradient_form = linearisation(pressure_gradient(subject(prognostic(-div(w)*p*dx, 'u'), self.X)), linear_pg)
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(-b*inner(w, domain.k)*dx, 'u'), self.X)
+        linear_gravity = name_label(subject(prognostic(-b_trial*inner(w, domain.k)*dx, 'u'), self.X), "gravity")
+        gravity_form = linearisation(name_label(subject(prognostic(-b*inner(w, domain.k)*dx, 'u'), self.X), "gravity"), linear_gravity)
 
         # -------------------------------------------------------------------- #
         # Divergence Term
@@ -1383,8 +1387,12 @@ class BoussinesqEquations(PrognosticEquationSet):
 
         if compressible:
             cs = parameters.cs
-            divergence_form = subject(
-                prognostic(cs**2 * phi * div(u) * dx, 'p'), self.X)
+            linear_div_form = subject(
+                prognostic(cs**2 * phi * div(u_trial) * dx, 'p'), self.X)
+            divergence_form = linearisation(
+                name_label(subject(
+                    prognostic(cs**2 * phi * div(u) * dx, 'p'),
+                    self.X), "sound"), linear_div_form)
         else:
             # This enforces that div(u) = 0
             # The p features here so that the div(u) evaluated in the
