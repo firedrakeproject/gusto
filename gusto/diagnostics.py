@@ -5,7 +5,7 @@ from firedrake import assemble, dot, dx, Function, sqrt, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
-    Projector, Interpolator, FunctionSpace
+    Projector, Interpolator, FunctionSpace, MixedFunctionSpace
 from firedrake.assign import Assigner
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -1693,7 +1693,7 @@ class TracerDensity(DiagnosticField):
 
     name = "TracerDensity"
 
-    def __init__(self, mixing_ratio_name, density_name, space=None, method='interpolate'):
+    def __init__(self, equation, mixing_ratio_name, density_name, space=None, method='interpolate'):
         """
         Args:
             mixing_ratio_name (str): the name of the tracer mixing ratio variable
@@ -1705,9 +1705,20 @@ class TracerDensity(DiagnosticField):
                 for this diagnostic. Valid options are 'interpolate', 'project' and
                 'assign'. Defaults to 'interpolate'.
         """
+        
         super().__init__(method=method, required_fields=(mixing_ratio_name, density_name))
+        print(mixing_ratio_name)
+        print(density_name)
         self.mixing_ratio_name = mixing_ratio_name
         self.density_name = density_name
+        self.equation = equation
+        #print(mixing_ratio_name.name)
+        #self.mixing_ratio_name = mixing_ratio_name.name
+        #print(density_name.name)
+        #self.density_name = density_name.name
+        
+        #print(mixing_ratio_name.space)
+        #print(density_name.space)
 
     def setup(self, domain, state_fields):
         """
@@ -1717,7 +1728,24 @@ class TracerDensity(DiagnosticField):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
+        #print(domain.__dict__)
         m_X = state_fields(self.mixing_ratio_name)
         rho_d = state_fields(self.density_name)
+        
+        print(self.equation.space_names)
+        m_X_space_name = self.equation.space_names[self.mixing_ratio_name]
+        rho_d_space_name = self.equation.space_names[self.density_name]
+        
+        m_X_space = self.equation.domain.spaces(m_X_space_name)
+        rho_d_space = self.equation.domain.spaces(rho_d_space_name)
+        
+        print(m_X_space)
+        print(rho_d_space)
+        
+        diag_space = MixedFunctionSpace(m_X_space, rho_d_space)[0]
+        
+        print(diag_space)
+        print(diag_space[0])
+        
         self.expr = m_X*rho_d
-        super().setup(domain, state_fields)
+        super().setup(domain, state_fields, space=diag_space)
