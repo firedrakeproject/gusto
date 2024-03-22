@@ -1370,12 +1370,14 @@ class BoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
-        pressure_gradient_form = subject(prognostic(-div(w)*p*dx, 'u'), self.X)
+        pressure_gradient_form = pressure_gradient(
+            subject(prognostic(-div(w)*p*dx, 'u'), self.X))
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(-b*inner(w, domain.k)*dx, 'u'), self.X)
+        gravity_form = name_label(subject(prognostic(-b*inner(w, domain.k)*dx,
+                                                     'u'), self.X), "gravity")
 
         # -------------------------------------------------------------------- #
         # Divergence Term
@@ -1383,17 +1385,23 @@ class BoussinesqEquations(PrognosticEquationSet):
 
         if compressible:
             cs = parameters.cs
-            divergence_form = subject(
-                prognostic(cs**2 * phi * div(u) * dx, 'p'), self.X)
+            linear_div_form = name_label(
+                subject(prognostic(cs**2 * phi * div(u_trial) * dx, 'p'),
+                        self.X), "divergence")
+            divergence_form = name_label(linearisation(
+                subject(prognostic(cs**2 * phi * div(u) * dx, 'p'), self.X),
+                linear_div_form), "divergence")
         else:
             # This enforces that div(u) = 0
             # The p features here so that the div(u) evaluated in the
             # "forcing" step replaces the whole pressure field, rather than
             # merely providing an increment to it.
-            divergence_form = name_label(
+            linear_div_form = name_label(
+                subject(prognostic(phi*(p_trial-div(u_trial))*dx, 'p'), self.X),
+                "incompressibility")
+            divergence_form = name_label(linearisation(
                 subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
-                "incompressibility"
-            )
+                linear_div_form), "incompressibility")
 
         residual = (mass_form + adv_form + divergence_form
                     + pressure_gradient_form + gravity_form)
@@ -1411,3 +1419,90 @@ class BoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
+
+
+class LinearBoussinesqEquations(BoussinesqEquations):
+    """
+    Class for the Boussinesq equations, which evolve the velocity
+    'u', the pressure 'p' and the buoyancy 'b'. Can be compressible or
+    incompressible, depending on the value of the input flag, which defaults
+    to compressible.
+
+    The compressible form of the equations is
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
+    ∂p/∂t + cs**2 ∇.u = p,                                                    \n
+    ∂b/∂t + (u.∇)b = 0,                                                       \n
+    where k is the vertical unit vector, Ω is the planet's rotation vector
+    and cs is the sound speed.
+
+    For the incompressible form of the equations, the pressure features as
+    a Lagrange multiplier to enforce incompressibility. The equations are     \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
+    ∇.u = p,                                                                  \n
+    ∂b/∂t + (u.∇)b = 0,                                                       \n
+    where k is the vertical unit vector and Ω is the planet's rotation vector.
+    """
+
+    def __init__(self, domain, parameters,
+                 compressible=True,
+                 Omega=None,
+                 space_names=None,
+                 linearisation_map='default',
+                 u_transport_option="vector_invariant_form",
+                 no_normal_flow_bc_ids=None,
+                 active_tracers=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
+            compressible (bool, optional): flag to indicate whether the
+                equations are compressible. Defaults to True
+            Omega (:class:`ufl.Expr`, optional): an expression for the planet's
+                rotation vector. Defaults to None.
+            space_names (dict, optional): a dictionary of strings for names of
+                the function spaces to use for the spatial discretisation. The
+                keys are the names of the prognostic variables. Defaults to None
+                in which case the spaces are taken from the de Rham complex.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
+            u_transport_option (str, optional): specifies the transport term
+                used for the velocity equation. Supported options are:
+                'vector_invariant_form', 'vector_advection_form' and
+                'circulation_form'.
+                Defaults to 'vector_invariant_form'.
+            no_normal_flow_bc_ids (list, optional): a list of IDs of domain
+                boundaries at which no normal flow will be enforced. Defaults to
+                None.
+            active_tracers (list, optional): a list of `ActiveTracer` objects
+                that encode the metadata for any active tracers to be included
+                in the equations.. Defaults to None.
+
+        Raises:
+            NotImplementedError: active tracers are not implemented.
+        """
+
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives, pressure gradient,
+            # Coriolis and transport term from depth equation
+            linearisation_map = lambda t: \
+                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                 or t.get(name_label) in ["gravity", "divergence", "incompressibility"]
+                 or (t.get(prognostic) in ['p', 'b'] and t.has_label(transport)))
+        super().__init__(domain=domain,
+                         parameters=parameters,
+                         compressible=compressible,
+                         Omega=Omega,
+                         space_names=space_names,
+                         linearisation_map=linearisation_map,
+                         u_transport_option=u_transport_option,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
+
+        # Use the underlying routine to do a first linearisation of
+        # the equations
+        self.linearise_equation_set()
