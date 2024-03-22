@@ -5,7 +5,7 @@ steps and ensuring that the resulting velocities are very small.
 """
 
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, Constant
+from firedrake import PeriodicIntervalMesh, ExtrudedMesh
 from os import path
 from netCDF4 import Dataset
 
