@@ -1711,14 +1711,16 @@ class TracerDensity(DiagnosticField):
         print(density_name)
         self.mixing_ratio_name = mixing_ratio_name
         self.density_name = density_name
-        self.equation = equation
-        #print(mixing_ratio_name.name)
-        #self.mixing_ratio_name = mixing_ratio_name.name
-        #print(density_name.name)
-        #self.density_name = density_name.name
+  #     self.equation = equation
         
-        #print(mixing_ratio_name.space)
-        #print(density_name.space)
+        m_X_space_name = equation.space_names[mixing_ratio_name]
+        rho_d_space_name = equation.space_names[density_name]
+        
+        m_X_space = equation.domain.spaces(m_X_space_name)
+        rho_d_space = equation.domain.spaces(rho_d_space_name)
+        
+        self.tracer_density_space = MixedFunctionSpace(m_X_space, rho_d_space)[0]
+        
 
     def setup(self, domain, state_fields):
         """
@@ -1728,24 +1730,26 @@ class TracerDensity(DiagnosticField):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        #print(domain.__dict__)
         m_X = state_fields(self.mixing_ratio_name)
         rho_d = state_fields(self.density_name)
         
-        print(self.equation.space_names)
-        m_X_space_name = self.equation.space_names[self.mixing_ratio_name]
-        rho_d_space_name = self.equation.space_names[self.density_name]
+        #m_X_space_name = self.equation.space_names[self.mixing_ratio_name]
+        #rho_d_space_name = self.equation.space_names[self.density_name]
         
-        m_X_space = self.equation.domain.spaces(m_X_space_name)
-        rho_d_space = self.equation.domain.spaces(rho_d_space_name)
+        #m_X_space = self.equation.domain.spaces(m_X_space_name)
+        #rho_d_space = self.equation.domain.spaces(rho_d_space_name)
         
-        print(m_X_space)
-        print(rho_d_space)
+        #print(m_X_space)
+        #print(rho_d_space)
         
-        diag_space = MixedFunctionSpace(m_X_space, rho_d_space)[0]
+        #diag_space = MixedFunctionSpace(m_X_space, rho_d_space)[0]
         
-        print(diag_space)
-        print(diag_space[0])
+        #print(diag_space)
+        #print(diag_space[0])
+        #print(diag_space[1])
+        
+        #assert(diag_space[0]==diag_space[1])
+        #import sys; sys.exit()
         
         self.expr = m_X*rho_d
-        super().setup(domain, state_fields, space=diag_space)
+        super().setup(domain, state_fields, space=self.tracer_density_space)
