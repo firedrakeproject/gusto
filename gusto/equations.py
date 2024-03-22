@@ -1325,7 +1325,7 @@ class BoussinesqEquations(PrognosticEquationSet):
 
         w, phi, gamma = self.tests[0:3]
         u, p, b = split(self.X)
-        u_trial = split(self.trials)[0]
+        u_trial, p_trial, _ = split(self.trials)
         _, p_bar, b_bar = split(self.X_ref)
 
         # -------------------------------------------------------------------- #
