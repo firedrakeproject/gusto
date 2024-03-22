@@ -25,7 +25,7 @@ def run_boussinesq(tmpdir, compressible):
     ncols = 10  # number of columns
     Lx = 1000.0
     Lz = 1000.0
-    mesh_name = 'incompressible_mesh'
+    mesh_name = 'boussinesq_mesh'
     m = PeriodicIntervalMesh(ncols, Lx)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Lz/nlayers, name=mesh_name)
     domain = Domain(mesh, dt, "CG", 1)
@@ -64,8 +64,7 @@ def run_boussinesq(tmpdir, compressible):
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
                                       transport_methods,
-                                      linear_solver=linear_solver,
-                                      num_outer=4, num_inner=1)
+                                      linear_solver=linear_solver)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -100,9 +99,9 @@ def run_boussinesq(tmpdir, compressible):
 
     # State for checking checkpoints
     if compressible:
-        checkpoint_name = 'compressible_chkpt.h5'
+        checkpoint_name = 'compressible_boussinesq_chkpt.h5'
     else:
-        checkpoint_name = 'incompressible_chkpt.h5'
+        checkpoint_name = 'incompressible_boussinesq_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
     check_output = OutputParameters(dirname=output_dirname,
                                     checkpoint_pickup_filename=new_path,
@@ -117,7 +116,7 @@ def run_boussinesq(tmpdir, compressible):
     return stepper, check_stepper
 
 
-@pytest.mark.parametrize("compressible", [False])
+@pytest.mark.parametrize("compressible", [True, False])
 def test_boussinesq(tmpdir, compressible):
 
     dirname = str(tmpdir)
