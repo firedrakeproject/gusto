@@ -24,7 +24,7 @@ from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["IncompressibleSolver", "LinearTimesteppingSolver", "CompressibleSolver", "ThermalSWSolver", "MoistConvectiveSWSolver"]
+__all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver", "ThermalSWSolver", "MoistConvectiveSWSolver"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -411,11 +411,11 @@ class CompressibleSolver(TimesteppingSolver):
         theta.assign(self.theta)
 
 
-class IncompressibleSolver(TimesteppingSolver):
+class BoussinesqSolver(TimesteppingSolver):
     """
-    Linear solver object for the incompressible Boussinesq equations.
+    Linear solver object for the Boussinesq equations.
 
-    This solves a linear problem for the incompressible Boussinesq equations
+    This solves a linear problem for the Boussinesq equations
     with prognostic variables u (velocity), p (pressure) and b (buoyancy). It
     follows the following strategy:
 
@@ -442,6 +442,7 @@ class IncompressibleSolver(TimesteppingSolver):
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
+
         dt = self.dt
         beta_ = dt*self.alpha
         Vu = equation.domain.spaces("HDiv")
@@ -475,8 +476,13 @@ class IncompressibleSolver(TimesteppingSolver):
             inner(w, (u - u_in))*dx
             - beta*div(w)*p*dx
             - beta*inner(w, k)*b*dx
-            + phi*div(u)*dx
         )
+
+        if equation.compressible:
+            cs = equation.parameters.cs
+            eqn += phi * (p - p_in) * dx + beta * phi * cs**2 * div(u) * dx
+        else:
+            eqn += phi * div(u) * dx
 
         if hasattr(self.equations, "mu"):
             eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
@@ -535,7 +541,7 @@ class IncompressibleSolver(TimesteppingSolver):
         self.xrhs.assign(xrhs)
 
         with timed_region("Gusto:VelocityPressureSolve"):
-            logger.info('Incompressible linear solver: mixed solve')
+            logger.info('Boussinesq linear solver: mixed solve')
             self.up_solver.solve()
 
         u1, p1 = self.up.subfunctions
@@ -544,7 +550,7 @@ class IncompressibleSolver(TimesteppingSolver):
         p.assign(p1)
 
         with timed_region("Gusto:BuoyancyRecon"):
-            logger.info('Incompressible linear solver: buoyancy reconstruction')
+            logger.info('Boussinesq linear solver: buoyancy reconstruction')
             self.b_solver.solve()
 
         b.assign(self.b)
