@@ -152,39 +152,60 @@ class DGUpwind(TransportMethod):
         # Determine appropriate form to use
         # -------------------------------------------------------------------- #
 
-        if self.transport_equation_type == TransportEquationType.advective:
-            if vector_manifold_correction:
-                form = vector_manifold_advection_form(self.domain, self.test,
-                                                      self.field, ibp=ibp,
-                                                      outflow=outflow)
-            else:
-                form = upwind_advection_form(self.domain, self.test, self.field,
-                                             ibp=ibp, outflow=outflow)
+        if equation.domain.mesh.topological_dimension() == 1:
+            assert not vector_manifold_correction
+            if self.transport_equation_type == TransportEquationType.advective:
+                form = upwind_advection_form_1d(self.domain, self.test,
+                                                self.field,
+                                                ibp=ibp, outflow=outflow)
+            elif self.transport_equation_type == TransportEquationType.conservative:
+                form = upwind_continuity_form_1d(self.domain, self.test,
+                                                 self.field,
+                                                 ibp=ibp, outflow=outflow)
 
-        elif self.transport_equation_type == TransportEquationType.conservative:
-            if vector_manifold_correction:
-                form = vector_manifold_continuity_form(self.domain, self.test,
-                                                       self.field, ibp=ibp,
-                                                       outflow=outflow)
-            else:
-                form = upwind_continuity_form(self.domain, self.test, self.field,
-                                              ibp=ibp, outflow=outflow)
-
-        elif self.transport_equation_type == TransportEquationType.circulation:
-            if outflow:
-                raise NotImplementedError('Outflow not implemented for upwind circulation')
-            form = upwind_circulation_form(self.domain, self.test, self.field, ibp=ibp)
-
-        elif self.transport_equation_type == TransportEquationType.vector_invariant:
-            if outflow:
-                raise NotImplementedError('Outflow not implemented for upwind vector invariant')
-            form = upwind_vector_invariant_form(self.domain, self.test, self.field, ibp=ibp)
-
-        elif self.transport_equation_type == TransportEquationType.tracer_conservative:
-            form = upwind_tracer_conservative_form(self.domain, self.test, self.field, self.conservative_density, ibp=ibp)
         else:
-            raise NotImplementedError('Upwind transport scheme has not been '
-                                      + 'implemented for this transport equation type')
+            if self.transport_equation_type == TransportEquationType.advective:
+                if vector_manifold_correction:
+                    form = vector_manifold_advection_form(self.domain,
+                                                          self.test,
+                                                          self.field, ibp=ibp,
+                                                          outflow=outflow)
+                else:
+                    form = upwind_advection_form(self.domain, self.test,
+                                                 self.field,
+                                                 ibp=ibp, outflow=outflow)
+
+            elif self.transport_equation_type == TransportEquationType.conservative:
+                if vector_manifold_correction:
+                    form = vector_manifold_continuity_form(self.domain,
+                                                           self.test,
+                                                           self.field, ibp=ibp,
+                                                           outflow=outflow)
+                else:
+                    form = upwind_continuity_form(self.domain, self.test,
+                                                  self.field,
+                                                  ibp=ibp, outflow=outflow)
+
+            elif self.transport_equation_type == TransportEquationType.circulation:
+                if outflow:
+                    raise NotImplementedError('Outflow not implemented for upwind circulation')
+                form = upwind_circulation_form(self.domain, self.test,
+                                               self.field, ibp=ibp)
+
+            elif self.transport_equation_type == TransportEquationType.vector_invariant:
+                if outflow:
+                    raise NotImplementedError('Outflow not implemented for upwind vector invariant')
+                form = upwind_vector_invariant_form(self.domain, self.test,
+                                                    self.field, ibp=ibp)
+
+            elif self.transport_equation_type == TransportEquationType.tracer_conservative:
+                form = upwind_tracer_conservative_form(self.domain, self.test,
+                                                       self.field,
+                                                       self.conservative_density,
+                                                       ibp=ibp)
+            else:
+                raise NotImplementedError('Upwind transport scheme has not been '
+                                          + 'implemented for this transport equation type')
 
         self.form = form
 
@@ -250,6 +271,52 @@ def upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=Fa
     return ibp_label(transport(form, TransportEquationType.advective), ibp)
 
 
+def upwind_advection_form_1d(domain, test, q, ibp=IntegrateByParts.ONCE,
+                             outflow=False):
+    u"""
+    The form corresponding to the DG upwind advective transport operator.
+
+    This discretises (u.∇)q, for transporting velocity u and transported
+    variable q. An upwind discretisation is used for the facet terms when the
+    form is integrated by parts.
+
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+        outflow (bool, optional): whether to include outflow at the domain
+            boundaries, through exterior facet terms. Defaults to False.
+
+    Raises:
+        ValueError: Can only use outflow option when the integration by parts
+            option is not "never".
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    if outflow and ibp == IntegrateByParts.NEVER:
+        raise ValueError("outflow is True and ibp is None are incompatible options")
+    Vu = domain.spaces("HDiv")
+    ubar = Function(Vu)
+    n = FacetNormal(domain.mesh)
+    un = 0.5*(ubar * n[0] + abs(ubar * n[0]))
+
+    if ibp == IntegrateByParts.ONCE:
+        L = -(test * ubar).dx(0) * q *dx + \
+            jump(test) * (un('+')*q('+') - un('-')*q('-'))*dS
+    else:
+        raise NotImplementedError("1d advection form only implemented with option ibp=IntegrateByParts.ONCE")
+
+    form = transporting_velocity(L, ubar)
+
+    return ibp_label(transport(form, TransportEquationType.advective), ibp)
+
+
 def upwind_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     u"""
     The form corresponding to the DG upwind continuity transport operator.
@@ -302,6 +369,52 @@ def upwind_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=F
         n = FacetNormal(domain.mesh)
         un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
         L += test*un*q*(ds_v + ds_t + ds_b)
+
+    form = transporting_velocity(L, ubar)
+
+    return ibp_label(transport(form, TransportEquationType.conservative), ibp)
+
+
+def upwind_continuity_form_1d(domain, test, q, ibp=IntegrateByParts.ONCE,
+                              outflow=False):
+    u"""
+    The form corresponding to the DG upwind continuity transport operator.
+
+    This discretises ∇.(u*q), for transporting velocity u and transported
+    variable q. An upwind discretisation is used for the facet terms when the
+    form is integrated by parts.
+
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+        outflow (bool, optional): whether to include outflow at the domain
+            boundaries, through exterior facet terms. Defaults to False.
+
+    Raises:
+        ValueError: Can only use outflow option when the integration by parts
+            option is not "never".
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    if outflow and ibp == IntegrateByParts.NEVER:
+        raise ValueError("outflow is True and ibp is None are incompatible options")
+    Vu = domain.spaces("HDiv")
+    ubar = Function(Vu)
+    n = FacetNormal(domain.mesh)
+    un = 0.5*(ubar * n[0] + abs(ubar * n[0]))
+
+    if ibp == IntegrateByParts.ONCE:
+        L = -test.dx(0) * q * ubar * dx \
+            + jump(test) * (un('+')*q('+') - un('-')*q('-')) * dS
+    else:
+        raise NotImplementedError("1d continuity form only implemented with option ibp=IntegrateByParts.ONCE")
 
     form = transporting_velocity(L, ubar)
 

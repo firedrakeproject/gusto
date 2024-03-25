@@ -18,9 +18,11 @@ from gusto.labels import (
 )
 from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (
-    advection_form, continuity_form, vector_invariant_form,
+    advection_form, advection_form_1d, continuity_form,
+    continuity_form_1d, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form,
-    diffusion_form, linear_continuity_form, linear_advection_form,
+    diffusion_form, diffusion_form_1d,
+    linear_continuity_form, linear_advection_form,
     tracer_conservative_form
 )
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
@@ -877,6 +879,73 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
 
         # Use the underlying routine to do a first linearisation of the equations
         self.linearise_equation_set()
+
+
+class ShallowWaterEquations_1d(PrognosticEquationSet):
+
+    def __init__(self, domain, parameters,
+                 fexpr=None,
+                 space_names=None, linearisation_map='default',
+                 diffusion_options=None,
+                 no_normal_flow_bc_ids=None, active_tracers=None):
+
+        field_names = ['u', 'v', 'D']
+        space_names = {'u': 'HDiv', 'v': 'L2', 'D': 'L2'}
+
+        super().__init__(field_names, domain, space_names,
+                         linearisation_map=linearisation_map,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
+
+        self.parameters = parameters
+        g = parameters.g
+        H = parameters.H
+
+        w1, w2, phi = self.tests
+        u, v, D = split(self.X)
+
+        # -------------------------------------------------------------------- #
+        # Time Derivative Terms
+        # -------------------------------------------------------------------- #
+        mass_form = self.generate_mass_terms()
+
+        # -------------------------------------------------------------------- #
+        # Transport Terms
+        # -------------------------------------------------------------------- #
+        # Velocity transport term
+        u_adv = prognostic(advection_form_1d(w1, u, u), 'u')
+        v_adv = prognostic(advection_form_1d(w2, v, u), 'v')
+
+        # Depth transport term
+        D_adv = prognostic(continuity_form_1d(phi, D, u), 'D')
+
+        adv_form = subject(u_adv + v_adv + D_adv, self.X)
+
+        pressure_gradient_form = pressure_gradient(subject(
+            prognostic(-g * D * w1.dx(0) * dx, "u"), self.X))
+
+        self.residual = (mass_form + adv_form
+                         + pressure_gradient_form)
+
+        self.residual += subject(prognostic(phi * H * u.dx(0) * dx, "u"), self.X)
+
+        if fexpr is not None:
+            V = FunctionSpace(domain.mesh, 'CG', 1)
+            f = self.prescribed_fields('coriolis', V).interpolate(fexpr)
+            coriolis_form = coriolis(subject(
+                prognostic(- f * v * w1 * dx, "u") +
+                prognostic(  f * u * w2 * dx, "v"), self.X))
+            self.residual += coriolis_form
+
+        if diffusion_options is not None:
+            for field, diffusion in diffusion_options:
+                idx = self.field_names.index(field)
+                test = self.tests[idx]
+                fn = split(self.X)[idx]
+                self.residual += subject(
+                    prognostic(diffusion_form_1d(test, fn, diffusion.kappa),
+                               field),
+                    self.X)
 
 
 class CompressibleEulerEquations(PrognosticEquationSet):

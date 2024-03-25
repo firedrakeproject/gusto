@@ -76,6 +76,56 @@ def interior_penalty_diffusion_form(domain, test, q, parameters):
     return diffusion(form)
 
 
+def interior_penalty_diffusion_form_1d(domain, test, q, parameters):
+    u"""
+    Form for the interior penalty discretisation of a diffusion term, ∇.(κ∇q)
+
+    The interior penalty discretisation involves the factor 'mu', the penalty
+    weight function.
+
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        test (:class:`TestFunction`): the equation's test function.
+        q (:class:`Function`): the variable being diffused.
+        parameters (:class:`DiffusionParameters`): object containing metadata
+            describing the diffusion term. Includes kappa and mu.
+
+    Returns:
+        :class:`ufl.Form`: the diffusion form.
+    """
+
+    kappa = parameters.kappa
+    mu = parameters.mu
+
+    n = FacetNormal(domain.mesh)[0]
+
+    form = test.dx(0) * q.dx(0) * kappa * dx
+
+    def get_flux_form(M):
+        """
+        The facet term for the interior penalty diffusion discretisation.
+
+        Args:
+            dS (:class:`ufl.Measure`): the facet measure.
+            M (:class:`Constant`): the diffusivity.
+
+        Returns:
+            :class:`ufl.Form`: the interior penalty flux form
+        """
+
+        fluxes = (
+            -2*avg(q * n) * avg(test.dx(0) * M)
+            -avg(q.dx(0) * M) * 2 * avg(test * n)
+            + mu * 2 * avg(q * n) * 2 * avg(test * n)*kappa
+        )*dS
+        return fluxes
+
+    form += get_flux_form(kappa)
+
+    return diffusion(form)
+
+
 class InteriorPenaltyDiffusion(DiffusionMethod):
     """The interior penalty method for discretising the diffusion term."""
 
@@ -92,5 +142,9 @@ class InteriorPenaltyDiffusion(DiffusionMethod):
 
         super().__init__(equation, variable)
 
-        self.form = interior_penalty_diffusion_form(equation.domain, self.test,
-                                                    self.field, diffusion_parameters)
+        if equation.domain.mesh.topological_dimension() == 1:
+            self.form = interior_penalty_diffusion_form_1d(
+                equation.domain, self.test, self.field, diffusion_parameters)
+        else:
+            self.form = interior_penalty_diffusion_form(
+                equation.domain, self.test, self.field, diffusion_parameters)
