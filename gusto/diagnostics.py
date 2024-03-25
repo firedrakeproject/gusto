@@ -5,7 +5,8 @@ from firedrake import assemble, dot, dx, Function, sqrt, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
-    Projector, Interpolator, FunctionSpace, MixedFunctionSpace
+    Projector, Interpolator, FunctionSpace, MixedFunctionSpace, \
+    interval, FiniteElement, TensorProductElement
 from firedrake.assign import Assigner
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -1696,6 +1697,8 @@ class TracerDensity(DiagnosticField):
     def __init__(self, equation, mixing_ratio_name, density_name, space=None, method='interpolate'):
         """
         Args:
+            equation (:class:`PrognosticEquationSet`): the equation set being
+                solved by the model.
             mixing_ratio_name (str): the name of the tracer mixing ratio variable
             density_name (str): the name of the tracer density variable
             space (:class:`FunctionSpace`, optional): the function space to
@@ -1707,20 +1710,19 @@ class TracerDensity(DiagnosticField):
         """
         
         super().__init__(method=method, required_fields=(mixing_ratio_name, density_name))
-        print(mixing_ratio_name)
-        print(density_name)
+        
         self.mixing_ratio_name = mixing_ratio_name
         self.density_name = density_name
-  #     self.equation = equation
         
-        m_X_space_name = equation.space_names[mixing_ratio_name]
-        rho_d_space_name = equation.space_names[density_name]
+        # We assume the density is in DG (or L2?)
+        #assert equation.space_names[density_name] == 'DG', \
+        #    f'The space for {density_name} needs to be DG for the Tracer Density diagnostic'
+        # Check that the mixing ratio is in DG or theta
         
-        m_X_space = equation.domain.spaces(m_X_space_name)
-        rho_d_space = equation.domain.spaces(rho_d_space_name)
-        
-        self.tracer_density_space = MixedFunctionSpace(m_X_space, rho_d_space)[0]
-        
+        # What if this isn't in the equation list, like in Terminator Toy?
+        self.m_X_space_name = equation.space_names[mixing_ratio_name]
+        assert self.m_X_space_name == 'DG' or self.m_X_space_name == 'theta', \
+            f'The space for {mixing_ratio_name} needs to be DG or theta for the Tracer Density diagnostic'
 
     def setup(self, domain, state_fields):
         """
@@ -1730,26 +1732,20 @@ class TracerDensity(DiagnosticField):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
+
         m_X = state_fields(self.mixing_ratio_name)
         rho_d = state_fields(self.density_name)
-        
-        #m_X_space_name = self.equation.space_names[self.mixing_ratio_name]
-        #rho_d_space_name = self.equation.space_names[self.density_name]
-        
-        #m_X_space = self.equation.domain.spaces(m_X_space_name)
-        #rho_d_space = self.equation.domain.spaces(rho_d_space_name)
-        
-        #print(m_X_space)
-        #print(rho_d_space)
-        
-        #diag_space = MixedFunctionSpace(m_X_space, rho_d_space)[0]
-        
-        #print(diag_space)
-        #print(diag_space[0])
-        #print(diag_space[1])
-        
-        #assert(diag_space[0]==diag_space[1])
-        #import sys; sys.exit()
-        
+
+        cell = domain.mesh._base_mesh.ufl_cell().cellname()
+        horiz_elt = FiniteElement('DG', cell, domain.horizontal_degree*2)
+
+        if self.m_X_space_name == 'theta':
+            vert_elt = FiniteElement('CG', interval, domain.vertical_degree*2+1) 
+        else:
+            vert_elt = FiniteElement('DG', interval, domain.vertical_degree*2)
+
+        elt = TensorProductElement(horiz_elt, vert_elt)
+        tracer_density_space = FunctionSpace(domain.mesh, elt, name='tracer_density_space')
+
         self.expr = m_X*rho_d
-        super().setup(domain, state_fields, space=self.tracer_density_space)
+        super().setup(domain, state_fields, space=tracer_density_space)
