@@ -25,6 +25,7 @@ from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 import scipy
 from scipy.special import legendre
+from scipy.linalg import lu
 from firedrake.petsc import PETSc
 
 
@@ -33,7 +34,7 @@ __all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage",
            "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton",
            "AdamsBashforth", "ImplicitMidpoint", "QinZhang",
            "IMEX_Euler", "ARS3", "ARK2", "Trap2", "SSP3", "BE_SDC", "FE_SDC",
-           "IMEX_SDC"]
+           "IMEX_SDC","IMEX_SDC_QD"]
 
 
 def wrapper_apply(original_apply):
@@ -1931,7 +1932,25 @@ class SDC(object, metaclass=ABCMeta):
             self.Qmatrix()
             self.Smatrix()
             self.Qfinal()
-            self.dtau = Constant(np.diff(np.append(0, self.nodes)))
+            self.dtau = np.diff(np.append(0, self.nodes))
+
+            self.Qdelta_exp = np.zeros((M, M))
+            self.Qdelta_imp = np.zeros((M, M))
+            print(self.Qdelta_exp)
+    
+            
+            # fill in matrix values
+            for m in np.arange(M):
+
+                self.Qdelta_exp[m+1::,m] = self.dtau[m]/self.dt_coarse
+                self.Qdelta_imp[m::,m] = self.dtau[m]/self.dt_coarse
+            self.Qdelta_imp[-1,-1] = self.dtau[-1]/self.dt_coarse
+
+            self.dtau=Constant(self.dtau)
+
+            print(self.Qdelta_exp)
+            print(self.Qdelta_imp)
+
 
     @property
     def nlevels(self):
@@ -2060,6 +2079,13 @@ class SDC(object, metaclass=ABCMeta):
         self.S[0, :] = deepcopy(self.Q[0, :])
         for m in np.arange(1, M):
             self.S[m, :] = self.Q[m, :] - self.Q[m - 1, :]
+    
+    def compute_qdelta(self):
+        print(self.Q)
+        P, L, U = lu(np.matrix.transpose(self.Q))
+        self.Qdelta= np.matrix.transpose(U)
+
+
 
     def compute_quad(self):
         with PETSc.Log.Event("SDC_quad"):
@@ -2067,6 +2093,13 @@ class SDC(object, metaclass=ABCMeta):
                 self.quad[j].assign(0.)
                 for k in range(self.M):
                     self.quad[j] += float(self.S[j, k])*self.fUnodes[k]
+    
+    def compute_quad_qd(self):
+        with PETSc.Log.Event("SDC_quad"):
+            for j in range(self.M):
+                self.quad[j].assign(0.)
+                for k in range(self.M):
+                    self.quad[j] += float(self.Q[j, k])*self.fUnodes[k]
     
     def compute_quad_final(self):
         self.quad_final.assign(0.)
@@ -2135,7 +2168,7 @@ class FE_SDC(SDC):
     @property
     def res_SDC(self):
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    map_if_false=lambda t: self.dt*t)
+                                    map_if_false=lambda t: self.dt_imp*t)
 
         a = F.label_map(lambda t: t.has_label(time_derivative),
                         replace_subject(self.U_SDC, old_idx=self.idx),
@@ -2227,10 +2260,10 @@ class FE_SDC(SDC):
                 self.fUnodes[m-1].assign(self.Urhs)
 
             self.compute_quad()
-
+            
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
-                self.dt = float(self.dtau[m-1])
+                float(self.dtau[m-1])
                 self.U0.assign(self.Unodes[m-1])
                 self.Un.assign(self.Unodes1[m-1])
                 self.Q_.assign(self.quad[m-1])
@@ -2470,6 +2503,9 @@ class IMEX_SDC(SDC):
             self.U_fin = Function(W)
             self.quad_final = Function(W)
 
+            self.dt_imp = Constant(0.)
+            self.dt_exp = Constant(0.)
+
             try:
                 #bcs = equation.bcs['u']
                 self.bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
@@ -2612,10 +2648,13 @@ class IMEX_SDC(SDC):
                     self.solver_rhs.solve()
                     self.fUnodes[m-1].assign(self.Urhs)
                 self.compute_quad()
+                print(self.Qdelta)
 
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
                 self.dt = float(self.dtau[m-1])
+                #self.dt = ((self.Qdelta_imp[m-1,m-1]))
+                # print(self.Qdelta_imp[m-1,m-1])
                 self.U0.assign(self.Unodes[m-1])
                 self.U01.assign(self.Unodes[m])
                 self.Un.assign(self.Unodes1[m-1])
@@ -2627,6 +2666,313 @@ class IMEX_SDC(SDC):
                     # self.solver_SDC.parameters['ksp_atol']=self.ksp_tols[k]
                     # self.solver_SDC.parameters['snes_atol']=self.snes_tols[k]
                     self.solver_SDC.solve()
+                    self.Unodes1[m].assign(self.U_SDC)
+            for m in range(1, self.M+1):
+                self.Unodes[m].assign(self.Unodes1[m])
+
+            self.Un.assign(self.Unodes1[-1])
+        if self.maxk > 0:
+            if self.final_update:
+                for m in range(1, self.M+1):
+                    self.Uin.assign(self.Unodes1[m])
+                    with PETSc.Log.Event("IMEX_SDC_rhs2"):
+                        self.solver_rhs.solve()
+                        self.fUnodes[m-1].assign(self.Urhs)
+                self.Un.assign(x_in)
+                self.compute_quad_final()
+                with PETSc.Log.Event("IMEX_SDC_final_solve"):
+                    self.solver_fin.solve()
+                x_out.assign(self.U_fin)
+            else:
+                x_out.assign(self.Un)
+        else:
+            x_out.assign(self.Unodes[-1])
+
+class IMEX_SDC_QD(SDC):
+
+    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,final_update=True):
+        super().__init__(domain, M, maxk, quadrature, field_name=field_name,final_update=final_update)
+        self.base = base_scheme
+        self.nStages = int(np.shape(self.Qdelta_imp)[1])
+
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        with PETSc.Log.Event("IMEX_SDC_init"):
+            self.base.setup(equation, *active_labels)
+            self.residual = self.base.residual
+            # self.ksp_tols=[1e-3,1e-2,1e-1,1e-1]
+            # self.snes_tols=[1e-4,1e-3,1e-2,1e-1]
+
+            # set up SDC form and solver
+            if self.field_name is not None and hasattr(equation, "field_names"):
+                self.idx = equation.field_names.index(self.field_name)
+                W = equation.spaces[self.idx]
+            else:
+                self.field_name = equation.field_name
+                W = equation.function_space
+                self.idx = None
+
+            # set up SDC form and solver
+            self.W = W
+            self.Unodes = [Function(W) for _ in range(self.M+1)]
+            self.Unodes1 = [Function(W) for _ in range(self.M+1)]
+            self.fUnodes = [Function(W) for _ in range(self.M+1)]
+            self.quad = [Function(W) for _ in range(self.M+1)]
+
+            self.U_SDC = Function(W)
+            self.U0 = Function(W)
+            self.U01 = Function(W)
+            self.Un = Function(W)
+            self.Q_ = Function(W)
+            self.U_fin = Function(W)
+            self.quad_final = Function(W)
+
+            self.dt_imp = Constant(0.)
+            self.dt_exp = Constant(0.)
+
+            try:
+                #bcs = equation.bcs['u']
+                self.bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
+            except KeyError:
+                self.bcs = None
+            # set up RHS evaluation
+            self.Urhs = Function(W)
+            self.Uin = Function(W)
+
+            self.compute_qdelta()
+
+            self.Qdelta_imp = self.Qdelta
+
+    @property
+    def res_rhs(self):
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs, old_idx=self.idx),
+                                    drop)
+        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    drop,
+                                    replace_subject(self.Uin, old_idx=self.idx))
+        Frhs = a - L
+        return Frhs.form
+    
+    @property
+    def res_SDC(self):
+        F = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    map_if_false=lambda t: self.dt*t)
+
+        F_imp = F.label_map(lambda t: any(t.has_label(time_derivative, implicit)),
+                            replace_subject(self.U_SDC, old_idx=self.idx),
+                            drop)
+
+        F_exp = F.label_map(lambda t: any(t.has_label(time_derivative, explicit)),
+                            replace_subject(self.Un, old_idx=self.idx),
+                            drop)
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
+
+        F01 = F.label_map(lambda t: t.has_label(implicit),
+                          replace_subject(self.U01, old_idx=self.idx),
+                          drop)
+
+        F01 = F01.label_map(all_terms, lambda t: -1*t)
+
+        F0 = F.label_map(lambda t: t.has_label(explicit),
+                         replace_subject(self.U0, old_idx=self.idx),
+                         drop)
+        F0 = F0.label_map(all_terms, lambda t: -1*t)
+
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_, old_idx=self.idx),
+                                    drop)
+
+        F_SDC = F_imp + F_exp + F01 + F0 + Q
+        return F_SDC.form
+    
+    
+    def res(self, stage):
+        """Set up the discretisation's residual for a given stage."""
+        # Add time derivative terms  y_s - y^n for stage s
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.U_SDC, old_idx=self.idx))
+        residual -= mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.Un, old_idx=self.idx))
+        # Loop through stages up to s-1 and calcualte/sum
+        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
+        # and
+        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
+        for i in range(stage):
+            r_exp_kp1 = self.residual.label_map(
+                lambda t: t.has_label(explicit),
+                map_if_true=replace_subject(self.Unodes1[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_exp_kp1 = r_exp_kp1.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta_exp[stage, i])*self.dt_coarse*t)
+            r_imp_kp1 = self.residual.label_map(
+                lambda t: t.has_label(implicit),
+                map_if_true=replace_subject(self.Unodes1[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_imp_kp1 = r_imp_kp1.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
+            residual += r_imp_kp1
+            residual += r_exp_kp1
+
+        for i in range(self.nStages):
+            r_exp_k = self.residual.label_map(
+                lambda t: t.has_label(explicit),
+                map_if_true=replace_subject(self.Unodes[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_exp_k = r_exp_k.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta_exp[stage, i])*self.dt_coarse*t)
+         
+            r_imp_k = self.residual.label_map(
+                lambda t: t.has_label(implicit),
+                map_if_true=replace_subject(self.Unodes[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_imp_k = r_imp_k.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
+            residual -= r_imp_k
+            residual -= r_exp_k
+        # Calculate and add on dt*a_ss*F(y_s)
+        r_imp = self.residual.label_map(
+            lambda t: t.has_label(implicit),
+            map_if_true=replace_subject(self.U_SDC, old_idx=self.idx),
+            map_if_false=drop)
+        r_imp = r_imp.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
+        residual += r_imp
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_, old_idx=self.idx),
+                                    drop)
+        residual += Q
+        return residual.form
+    
+    @property
+    def res_fin(self):
+
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                        replace_subject(self.U_fin, old_idx=self.idx),
+                        drop)
+
+        F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                            replace_subject(self.Un, old_idx=self.idx),
+                            drop)
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
+
+
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.quad_final, old_idx=self.idx),
+                                    drop)
+
+        F_fin = a + F_exp + Q
+        return F_fin.form
+    
+    @cached_property
+    def solver_fin(self):
+        """Set up the problem and the solver."""
+        # setup linear solver using lhs and rhs defined in derived class
+        prob_fin = NonlinearVariationalProblem(self.res_fin, self.U_fin, bcs=self.bcs)
+        
+        #solver_name = self.field_name+self.__class__.__name__+"_SDC"
+        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
+        solver_parameters = {'snes_type': 'ksponly',
+                             'ksp_type': 'cg',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+        return NonlinearVariationalSolver(prob_fin, solver_parameters=solver_parameters)
+    
+    @cached_property
+    def solver_SDC(self):
+        """Set up the problem and the solver."""
+        # setup linear solver using lhs and rhs defined in derived class
+        prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
+        #solver_name = self.field_name+self.__class__.__name__+"_SDC"
+        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
+        solver_parameters = {'snes_type': 'newtonls',
+                             'ksp_type': 'gmres',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+        # solver_parameters= { 'snes_type': 'newtonls',
+        #                      'ksp_type': 'gmres', 
+        #                      "pc_type": "mg",
+        #                     "pc_mg_type": "full",
+        #                     "mg_levels_ksp_type": "chebyshev",
+        #                     "mg_levels_ksp_max_it": 2,
+        #                     "mg_levels_pc_type": "jacobi"
+        #                     }
+        #solver_parameters.setdefault('snes_type', 'ksponly')
+        return NonlinearVariationalSolver(prob_SDC, solver_parameters=solver_parameters)
+    
+    @cached_property
+    def solver_rhs(self):
+        """Set up the problem and the solver."""
+        # setup linear solver using lhs and rhs defined in derived class
+        prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
+        #solver_name = self.field_name+self.__class__.__name__+"_rhs"
+        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
+        solver_parameters = {'snes_type': 'ksponly',
+                             'ksp_type': 'cg',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+        return NonlinearVariationalSolver(prob_rhs, solver_parameters=solver_parameters)
+    @cached_property
+    def solvers(self):
+        """Set up a list of solvers for each problem at a stage."""
+        solvers = []
+        for stage in range(self.nStages):
+            # setup solver using residual defined in derived class
+            problem = NonlinearVariationalProblem(self.res(stage), self.U_SDC, bcs=self.bcs)
+            solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
+            solver_parameters = {'ksp_type': 'gmres',
+                                'pc_type': 'bjacobi',
+                                'sub_pc_type': 'ilu'}
+            solvers.append(NonlinearVariationalSolver(problem,  solver_parameters=solver_parameters, options_prefix=solver_name))
+        return solvers
+    def apply(self, x_out, x_in):
+        self.Un.assign(x_in)
+        solver_list = self.solvers
+
+        self.Unodes[0].assign(self.Un)
+        with PETSc.Log.Event("IMEX_SDC_precon"):
+            for m in range(self.M):
+                # self.Unodes[m+1].assign(self.Un)
+                self.base.dt = float(self.dtau[m])
+                self.base.apply(self.Unodes[m+1], self.Unodes[m])
+
+        k = 0
+        while k < self.maxk:
+            k += 1
+            with PETSc.Log.Event("IMEX_SDC_rhs_quad"):
+                for m in range(1, self.M+1):
+                    self.Uin.assign(self.Unodes[m])
+                    self.solver_rhs.solve()
+                    self.fUnodes[m-1].assign(self.Urhs)
+                self.compute_quad_qd()
+
+                print(self.Qdelta)
+
+            self.Unodes1[0].assign(self.Unodes[0])
+            for m in range(1, self.M+1):
+                #self.dt = float(self.dtau[m-1])
+                self.dt = ((self.Qdelta_imp[m-1,m-1]))
+                # print(self.Qdelta_imp[m-1,m-1])
+                print(self.dt_exp)
+                print(self.dt_imp)
+                self.Q_.assign(self.quad[m-1])
+                with PETSc.Log.Event("IMEX_SDC_solve"):
+                    self.U_SDC.assign(self.Unodes[m])
+                    # self.solver_SDC.parameters['ksp_rtol']=self.ksp_tols[k]
+                    # self.solver_SDC.parameters['snes_rtol']=self.snes_tols[k]
+                    # self.solver_SDC.parameters['ksp_atol']=self.ksp_tols[k]
+                    # self.solver_SDC.parameters['snes_atol']=self.snes_tols[k]
+                    self.solver = solver_list[m-1]
+                    self.solver.solve()
                     self.Unodes1[m].assign(self.U_SDC)
             for m in range(1, self.M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
