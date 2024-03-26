@@ -88,16 +88,22 @@ class PhysicsLabel(Label):
 # ---------------------------------------------------------------------------- #
 # Common Labels
 # ---------------------------------------------------------------------------- #
-
-time_derivative = Label("time_derivative")
 implicit = Label("implicit")
 explicit = Label("explicit")
-transport = Label("transport", validator=lambda value: type(value) == TransportEquationType)
-diffusion = Label("diffusion")
 transporting_velocity = Label("transporting_velocity", validator=lambda value: type(value) in [Function, ufl.tensors.ListTensor])
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)
-pressure_gradient = DynamicsLabel("pressure_gradient")
-coriolis = DynamicsLabel("coriolis")
 linearisation = Label("linearisation", validator=lambda value: type(value) in [LabelledForm, Term])
 ibp_label = Label("ibp", validator=lambda value: type(value) == IntegrateByParts)
-hydrostatic = Label("hydrostatic", validator=lambda value: type(value) in [LabelledForm, Term])
+
+# labels for terms in the equations
+time_derivative = Label("time_derivative")
+transport = Label("transport",
+                  validator=lambda value: type(value) == TransportEquationType)
+diffusion = Label("diffusion")
+pressure_gradient = DynamicsLabel("pressure_gradient")
+coriolis = DynamicsLabel("coriolis")
+divergence = DynamicsLabel("divergence")
+gravity = DynamicsLabel("gravity")
+hydrostatic = DynamicsLabel("hydrostatic")
+incompressible = DynamicsLabel("incompressible")
+sponge = DynamicsLabel("sponge")

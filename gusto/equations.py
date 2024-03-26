@@ -8,13 +8,13 @@ from firedrake import (
     SpatialCoordinate, split, Constant, action
 )
 from firedrake.fml import (
-    Term, all_terms, keep, drop, Label, subject, name_label,
+    Term, all_terms, keep, drop, Label, subject,
     replace_subject, replace_trial_function
 )
 from gusto.fields import PrescribedFields
 from gusto.labels import (
     time_derivative, transport, prognostic, hydrostatic, linearisation,
-    pressure_gradient, coriolis
+    pressure_gradient, coriolis, divergence, gravity, incompressible, sponge
 )
 from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (
@@ -892,7 +892,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
     pressure.
     """
 
-    def __init__(self, domain, parameters, Omega=None, sponge=None,
+    def __init__(self, domain, parameters, Omega=None, sponge_options=None,
                  extra_terms=None, space_names=None,
                  linearisation_map='default',
                  u_transport_option="vector_invariant_form",
@@ -907,8 +907,9 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 the model's physical parameters.
             Omega (:class:`ufl.Expr`, optional): an expression for the planet's
                 rotation vector. Defaults to None.
-            sponge (:class:`ufl.Expr`, optional): an expression for a sponge
-                layer. Defaults to None.
+            sponge_options (:class:`SpongeLayerParameters`, optional): any
+                parameters for applying a sponge layer to the upper boundary.
+                Defaults to None.
             extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
                 included in the equation set. Defaults to None.
             space_names (dict, optional): a dictionary of strings for names of
@@ -925,9 +926,9 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 'vector_invariant_form', 'vector_advection_form' and
                 'circulation_form'.
                 Defaults to 'vector_invariant_form'.
-            diffusion_options (:class:`DiffusionOptions`, optional): any options
-                to specify for applying diffusion terms to variables. Defaults
-                to None.
+            diffusion_options (:class:`DiffusionParameters`, optional): any
+                options to specify for applying diffusion terms to variables.
+                Defaults to None.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
                 None.
@@ -1023,15 +1024,15 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 raise NotImplementedError('Only mixing ratio tracers are implemented')
         theta_v = theta / (Constant(1.0) + tracer_mr_total)
 
-        pressure_gradient_form = name_label(subject(prognostic(
+        pressure_gradient_form = pressure_gradient(subject(prognostic(
             cp*(-div(theta_v*w)*exner*dx
-                + jump(theta_v*w, n)*avg(exner)*dS_v), 'u'), self.X), "pressure_gradient")
+                + jump(theta_v*w, n)*avg(exner)*dS_v), 'u'), self.X))
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = name_label(subject(prognostic(Term(g*inner(domain.k, w)*dx),
-                                                     'u'), self.X), "gravity")
+        gravity_form = gravity(subject(prognostic(Term(g*inner(domain.k, w)*dx),
+                                                  'u'), self.X))
 
         residual = (mass_form + adv_form + pressure_gradient_form + gravity_form)
 
@@ -1077,22 +1078,22 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             residual += subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, "u"), self.X)
 
-        if sponge is not None:
+        if sponge_options is not None:
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
             x = SpatialCoordinate(domain.mesh)
             z = x[len(x)-1]
-            H = sponge.H
-            zc = sponge.z_level
+            H = sponge_options.H
+            zc = sponge_options.z_level
             assert float(zc) < float(H), \
                 "The sponge level is set above the height the your domain"
-            mubar = sponge.mubar
+            mubar = sponge_options.mubar
             muexpr = conditional(z <= zc,
                                  0.0,
                                  mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
             self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
 
-            residual += name_label(subject(prognostic(
-                self.mu*inner(w, domain.k)*inner(u, domain.k)*dx, 'u'), self.X), "sponge")
+            residual += sponge(subject(prognostic(
+                self.mu*inner(w, domain.k)*inner(u, domain.k)*dx, 'u'), self.X))
 
         if diffusion_options is not None:
             for field, diffusion in diffusion_options:
@@ -1196,12 +1197,11 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
 
         k = self.domain.k
         u = split(self.X)[0]
-        self.residual += name_label(
+        self.residual += hydrostatic(
             subject(
                 prognostic(
                     -inner(k, self.tests[0]) * inner(k, u) * dx, "u"),
-                self.X),
-            "hydrostatic_form")
+                self.X))
 
     def hydrostatic_projection(self, t):
         """
@@ -1380,19 +1380,17 @@ class BoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Divergence Term
         # -------------------------------------------------------------------- #
-
         if compressible:
             cs = parameters.cs
-            divergence_form = subject(
-                prognostic(cs**2 * phi * div(u) * dx, 'p'), self.X)
+            divergence_form = divergence(subject(
+                prognostic(cs**2 * phi * div(u) * dx, 'p'), self.X))
         else:
             # This enforces that div(u) = 0
             # The p features here so that the div(u) evaluated in the
             # "forcing" step replaces the whole pressure field, rather than
             # merely providing an increment to it.
-            divergence_form = name_label(
+            divergence_form = incompressible(
                 subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
-                "incompressibility"
             )
 
         residual = (mass_form + adv_form + divergence_form
