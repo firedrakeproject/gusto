@@ -1300,21 +1300,33 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
         return replace_subject(new_subj)(t)
 
 
-class IncompressibleBoussinesqEquations(PrognosticEquationSet):
+class BoussinesqEquations(PrognosticEquationSet):
     """
-    Class for the incompressible Boussinesq equations, which evolve the velocity
-    'u', the pressure 'p' and the buoyancy 'b'.
+    Class for the Boussinesq equations, which evolve the velocity
+    'u', the pressure 'p' and the buoyancy 'b'. Can be compressible or
+    incompressible, depending on the value of the input flag, which defaults
+    to compressible.
 
-    The pressure features as a Lagrange multiplier to enforce the
-    incompressibility of the equations. The equations are then                \n
+    The compressible form of the equations is
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
+    ∂p/∂t + cs**2 ∇.u = p,                                                    \n
+    ∂b/∂t + (u.∇)b = 0,                                                       \n
+    where k is the vertical unit vector, Ω is the planet's rotation vector
+    and cs is the sound speed.
+
+    For the incompressible form of the equations, the pressure features as
+    a Lagrange multiplier to enforce incompressibility. The equations are     \n
     ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
     ∇.u = p,                                                                  \n
     ∂b/∂t + (u.∇)b = 0,                                                       \n
-    where k is the vertical unit vector and, Ω is the planet's rotation vector.
+    where k is the vertical unit vector and Ω is the planet's rotation vector.
     """
 
-    def __init__(self, domain, parameters, Omega=None,
-                 space_names=None, linearisation_map='default',
+    def __init__(self, domain, parameters,
+                 compressible=True,
+                 Omega=None,
+                 space_names=None,
+                 linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
@@ -1324,6 +1336,8 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
+            compressible (bool, optional): flag to indicate whether the
+                equations are compressible. Defaults to True
             Omega (:class:`ufl.Expr`, optional): an expression for the planet's
                 rotation vector. Defaults to None.
             space_names (dict, optional): a dictionary of strings for names of
@@ -1376,11 +1390,12 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
+        self.compressible = compressible
 
         w, phi, gamma = self.tests[0:3]
         u, p, b = split(self.X)
         u_trial = split(self.trials)[0]
-        b_bar = split(self.X_ref)[2]
+        _, p_bar, b_bar = split(self.X_ref)
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -1407,7 +1422,15 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
             linear_b_adv = linear_advection_form(gamma, b_bar, u_trial)
             b_adv = linearisation(b_adv, linear_b_adv)
 
-        adv_form = subject(u_adv + b_adv, self.X)
+        if compressible:
+            # Pressure transport
+            p_adv = prognostic(advection_form(phi, p, u), 'p')
+            if self.linearisation_map(p_adv.terms[0]):
+                linear_p_adv = linear_advection_form(phi, p_bar, u_trial)
+                p_adv = linearisation(p_adv, linear_p_adv)
+            adv_form = subject(u_adv + p_adv + b_adv, self.X)
+        else:
+            adv_form = subject(u_adv + b_adv, self.X)
 
         # Add transport of tracers
         if len(active_tracers) > 0:
@@ -1426,14 +1449,20 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Divergence Term
         # -------------------------------------------------------------------- #
-        # This enforces that div(u) = 0
-        # The p features here so that the div(u) evaluated in the "forcing" step
-        # replaces the whole pressure field, rather than merely providing an
-        # increment to it.
-        divergence_form = name_label(
-            subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
-            "incompressibility"
-        )
+
+        if compressible:
+            cs = parameters.cs
+            divergence_form = subject(
+                prognostic(cs**2 * phi * div(u) * dx, 'p'), self.X)
+        else:
+            # This enforces that div(u) = 0
+            # The p features here so that the div(u) evaluated in the
+            # "forcing" step replaces the whole pressure field, rather than
+            # merely providing an increment to it.
+            divergence_form = name_label(
+                subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
+                "incompressibility"
+            )
 
         residual = (mass_form + adv_form + divergence_form
                     + pressure_gradient_form + gravity_form)
