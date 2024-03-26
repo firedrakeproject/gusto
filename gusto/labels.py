@@ -39,7 +39,8 @@ class DynamicsLabel(Label):
             labelled_terms = (Label.__call__(self, t, value) for t in new_target.terms)
             return LabelledForm(*labelled_terms)
         else:
-            super().__call__(new_target, value)
+            new = super().__call__(new_target, value)
+            return new
 
 
 class PhysicsLabel(Label):
@@ -82,7 +83,8 @@ class PhysicsLabel(Label):
             labelled_terms = (Label.__call__(self, t, value) for t in new_target.terms)
             return LabelledForm(*labelled_terms)
         else:
-            super().__call__(new_target, value)
+            new = super().__call__(new_target, value)
+            return new
 
 
 # ---------------------------------------------------------------------------- #

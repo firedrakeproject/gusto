@@ -1031,10 +1031,11 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = gravity(subject(prognostic(Term(g*inner(domain.k, w)*dx),
+        gravity_form = gravity(subject(prognostic(g*inner(domain.k, w)*dx,
                                                   'u'), self.X))
 
-        residual = (mass_form + adv_form + pressure_gradient_form + gravity_form)
+        residual = (mass_form + adv_form + pressure_gradient_form
+                    + gravity_form)
 
         # -------------------------------------------------------------------- #
         # Moist Thermodynamic Divergence Term
@@ -1074,9 +1075,9 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Extra Terms (Coriolis, Sponge, Diffusion and others)
         # -------------------------------------------------------------------- #
         if Omega is not None:
-            # TODO: add linearisation and label for this
-            residual += subject(prognostic(
-                inner(w, cross(2*Omega, u))*dx, "u"), self.X)
+            # TODO: add linearisation
+            residual += coriolis(subject(prognostic(
+                inner(w, cross(2*Omega, u))*dx, "u"), self.X))
 
         if sponge_options is not None:
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
@@ -1370,12 +1371,14 @@ class BoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
-        pressure_gradient_form = subject(prognostic(-div(w)*p*dx, 'u'), self.X)
+        pressure_gradient_form = pressure_gradient(subject(prognostic(
+            -div(w)*p*dx, 'u'), self.X))
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(-b*inner(w, domain.k)*dx, 'u'), self.X)
+        gravity_form = gravity(subject(prognostic(
+            -b*inner(w, domain.k)*dx, 'u'), self.X))
 
         # -------------------------------------------------------------------- #
         # Divergence Term
@@ -1400,9 +1403,9 @@ class BoussinesqEquations(PrognosticEquationSet):
         # Extra Terms (Coriolis)
         # -------------------------------------------------------------------- #
         if Omega is not None:
-            # TODO: add linearisation and label for this
-            residual += subject(prognostic(
-                inner(w, cross(2*Omega, u))*dx, 'u'), self.X)
+            # TODO: add linearisation
+            residual += coriolis(subject(prognostic(
+                inner(w, cross(2*Omega, u))*dx, 'u'), self.X))
 
         # -------------------------------------------------------------------- #
         # Linearise equations
