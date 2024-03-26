@@ -1692,13 +1692,14 @@ class TracerDensity(DiagnosticField):
     """Diagnostic for computing the density of a tracer. This is
     computed as the product of a mixing ratio and dry density"""
 
-    name = "TracerDensity"
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return "TracerDensity_"+self.mixing_ratio_name+'_'+self.density_name
 
-    def __init__(self, equation, mixing_ratio_name, density_name, space=None, method='interpolate'):
+    def __init__(self, mixing_ratio_name, density_name, space=None, method='interpolate'):
         """
         Args:
-            equation (:class:`PrognosticEquationSet`): the equation set being
-                solved by the model.
             mixing_ratio_name (str): the name of the tracer mixing ratio variable
             density_name (str): the name of the tracer density variable
             space (:class:`FunctionSpace`, optional): the function space to
@@ -1708,21 +1709,11 @@ class TracerDensity(DiagnosticField):
                 for this diagnostic. Valid options are 'interpolate', 'project' and
                 'assign'. Defaults to 'interpolate'.
         """
-        
+
         super().__init__(method=method, required_fields=(mixing_ratio_name, density_name))
-        
+
         self.mixing_ratio_name = mixing_ratio_name
         self.density_name = density_name
-        
-        # We assume the density is in DG (or L2?)
-        #assert equation.space_names[density_name] == 'DG', \
-        #    f'The space for {density_name} needs to be DG for the Tracer Density diagnostic'
-        # Check that the mixing ratio is in DG or theta
-        
-        # What if this isn't in the equation list, like in Terminator Toy?
-        self.m_X_space_name = equation.space_names[mixing_ratio_name]
-        assert self.m_X_space_name == 'DG' or self.m_X_space_name == 'theta', \
-            f'The space for {mixing_ratio_name} needs to be DG or theta for the Tracer Density diagnostic'
 
     def setup(self, domain, state_fields):
         """
@@ -1735,16 +1726,32 @@ class TracerDensity(DiagnosticField):
 
         m_X = state_fields(self.mixing_ratio_name)
         rho_d = state_fields(self.density_name)
+        
+        m_X_space = m_X.function_space()
+        rho_d_space = rho_d.function_space()
 
-        cell = domain.mesh._base_mesh.ufl_cell().cellname()
-        horiz_elt = FiniteElement('DG', cell, domain.horizontal_degree*2)
+        if domain.spaces.extruded_mesh:
+            m_X_horiz = m_X_space.ufl_element().sub_elements[0]
+            m_X_vert = m_X_space.ufl_element().sub_elements[1]
+            rho_d_horiz = rho_d_space.ufl_element().sub_elements[0]
+            rho_d_vert = rho_d_space.ufl_element().sub_elements[1]
 
-        if self.m_X_space_name == 'theta':
-            vert_elt = FiniteElement('CG', interval, domain.vertical_degree*2+1) 
+            horiz_degree = m_X_horiz.degree() + rho_d_horiz.degree()
+            vert_degree = m_X_vert.degree() + rho_d_vert.degree()
+
+            cell = domain.mesh._base_mesh.ufl_cell().cellname()
+            horiz_elt = FiniteElement('DG', cell, horiz_degree)
+            vert_elt = FiniteElement('DG', cell, vert_degree)
+            elt = TensorProductElement(horiz_elt, vert_elt)
+
         else:
-            vert_elt = FiniteElement('DG', interval, domain.vertical_degree*2)
+            m_X_degree = m_X_space.ufl_element().degree()
+            rho_d_degree = rho_d_space.ufl_element().degree()
+            degree = m_X_degree + rho_d_degree
 
-        elt = TensorProductElement(horiz_elt, vert_elt)
+            cell = domain.mesh.ufl_cell().cellname()
+            elt = FiniteElement('DG', cell, degree)
+
         tracer_density_space = FunctionSpace(domain.mesh, elt, name='tracer_density_space')
 
         self.expr = m_X*rho_d
