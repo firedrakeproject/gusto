@@ -11,9 +11,12 @@ domain = Domain(mesh, dt, 'CG', 1)
 
 for epsilon in [0.1]:
     parameters = ShallowWaterParameters(H=1/epsilon, g=1/epsilon)
-    diffusion_options = [("u", DiffusionParameters(kappa=1e-2, mu=10/delta)),
-                         ("v", DiffusionParameters(kappa=1e-2, mu=10/delta)),
-                         ("D", DiffusionParameters(kappa=1e-2, mu=10/delta))]
+    u_diffusion_opts = DiffusionParameters(kappa=1e-2)
+    v_diffusion_opts = DiffusionParameters(kappa=1e-2, mu=10/delta)
+    D_diffusion_opts = DiffusionParameters(kappa=1e-2, mu=10/delta)
+    diffusion_options = [("u", u_diffusion_opts),
+                         ("v", v_diffusion_opts),
+                         ("D", D_diffusion_opts)]
     eqns = ShallowWaterEquations_1d(domain, parameters,
                                     fexpr=Constant(1/epsilon),
                                     diffusion_options=diffusion_options)
@@ -23,9 +26,13 @@ for epsilon in [0.1]:
     io = IO(domain, output)
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "v"),
                          DGUpwind(eqns, "D")]
+
+    diffusion_methods = [CGDiffusion(eqns, "u", u_diffusion_opts),
+                         InteriorPenaltyDiffusion(eqns, "v", v_diffusion_opts),
+                         InteriorPenaltyDiffusion(eqns, "D", D_diffusion_opts)]
     # stepper = Timestepper(eqns, ImplicitMidpoint(domain), io)
     stepper = Timestepper(eqns, RK4(domain), io,
-                          spatial_methods=transport_methods)
+                          spatial_methods=transport_methods+diffusion_methods)
 
     D = stepper.fields("D")
     x = SpatialCoordinate(mesh)[0]
@@ -46,4 +53,4 @@ for epsilon in [0.1]:
 
     # D.interpolate(H + 0.1*H*exp(-(x-pi)**2/0.5))
 
-    stepper.run(0, 10)
+    stepper.run(0, 1)

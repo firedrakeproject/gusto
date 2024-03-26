@@ -5,7 +5,7 @@ from gusto.labels import diffusion
 from gusto.spatial_methods import SpatialMethod
 
 
-__all__ = ["InteriorPenaltyDiffusion"]
+__all__ = ["InteriorPenaltyDiffusion", "CGDiffusion"]
 
 
 class DiffusionMethod(SpatialMethod):
@@ -148,3 +148,16 @@ class InteriorPenaltyDiffusion(DiffusionMethod):
         else:
             self.form = interior_penalty_diffusion_form(
                 equation.domain, self.test, self.field, diffusion_parameters)
+
+
+class CGDiffusion(DiffusionMethod):
+
+    def __init__(self, equation, variable, diffusion_parameters):
+
+        super().__init__(equation, variable)
+
+        if equation.domain.mesh.topological_dimension() == 1:
+            kappa = diffusion_parameters.kappa
+            self.form = diffusion(kappa * self.test.dx(0) * self.field.dx(0) * dx)
+        else:
+            raise NotImplementedError("CG diffusion only implemented in 1D")
