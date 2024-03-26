@@ -899,7 +899,6 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
 
         self.parameters = parameters
         g = parameters.g
-        H = parameters.H
 
         w1, w2, phi = self.tests
         u, v, D = split(self.X)
