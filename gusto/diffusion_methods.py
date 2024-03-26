@@ -115,8 +115,8 @@ def interior_penalty_diffusion_form_1d(domain, test, q, parameters):
         """
 
         fluxes = (
-            -2*avg(q * n) * avg(test.dx(0) * M)
-            -avg(q.dx(0) * M) * 2 * avg(test * n)
+            - 2*avg(q * n) * avg(test.dx(0) * M)
+            - avg(q.dx(0) * M) * 2 * avg(test * n)
             + mu * 2 * avg(q * n) * 2 * avg(test * n)*kappa
         )*dS
         return fluxes

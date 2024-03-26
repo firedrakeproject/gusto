@@ -307,7 +307,7 @@ def upwind_advection_form_1d(domain, test, q, ibp=IntegrateByParts.ONCE,
     un = 0.5*(ubar * n[0] + abs(ubar * n[0]))
 
     if ibp == IntegrateByParts.ONCE:
-        L = -(test * ubar).dx(0) * q *dx + \
+        L = -(test * ubar).dx(0) * q * dx + \
             jump(test) * (un('+')*q('+') - un('-')*q('-'))*dS
     else:
         raise NotImplementedError("1d advection form only implemented with option ibp=IntegrateByParts.ONCE")

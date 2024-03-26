@@ -1,6 +1,5 @@
 from firedrake import *
 from gusto import *
-import matplotlib.pyplot as plt
 
 L = 2*pi
 n = 128
@@ -24,19 +23,17 @@ for epsilon in [0.1]:
     io = IO(domain, output)
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "v"),
                          DGUpwind(eqns, "D")]
-    #stepper = Timestepper(eqns, ImplicitMidpoint(domain), io)
+    # stepper = Timestepper(eqns, ImplicitMidpoint(domain), io)
     stepper = Timestepper(eqns, RK4(domain), io,
                           spatial_methods=transport_methods)
 
     D = stepper.fields("D")
     x = SpatialCoordinate(mesh)[0]
     hexpr = (
-        exp(-4*(x-0.5*pi)**2) * sin((x-0.5*pi)) +
-        exp(-2*(x-1*pi)**2) * sin(8*(x-1*pi))
+        exp(-4*(x-0.5*pi)**2) * sin((x-0.5*pi))
+        + exp(-2*(x-1*pi)**2) * sin(8*(x-1*pi))
     )
     h = Function(D.function_space()).interpolate(hexpr)
-    #plot(h)
-    #plt.show()
 
     A = assemble(h*dx)
     B = h.dat.data.max()
@@ -44,12 +41,9 @@ for epsilon in [0.1]:
     C1 = (1-C0)/B
     H = parameters.H
     D.interpolate(C1*hexpr + C0)
-    #plot(D)
-    #plt.show()
-    print(assemble(D*dx))
-    print(D.dat.data.max())
-    #D += parameters.H
 
-    #D.interpolate(H + 0.1*H*exp(-(x-pi)**2/0.5))
+    # D += parameters.H
+
+    # D.interpolate(H + 0.1*H*exp(-(x-pi)**2/0.5))
 
     stepper.run(0, 10)

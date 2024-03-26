@@ -933,8 +933,8 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
             V = FunctionSpace(domain.mesh, 'CG', 1)
             f = self.prescribed_fields('coriolis', V).interpolate(fexpr)
             coriolis_form = coriolis(subject(
-                prognostic(- f * v * w1 * dx, "u") +
-                prognostic(  f * u * w2 * dx, "v"), self.X))
+                prognostic(-f * v * w1 * dx, "u")
+                + prognostic(f * u * w2 * dx, "v"), self.X))
             self.residual += coriolis_form
 
         if diffusion_options is not None:
