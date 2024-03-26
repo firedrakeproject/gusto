@@ -5,8 +5,8 @@ from firedrake import assemble, dot, dx, Function, sqrt, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
-    Projector, Interpolator, FunctionSpace, MixedFunctionSpace, \
-    interval, FiniteElement, TensorProductElement
+    Projector, Interpolator, FunctionSpace, FiniteElement, \
+    TensorProductElement
 from firedrake.assign import Assigner
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -1726,7 +1726,7 @@ class TracerDensity(DiagnosticField):
 
         m_X = state_fields(self.mixing_ratio_name)
         rho_d = state_fields(self.density_name)
-        
+
         m_X_space = m_X.function_space()
         rho_d_space = rho_d.function_space()
 
