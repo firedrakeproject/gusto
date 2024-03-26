@@ -927,8 +927,6 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
         self.residual = (mass_form + adv_form
                          + pressure_gradient_form)
 
-        self.residual += subject(prognostic(phi * H * u.dx(0) * dx, "u"), self.X)
-
         if fexpr is not None:
             V = FunctionSpace(domain.mesh, 'CG', 1)
             f = self.prescribed_fields('coriolis', V).interpolate(fexpr)
