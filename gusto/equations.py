@@ -883,6 +883,31 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
 
 class ShallowWaterEquations_1d(PrognosticEquationSet):
 
+    """
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        parameters (:class:`Configuration`, optional): an object containing
+            the model's physical parameters.
+        fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
+            parameter. Defaults to None.
+        space_names (dict, optional): a dictionary of strings for names of
+            the function spaces to use for the spatial discretisation. The
+            keys are the names of the prognostic variables. Defaults to None
+            in which case the spaces are taken from the de Rham complex.
+        linearisation_map (func, optional): a function specifying which
+            terms in the equation set to linearise. If None is specified
+            then no terms are linearised. Defaults to the string 'default',
+            in which case the linearisation includes both time derivatives,
+            the 'D' transport term, pressure gradient and Coriolis terms.
+        no_normal_flow_bc_ids (list, optional): a list of IDs of domain
+            boundaries at which no normal flow will be enforced. Defaults to
+            None.
+        active_tracers (list, optional): a list of `ActiveTracer` objects
+            that encode the metadata for any active tracers to be included
+            in the equations. Defaults to None.
+        """
+
     def __init__(self, domain, parameters,
                  fexpr=None,
                  space_names=None, linearisation_map='default',
@@ -891,6 +916,9 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
 
         field_names = ['u', 'v', 'D']
         space_names = {'u': 'HDiv', 'v': 'L2', 'D': 'L2'}
+
+        if active_tracers is not None:
+            raise NotImplementedError('Tracers not implemented for 1D shallow water equations')
 
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
