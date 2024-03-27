@@ -1,6 +1,7 @@
 """Common diagnostic fields."""
 
-from firedrake import assemble, dot, dx, Function, sqrt, \
+from multiprocessing import Value
+from firedrake import op2, assemble, dot, dx, Function, sqrt, ln, \
     TestFunction, TrialFunction, Constant, grad, inner, curl, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, cross, avg, jump, pi, \
@@ -20,8 +21,8 @@ import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
            "ZComponent", "MeridionalComponent", "ZonalComponent", "RadialComponent",
-           "RichardsonNumber", "Energy", "KineticEnergy", "ShallowWaterKineticEnergy",
-           "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy",
+           "RichardsonNumber","Entropy", "PhysicalEntropy", "DynamicEntropy", "Energy", "KineticEnergy", 
+           "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy",
            "CompressibleKineticEnergy", "Exner", "Sum", "Difference", "SteadyStateError",
            "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
@@ -678,6 +679,37 @@ class RichardsonNumber(DiagnosticField):
         Nsq = self.factor*grad_density[z_dim]
         self.expr = Nsq/denom
         super().setup(domain, state_fields)
+
+
+class Entropy(DiagnosticField):
+      """
+      base diagnostic field for entropy diagnostic
+      """
+
+      def __init__(self, equations, space=None, method="interpolate"):
+        self.equations = equations
+        if isinstance(equations, CompressibleEulerEquations):    
+            required_fields = ['rho', 'theta']
+        else:
+            raise NotImplementedError(f'entropy not yet implemented for {type(equations)}')		
+        super().__init__(space=space, method=method, required_fields=tuple(required_fields))
+     
+class PhysicalEntropy(Entropy):
+      name = "PhysicalEntropy"
+      def setup(self, domain, state_fields):
+           rho = state_fields('rho')
+           theta = state_fields('theta')
+           self.expr = rho * ln(theta)
+           super().setup(domain, state_fields)
+
+class DynamicEntropy(Entropy):
+      name = "DyanmicEntropy"
+      def setup(self, domain, state_fields):
+           rho = state_fields('rho')
+           theta = state_fields('theta')
+           self.expr = 0.5 * rho * theta**2
+           super().setup(domain, state_fields)
+
 
 
 # TODO: unify all energy diagnostics -- should be based on equation
