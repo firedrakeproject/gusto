@@ -1074,6 +1074,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
 
         if parameters.Omega is not None:
+            # TODO add linerisation and label for this
             Omega = as_vector((0, 0, parameters.Omega))
             coriolis_form = coriolis(subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, "u"), self.X))

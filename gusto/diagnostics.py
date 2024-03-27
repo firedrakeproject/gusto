@@ -1726,7 +1726,7 @@ class CompressibleVorticity(DiagnosticField):
             n = FacetNormal(domain.mesh)
             a = inner(vort, w) * dx
             L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * dS_h
-            if vorticity_type != 'relative':
+            if vorticity_type == 'absolute':
                 Omega = as_vector((0, 0, self.parameters.Omega))
                 L += inner(2*Omega, w) * dx
 
@@ -1769,6 +1769,8 @@ class CompressibleAbsoluteVorticity(CompressibleVorticity):
     def __init__(self, parameters, space=None, method='solve'):
         u"""
         Args:
+            parameters (:class:`CompressibleEulerParameters`): the configuration
+                object containing the physical parameters for this equation.
             space (:class:`FunctionSpace`, optional): the function space to
                 evaluate the diagnostic field in. Defaults to None, in which
                 case a default space will be chosen for this diagnostic.
