@@ -1694,7 +1694,9 @@ class TracerDensity(DiagnosticField):
 
     @property
     def name(self):
-        """Gives the name of this diagnostic field."""
+        """Gives the name of this diagnostic field. This records
+        the mixing ratio and density names, in case multiple tracer
+        densities are used."""
         return "TracerDensity_"+self.mixing_ratio_name+'_'+self.density_name
 
     def __init__(self, mixing_ratio_name, density_name, space=None, method='interpolate'):
@@ -1704,12 +1706,13 @@ class TracerDensity(DiagnosticField):
             density_name (str): the name of the tracer density variable
             space (:class:`FunctionSpace`, optional): the function space to
                 evaluate the diagnostic field in. Defaults to None, in which
-                case a default space will be chosen for this diagnostic.
+                case a new space will be constructed for this diagnostic. This
+                space will have enough a high enough degree to accurately compute
+                the product of the mixing ratio and density.
             method (str, optional): a string specifying the method of evaluation
                 for this diagnostic. Valid options are 'interpolate', 'project' and
                 'assign'. Defaults to 'interpolate'.
         """
-
         super().__init__(space=space, method=method, required_fields=(mixing_ratio_name, density_name))
 
         self.mixing_ratio_name = mixing_ratio_name
@@ -1728,12 +1731,16 @@ class TracerDensity(DiagnosticField):
         self.expr = m_X*rho_d
 
         if self.space is None:
+            # Construct a space for the diagnostic that has enough
+            # degrees to accurately capture the tracer density. This
+            # will be the sum of the degrees of the individual mixing ratio 
+            # and density function spaces.
             m_X_space = m_X.function_space()
             rho_d_space = rho_d.function_space()
 
             if domain.spaces.extruded_mesh:
                 # Extract the base horizontal and vertical elements
-                # for the mixing ratio and density
+                # for the mixing ratio and density.
                 m_X_horiz = m_X_space.ufl_element().sub_elements[0]
                 m_X_vert = m_X_space.ufl_element().sub_elements[1]
                 rho_d_horiz = rho_d_space.ufl_element().sub_elements[0]
