@@ -3,16 +3,16 @@
 from firedrake import assemble, dot, dx, Function, sqrt, \
     TestFunction, TrialFunction, Constant, grad, inner, curl, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
+    ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, cross, avg, jump, pi, \
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
     Projector, Interpolator, FunctionSpace
 from firedrake.assign import Assigner
 
 from abc import ABCMeta, abstractmethod, abstractproperty
+from gusto.equations import CompressibleEulerEquations
 import gusto.thermodynamics as tde
 from gusto.coord_transforms import rotated_lonlatr_vectors
 from gusto.recovery import Recoverer, BoundaryMethod
-from gusto.equations import CompressibleEulerEquations
 from gusto.active_tracers import TracerVariableType, Phases
 from gusto.logging import logger
 from gusto.kernels import MinKernel, MaxKernel
@@ -1575,9 +1575,9 @@ class Vorticity(DiagnosticField):
 
         if self.method != 'solve':
             if vorticity_type == "potential":
-                self.expr = curl(u + f) / D
+                self.expr = (curl(u) + f) / D
             elif vorticity_type == "absolute":
-                self.expr = curl(u + f)
+                self.expr = curl(u) + f
             elif vorticity_type == "relative":
                 self.expr = curl(u)
 
@@ -1685,6 +1685,112 @@ class RelativeVorticity(Vorticity):
             state_fields (:class:`StateFields`): the model's field container.
         """
         super().setup(domain, state_fields, vorticity_type="relative")
+
+
+class CompressibleVorticity(DiagnosticField):
+    u""" Base diagnostic Field for three dimensional Vorticity """
+
+    def setup(self, domain, state_fields, vorticity_type=None):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+            vorticity_type (str, optional): denotes which type of vorticity to
+                be computed ('relative', 'absolute'). Defaults to
+                None.
+        """
+        # TODO Do we eventually want a potential voriticy?
+        vorticity_types = ['relative', 'absolute']
+        if vorticity_type not in vorticity_types:
+            if vorticity_type == 'potential':
+                raise ValueError('Potential vorticity has not yet been implemented')
+            else:
+                raise ValueError(f'vorticity type must be one of {vorticity_types}, not {vorticity_type}')
+
+        space = domain.spaces('HCurl')
+        u = state_fields('u')
+        if self.method != 'solve':
+            if vorticity_type == 'relative':
+                self.expression = curl(u)
+            elif vorticity_type == 'absolute':
+                Omega = as_vector((0, 0, self.parameters.Omega))
+                self.expression = curl(u) + 2*Omega
+
+        super().setup(domain, state_fields, space=space)
+
+        if self.method == 'solve':
+            vort = TrialFunction(space)
+            w = TestFunction(space)
+            n = FacetNormal(domain.mesh)
+            a = inner(vort, w) * dx
+            L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * dS_h
+            if vorticity_type == 'absolute':
+                Omega = as_vector((0, 0, self.parameters.Omega))
+                L += inner(2*Omega, w) * dx
+
+            problem = LinearVariationalProblem(a, L, self.field)
+            self.evaluator = LinearVariationalSolver(problem, solver_parameters={'ksp_type': 'cg'})
+
+
+class CompressibleRelativeVorticity(CompressibleVorticity):
+    u""" Diagnostic field for compressible euler relative vorticity  """
+    name = 'CompressibleRelativeVorticity'
+
+    def __init__(self, space=None, method='solve'):
+        u"""
+        Args:
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'solve'.
+        """
+        self.solve_implemented = True
+        super().__init__(space=space, method=method, required_fields=('u',))
+
+    def setup(self, domain, state_fields):
+        u"""
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        super().setup(domain, state_fields, vorticity_type='relative')
+
+
+class CompressibleAbsoluteVorticity(CompressibleVorticity):
+    u""" Diagnostic field for compressible euler absolute vorticity  """
+    name = 'CompressibleAbsoluteVorticity'
+
+    def __init__(self, parameters, space=None, method='solve'):
+        u"""
+        Args:
+            parameters (:class:`CompressibleEulerParameters`): the configuration
+                object containing the physical parameters for this equation.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'solve'.
+        """
+        self.solve_implemented = True
+        self.parameters = parameters
+        super().__init__(space=space, method=method, required_fields=('u'))
+
+    def setup(self, domain, state_fields):
+        u"""
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        super().setup(domain, state_fields, vorticity_type='absolute')
 
 
 class TracerDensity(DiagnosticField):
