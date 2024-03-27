@@ -1,7 +1,7 @@
 """Common diagnostic fields."""
 
-from multiprocessing import Value
-from firedrake import op2, assemble, dot, dx, Function, sqrt, ln, \
+
+from firedrake import assemble, dot, dx, Function, sqrt, ln, \
     TestFunction, TrialFunction, Constant, grad, inner, curl, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, cross, avg, jump, pi, \
@@ -697,7 +697,7 @@ class Entropy(DiagnosticField):
                 'assign' and 'solve'. Defaults to 'interpolate'.
         """
         self.equations = equations
-        if isinstance(equations, CompressibleEulerEquations):   
+        if isinstance(equations, CompressibleEulerEquations):
             required_fields = ['rho', 'theta']
         else:
             raise NotImplementedError(f'entropy not yet implemented for {type(equations)}')
