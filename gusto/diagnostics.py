@@ -1733,7 +1733,7 @@ class TracerDensity(DiagnosticField):
         if self.space is None:
             # Construct a space for the diagnostic that has enough
             # degrees to accurately capture the tracer density. This
-            # will be the sum of the degrees of the individual mixing ratio 
+            # will be the sum of the degrees of the individual mixing ratio
             # and density function spaces.
             m_X_space = m_X.function_space()
             rho_d_space = rho_d.function_space()
