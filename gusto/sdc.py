@@ -28,7 +28,7 @@ y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m-1)^(k+1)) - F(y_(m-1)^k))
             + sum(j=1,M) s_mj*F(y^k)
 where s_mj = q_mj - q_(m-1)j for entires q_ik in Q.
 
-Key choices in our SDC method are: 
+Key choices in our SDC method are:
 - Choice of quadrature node type (e.g. gauss-lobatto)
 - Number of quadrature nodes
 - Number of iterations - each iteration increases the order of accuracy up to
@@ -49,77 +49,76 @@ from firedrake.fml import (
 from firedrake.utils import cached_property
 
 from gusto.labels import (time_derivative, implicit, explicit)
-from gusto.wrappers import *
-from gusto.time_discretisation import *
 import scipy
 from scipy.special import legendre
 
 
 __all__ = ["BE_SDC", "FE_SDC", "IMEX_SDC"]
 
+
 class SDC(object, metaclass=ABCMeta):
     """Base class for Spectral Deferred Correction schemes."""
 
-    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None, 
+    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
                  limiter=None, options=None):
-            """
-            Initialise SDC object
-            Args:
-                base_scheme (:class:`TimeDiscretisation`): Base time stepping scheme to get first guess of solution on 
-                    quadrature nodes.
-                domain (:class:`Domain`): the model's domain object, containing the
-                    mesh and the compatible function spaces.
-                M (int): Number of quadrature nodes to compute spectral integration over
-                maxk (int): Max number of correction interations
-                quadrature (str): Type of quadrature to be used. Options are gauss-legendre,
-                    gauss-radau and gauss-lobotto.
-                field_name (str, optional): name of the field to be evolved.
-                    Defaults to None.
-                linear_solver_parameters (dict, optional): dictionary of parameters to
-                    pass to the underlying linear solver. Defaults to None.
-                nonlinear_solver_parameters (dict, optional): dictionary of parameters to
-                    pass to the underlying nonlinear solver. Defaults to None.
-                final_update (bool, optional): Whether to compute final update, or just take last
-                    quadrature value. Defaults to True
-                limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
-                options (:class:`AdvectionOptions`, optional): an object containing
-                    options to either be passed to the spatial discretisation, or
-                    to control the "wrapper" methods, such as Embedded DG or a
-                    recovery method. Defaults to None.
-            """
-            self.base = base_scheme
-            self.field_name = field_name
-            self.domain = domain
-            self.dt_coarse = domain.dt
-            self.M = M
-            self.maxk = maxk
-            self.final_update = final_update
+        """
+        Initialise SDC object
+        Args:
+            base_scheme (:class:`TimeDiscretisation`): Base time stepping scheme to get first guess of solution on
+                quadrature nodes.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            M (int): Number of quadrature nodes to compute spectral integration over
+            maxk (int): Max number of correction interations
+            quadrature (str): Type of quadrature to be used. Options are gauss-legendre,
+                gauss-radau and gauss-lobotto.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            linear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying linear solver. Defaults to None.
+            nonlinear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying nonlinear solver. Defaults to None.
+            final_update (bool, optional): Whether to compute final update, or just take last
+                quadrature value. Defaults to True
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+            the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+        """
+        self.base = base_scheme
+        self.field_name = field_name
+        self.domain = domain
+        self.dt_coarse = domain.dt
+        self.M = M
+        self.maxk = maxk
+        self.final_update = final_update
 
-            # get default linear and nonlinear solver options if none passed in
-            if linear_solver_parameters is None:
-                self.linear_solver_parameters = {'snes_type': 'ksponly',
-                                                'ksp_type': 'cg',
+        # get default linear and nonlinear solver options if none passed in
+        if linear_solver_parameters is None:
+            self.linear_solver_parameters = {'snes_type': 'ksponly',
+                                             'ksp_type': 'cg',
+                                             'pc_type': 'bjacobi',
+                                             'sub_pc_type': 'ilu'}
+            self.linear_solver_parameters = linear_solver_parameters
+
+        if nonlinear_solver_parameters is None:
+            self.nonlinear_solver_parameters = {'snes_type': 'newtonls',
+                                                'ksp_type': 'gmres',
                                                 'pc_type': 'bjacobi',
                                                 'sub_pc_type': 'ilu'}
-                self.linear_solver_parameters = linear_solver_parameters
+        else:
+            self.nonlinear_solver_parameters = nonlinear_solver_parameters
 
-            if nonlinear_solver_parameters is None:
-                self.nonlinear_solver_parameters = {'snes_type': 'newtonls',
-                                                    'ksp_type': 'gmres',
-                                                    'pc_type': 'bjacobi',
-                                                    'sub_pc_type': 'ilu'}
-            else:
-                self.nonlinear_solver_parameters = nonlinear_solver_parameters
-
-            # Set up quadrature nodes over [0.dt] and create
-            # the various integration matrices
-            self.create_nodes(self.dt_coarse, quadrature)
-            self.Qmatrix()
-            self.Smatrix()
-            self.Qfinal()
-            self.dtau = np.diff(np.append(0, self.nodes))
+        # Set up quadrature nodes over [0.dt] and create
+        # the various integration matrices
+        self.create_nodes(self.dt_coarse, quadrature)
+        self.Qmatrix()
+        self.Smatrix()
+        self.Qfinal()
+        self.dtau = np.diff(np.append(0, self.nodes))
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -177,7 +176,7 @@ class SDC(object, metaclass=ABCMeta):
                                     replace_subject(self.Uin, old_idx=self.idx))
         residual_rhs = a - L
         return residual_rhs.form
-    
+
     @abstractproperty
     def res_SDC(self):
         """Set up the residual for the SDC solve."""
@@ -214,12 +213,12 @@ class SDC(object, metaclass=ABCMeta):
         """Set up the residual for final solve."""
         # y^(n+1)
         a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                        replace_subject(self.U_fin, old_idx=self.idx),
-                        drop)
+                                    replace_subject(self.U_fin, old_idx=self.idx),
+                                    drop)
         # y^n
         F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                            replace_subject(self.Un, old_idx=self.idx),
-                            drop)
+                                        replace_subject(self.Un, old_idx=self.idx),
+                                        drop)
         F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
                                 lambda t: -1*t)
 
@@ -230,7 +229,7 @@ class SDC(object, metaclass=ABCMeta):
 
         residual_final = a + F_exp + Q
         return residual_final.form
-    
+
     @cached_property
     def solver_fin(self):
         """Set up the problem and the solver for final update."""
@@ -239,7 +238,7 @@ class SDC(object, metaclass=ABCMeta):
         solver_name = self.field_name+self.__class__.__name__+"_final"
         return NonlinearVariationalSolver(prob_fin, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
-    
+
     @cached_property
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
@@ -247,7 +246,7 @@ class SDC(object, metaclass=ABCMeta):
         prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.nonlinear_solver_parameters,
-                                              options_prefix=solver_name)
+                                          options_prefix=solver_name)
 
     @cached_property
     def solver_rhs(self):
@@ -256,7 +255,7 @@ class SDC(object, metaclass=ABCMeta):
         prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_rhs"
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
-                                         options_prefix=solver_name)
+                                          options_prefix=solver_name)
 
     def create_nodes(self, b, quadrature, A=-1, B=1):
         """
@@ -281,9 +280,9 @@ class SDC(object, metaclass=ABCMeta):
         elif quadrature == "gauss-lobatto":
             # nodes and weights for gauss - lobatto quadrature
             pn = legendre(M-1)
-            pn_d=pn.deriv()
+            pn_d = pn.deriv()
             nodes[0] = A
-            nodes[-1]= B
+            nodes[-1] = B
             nodes[1:-1] = np.sort(pn_d.roots)
         elif quadrature == "gauss-legendre":
             # nodes and weights for gauss - legendre quadrature
@@ -345,7 +344,7 @@ class SDC(object, metaclass=ABCMeta):
 
     def get_weights(self, b):
         """
-        Genrates integration weights my integrating Lagrande polynomials to the 
+        Genrates integration weights my integrating Lagrande polynomials to the
         quadrature nodes.
         Args:
             b (real): End of quadrature domain (start is a=0)
@@ -382,7 +381,7 @@ class SDC(object, metaclass=ABCMeta):
 
         # Get weights for the interval [0,dt]
         w = self.get_weights(self.dt_coarse)
-        
+
         self.Qfin[:] = w
 
     def Smatrix(self):
@@ -405,7 +404,7 @@ class SDC(object, metaclass=ABCMeta):
             self.quad[j].assign(0.)
             for k in range(self.M):
                 self.quad[j] += float(self.S[j, k])*self.fUnodes[k]
-    
+
     def compute_quad_final(self):
         """
         Computes final integration of F(y) on quadrature nodes
@@ -425,6 +424,7 @@ class SDC(object, metaclass=ABCMeta):
         """
         pass
 
+
 class FE_SDC(SDC):
 
     def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,
@@ -432,7 +432,7 @@ class FE_SDC(SDC):
         """
         Initialise Forward Euler SDC scheme
         Args:
-            base_scheme (:class:`TimeDiscretisation`): Base time stepping scheme to get first guess of solution on 
+            base_scheme (:class:`TimeDiscretisation`): Base time stepping scheme to get first guess of solution on
                 quadrature nodes.
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
@@ -477,7 +477,7 @@ class FE_SDC(SDC):
                                     replace_subject(self.Uin, old_idx=self.idx))
         residual_rhs = a - L
         return residual_rhs.form
-    
+
     @property
     def res_SDC(self):
         """Set up the residual for the SDC solve."""
@@ -514,12 +514,12 @@ class FE_SDC(SDC):
         """Set up the residual for final solve."""
         # y^(n+1)
         a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                        replace_subject(self.U_fin, old_idx=self.idx),
-                        drop)
+                                    replace_subject(self.U_fin, old_idx=self.idx),
+                                    drop)
         # y^n
         F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                            replace_subject(self.Un, old_idx=self.idx),
-                            drop)
+                                        replace_subject(self.Un, old_idx=self.idx),
+                                        drop)
         F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
                                 lambda t: -1*t)
 
@@ -539,7 +539,7 @@ class FE_SDC(SDC):
         solver_name = self.field_name+self.__class__.__name__+"_final"
         return NonlinearVariationalSolver(prob_fin, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
-    
+
     @cached_property
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
@@ -547,7 +547,7 @@ class FE_SDC(SDC):
         prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.linear_solver_parameters,
-                                              options_prefix=solver_name)
+                                          options_prefix=solver_name)
 
     @cached_property
     def solver_rhs(self):
@@ -555,11 +555,12 @@ class FE_SDC(SDC):
         # setup linear solver using rhs residual defined in derived class
         prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_rhs"
-        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters)
+        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
+                                          options_prefix=solver_name)
 
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
-        
+
         # Compute initial guess on quadrature nodes with low-order
         # base timestepper
         self.Unodes[0].assign(self.Un)
@@ -571,14 +572,14 @@ class FE_SDC(SDC):
         k = 0
         while k < self.maxk:
             k += 1
-            
-            # Compute sum(j=1,M) s_mj*F(y_m^k) 
+
+            # Compute sum(j=1,M) s_mj*F(y_m^k)
             for m in range(1, self.M+1):
                 self.Uin.assign(self.Unodes[m])
                 self.solver_rhs.solve()
                 self.fUnodes[m-1].assign(self.Urhs)
             self.compute_quad()
-            
+
             # Loop through quadrature nodes and solve
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
@@ -591,7 +592,7 @@ class FE_SDC(SDC):
                 # Set initial guess for solver
                 self.U_SDC.assign(self.Unodes[m])
 
-                # Compute 
+                # Compute
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m-1)^(k+1)) - F(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*F(y^k)
                 self.solver_SDC.solve()
@@ -618,6 +619,7 @@ class FE_SDC(SDC):
         else:
             x_out.assign(self.Unodes[-1])
 
+
 class BE_SDC(SDC):
 
     def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,
@@ -625,7 +627,7 @@ class BE_SDC(SDC):
         """
         Initialise Backward Euler SDC scheme
         Args:
-            base_scheme (:class:`TimeDiscretisation`): Base time stepping scheme to get first guess of solution on 
+            base_scheme (:class:`TimeDiscretisation`): Base time stepping scheme to get first guess of solution on
                 quadrature nodes.
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
@@ -657,7 +659,7 @@ class BE_SDC(SDC):
                 the equation to include.
         """
         super().setup(equation, apply_bcs, *active_labels)
-    
+
     @property
     def res_rhs(self):
         """Set up the residual for the calculation of F(Y)."""
@@ -676,12 +678,12 @@ class BE_SDC(SDC):
         """Set up the residual for final solve."""
         # y^(n+1)
         a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                        replace_subject(self.U_fin, old_idx=self.idx),
-                        drop)
+                                    replace_subject(self.U_fin, old_idx=self.idx),
+                                    drop)
         # y^n
         F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                            replace_subject(self.Un, old_idx=self.idx),
-                            drop)
+                                        replace_subject(self.Un, old_idx=self.idx),
+                                        drop)
         F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
                                 lambda t: -1*t)
 
@@ -707,8 +709,8 @@ class BE_SDC(SDC):
                                 drop)
         # dt*F(y_m^k)
         F01 = F.label_map(lambda t: t.has_label(time_derivative),
-                            drop,
-                            replace_subject(self.U01, old_idx=self.idx))
+                          drop,
+                          replace_subject(self.U01, old_idx=self.idx))
 
         F01 = F01.label_map(all_terms, lambda t: -1*t)
 
@@ -717,9 +719,9 @@ class BE_SDC(SDC):
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
 
-        F_SDC = F_imp + F_exp + F01  + Q
+        F_SDC = F_imp + F_exp + F01 + Q
         return F_SDC.form
-    
+
     @cached_property
     def solver_fin(self):
         """Set up the problem and the solver for final update."""
@@ -728,7 +730,7 @@ class BE_SDC(SDC):
         solver_name = self.field_name+self.__class__.__name__+"_final"
         return NonlinearVariationalSolver(prob_fin, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
-    
+
     @cached_property
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
@@ -736,7 +738,7 @@ class BE_SDC(SDC):
         prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.nonlinear_solver_parameters,
-                                              options_prefix=solver_name)
+                                          options_prefix=solver_name)
 
     @cached_property
     def solver_rhs(self):
@@ -744,8 +746,9 @@ class BE_SDC(SDC):
         # setup linear solver using rhs residual defined in derived class
         prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_rhs"
-        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters)
-    
+        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
+                                          options_prefix=solver_name)
+
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
 
@@ -755,12 +758,12 @@ class BE_SDC(SDC):
         for m in range(self.M):
             self.base.dt = self.dtau[m]
             self.base.apply(self.Unodes[m+1], self.Unodes[m])
-        
+
         # Iterate through correction sweeps
         k = 0
         while k < self.maxk:
             k += 1
-            
+
             # Compute sum(j=1,M) s_mj*F(y_m^k)
             for m in range(1, self.M+1):
                 self.Uin.assign(self.Unodes[m])
@@ -777,11 +780,11 @@ class BE_SDC(SDC):
                 self.U0.assign(self.Unodes[m-1])
                 self.Un.assign(self.Unodes1[m-1])
                 self.Q_.assign(self.quad[m-1])
-                
+
                 # Set initial guess for solver
                 self.U_SDC.assign(self.Unodes[m])
 
-                # Compute 
+                # Compute
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k))
                 #             + sum(j=1,M) s_mj*F(y_m^k)
                 self.solver_SDC.solve()
@@ -808,6 +811,7 @@ class BE_SDC(SDC):
         else:
             x_out.assign(self.Unodes[-1])
 
+
 class IMEX_SDC(SDC):
 
     def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,
@@ -815,7 +819,7 @@ class IMEX_SDC(SDC):
         """
         Initialise IMEX (FWSW) Euler SDC scheme
         Args:
-            base_scheme (:class:`TimeDiscretisation`): Base time stepping scheme to get first guess of solution on 
+            base_scheme (:class:`TimeDiscretisation`): Base time stepping scheme to get first guess of solution on
                 quadrature nodes.
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
@@ -866,12 +870,12 @@ class IMEX_SDC(SDC):
         """Set up the residual for final solve."""
         # y^(n+1)
         a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                        replace_subject(self.U_fin, old_idx=self.idx),
-                        drop)
+                                    replace_subject(self.U_fin, old_idx=self.idx),
+                                    drop)
         # y^n
         F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                            replace_subject(self.Un, old_idx=self.idx),
-                            drop)
+                                        replace_subject(self.Un, old_idx=self.idx),
+                                        drop)
         F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
                                 lambda t: -1*t)
 
@@ -919,7 +923,7 @@ class IMEX_SDC(SDC):
 
         F_SDC = F_imp + F_exp + F01 + F0 + Q
         return F_SDC.form
-    
+
     @cached_property
     def solver_fin(self):
         """Set up the problem and the solver for final update."""
@@ -928,7 +932,7 @@ class IMEX_SDC(SDC):
         solver_name = self.field_name+self.__class__.__name__+"_final"
         return NonlinearVariationalSolver(prob_fin, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
-    
+
     @cached_property
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
@@ -936,7 +940,7 @@ class IMEX_SDC(SDC):
         prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.nonlinear_solver_parameters,
-                                              options_prefix=solver_name)
+                                          options_prefix=solver_name)
 
     @cached_property
     def solver_rhs(self):
@@ -944,7 +948,8 @@ class IMEX_SDC(SDC):
         # setup linear solver using rhs residual defined in derived class
         prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_rhs"
-        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters)
+        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
+                                          options_prefix=solver_name)
 
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
@@ -981,7 +986,7 @@ class IMEX_SDC(SDC):
                 # Set initial guess for solver
                 self.U_SDC.assign(self.Unodes[m])
 
-                # Compute 
+                # Compute
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
