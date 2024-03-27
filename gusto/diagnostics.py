@@ -26,7 +26,8 @@ __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent
            "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
-           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
+           "ShallowWaterPotentialVorticity", "ShallowWaterRelativeVorticity", "ShallowWaterAbsoluteVorticity", 
+           "Vorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
            "BruntVaisalaFrequencySquared", "TracerDensity"]
 
 
@@ -796,7 +797,7 @@ class ShallowWaterPotentialEnergy(Energy):
 
 class ShallowWaterPotentialEnstrophy(DiagnosticField):
     """Diagnostic (dry) compressible kinetic energy density."""
-    def __init__(self, base_field_name="PotentialVorticity", space=None,
+    def __init__(self, base_field_name="ShallowWaterPotentialVorticity", space=None,
                  method='interpolate'):
         """
         Args:
@@ -809,15 +810,17 @@ class ShallowWaterPotentialEnstrophy(DiagnosticField):
                 for this diagnostic. Valid options are 'interpolate', 'project',
                 'assign' and 'solve'. Defaults to 'interpolate'.
         """
-        base_enstrophy_names = ["PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity"]
+        base_enstrophy_names = ["ShallowWaterPotentialVorticity", 
+                                "ShallowWaterRelativeVorticity", 
+                                "ShallowWaterAbsoluteVorticity"]
         if base_field_name not in base_enstrophy_names:
             raise ValueError(
                 f"Don't know how to compute enstrophy with base_field_name={base_field_name};"
                 + f"base_field_name should be one of {base_enstrophy_names}")
         # Work out required fields
-        if base_field_name in ["PotentialVorticity", "AbsoluteVorticity"]:
+        if base_field_name in ["ShallowWaterPotentialVorticity", "ShallowWaterAbsoluteVorticity"]:
             required_fields = (base_field_name, "D")
-        elif base_field_name == "RelativeVorticity":
+        elif base_field_name == "ShallowWaterRelativeVorticity":
             required_fields = (base_field_name, "D", "coriolis")
         else:
             raise NotImplementedError(f'Enstrophy with vorticity {base_field_name} not implemented')
@@ -839,17 +842,17 @@ class ShallowWaterPotentialEnstrophy(DiagnosticField):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        if self.base_field_name == "PotentialVorticity":
-            pv = state_fields("PotentialVorticity")
+        if self.base_field_name == "ShallowWaterPotentialVorticity":
+            pv = state_fields("ShallowWaterPotentialVorticity")
             D = state_fields("D")
             self.expr = 0.5*pv**2*D
-        elif self.base_field_name == "RelativeVorticity":
-            zeta = state_fields("RelativeVorticity")
+        elif self.base_field_name == "ShallowWaterRelativeVorticity":
+            zeta = state_fields("ShallowWaterRelativeVorticity")
             D = state_fields("D")
             f = state_fields("coriolis")
             self.expr = 0.5*(zeta + f)**2/D
-        elif self.base_field_name == "AbsoluteVorticity":
-            zeta_abs = state_fields("AbsoluteVorticity")
+        elif self.base_field_name == "ShallowWaterAbsoluteVorticity":
+            zeta_abs = state_fields("ShallowWaterAbsoluteVorticity")
             D = state_fields("D")
             self.expr = 0.5*(zeta_abs)**2/D
         else:
@@ -1547,7 +1550,7 @@ class Precipitation(DiagnosticField):
         self.field.assign(self.field + self.flux)
 
 
-class Vorticity(DiagnosticField):
+class ShallowWaterVorticity(DiagnosticField):
     """Base diagnostic field class for shallow-water vorticity variables."""
 
     def setup(self, domain, state_fields, vorticity_type=None):
@@ -1602,9 +1605,9 @@ class Vorticity(DiagnosticField):
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={"ksp_type": "cg"})
 
 
-class PotentialVorticity(Vorticity):
+class ShallowWaterPotentialVorticity(ShallowWaterVorticity):
     u"""Diagnostic field for shallow-water potential vorticity, q=(∇×(u+f))/D"""
-    name = "PotentialVorticity"
+    name = "ShallowWaterPotentialVorticity"
 
     def __init__(self, space=None, method='solve'):
         """
@@ -1631,9 +1634,9 @@ class PotentialVorticity(Vorticity):
         super().setup(domain, state_fields, vorticity_type="potential")
 
 
-class AbsoluteVorticity(Vorticity):
+class ShallowWaterAbsoluteVorticity(ShallowWaterVorticity):
     u"""Diagnostic field for absolute vorticity, ζ=∇×(u+f)"""
-    name = "AbsoluteVorticity"
+    name = "ShallowWaterAbsoluteVorticity"
 
     def __init__(self, space=None, method='solve'):
         """
@@ -1659,9 +1662,9 @@ class AbsoluteVorticity(Vorticity):
         super().setup(domain, state_fields, vorticity_type="absolute")
 
 
-class RelativeVorticity(Vorticity):
+class ShallowWaterRelativeVorticity(ShallowWaterVorticity):
     u"""Diagnostic field for relative vorticity, ζ=∇×u"""
-    name = "RelativeVorticity"
+    name = "ShallowWaterRelativeVorticity"
 
     def __init__(self, space=None, method='solve'):
         """
@@ -1687,7 +1690,7 @@ class RelativeVorticity(Vorticity):
         super().setup(domain, state_fields, vorticity_type="relative")
 
 
-class CompressibleVorticity(DiagnosticField):
+class Vorticity(DiagnosticField):
     u""" Base diagnostic Field for three dimensional Vorticity """
 
     def setup(self, domain, state_fields, vorticity_type=None):
@@ -1734,9 +1737,9 @@ class CompressibleVorticity(DiagnosticField):
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={'ksp_type': 'cg'})
 
 
-class CompressibleRelativeVorticity(CompressibleVorticity):
+class RelativeVorticity(Vorticity):
     u""" Diagnostic field for compressible euler relative vorticity  """
-    name = 'CompressibleRelativeVorticity'
+    name = 'RelativeVorticity'
 
     def __init__(self, space=None, method='solve'):
         u"""
@@ -1762,9 +1765,9 @@ class CompressibleRelativeVorticity(CompressibleVorticity):
         super().setup(domain, state_fields, vorticity_type='relative')
 
 
-class CompressibleAbsoluteVorticity(CompressibleVorticity):
+class AbsoluteVorticity(Vorticity):
     u""" Diagnostic field for compressible euler absolute vorticity  """
-    name = 'CompressibleAbsoluteVorticity'
+    name = 'AbsoluteVorticity'
 
     def __init__(self, parameters, space=None, method='solve'):
         u"""
