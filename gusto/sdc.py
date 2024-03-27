@@ -96,38 +96,6 @@ class SDC(object, metaclass=ABCMeta):
             self.M = M
             self.maxk = maxk
             self.final_update = final_update
-            self.options = options
-            self.limiter = limiter
-            self.courant_max = None
-
-            if options is not None:
-                self.wrapper_name = options.name
-                if self.wrapper_name == "mixed_options":
-                    self.wrapper = MixedFSWrapper()
-
-                    for field, suboption in options.suboptions.items():
-                        if suboption.name == 'embedded_dg':
-                            self.wrapper.subwrappers.update({field: EmbeddedDGWrapper(self, suboption)})
-                        elif suboption.name == "recovered":
-                            self.wrapper.subwrappers.update({field: RecoveryWrapper(self, suboption)})
-                        elif suboption.name == "supg":
-                            raise RuntimeError(
-                                'Time discretisation: suboption SUPG is currently not implemented within MixedOptions')
-                        else:
-                            raise RuntimeError(
-                                f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
-                elif self.wrapper_name == "embedded_dg":
-                    self.wrapper = EmbeddedDGWrapper(self, options)
-                elif self.wrapper_name == "recovered":
-                    self.wrapper = RecoveryWrapper(self, options)
-                elif self.wrapper_name == "supg":
-                    self.wrapper = SUPGWrapper(self, options)
-                else:
-                    raise RuntimeError(
-                        f'Time discretisation: wrapper {self.wrapper_name} not implemented')
-            else:
-                self.wrapper = None
-                self.wrapper_name = None
 
             # get default linear and nonlinear solver options if none passed in
             if linear_solver_parameters is None:
@@ -164,11 +132,8 @@ class SDC(object, metaclass=ABCMeta):
         """
         # Inherit from base time discretisation
         self.base.setup(equation, apply_bcs, *active_labels)
+        self.equation = self.base.equation
         self.residual = self.base.residual
-        self.evaluate_source = self.base.evalaute_source
-        self.physics_names = self.base.physics_names
-        self.wrapper = self.base.wrapper
-        self.fs = self.base.fs
 
         # set up SDC variables
         if self.field_name is not None and hasattr(equation, "field_names"):
@@ -200,7 +165,7 @@ class SDC(object, metaclass=ABCMeta):
     def nlevels(self):
         return 1
 
-    @property
+    @abstractproperty
     def res_rhs(self):
         """Set up the residual for the calculation of F(Y)."""
         a = self.residual.label_map(lambda t: t.has_label(time_derivative),
@@ -213,11 +178,11 @@ class SDC(object, metaclass=ABCMeta):
         residual_rhs = a - L
         return residual_rhs.form
     
-    @property
+    @abstractproperty
     def res_SDC(self):
         """Set up the residual for the SDC solve."""
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    map_if_false=lambda t: self.dt_imp*t)
+                                    map_if_false=lambda t: self.dt*t)
 
         # y_m^(k+1)
         a = F.label_map(lambda t: t.has_label(time_derivative),
@@ -244,7 +209,7 @@ class SDC(object, metaclass=ABCMeta):
         residual_SDC = a + F_exp + F0 + Q
         return residual_SDC.form
 
-    @property
+    @abstractproperty
     def res_fin(self):
         """Set up the residual for final solve."""
         # y^(n+1)
@@ -282,8 +247,8 @@ class SDC(object, metaclass=ABCMeta):
         prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.nonlinear_solver_parameters,
-                                          options_prefix=solver_name)
-    
+                                              options_prefix=solver_name)
+
     @cached_property
     def solver_rhs(self):
         """Set up the problem and the solver for mass matrix inversion."""
@@ -291,7 +256,7 @@ class SDC(object, metaclass=ABCMeta):
         prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_rhs"
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
-                                          options_prefix=solver_name)
+                                         options_prefix=solver_name)
 
     def create_nodes(self, b, quadrature, A=-1, B=1):
         """
@@ -484,11 +449,10 @@ class FE_SDC(SDC):
             final_update (bool, optional): Whether to compute final update, or just take last
                 quadrature value. Defaults to True
         """
-        super().__init__(domain, M, maxk, quadrature, field_name=field_name,
+        super().__init__(base_scheme, domain, M, maxk, quadrature, field_name=field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
                          final_update=final_update)
-        self.base = base_scheme
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -501,26 +465,81 @@ class FE_SDC(SDC):
         """
         super().setup(equation, apply_bcs, *active_labels)
 
-    @cached_property
+    @property
     def res_rhs(self):
         """Set up the residual for the calculation of F(Y)."""
-        return super(SDC, self).res_rhs
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs, old_idx=self.idx),
+                                    drop)
+        # F(y)
+        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    drop,
+                                    replace_subject(self.Uin, old_idx=self.idx))
+        residual_rhs = a - L
+        return residual_rhs.form
     
-    @cached_property
+    @property
     def res_SDC(self):
         """Set up the residual for the SDC solve."""
-        return super(SDC, self).res_SDC
+        F = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    map_if_false=lambda t: self.dt*t)
 
-    @cached_property
+        # y_m^(k+1)
+        a = F.label_map(lambda t: t.has_label(time_derivative),
+                        replace_subject(self.U_SDC, old_idx=self.idx),
+                        drop)
+
+        # y_(m-1)^(k+1) + dt*F(y_(m-1)^(k+1))
+        F_exp = F.label_map(all_terms, replace_subject(self.Un, old_idx=self.idx))
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
+
+        # dt*F(y_(m-1)^k)
+        F0 = F.label_map(lambda t: t.has_label(time_derivative),
+                         drop,
+                         replace_subject(self.U0, old_idx=self.idx))
+        F0 = F0.label_map(all_terms,
+                          lambda t: -1*t)
+
+        # sum(j=1,M) s_mj*F(y_m^k
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_, old_idx=self.idx),
+                                    drop)
+
+        residual_SDC = a + F_exp + F0 + Q
+        return residual_SDC.form
+
+    @property
     def res_fin(self):
         """Set up the residual for final solve."""
-        return super(SDC, self).res_fin
+        # y^(n+1)
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                        replace_subject(self.U_fin, old_idx=self.idx),
+                        drop)
+        # y^n
+        F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                            replace_subject(self.Un, old_idx=self.idx),
+                            drop)
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
+
+        # sum(j=1,M) q_j*F(y_j)
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.quad_final, old_idx=self.idx),
+                                    drop)
+
+        residual_final = a + F_exp + Q
+        return residual_final.form
 
     @cached_property
     def solver_fin(self):
         """Set up the problem and the solver for final update."""
-        return super(SDC, self).solver_fin
-
+        # setup linear solver using final residual defined in derived class
+        prob_fin = NonlinearVariationalProblem(self.res_fin, self.U_fin, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_final"
+        return NonlinearVariationalSolver(prob_fin, solver_parameters=self.linear_solver_parameters,
+                                          options_prefix=solver_name)
+    
     @cached_property
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
@@ -528,12 +547,15 @@ class FE_SDC(SDC):
         prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.linear_solver_parameters,
-                                          options_prefix=solver_name)
+                                              options_prefix=solver_name)
 
     @cached_property
     def solver_rhs(self):
         """Set up the problem and the solver for mass matrix inversion."""
-        return super(SDC, self).solver_rhs
+        # setup linear solver using rhs residual defined in derived class
+        prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_rhs"
+        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters)
 
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
@@ -572,7 +594,7 @@ class FE_SDC(SDC):
                 # Compute 
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m-1)^(k+1)) - F(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*F(y^k)
-                self.solver_SDC.solve(self.Unodes[m-1])
+                self.solver_SDC.solve()
                 self.Unodes1[m].assign(self.U_SDC)
             for m in range(1, self.M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
@@ -620,11 +642,10 @@ class BE_SDC(SDC):
             final_update (bool, optional): Whether to compute final update, or just take last
                 quadrature value. Defaults to True
         """
-        super().__init__(domain, M, maxk, quadrature, field_name=field_name,
+        super().__init__(base_scheme, domain, M, maxk, quadrature, field_name=field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
                          final_update=final_update)
-        self.base = base_scheme
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -637,17 +658,41 @@ class BE_SDC(SDC):
         """
         super().setup(equation, apply_bcs, *active_labels)
     
-    @cached_property
+    @property
     def res_rhs(self):
         """Set up the residual for the calculation of F(Y)."""
-        return super(SDC, self).res_rhs
-    
-    @cached_property
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs, old_idx=self.idx),
+                                    drop)
+        # F(y)
+        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    drop,
+                                    replace_subject(self.Uin, old_idx=self.idx))
+        residual_rhs = a - L
+        return residual_rhs.form
+
+    @property
     def res_fin(self):
         """Set up the residual for final solve."""
-        return super(SDC, self).res_fin
+        # y^(n+1)
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                        replace_subject(self.U_fin, old_idx=self.idx),
+                        drop)
+        # y^n
+        F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                            replace_subject(self.Un, old_idx=self.idx),
+                            drop)
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
 
-    
+        # sum(j=1,M) q_j*F(y_j)
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.quad_final, old_idx=self.idx),
+                                    drop)
+
+        residual_final = a + F_exp + Q
+        return residual_final.form
+
     @property
     def res_SDC(self):
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
@@ -678,18 +723,29 @@ class BE_SDC(SDC):
     @cached_property
     def solver_fin(self):
         """Set up the problem and the solver for final update."""
-        return super(SDC, self).solver_fin
-
+        # setup linear solver using final residual defined in derived class
+        prob_fin = NonlinearVariationalProblem(self.res_fin, self.U_fin, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_final"
+        return NonlinearVariationalSolver(prob_fin, solver_parameters=self.linear_solver_parameters,
+                                          options_prefix=solver_name)
+    
     @cached_property
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
-        return super(SDC, self).solver_SDC
+        # setup linear solver using SDC residual defined in derived class
+        prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_SDC"
+        return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.nonlinear_solver_parameters,
+                                              options_prefix=solver_name)
 
     @cached_property
     def solver_rhs(self):
         """Set up the problem and the solver for mass matrix inversion."""
-        return super(SDC, self).solver_rhs
-
+        # setup linear solver using rhs residual defined in derived class
+        prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_rhs"
+        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters)
+    
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
 
@@ -776,11 +832,10 @@ class IMEX_SDC(SDC):
             final_update (bool, optional): Whether to compute final update, or just take last
                 quadrature value. Defaults to True
         """
-        super().__init__(domain, M, maxk, quadrature, field_name=field_name,
+        super().__init__(base_scheme, domain, M, maxk, quadrature, field_name=field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
                          final_update=final_update)
-        self.base = base_scheme
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -793,17 +848,41 @@ class IMEX_SDC(SDC):
         """
         super().setup(equation, apply_bcs, *active_labels)
 
-    @cached_property
+    @property
     def res_rhs(self):
         """Set up the residual for the calculation of F(Y)."""
-        return super(SDC, self).res_rhs
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs, old_idx=self.idx),
+                                    drop)
+        # F(y)
+        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    drop,
+                                    replace_subject(self.Uin, old_idx=self.idx))
+        residual_rhs = a - L
+        return residual_rhs.form
 
-    @cached_property
+    @property
     def res_fin(self):
         """Set up the residual for final solve."""
-        return super(SDC, self).res_fin
+        # y^(n+1)
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                        replace_subject(self.U_fin, old_idx=self.idx),
+                        drop)
+        # y^n
+        F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                            replace_subject(self.Un, old_idx=self.idx),
+                            drop)
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
 
-    
+        # sum(j=1,M) q_j*F(y_j)
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.quad_final, old_idx=self.idx),
+                                    drop)
+
+        residual_final = a + F_exp + Q
+        return residual_final.form
+
     @property
     def res_SDC(self):
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
@@ -844,17 +923,28 @@ class IMEX_SDC(SDC):
     @cached_property
     def solver_fin(self):
         """Set up the problem and the solver for final update."""
-        return super(SDC, self).solver_fin
-
+        # setup linear solver using final residual defined in derived class
+        prob_fin = NonlinearVariationalProblem(self.res_fin, self.U_fin, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_final"
+        return NonlinearVariationalSolver(prob_fin, solver_parameters=self.linear_solver_parameters,
+                                          options_prefix=solver_name)
+    
     @cached_property
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
-        return super(SDC, self).solver_SDC
+        # setup linear solver using SDC residual defined in derived class
+        prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_SDC"
+        return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.nonlinear_solver_parameters,
+                                              options_prefix=solver_name)
 
     @cached_property
     def solver_rhs(self):
         """Set up the problem and the solver for mass matrix inversion."""
-        return super(SDC, self).solver_rhs
+        # setup linear solver using rhs residual defined in derived class
+        prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_rhs"
+        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters)
 
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
