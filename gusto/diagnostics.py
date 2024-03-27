@@ -1710,7 +1710,7 @@ class TracerDensity(DiagnosticField):
                 'assign'. Defaults to 'interpolate'.
         """
 
-        super().__init__(method=method, required_fields=(mixing_ratio_name, density_name))
+        super().__init__(space=space, method=method, required_fields=(mixing_ratio_name, density_name))
 
         self.mixing_ratio_name = mixing_ratio_name
         self.density_name = density_name
@@ -1723,36 +1723,39 @@ class TracerDensity(DiagnosticField):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-
         m_X = state_fields(self.mixing_ratio_name)
         rho_d = state_fields(self.density_name)
+        self.expr = m_X*rho_d
 
-        m_X_space = m_X.function_space()
-        rho_d_space = rho_d.function_space()
+        if self.space is None:
+            m_X_space = m_X.function_space()
+            rho_d_space = rho_d.function_space()
 
-        if domain.spaces.extruded_mesh:
-            m_X_horiz = m_X_space.ufl_element().sub_elements[0]
-            m_X_vert = m_X_space.ufl_element().sub_elements[1]
-            rho_d_horiz = rho_d_space.ufl_element().sub_elements[0]
-            rho_d_vert = rho_d_space.ufl_element().sub_elements[1]
+            if domain.spaces.extruded_mesh:
+                # Extract the base horizontal and vertical elements
+                # for the mixing ratio and density
+                m_X_horiz = m_X_space.ufl_element().sub_elements[0]
+                m_X_vert = m_X_space.ufl_element().sub_elements[1]
+                rho_d_horiz = rho_d_space.ufl_element().sub_elements[0]
+                rho_d_vert = rho_d_space.ufl_element().sub_elements[1]
 
-            horiz_degree = m_X_horiz.degree() + rho_d_horiz.degree()
-            vert_degree = m_X_vert.degree() + rho_d_vert.degree()
+                horiz_degree = m_X_horiz.degree() + rho_d_horiz.degree()
+                vert_degree = m_X_vert.degree() + rho_d_vert.degree()
 
-            cell = domain.mesh._base_mesh.ufl_cell().cellname()
-            horiz_elt = FiniteElement('DG', cell, horiz_degree)
-            vert_elt = FiniteElement('DG', cell, vert_degree)
-            elt = TensorProductElement(horiz_elt, vert_elt)
+                cell = domain.mesh._base_mesh.ufl_cell().cellname()
+                horiz_elt = FiniteElement('DG', cell, horiz_degree)
+                vert_elt = FiniteElement('DG', cell, vert_degree)
+                elt = TensorProductElement(horiz_elt, vert_elt)
+            else:
+                m_X_degree = m_X_space.ufl_element().degree()
+                rho_d_degree = rho_d_space.ufl_element().degree()
+                degree = m_X_degree + rho_d_degree
+
+                cell = domain.mesh.ufl_cell().cellname()
+                elt = FiniteElement('DG', cell, degree)
+
+            tracer_density_space = FunctionSpace(domain.mesh, elt, name='tracer_density_space')
+            super().setup(domain, state_fields, space=tracer_density_space)
 
         else:
-            m_X_degree = m_X_space.ufl_element().degree()
-            rho_d_degree = rho_d_space.ufl_element().degree()
-            degree = m_X_degree + rho_d_degree
-
-            cell = domain.mesh.ufl_cell().cellname()
-            elt = FiniteElement('DG', cell, degree)
-
-        tracer_density_space = FunctionSpace(domain.mesh, elt, name='tracer_density_space')
-
-        self.expr = m_X*rho_d
-        super().setup(domain, state_fields, space=tracer_density_space)
+            super().setup(domain, state_fields)

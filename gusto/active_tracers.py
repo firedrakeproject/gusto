@@ -155,8 +155,8 @@ class Rain(ActiveTracer):
     """An object encoding the details of rain as a tracer."""
     def __init__(self, name='rain', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
-                 density_name=None,
-                 transport_eqn=TransportEquationType.advective):
+                 transport_eqn=TransportEquationType.advective,
+                 density_name=None):
         """
         Args:
             name (str, optional): the name for the variable. Defaults to 'rain'.
