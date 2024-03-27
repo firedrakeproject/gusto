@@ -39,11 +39,9 @@ mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 domain = Domain(mesh, dt, "RTCF", 1)
 
 # Equation
-parameters = CompressibleParameters()
-Omega = as_vector((0., 0., 0.5e-4))
+parameters = CompressibleParameters(Omega=0.5e-4)
 balanced_pg = as_vector((0., -1.0e-4*20, 0.))
-eqns = CompressibleEulerEquations(domain, parameters, Omega=Omega,
-                                  extra_terms=[("u", balanced_pg)])
+eqns = CompressibleEulerEquations(domain, parameters, extra_terms=[("u", balanced_pg)])
 
 # I/O
 dirname = 'skamarock_klemp_hydrostatic'
