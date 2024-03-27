@@ -21,7 +21,7 @@ import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
            "ZComponent", "MeridionalComponent", "ZonalComponent", "RadialComponent",
-           "RichardsonNumber","Entropy", "PhysicalEntropy", "DynamicEntropy", "Energy", "KineticEnergy", 
+           "RichardsonNumber", "Entropy", "PhysicalEntropy", "DynamicEntropy", "Energy", "KineticEnergy",
            "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy",
            "CompressibleKineticEnergy", "Exner", "Sum", "Difference", "SteadyStateError",
            "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
@@ -682,34 +682,61 @@ class RichardsonNumber(DiagnosticField):
 
 
 class Entropy(DiagnosticField):
-      """
-      base diagnostic field for entropy diagnostic
-      """
+    """ base diagnostic field for entropy diagnostic """
 
-      def __init__(self, equations, space=None, method="interpolate"):
+    def __init__(self, equations, space=None, method="interpolate"):
+        """
+        Args:
+            equations (:class:`PrognosticEquationSet`): the equation set being
+                solved by the model.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
         self.equations = equations
-        if isinstance(equations, CompressibleEulerEquations):    
+        if isinstance(equations, CompressibleEulerEquations):   
             required_fields = ['rho', 'theta']
         else:
-            raise NotImplementedError(f'entropy not yet implemented for {type(equations)}')		
+            raise NotImplementedError(f'entropy not yet implemented for {type(equations)}')
+
         super().__init__(space=space, method=method, required_fields=tuple(required_fields))
-     
+
+
 class PhysicalEntropy(Entropy):
-      name = "PhysicalEntropy"
-      def setup(self, domain, state_fields):
-           rho = state_fields('rho')
-           theta = state_fields('theta')
-           self.expr = rho * ln(theta)
-           super().setup(domain, state_fields)
+    name = "PhysicalEntropy"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        rho = state_fields('rho')
+        theta = state_fields('theta')
+        self.expr = rho * ln(theta)
+        super().setup(domain, state_fields)
+
 
 class DynamicEntropy(Entropy):
-      name = "DyanmicEntropy"
-      def setup(self, domain, state_fields):
-           rho = state_fields('rho')
-           theta = state_fields('theta')
-           self.expr = 0.5 * rho * theta**2
-           super().setup(domain, state_fields)
+    name = "DyanmicEntropy"
 
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        rho = state_fields('rho')
+        theta = state_fields('theta')
+        self.expr = 0.5 * rho * theta**2
+        super().setup(domain, state_fields)
 
 
 # TODO: unify all energy diagnostics -- should be based on equation
