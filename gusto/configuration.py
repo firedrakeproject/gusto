@@ -1,7 +1,7 @@
 """Some simple tools for configuring the model."""
 from abc import ABCMeta, abstractproperty
 from enum import Enum
-from firedrake import sqrt, Constant, as_vector
+from firedrake import sqrt, Constant
 
 
 __all__ = [
@@ -136,7 +136,9 @@ class CompressibleParameters(Configuration):
     w_sat2 = -17.27  # second const. in Teten's formula (no units)
     w_sat3 = 35.86  # third const. in Teten's formula (K)
     w_sat4 = 610.9  # fourth const. in Teten's formula (Pa)
-    Omega = None # Rotation rate  
+    Omega = None  # Rotation rate
+
+
 class ShallowWaterParameters(Configuration):
     """Physical parameters for the shallow-water equations."""
 

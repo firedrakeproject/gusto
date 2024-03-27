@@ -1072,14 +1072,12 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Extra Terms (Coriolis, Sponge, Diffusion and others)
         # -------------------------------------------------------------------- #
-        
+
         if parameters.Omega is not None:
             Omega = as_vector((0, 0, parameters.Omega))
             coriolis_form = coriolis(subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, "u"), self.X))
             residual += coriolis_form
-
-
 
         if sponge is not None:
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
