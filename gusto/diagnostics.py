@@ -723,7 +723,7 @@ class PhysicalEntropy(Entropy):
 
 
 class DynamicEntropy(Entropy):
-    name = "DyanmicEntropy"
+    name = "DynamicEntropy"
 
     def setup(self, domain, state_fields):
         """
