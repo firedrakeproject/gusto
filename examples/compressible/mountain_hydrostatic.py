@@ -57,7 +57,7 @@ domain = Domain(mesh, dt, "CG", 1)
 # Equation
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 sponge = SpongeLayerParameters(H=H, z_level=H-20000, mubar=0.3)
-eqns = CompressibleEulerEquations(domain, parameters, sponge=sponge)
+eqns = CompressibleEulerEquations(domain, parameters, sponge_options=sponge)
 
 # I/O
 dirname = 'hydrostatic_mountain'
