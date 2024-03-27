@@ -11,7 +11,8 @@ def test_tracer_classes():
     names = ['mr_v', 'big_blob']
     spaces = ['V', 'U']
     transport_eqns = [TransportEquationType.advective,
-                      TransportEquationType.no_transport]
+                      TransportEquationType.no_transport,
+                      TransportEquationType.tracer_conservative]
     variable_types = [TracerVariableType.mixing_ratio]
 
     for name, space, transport_eqn in zip(names, spaces, transport_eqns):

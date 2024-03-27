@@ -20,7 +20,8 @@ from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (
     advection_form, continuity_form, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form,
-    diffusion_form, linear_continuity_form, linear_advection_form
+    diffusion_form, linear_continuity_form, linear_advection_form,
+    tracer_conservative_form
 )
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
 from gusto.configuration import TransportEquationType
@@ -375,6 +376,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 + 'when there is a variable called "u" and none was found')
 
         Vu = domain.spaces("HDiv")
+        # we only apply no normal-flow BCs when extruded mesh is non periodic
         if Vu.extruded and not Vu.ufl_domain().topology.extruded_periodic:
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "bottom"))
             self.bcs['u'].append(DirichletBC(Vu, 0.0, "top"))
@@ -429,6 +431,43 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             else:
                 raise TypeError(f'Tracers must be ActiveTracer objects, not {type(tracer)}')
 
+    def generate_tracer_mass_terms(self, active_tracers):
+        """
+        Adds the mass forms for the active tracers to the equation set.
+
+        Args:
+            active_tracers (list): A list of :class:`ActiveTracer` objects that
+                encode the metadata for the active tracers.
+
+        Returns:
+            :class:`LabelledForm`: a labelled form containing the mass
+                terms for the active tracers. This is the usual mass form
+                unless using tracer_conservative, where it is multiplied
+                by the reference density.
+        """
+
+        for i, tracer in enumerate(active_tracers):
+            idx = self.field_names.index(tracer.name)
+            tracer_prog = split(self.X)[idx]
+            tracer_test = self.tests[idx]
+
+            if tracer.transport_eqn == TransportEquationType.tracer_conservative:
+                ref_density_idx = self.field_names.index(tracer.density_name)
+                ref_density = split(self.X)[ref_density_idx]
+                q = tracer_prog*ref_density
+                mass = subject(prognostic(inner(q, tracer_test)*dx,
+                                          self.field_names[idx]), self.X)
+            else:
+                mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx,
+                                          self.field_names[idx]), self.X)
+
+            if i == 0:
+                mass_form = time_derivative(mass)
+            else:
+                mass_form += time_derivative(mass)
+
+        return mass_form
+
     def generate_tracer_transport_terms(self, active_tracers):
         """
         Adds the transport forms for the active tracers to the equation set.
@@ -472,6 +511,13 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                     tracer_adv = prognostic(
                         continuity_form(tracer_test, tracer_prog, u),
                         tracer.name)
+                elif tracer.transport_eqn == TransportEquationType.tracer_conservative:
+                    ref_density_idx = self.field_names.index(tracer.density_name)
+                    ref_density = split(self.X)[ref_density_idx]
+                    tracer_adv = prognostic(
+                        tracer_conservative_form(tracer_test, tracer_prog,
+                                                 ref_density, u), tracer.name)
+
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
 
@@ -561,9 +607,9 @@ class CoupledTransportEquation(PrognosticEquationSet):
         self.tests = TestFunctions(W)
         self.X = Function(W)
 
-        mass_form = self.generate_mass_terms()
-
-        self.residual = subject(mass_form, self.X)
+        # Add mass forms for the tracers, which will use
+        # mass*density for any tracer_conservative terms
+        self.residual = self.generate_tracer_mass_terms(active_tracers)
 
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)
@@ -572,7 +618,6 @@ class CoupledTransportEquation(PrognosticEquationSet):
 # ============================================================================ #
 # Specified Equation Sets
 # ============================================================================ #
-
 
 class ShallowWaterEquations(PrognosticEquationSet):
     u"""
@@ -985,7 +1030,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(Term(g*inner(domain.k, w)*dx), 'u'), self.X)
+        gravity_form = name_label(subject(prognostic(Term(g*inner(domain.k, w)*dx),
+                                                     'u'), self.X), "gravity")
 
         residual = (mass_form + adv_form + pressure_gradient_form + gravity_form)
 
@@ -1189,21 +1235,33 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
         return replace_subject(new_subj)(t)
 
 
-class IncompressibleBoussinesqEquations(PrognosticEquationSet):
+class BoussinesqEquations(PrognosticEquationSet):
     """
-    Class for the incompressible Boussinesq equations, which evolve the velocity
-    'u', the pressure 'p' and the buoyancy 'b'.
+    Class for the Boussinesq equations, which evolve the velocity
+    'u', the pressure 'p' and the buoyancy 'b'. Can be compressible or
+    incompressible, depending on the value of the input flag, which defaults
+    to compressible.
 
-    The pressure features as a Lagrange multiplier to enforce the
-    incompressibility of the equations. The equations are then                \n
+    The compressible form of the equations is
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
+    ∂p/∂t + cs**2 ∇.u = p,                                                    \n
+    ∂b/∂t + (u.∇)b = 0,                                                       \n
+    where k is the vertical unit vector, Ω is the planet's rotation vector
+    and cs is the sound speed.
+
+    For the incompressible form of the equations, the pressure features as
+    a Lagrange multiplier to enforce incompressibility. The equations are     \n
     ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
     ∇.u = p,                                                                  \n
     ∂b/∂t + (u.∇)b = 0,                                                       \n
-    where k is the vertical unit vector and, Ω is the planet's rotation vector.
+    where k is the vertical unit vector and Ω is the planet's rotation vector.
     """
 
-    def __init__(self, domain, parameters, Omega=None,
-                 space_names=None, linearisation_map='default',
+    def __init__(self, domain, parameters,
+                 compressible=True,
+                 Omega=None,
+                 space_names=None,
+                 linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
@@ -1213,6 +1271,8 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
+            compressible (bool, optional): flag to indicate whether the
+                equations are compressible. Defaults to True
             Omega (:class:`ufl.Expr`, optional): an expression for the planet's
                 rotation vector. Defaults to None.
             space_names (dict, optional): a dictionary of strings for names of
@@ -1265,11 +1325,12 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
+        self.compressible = compressible
 
         w, phi, gamma = self.tests[0:3]
         u, p, b = split(self.X)
         u_trial = split(self.trials)[0]
-        b_bar = split(self.X_ref)[2]
+        _, p_bar, b_bar = split(self.X_ref)
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -1296,7 +1357,15 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
             linear_b_adv = linear_advection_form(gamma, b_bar, u_trial)
             b_adv = linearisation(b_adv, linear_b_adv)
 
-        adv_form = subject(u_adv + b_adv, self.X)
+        if compressible:
+            # Pressure transport
+            p_adv = prognostic(advection_form(phi, p, u), 'p')
+            if self.linearisation_map(p_adv.terms[0]):
+                linear_p_adv = linear_advection_form(phi, p_bar, u_trial)
+                p_adv = linearisation(p_adv, linear_p_adv)
+            adv_form = subject(u_adv + p_adv + b_adv, self.X)
+        else:
+            adv_form = subject(u_adv + b_adv, self.X)
 
         # Add transport of tracers
         if len(active_tracers) > 0:
@@ -1315,14 +1384,20 @@ class IncompressibleBoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Divergence Term
         # -------------------------------------------------------------------- #
-        # This enforces that div(u) = 0
-        # The p features here so that the div(u) evaluated in the "forcing" step
-        # replaces the whole pressure field, rather than merely providing an
-        # increment to it.
-        divergence_form = name_label(
-            subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
-            "incompressibility"
-        )
+
+        if compressible:
+            cs = parameters.cs
+            divergence_form = subject(
+                prognostic(cs**2 * phi * div(u) * dx, 'p'), self.X)
+        else:
+            # This enforces that div(u) = 0
+            # The p features here so that the div(u) evaluated in the
+            # "forcing" step replaces the whole pressure field, rather than
+            # merely providing an increment to it.
+            divergence_form = name_label(
+                subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
+                "incompressibility"
+            )
 
         residual = (mass_form + adv_form + divergence_form
                     + pressure_gradient_form + gravity_form)

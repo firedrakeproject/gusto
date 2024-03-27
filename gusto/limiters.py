@@ -8,11 +8,12 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
                        FiniteElement, TensorProductElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
-from gusto.kernels import LimitMidpoints
+from gusto.kernels import LimitMidpoints, ClipZero
 
 import numpy as np
 
-__all__ = ["DG1Limiter", "ThetaLimiter", "NoLimiter", "MixedFSLimiter"]
+__all__ = ["DG1Limiter", "ThetaLimiter", "NoLimiter", "ZeroLimiter",
+           "MixedFSLimiter"]
 
 
 class DG1Limiter(object):
@@ -161,6 +162,52 @@ class ThetaLimiter(object):
         self._limit_midpoints_kernel.apply(self.field_hat, self.field_DG1, self.field_old)
         # Return to original space
         field.interpolate(self.field_hat)
+
+
+class ZeroLimiter(object):
+    """
+    A simple limiter to enforce non-negativity of a field pointwise.
+
+    Negative values are simply clipped to be zero. There is also the option to
+    project the field to another function space to enforce non-negativity there.
+    """
+
+    def __init__(self, space, clipping_space=None):
+        """
+        Args:
+            space (:class:`FunctionSpace`): the space of the incoming field to
+                clip.
+            clipping_space (:class:`FunctionSpace`, optional): the space in
+                which to clip the field. If not specified, the space of the
+                input field is used.
+        """
+
+        self.space = space
+        if clipping_space is not None:
+            self.clipping_space = clipping_space
+            self.map_to_clip = True
+            self.field_to_clip = Function(self.clipping_space)
+        else:
+            self.clipping_space = space
+            self.map_to_clip = False
+
+        self._kernel = ClipZero(self.clipping_space)
+
+    def apply(self, field):
+        """
+        The application of the limiter to the field.
+
+        Args:
+            field (:class:`Function`): the field to apply the limiter to.
+         """
+
+        # Obtain field in clipping space
+        if self.map_to_clip:
+            self.field_to_clip.interpolate(field)
+            self._kernel.apply(self.field_to_clip, self.field_to_clip)
+            field.interpolate(self.field_to_clip)
+        else:
+            self._kernel.apply(field, field)
 
 
 class NoLimiter(object):
