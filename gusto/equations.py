@@ -927,6 +927,14 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
         if active_tracers is not None:
             raise NotImplementedError('Tracers not implemented for 1D shallow water equations')
 
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives, pressure gradient,
+            # Coriolis and transport term from depth equation
+            linearisation_map = lambda t: \
+                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                 or (t.get(prognostic) == 'D' and t.has_label(transport)))
+
+
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -958,7 +966,6 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
         # Transport term needs special linearisation
         if self.linearisation_map(D_adv.terms[0]):
             linear_D_adv = linear_continuity_form_1d(phi, H, u_trial)
-            # linear_D_adv = prognostic(H * phi * u_trial.dx(0) * dx, "D")
             # Add linearisation to D_adv
             D_adv = linearisation(D_adv, linear_D_adv)
 
