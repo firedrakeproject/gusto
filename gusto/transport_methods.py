@@ -151,8 +151,8 @@ class DGUpwind(TransportMethod):
         # -------------------------------------------------------------------- #
         # Determine appropriate form to use
         # -------------------------------------------------------------------- #
-
-        if equation.domain.mesh.topological_dimension() == 1:
+        # first check for 1d mesh and scalar velocity space
+        if equation.domain.mesh.topological_dimension() == 1 and len(equation.domain.spaces("HDiv").shape) == 0:
             assert not vector_manifold_correction
             if self.transport_equation_type == TransportEquationType.advective:
                 form = upwind_advection_form_1d(self.domain, self.test,
