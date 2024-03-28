@@ -1053,8 +1053,6 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
 
         # Use the underlying routine to do a first linearisation of the equations
         self.linearise_equation_set()
-        for t in self.residual:
-            print(t.form)
 
 
 class CompressibleEulerEquations(PrognosticEquationSet):
