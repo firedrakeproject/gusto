@@ -934,7 +934,6 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
                 (any(t.has_label(time_derivative, pressure_gradient, coriolis))
                  or (t.get(prognostic) == 'D' and t.has_label(transport)))
 
-
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
