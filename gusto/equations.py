@@ -888,7 +888,7 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
     the velocity 'u', 'v' and the depth field 'D', solving some variant of:  \n
     ∂u/∂t + u∂u/∂x - fv + g*∂D/∂x = 0,                                       \n
     ∂v/∂t + fu = 0,                                                          \n
-    ∂D/∂t + ∂(uD)/∂x = 0,                                                     \n
+    ∂D/∂t + ∂(uD)/∂x = 0,                                                    \n
     for mean depth 'H', Coriolis parameter 'f' and gravity 'g'.
 
     Args:
