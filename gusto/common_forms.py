@@ -9,9 +9,12 @@ from gusto.configuration import TransportEquationType
 from gusto.labels import (transport, transporting_velocity, diffusion,
                           prognostic, linearisation)
 
-__all__ = ["advection_form", "continuity_form", "vector_invariant_form",
+__all__ = ["advection_form", "advection_form_1d", "continuity_form",
+           "continuity_form_1d", "vector_invariant_form",
            "kinetic_energy_form", "advection_equation_circulation_form",
-           "diffusion_form", "linear_advection_form", "linear_continuity_form",
+           "diffusion_form", "diffusion_form_1d",
+           "linear_advection_form", "linear_continuity_form",
+           "linear_continuity_form_1d",
            "split_continuity_form", "tracer_conservative_form"]
 
 
@@ -31,6 +34,27 @@ def advection_form(test, q, ubar):
     """
 
     L = inner(test, dot(ubar, grad(q)))*dx
+    form = transporting_velocity(L, ubar)
+
+    return transport(form, TransportEquationType.advective)
+
+
+def advection_form_1d(test, q, ubar):
+    u"""
+    The form corresponding to the advective transport operator.
+
+    This describes (u.∇)q, for transporting velocity u and transported q.
+
+    Args:
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    L = test * ubar * q.dx(0)*dx
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.advective)
@@ -76,6 +100,27 @@ def continuity_form(test, q, ubar):
     return transport(form, TransportEquationType.conservative)
 
 
+def continuity_form_1d(test, q, ubar):
+    u"""
+    The form corresponding to the continuity transport operator.
+
+    This describes ∇.(u*q), for transporting velocity u and transported q.
+
+    Args:
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    L = test * (q * ubar).dx(0)*dx
+    form = transporting_velocity(L, ubar)
+
+    return transport(form, TransportEquationType.conservative)
+
+
 def linear_continuity_form(test, qbar, ubar):
     """
     The form corresponding to the linearised continuity transport operator.
@@ -90,6 +135,25 @@ def linear_continuity_form(test, qbar, ubar):
     """
 
     L = qbar*test*div(ubar)*dx
+    form = transporting_velocity(L, ubar)
+
+    return transport(form, TransportEquationType.conservative)
+
+
+def linear_continuity_form_1d(test, qbar, ubar):
+    """
+    The form corresponding to the linearised continuity transport operator.
+
+    Args:
+        test (:class:`TestFunction`): the test function.
+        qbar (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity.
+
+    Returns:
+        :class:`LabelledForm`: a labelled transport form.
+    """
+
+    L = qbar*test*ubar.dx(0)*dx
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.conservative)
@@ -196,6 +260,21 @@ def diffusion_form(test, q, kappa):
     """
 
     form = -inner(test, div(kappa*grad(q)))*dx
+
+    return diffusion(form)
+
+
+def diffusion_form_1d(test, q, kappa):
+    u"""
+    The diffusion form, -∇.(κ∇q) for diffusivity κ and variable q.
+
+    Args:
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be diffused.
+        kappa: (:class:`ufl.Expr`): the diffusivity value.
+    """
+
+    form = -test * (kappa*q.dx(0)).dx(0)*dx
 
     return diffusion(form)
 
