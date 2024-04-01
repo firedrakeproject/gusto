@@ -137,22 +137,48 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.equation = equation
         self.residual = equation.residual
 
+        print(self.field_name)
+  
         if self.field_name is not None and hasattr(equation, "field_names"):
-            self.idx = equation.field_names.index(self.field_name)
-            self.fs = equation.spaces[self.idx]
-            self.residual = self.residual.label_map(
-                lambda t: t.get(prognostic) == self.field_name,
-                lambda t: Term(
-                    split_form(t.form)[self.idx].form,
-                    t.labels),
-                drop)
+            if isinstance(self.field_name, list):
+                # Multiple fields are being solved simultaneously.
+                # This enables conservative transport to be implemented
+                # with SIQN.
+                bcs = []
+                
+                for subfield in self.field_name:
+                    self.idx = equation.field_names.index(subfield)
+                    self.fs = equation.spaces[self.idx]
+                    self.residual = self.residual.label_map(
+                        lambda t: t.get(prognostic) == subfield,
+                        lambda t: Term(
+                            split_form(t.form)[self.idx].form,
+                            t.labels),
+                        drop)
+                        
+                    # Hmm, how to best apply BCs if we get multiple...
+                    if equation.bcs[subfield] != []:
+                        bcs.append(equation.bcs[subfield])
+                    #bcs = equation.bcs[subfield]
+                
+            else:
+                self.idx = equation.field_names.index(self.field_name)
+                self.fs = equation.spaces[self.idx]
+                self.residual = self.residual.label_map(
+                    lambda t: t.get(prognostic) == self.field_name,
+                    lambda t: Term(
+                        split_form(t.form)[self.idx].form,
+                        t.labels),
+                    drop)
+                bcs = equation.bcs[self.field_name]
 
         else:
             self.field_name = equation.field_name
             self.fs = equation.function_space
             self.idx = None
-
-        bcs = equation.bcs[self.field_name]
+            bcs = equation.bcs[self.field_name]
+            
+        print(bcs)
 
         if len(active_labels) > 0:
             self.residual = self.residual.label_map(
@@ -231,6 +257,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         for bc in bcs]
         else:
             self.bcs = bcs
+            
+        print(self.bcs)
 
         # -------------------------------------------------------------------- #
         # Make the required functions

@@ -568,15 +568,41 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.active_transport = []
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
-            assert scheme.field_name in equation_set.field_names
-            self.active_transport.append((scheme.field_name, scheme))
-            # Check that there is a corresponding transport method
-            method_found = False
-            for method in spatial_methods:
-                if scheme.field_name == method.variable and method.term_label == transport:
-                    method_found = True
-            assert method_found, f'No transport method found for variable {scheme.field_name}'
+            
+            if isinstance(scheme.field_name, list):
+                # Multiple fields are being transported simulatenously,
+                # to enable conservative transport
+                name_str = ''
+                for subfield in scheme.field_name:
+                    print(subfield)
+                    assert subfield in equation_set.field_names
+                    
+                    method_found = False
+                    
+                    for method in spatial_methods:
+                        if subfield == method.variable and method.term_label == transport:
+                            method_found = True
+                    assert method_found, f'No transport method found for variable {scheme.field_name}'
+                    name_str += subfield+' '
+                # Join names later?
+                # How does other code mix names ... . ? 
+                #self.active_transport.append((scheme.field_name, scheme))
+                self.active_transport.append(('conserved_fields: '+name_str, scheme))
+                
+            else:
+                assert scheme.field_name in equation_set.field_names
+                
+                method_found = False
+            
+                for method in spatial_methods:
+                    if scheme.field_name == method.variable and method.term_label == transport:
+                        method_found = True
+                        self.active_transport.append((scheme.field_name, scheme))
+                        
+                assert method_found, f'No transport method found for variable {scheme.field_name}'
 
+        print(self.active_transport)
+        
         self.diffusion_schemes = []
         if diffusion_schemes is not None:
             for scheme in diffusion_schemes:
