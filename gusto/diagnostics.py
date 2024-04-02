@@ -8,6 +8,7 @@ from firedrake import assemble, dot, dx, Function, sqrt, \
     Projector, Interpolator, FunctionSpace, FiniteElement, \
     TensorProductElement
 from firedrake.assign import Assigner
+from ufl.domain import extract_unique_domain
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 import gusto.thermodynamics as tde
@@ -93,7 +94,7 @@ class Diagnostics(object):
             f (:class:`Function`): field to compute diagnostic for.
         """
 
-        area = assemble(1*dx(domain=f.ufl_domain()))
+        area = assemble(1*dx(domain=extract_unique_domain(f)))
         return sqrt(assemble(inner(f, f)*dx)/area)
 
     @staticmethod
