@@ -1491,13 +1491,14 @@ class BoussinesqEquations(PrognosticEquationSet):
             active_tracers = []
 
         if linearisation_map == 'default':
-            # Default linearisation is time derivatives and scalar transport terms
+            # Default linearisation is time derivatives, scalar transport,
+            # pressure gradiant, gravity and divergence terms
             # Don't include active tracers
             linearisation_map = lambda t: \
                 t.get(prognostic) in ['u', 'p', 'b'] \
                 and (
-                    any(t.has_label(time_derivative, pressure_gradient))
-                    or t.get(name_label) in ["sound", "gravity"]
+                    any(t.has_label(time_derivative, pressure_gradient,
+                                    divergence, gravity))
                     or (t.get(prognostic) not in ['u'] and t.has_label(transport)))
 
         super().__init__(field_names, domain, space_names,
