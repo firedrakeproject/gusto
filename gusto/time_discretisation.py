@@ -27,6 +27,7 @@ import scipy
 from scipy.special import legendre
 from scipy.linalg import lu
 from firedrake.petsc import PETSc
+from gusto.qmatrix import *
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage",
@@ -1928,25 +1929,57 @@ class SDC(object, metaclass=ABCMeta):
             self.maxk = maxk
             self.final_update=final_update
 
-            self.create_nodes(self.dt_coarse, quadrature)
-            self.Qmatrix()
-            self.Smatrix()
-            self.Qfinal()
-            self.dtau = np.diff(np.append(0, self.nodes))
+            sdc_dict = getSetup(
+                    nNodes=M, nodeType="RADAU-RIGHT", nIter=maxk, 
+                    qDeltaImplicit="LU", qDeltaExplicit="FE",
+                    preSweep="QDELTA", postSweep="LASTNODE",
+                    qDeltaInitial="BE", nodeDistr="LEGENDRE"
+                    )
+            
+            self.nodes = self.rescale_nodes(sdc_dict["tauNodes"],0., self.dt_coarse,0,1)
 
-            self.Qdelta_exp = np.zeros((M, M))
-            self.Qdelta_imp = np.zeros((M, M))
-            #print(self.Qdelta_exp)
+            self.Q=float(self.dt_coarse)*sdc_dict['qMatrix']
+            self.S=float(self.dt_coarse)*sdc_dict['sMatrix']
+            self.Qfin=float(self.dt_coarse)*sdc_dict['weights']
+            self.dtau = float(self.dt_coarse)*sdc_dict['deltaTau'][0:-1]
+            
+           
+
+            # self.create_nodes(50., quadrature)
+            # print(self.nodes)
+            #self.create_nodes(self.dt_coarse, quadrature)
+            #self.Qmatrix()
+            # print(self.Q)
+            # self.Smatrix()
+            #self.Qfinal()
+            # self.dtau = np.diff(np.append(0., self.nodes))
+            # for x in self.dtau:
+
+            #     print(float(x))
+
+            # self.Qdelta_exp = np.zeros((M, M))
+            # self.Qdelta_imp = np.zeros((M, M))
+            # #print(self.Qdelta_exp)
     
             
-            # fill in matrix values
-            for m in np.arange(M):
+            # # fill in matrix values
+            # for m in np.arange(M):
 
-                self.Qdelta_exp[m+1::,m] = self.dtau[m]/self.dt_coarse
-                self.Qdelta_imp[m::,m] = self.dtau[m]/self.dt_coarse
-            self.Qdelta_imp[-1,-1] = self.dtau[-1]/self.dt_coarse
+            #     self.Qdelta_exp[m+1::,m] = self.dtau[m]/self.dt_coarse
+            #     self.Qdelta_imp[m::,m] = self.dtau[m]/self.dt_coarse
+            # self.Qdelta_imp[-1,-1] = self.dtau[-1]/self.dt_coarse
 
             self.dtau=Constant(self.dtau)
+
+
+            self.Qdelta_imp = sdc_dict['qDeltaI'][0]
+            self.Qdelta_exp = sdc_dict['qDeltaE']
+
+
+            # print(sdc_dict['qDeltaI'][0])
+            # print(self.Qdelta_imp)
+            # print("EXPLICIT DICT", sdc_dict['qDeltaE'])
+            # print("EXPLICIT GENRATED",self.Qdelta_exp)
 
             #print(self.Qdelta_exp)
             #print(self.Qdelta_imp)
@@ -1987,6 +2020,11 @@ class SDC(object, metaclass=ABCMeta):
             # rescale to be between [a,b] instead of [A,B]
             nodes = ((b - a) * nodes + a * B - b * A) / (B - A)
             self.nodes = ((b + a) - nodes)[::-1]  # reverse nodes
+
+    def rescale_nodes(self, nodes, a, b, A, B):
+        nodes = ((b - a) * nodes + a * B - b * A) / (B - A)
+        return nodes
+
 
     def NewtonVM(self, t):
         """
@@ -2082,13 +2120,13 @@ class SDC(object, metaclass=ABCMeta):
     
     def compute_qdelta(self):
         #print(self.Q)
-        print(float(self.dt_coarse))
+        #print(float(self.dt_coarse))
         Q = self.Q/float(self.dt_coarse)
         P, L, U = lu(np.matrix.transpose(Q))
         self.Qdelta= np.matrix.transpose(U)
-        print(P)
-        print(self.Qdelta_imp)
-        print(self.Qdelta_exp)
+        #print(P)
+        #print(self.Qdelta_imp)
+        #print(self.Qdelta_exp)
         self.Qdelta=self.Qdelta_imp 
 
 
@@ -2808,7 +2846,8 @@ class IMEX_SDC_QD(SDC):
         # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
         # and
         # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
-        for i in range(stage):
+
+        for i in range(self.nStages):
             r_exp_kp1 = self.residual.label_map(
                 lambda t: t.has_label(explicit),
                 map_if_true=replace_subject(self.Unodes1[i], old_idx=self.idx),
@@ -2825,8 +2864,6 @@ class IMEX_SDC_QD(SDC):
                 map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
             residual += r_imp_kp1
             residual += r_exp_kp1
-
-        for i in range(self.nStages):
             r_exp_k = self.residual.label_map(
                 lambda t: t.has_label(explicit),
                 map_if_true=replace_subject(self.Unodes[i], old_idx=self.idx),
@@ -2985,7 +3022,6 @@ class IMEX_SDC_QD(SDC):
             for m in range(1, self.M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
 
-            self.Un.assign(self.Unodes1[-1])
         if self.maxk > 0:
             if self.final_update:
                 for m in range(1, self.M+1):
@@ -2999,7 +3035,7 @@ class IMEX_SDC_QD(SDC):
                     self.solver_fin.solve()
                 x_out.assign(self.U_fin)
             else:
-                x_out.assign(self.Un)
+                x_out.assign(self.Unodes[-1])
         else:
             x_out.assign(self.Unodes[-1])
 
