@@ -443,10 +443,6 @@ class BoussinesqSolver(TimesteppingSolver):
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
 
-        # flag to indicate whether we're solving the compressible
-        # form of the equations
-        compressible = equation.compressible
-
         dt = self.dt
         beta_ = dt*self.alpha
         Vu = equation.domain.spaces("HDiv")
@@ -482,7 +478,7 @@ class BoussinesqSolver(TimesteppingSolver):
             - beta*inner(w, k)*b*dx
         )
 
-        if compressible:
+        if equation.compressible:
             cs = equation.parameters.cs
             eqn += phi * (p - p_in) * dx + beta * phi * cs**2 * div(u) * dx
         else:
