@@ -2174,7 +2174,7 @@ class FE_SDC(SDC):
     @property
     def res_SDC(self):
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    map_if_false=lambda t: self.dt_imp*t)
+                                    map_if_false=lambda t: self.dt*t)
 
         a = F.label_map(lambda t: t.has_label(time_derivative),
                         replace_subject(self.U_SDC, old_idx=self.idx),
@@ -2269,11 +2269,11 @@ class FE_SDC(SDC):
             
             self.Unodes1[0].assign(self.Unodes[0])
             for m in range(1, self.M+1):
-                float(self.dtau[m-1])
+                self.dt = float(self.dtau[m-1])
                 self.U0.assign(self.Unodes[m-1])
                 self.Un.assign(self.Unodes1[m-1])
                 self.Q_.assign(self.quad[m-1])
-                self.solver_SDC.solve(self.Unodes[m-1])
+                self.solver_SDC.solve()
                 self.Unodes1[m].assign(self.U_SDC)
             for m in range(1, self.M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
