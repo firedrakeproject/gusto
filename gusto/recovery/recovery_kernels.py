@@ -160,7 +160,6 @@ class BoundaryRecoveryExtruded():
         par_loop(self._top_kernel, dx,
                  args={"x_out": (x_out, WRITE),
                        "x_in": (x_in, READ)},
-                 is_loopy_kernel=True,
                  iteration_region=ON_TOP)
         par_loop(self._bot_kernel, dx,
                  args={"x_out": (x_out, WRITE),
@@ -241,7 +240,6 @@ class BoundaryRecoveryHCurl():
         par_loop(self._bot_kernel, dx,
                  args={"x_out": (x_out, WRITE),
                        "x_in": (x_in, READ)},
-                 is_loopy_kernel=True,
                  iteration_region=ON_BOTTOM)
 
 
