@@ -1,14 +1,14 @@
 """
-The gravity wave test case of Skamarock and Klemp (1994), solved using the
-compressible Boussinesq equations.
+Linear gravity wave test case of Skamarock and Klemp (1994), solved using
+REXI applied to the compressible Boussinesq equations.
 
-Buoyancy is transported using SUPG.
 """
 
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        sin, SpatialCoordinate, Function, pi)
 from firedrake.output import VTKFile
+
 
 def run_rexi_linear_boussinesq(tmpdir):
 
@@ -20,7 +20,6 @@ def run_rexi_linear_boussinesq(tmpdir):
     L = 3.0e5  # Domain length
     H = 1.0e4  # Height position of the model top
 
-    tmax = 3600.
     columns = 300  # number of columns
     nlayers = 10  # horizontal layers
 
