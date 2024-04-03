@@ -8,7 +8,8 @@ from os.path import join, abspath, dirname
 from gusto import *
 from gusto.rexi import *
 from firedrake import (PeriodicUnitSquareMesh, SpatialCoordinate, Constant, sin,
-                       cos, pi, as_vector, Function, File)
+                       cos, pi, as_vector, Function)
+from firedrake.output import VTKFile
 
 import numpy as np
 
@@ -34,7 +35,7 @@ def run_rexi_sw(tmpdir):
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # REXI output
-    rexi_output = File(str(tmpdir)+"/waves_sw/rexi.pvd")
+    rexi_output = VTKFile(str(tmpdir)+"/waves_sw/rexi.pvd")
 
     # Initial conditions
     x, y = SpatialCoordinate(mesh)
