@@ -7,8 +7,9 @@ import sys
 import time
 from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.meshes import get_flat_latlon_mesh
-from firedrake import (Function, functionspaceimpl, File, Constant,
+from firedrake import (Function, functionspaceimpl, Constant,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
+from firedrake.output import VTKFile
 from pyop2.mpi import MPI
 import numpy as np
 from gusto.logging import logger, update_logfile_location
@@ -423,7 +424,7 @@ class IO(object):
         if self.output.dump_vtus:
             # setup pvd output file
             outfile_pvd = path.join(self.dumpdir, "field_output.pvd")
-            self.pvd_dumpfile = File(
+            self.pvd_dumpfile = VTKFile(
                 outfile_pvd, project_output=self.output.project_fields,
                 comm=self.mesh.comm)
 
@@ -453,9 +454,9 @@ class IO(object):
         if len(self.output.dumplist_latlon) > 0:
             mesh_ll = get_flat_latlon_mesh(self.mesh)
             outfile_ll = path.join(self.dumpdir, "field_output_latlon.pvd")
-            self.dumpfile_ll = File(outfile_ll,
-                                    project_output=self.output.project_fields,
-                                    comm=self.mesh.comm)
+            self.dumpfile_ll = VTKFile(outfile_ll,
+                                       project_output=self.output.project_fields,
+                                       comm=self.mesh.comm)
 
             # make functions on latlon mesh, as specified by dumplist_latlon
             self.to_dump_latlon = []
