@@ -35,7 +35,7 @@ __all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage",
            "TrapeziumRule", "BDF2", "TR_BDF2", "Leapfrog", "AdamsMoulton",
            "AdamsBashforth", "ImplicitMidpoint", "QinZhang",
            "IMEX_Euler", "ARS3", "ARK2", "Trap2", "SSP3", "BE_SDC", "FE_SDC",
-           "IMEX_SDC","IMEX_SDC_QD","BE_SDC_QD"]
+           "IMEX_SDC","IMEX_SDC_QD","Euler_SDC_QD"]
 
 
 def wrapper_apply(original_apply):
@@ -2881,15 +2881,6 @@ class IMEX_SDC_QD(SDC):
                 map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
             residual -= r_imp_k
             residual -= r_exp_k
-        # Calculate and add on dt*a_ss*F(y_s)
-        # r_imp = self.residual.label_map(
-        #     lambda t: t.has_label(implicit),
-        #     map_if_true=replace_subject(self.U_SDC, old_idx=self.idx),
-        #     map_if_false=drop)
-        # r_imp = r_imp.label_map(
-        #     lambda t: t.has_label(time_derivative),
-        #     map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
-        # residual += r_imp
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
@@ -3039,12 +3030,18 @@ class IMEX_SDC_QD(SDC):
         else:
             x_out.assign(self.Unodes[-1])
 
-class BE_SDC_QD(SDC):
+class Euler_SDC_QD(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,final_update=True):
+    def __init__(self, scheme_type, base_scheme, domain, M, maxk, quadrature, field_name=None,final_update=True):
         super().__init__(domain, M, maxk, quadrature, field_name=field_name,final_update=final_update)
         self.base = base_scheme
         self.nStages = int(np.shape(self.Qdelta_imp)[1])
+
+        if (scheme_type == "implicit"):
+            self.implicit = True
+        else:
+            self.implicit=False
+
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         with PETSc.Log.Event("IMEX_SDC_init"):
@@ -3090,8 +3087,10 @@ class BE_SDC_QD(SDC):
             self.Uin = Function(W)
 
             #self.compute_qdelta()
-
-            self.Qdelta = self.Qdelta_imp
+            if (self.implicit):
+                self.Qdelta = self.Qdelta_imp
+            else:
+                self.Qdelta = self.Qdelta_exp
 
     @property
     def res_rhs(self):
