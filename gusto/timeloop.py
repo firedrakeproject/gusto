@@ -1,7 +1,7 @@
 """Classes for controlling the timestepping loop."""
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import Function, Projector, split, Constant
+from firedrake import Function, Projector, split, Constant, MixedFunctionSpace
 from firedrake.fml import drop, Label, Term
 from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
@@ -572,7 +572,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             if isinstance(scheme.field_name, list):
                 # Multiple fields are being transported simulatenously,
                 # to enable conservative transport
-                name_str = ''
                 for subfield in scheme.field_name:
                     print(subfield)
                     assert subfield in equation_set.field_names
@@ -583,11 +582,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                         if subfield == method.variable and method.term_label == transport:
                             method_found = True
                     assert method_found, f'No transport method found for variable {scheme.field_name}'
-                    name_str += subfield+' '
-                # Join names later?
-                # How does other code mix names ... . ? 
-                #self.active_transport.append((scheme.field_name, scheme))
-                self.active_transport.append(('conserved_fields: '+name_str, scheme))
+                # Join the names of variables to transport simultaneously:
+                conserved_transport_fields = "_".join(scheme.field_name)
+                
+                self.active_transport.append((scheme.field_name, scheme))
+                #self.active_transport.append((conserved_transport_fields, scheme))
                 
             else:
                 assert scheme.field_name in equation_set.field_names
@@ -601,7 +600,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                         
                 assert method_found, f'No transport method found for variable {scheme.field_name}'
 
-        print(self.active_transport)
+        print('self.active_transport is ',self.active_transport)
+        print('equation_set.field_names is ',equation_set.field_names)
         
         self.diffusion_schemes = []
         if diffusion_schemes is not None:
@@ -637,13 +637,18 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         self.tracers_to_copy = []
         for name in equation_set.field_names:
+            print(equation_set.field_names)
             # Extract time derivative for that prognostic
             mass_form = equation_set.residual.label_map(
                 lambda t: (t.has_label(time_derivative) and t.get(prognostic) == name),
                 map_if_false=drop)
             # Copy over field if the time derivative term has no linearisation
-            if not mass_form.terms[0].has_label(linearisation):
-                self.tracers_to_copy.append(name)
+            
+            # This is breaking, so remove for now
+            # Need a way around this ...
+            
+            #if not mass_form.terms[0].has_label(linearisation):
+            #    self.tracers_to_copy.append(name)
 
         self.field_name = equation_set.field_name
         W = equation_set.function_space
@@ -692,17 +697,34 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # tests with KGOs fail
         apply_bcs = True
         self.setup_equation(self.equation)
-        for _, scheme in self.active_transport:
+        print('yupyup')
+        for field_name, scheme in self.active_transport:
+            print(field_name)
+            print(scheme)
             scheme.setup(self.equation, apply_bcs, transport)
             self.setup_transporting_velocity(scheme)
             scheme.courant_max = self.io.courant_max
-
+            
+            # Create an intermediate field for conservative transport
+            # variables, if required
+            #if isinstance(field_name, list):
+             #   conserved_transport_fields = "_".join(field_name)
+                
+              #  conserved_transport_spaces = [self.equation.domain.spaces(space_name) for space_name in
+              #         [self.equation.space_names[name] for name in field_name]]
+              #  W = MixedFunctionSpace(conserved_transport_spaces)
+                #self.equation.prescribed_fields.add_field(conserved_transport_fields,W)
+              #  self.simultaneous_transport = Function(W)
+                    
+                    
         apply_bcs = True
         for _, scheme in self.diffusion_schemes:
             scheme.setup(self.equation, apply_bcs, diffusion)
         for parametrisation, scheme in self.all_physics_schemes:
             apply_bcs = True
             scheme.setup(self.equation, apply_bcs, parametrisation.label)
+            
+        print(self.equation.field_names)
 
     def copy_active_tracers(self, x_in, x_out):
         """
@@ -752,9 +774,46 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'transporting velocity, outer iteration {outer}')
                 for name, scheme in self.active_transport:
+                    print(name)
+                    print(scheme)
                     logger.info(f'SIQN: Transport {outer}: {name}')
                     # transports a field from xstar and puts result in xp
-                    scheme.apply(xp(name), xstar(name))
+                    print(xp)
+                    print(dir(xp))
+                    if isinstance(name, list):
+                        print(name, scheme)
+                        # This is currently setup just for the conservative
+                        # transport of tracers
+                        simult_fields_name = "_".join(name)
+                        logger.info(f'SIQN: Transport {outer}: Simultaneous transport of {name}')
+                        # Create the function for timestepping
+                        idx = self.equation.field_names.index(simult_fields_name)
+                        
+                        simult_field_star = Function(self.equation.spaces[idx])
+                        simult_field_p = Function(self.equation.spaces[idx])
+                    
+                        print('simult_field is', simult_field_star)
+                        count = 0
+                        for subname in name:
+                            print(subname)
+                            simult_field_star.subfunctions[count].assign(xstar(subname))
+                            count += 1
+                            
+                        #x_in(subname) = [xstar(subname) for subname in field_name]
+                        
+                        # Simultaneously transport the variables defined 
+                        # in a list with the joint time discretsation
+                        scheme.apply(simult_field_p, simult_field_star)
+                        
+                        # Split the result and assign to the correct 
+                        # individual fields
+                        count = 0
+                        for subname in name:
+                            xp(subname).assign(simult_field_star.subfunctions[count])
+                            count += 1
+                    else:
+                        logger.info(f'SIQN: Transport {outer}: {name}')
+                        scheme.apply(xp(name), xstar(name))
 
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:

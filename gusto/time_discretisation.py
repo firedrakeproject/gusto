@@ -11,7 +11,7 @@ import numpy as np
 
 from firedrake import (
     Function, TestFunction, TestFunctions, NonlinearVariationalProblem,
-    NonlinearVariationalSolver, DirichletBC, split, Constant
+    NonlinearVariationalSolver, DirichletBC, split, Constant, MixedFunctionSpace
 )
 from firedrake.fml import (
     replace_subject, replace_test_function, Term, all_terms, drop, keep
@@ -145,14 +145,15 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 # This enables conservative transport to be implemented
                 # with SIQN.
                 bcs = []
+                simult_spaces = []
                 
                 for subfield in self.field_name:
-                    self.idx = equation.field_names.index(subfield)
-                    self.fs = equation.spaces[self.idx]
+                    idx = equation.field_names.index(subfield)
+                    simult_spaces.append(equation.spaces[idx])
                     self.residual = self.residual.label_map(
                         lambda t: t.get(prognostic) == subfield,
                         lambda t: Term(
-                            split_form(t.form)[self.idx].form,
+                            split_form(t.form)[idx].form,
                             t.labels),
                         drop)
                         
@@ -160,6 +161,21 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     if equation.bcs[subfield] != []:
                         bcs.append(equation.bcs[subfield])
                     #bcs = equation.bcs[subfield]
+                self.fs = MixedFunctionSpace(simult_spaces)
+                
+                simult_fields_name = "_".join(self.field_name)
+                
+                # Add field to self.equation
+                self.equation.field_names.append(simult_fields_name)
+                self.equation.spaces.append(self.fs)
+                
+                print(self.equation.field_names)
+                
+                # Need none to work with wrappers
+                self.idx = None
+                
+                # Use this if I should refer to the new, intermediate, field
+                #self.idx = equation.field_names.index(simult_fields_name)
                 
             else:
                 self.idx = equation.field_names.index(self.field_name)
@@ -205,7 +221,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 self.wrapper.field_names = equation.field_names
 
                 for field, subwrapper in self.wrapper.subwrappers.items():
-
+                    print(field)
                     if field not in equation.field_names:
                         raise ValueError(f"The option defined for {field} is for a field that does not exist in the equation set")
 
