@@ -2882,14 +2882,14 @@ class IMEX_SDC_QD(SDC):
             residual -= r_imp_k
             residual -= r_exp_k
         # Calculate and add on dt*a_ss*F(y_s)
-        r_imp = self.residual.label_map(
-            lambda t: t.has_label(implicit),
-            map_if_true=replace_subject(self.U_SDC, old_idx=self.idx),
-            map_if_false=drop)
-        r_imp = r_imp.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
-        residual += r_imp
+        # r_imp = self.residual.label_map(
+        #     lambda t: t.has_label(implicit),
+        #     map_if_true=replace_subject(self.U_SDC, old_idx=self.idx),
+        #     map_if_false=drop)
+        # r_imp = r_imp.label_map(
+        #     lambda t: t.has_label(time_derivative),
+        #     map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
+        # residual += r_imp
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
@@ -3089,9 +3089,9 @@ class BE_SDC_QD(SDC):
             self.Urhs = Function(W)
             self.Uin = Function(W)
 
-            self.compute_qdelta()
+            #self.compute_qdelta()
 
-            # self.Qdelta_imp = self.Qdelta
+            self.Qdelta = self.Qdelta_imp
 
     @property
     def res_rhs(self):
@@ -3152,19 +3152,18 @@ class BE_SDC_QD(SDC):
         # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
         # and
         # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
-        for i in range(stage):
+
+        for i in range(self.nStages):
             r_kp1 = self.residual.label_map(
-                    lambda t: t.has_label(time_derivative),
-                    map_if_true=drop,
-                    map_if_false=replace_subject(self.Unodes1[i], old_idx=self.idx))
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.Unodes1[i], old_idx=self.idx))
             r_kp1 = r_kp1.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_true=drop,
                 map_if_false=lambda t: Constant(self.Qdelta[stage, i])*self.dt_coarse*t)
 
             residual += r_kp1
-
-        for i in range(self.nStages):
             r_k = self.residual.label_map(
                     lambda t: t.has_label(time_derivative),
                     map_if_true=drop,
@@ -3174,16 +3173,7 @@ class BE_SDC_QD(SDC):
                 map_if_true=drop,
                 map_if_false=lambda t: Constant(self.Qdelta[stage, i])*self.dt_coarse*t)
 
-            residual += r_k
-        # Calculate and add on dt*a_ss*F(y_s)
-        r_imp = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_true=drop,
-            map_if_false=replace_subject(self.U_SDC, old_idx=self.idx))
-        r_imp = r_imp.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=lambda t: Constant(self.Qdelta[stage, stage])*self.dt_coarse*t)
-        residual += r_imp
+            residual -= r_k
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
@@ -3316,7 +3306,6 @@ class BE_SDC_QD(SDC):
             for m in range(1, self.M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
 
-            self.Un.assign(self.Unodes1[-1])
         if self.maxk > 0:
             if self.final_update:
                 for m in range(1, self.M+1):
@@ -3324,13 +3313,12 @@ class BE_SDC_QD(SDC):
                     with PETSc.Log.Event("IMEX_SDC_rhs2"):
                         self.solver_rhs.solve()
                         self.fUnodes[m-1].assign(self.Urhs)
-                self.Un.assign(x_in)
                 self.compute_quad_final()
                 with PETSc.Log.Event("IMEX_SDC_final_solve"):
                     self.solver_fin.solve()
                 x_out.assign(self.U_fin)
             else:
-                x_out.assign(self.Un)
+                x_out.assign(self.Unodes[-1])
         else:
             x_out.assign(self.Unodes[-1])
 
