@@ -1931,7 +1931,7 @@ class SDC(object, metaclass=ABCMeta):
 
             sdc_dict = getSetup(
                     nNodes=M, nodeType="RADAU-RIGHT", nIter=maxk, 
-                    qDeltaImplicit="IE", qDeltaExplicit="FE",
+                    qDeltaImplicit="BE", qDeltaExplicit="FE",
                     preSweep="QDELTA", postSweep="LASTNODE",
                     qDeltaInitial="BE", nodeDistr="LEGENDRE"
                     )
