@@ -1920,7 +1920,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
 class SDC(object, metaclass=ABCMeta):
 
-    def __init__(self, domain, M, maxk, quadrature, field_name=None, final_update=True):
+    def __init__(self, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None, final_update=True):
         with PETSc.Log.Event("SDC_init"):
             self.field_name=field_name
             self.domain = domain
@@ -1930,10 +1930,10 @@ class SDC(object, metaclass=ABCMeta):
             self.final_update=final_update
 
             sdc_dict = getSetup(
-                    nNodes=M, nodeType="RADAU-RIGHT", nIter=maxk, 
-                    qDeltaImplicit="BE", qDeltaExplicit="FE",
+                    nNodes=M, nodeType=node_type, nIter=maxk, 
+                    qDeltaImplicit=qdelta_imp, qDeltaExplicit=qdelta_exp,
                     preSweep="QDELTA", postSweep="LASTNODE",
-                    qDeltaInitial="BE", nodeDistr="LEGENDRE"
+                    qDeltaInitial="BE", nodeDistr=node_dist
                     )
             
             self.nodes = self.rescale_nodes(sdc_dict["tauNodes"],0., self.dt_coarse,0,1)
@@ -2157,8 +2157,8 @@ class SDC(object, metaclass=ABCMeta):
 
 class FE_SDC(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None, final_update=True):
-        super().__init__(domain, M, maxk, quadrature, field_name=field_name, final_update=final_update)
+    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None, final_update=True):
+        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name, final_update=final_update)
         self.base = base_scheme
 
 
@@ -2336,8 +2336,8 @@ class FE_SDC(SDC):
 
 class BE_SDC(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None, final_update=True):
-        super().__init__(domain, M, maxk, quadrature, field_name=field_name, final_update=final_update)
+    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None, final_update=True):
+        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name, final_update=final_update)
         self.base = base_scheme
 
 
@@ -2512,8 +2512,8 @@ class BE_SDC(SDC):
 
 class IMEX_SDC(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,final_update=True):
-        super().__init__(domain, M, maxk, quadrature, field_name=field_name,final_update=final_update)
+    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None,final_update=True):
+        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name,final_update=final_update)
         self.base = base_scheme
 
     def setup(self, equation, apply_bcs=True, *active_labels):
@@ -2735,8 +2735,8 @@ class IMEX_SDC(SDC):
 
 class IMEX_SDC_QD(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,final_update=True):
-        super().__init__(domain, M, maxk, quadrature, field_name=field_name,final_update=final_update)
+    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None,final_update=True):
+        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name,final_update=final_update)
         self.base = base_scheme
         self.nStages = int(np.shape(self.Qdelta_imp)[1])
 
@@ -3032,8 +3032,8 @@ class IMEX_SDC_QD(SDC):
 
 class Euler_SDC_QD(SDC):
 
-    def __init__(self, scheme_type, base_scheme, domain, M, maxk, quadrature, field_name=None,final_update=True):
-        super().__init__(domain, M, maxk, quadrature, field_name=field_name,final_update=final_update)
+    def __init__(self, scheme_type, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None,final_update=True):
+        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name,final_update=final_update)
         self.base = base_scheme
         self.nStages = int(np.shape(self.Qdelta_imp)[1])
 
