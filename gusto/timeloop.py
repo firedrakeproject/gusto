@@ -681,6 +681,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
     def setup_fields(self):
         """Sets up time levels n, star, p and np1"""
+        print('setting up fields')
         self.x = TimeLevelFields(self.equation, 1)
         self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast"))
         for aux_eqn, _ in self.auxiliary_equations_and_schemes:
@@ -690,11 +691,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # need passing to StateFields
         self.fields = StateFields(self.x, self.equation.prescribed_fields,
                                   *self.io.output.dumplist)
+        print(dir(self.fields))
 
     def setup_scheme(self):
         """Sets up transport, diffusion and physics schemes"""
         # TODO: apply_bcs should be False for advection but this means
         # tests with KGOs fail
+        print('setting up scheme')
         apply_bcs = True
         self.setup_equation(self.equation)
         print('yupyup')
@@ -704,6 +707,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             scheme.setup(self.equation, apply_bcs, transport)
             self.setup_transporting_velocity(scheme)
             scheme.courant_max = self.io.courant_max
+            
+            #if isinstance(field_name, list):
+            #    simult_fields_name = "_".join(field_name)
+            #    idx = self.equation.field_names.index(simult_fields_name)
+            #    simult_fields_space = self.equation.spaces[idx]
+            #    self.fields.add_field(simult_fields_name, simult_fields_space, subfield_names=field_name)
             
             # Create an intermediate field for conservative transport
             # variables, if required
@@ -723,8 +732,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for parametrisation, scheme in self.all_physics_schemes:
             apply_bcs = True
             scheme.setup(self.equation, apply_bcs, parametrisation.label)
-            
-        print(self.equation.field_names)
 
     def copy_active_tracers(self, x_in, x_out):
         """
@@ -774,12 +781,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'transporting velocity, outer iteration {outer}')
                 for name, scheme in self.active_transport:
-                    print(name)
-                    print(scheme)
                     logger.info(f'SIQN: Transport {outer}: {name}')
                     # transports a field from xstar and puts result in xp
-                    print(xp)
-                    print(dir(xp))
                     if isinstance(name, list):
                         print(name, scheme)
                         # This is currently setup just for the conservative
@@ -789,26 +792,30 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                         # Create the function for timestepping
                         idx = self.equation.field_names.index(simult_fields_name)
                         
-                        simult_field_star = Function(self.equation.spaces[idx])
-                        simult_field_p = Function(self.equation.spaces[idx])
-                    
-                        print('simult_field is', simult_field_star)
+                        simult_field_star = Function(self.equation.spaces[idx], name=simult_fields_name)
+                        simult_field_p = Function(self.equation.spaces[idx], name=simult_fields_name)
+                        
+                        #simult_field_star = Function(self.equation.function_space)
+                        #simult_field_p = Function(self.equation.function_space)
+                        
+                        xstars = []
                         count = 0
                         for subname in name:
                             print(subname)
                             simult_field_star.subfunctions[count].assign(xstar(subname))
+                            xstars.append(xstar(subname))
                             count += 1
-                            
-                        #x_in(subname) = [xstar(subname) for subname in field_name]
                         
                         # Simultaneously transport the variables defined 
                         # in a list with the joint time discretsation
                         scheme.apply(simult_field_p, simult_field_star)
+                        #scheme.apply(simult_field_p, xstars)
                         
                         # Split the result and assign to the correct 
                         # individual fields
                         count = 0
                         for subname in name:
+                            idx = self.equation.field_names.index[subname]
                             xp(subname).assign(simult_field_star.subfunctions[count])
                             count += 1
                     else:

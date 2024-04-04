@@ -136,8 +136,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """
         self.equation = equation
         self.residual = equation.residual
-
-        print(self.field_name)
   
         if self.field_name is not None and hasattr(equation, "field_names"):
             if isinstance(self.field_name, list):
@@ -146,33 +144,55 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 # with SIQN.
                 bcs = []
                 simult_spaces = []
+                self.idx = []
+                
+                first = True
                 
                 for subfield in self.field_name:
                     idx = equation.field_names.index(subfield)
+                    self.idx.append(idx)
                     simult_spaces.append(equation.spaces[idx])
-                    self.residual = self.residual.label_map(
-                        lambda t: t.get(prognostic) == subfield,
-                        lambda t: Term(
-                            split_form(t.form)[idx].form,
-                            t.labels),
-                        drop)
+                    
+                    if first==True:
+                        residual = self.residual.label_map(
+                            lambda t: t.get(prognostic) == subfield,
+                            lambda t: Term(
+                                split_form(t.form)[idx].form,
+                                t.labels),
+                            drop)
+                            
+                        first = False
+                    else:
+                        residual += self.residual.label_map(
+                            lambda t: t.get(prognostic) == subfield,
+                            lambda t: Term(
+                                split_form(t.form)[idx].form,
+                                t.labels),
+                            drop)
                         
                     # Hmm, how to best apply BCs if we get multiple...
                     if equation.bcs[subfield] != []:
                         bcs.append(equation.bcs[subfield])
                     #bcs = equation.bcs[subfield]
+                    
+                # Store residual information for all fields
+                # being simultaneously transported.
+                self.residual = residual
+                    
                 self.fs = MixedFunctionSpace(simult_spaces)
                 
                 simult_fields_name = "_".join(self.field_name)
                 
-                # Add field to self.equation
+                # Add field to self.equation ?
+                # Or not ... 
                 self.equation.field_names.append(simult_fields_name)
                 self.equation.spaces.append(self.fs)
                 
-                print(self.equation.field_names)
+                #print(self.equation.field_names)
+                #print(self.equation.spaces)
                 
                 # Need none to work with wrappers
-                self.idx = None
+                # self.idx = None
                 
                 # Use this if I should refer to the new, intermediate, field
                 #self.idx = equation.field_names.index(simult_fields_name)
@@ -193,8 +213,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.fs = equation.function_space
             self.idx = None
             bcs = equation.bcs[self.field_name]
-            
-        print(bcs)
 
         if len(active_labels) > 0:
             self.residual = self.residual.label_map(
@@ -273,8 +291,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         for bc in bcs]
         else:
             self.bcs = bcs
-            
-        print(self.bcs)
 
         # -------------------------------------------------------------------- #
         # Make the required functions
@@ -290,19 +306,53 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
     @abstractproperty
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
-        l = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
-            map_if_false=drop)
+        if isinstance(self.idx, list):
+            first = True
+            simult_fields_name = "_".join(self.field_name)
+            new_idx = equation.field_names.index(simult_fields_name)
+            for idx in self.idx:
+                if first==True:
+                    l = self.residual.label_map(
+                        lambda t: t.has_label(time_derivative),
+                        map_if_true=replace_subject(self.x_out, old_idx=idx, new_idx=new_idx),
+                        map_if_false=drop)
+                    first=False
+                else:
+                    l += self.residual.label_map(
+                        lambda t: t.has_label(time_derivative),
+                        map_if_true=replace_subject(self.x_out, old_idx=idx, new_idx=new_idx),
+                        map_if_false=drop)
+                    first=False
+        
+        else:    
+            l = self.residual.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+                map_if_false=drop)
 
         return l.form
 
     @abstractproperty
     def rhs(self):
         """Set up the time discretisation's right hand side."""
-        r = self.residual.label_map(
-            all_terms,
-            map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        if isinstance(self.idx, list):
+            simult_fields_name = "_".join(self.field_name)
+            new_idx = equation.field_names.index(simult_fields_name)
+        
+            first = True
+            for idx in self.idx:
+                if first==True:
+                    r = self.residual.label_map(
+                        all_terms,
+                        map_if_true=replace_subject(self.x1, old_idx=idx, new_idx=new_idx))
+                else:
+                    r += self.residual.label_map(
+                        all_terms,
+                        map_if_true=replace_subject(self.x1, old_idx=idx, new_idx=new_idx))
+        else:
+            r = self.residual.label_map(
+                all_terms,
+                map_if_true=replace_subject(self.x1, old_idx=self.idx))
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
