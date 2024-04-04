@@ -19,21 +19,22 @@ class Rexi(object):
 
     (A_n + tau L)V_n = U
 
-    required for computing the matrix exponential as described in notes.pdf
-
-    :arg equation: :class:`.Equation` object defining the equation set to
-    be solved
-    :arg rexi_parameters: :class:`.Equation` object
-    :arg solver_parameters: dictionary of solver parameters. Default None,
-    which results in the default solver parameters defined in the equation
-    class being used.
-    :arg manager: :class:`.Ensemble` object containing the space and ensemble
-    subcommunicators
-
+    required for computing the matrix exponential.
     """
+
     def __init__(self, equation, rexi_parameters, *, solver_parameters=None,
                  manager=None):
 
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation
+            rexi_parameters (:class:`RexiParameters`): Rexi configuration
+                parameters
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the solver. Defaults to None.
+            manager (:class:`.Ensemble`): the space and ensemble sub-
+                communicators. Defaults to None.
+        """
         residual = equation.residual.label_map(
             lambda t: t.has_label(linearisation),
             map_if_true=lambda t: Term(t.get(linearisation).form, t.labels),
