@@ -2847,7 +2847,7 @@ class IMEX_SDC_QD(SDC):
         # and
         # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
 
-        for i in range(self.nStages):
+        for i in range(stage):
             r_exp_kp1 = self.residual.label_map(
                 lambda t: t.has_label(explicit),
                 map_if_true=replace_subject(self.Unodes1[i], old_idx=self.idx),
@@ -2864,6 +2864,8 @@ class IMEX_SDC_QD(SDC):
                 map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
             residual += r_imp_kp1
             residual += r_exp_kp1
+        
+        for i in range(self.nStages):
             r_exp_k = self.residual.label_map(
                 lambda t: t.has_label(explicit),
                 map_if_true=replace_subject(self.Unodes[i], old_idx=self.idx),
@@ -2881,6 +2883,15 @@ class IMEX_SDC_QD(SDC):
                 map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
             residual -= r_imp_k
             residual -= r_exp_k
+        
+        r_imp = self.residual.label_map(
+                lambda t: t.has_label(implicit),
+                map_if_true=replace_subject(self.U_SDC, old_idx=self.idx),
+                map_if_false=drop)
+        r_imp = r_imp.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
+        residual +=r_imp
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
@@ -3152,7 +3163,7 @@ class Euler_SDC_QD(SDC):
         # and
         # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
 
-        for i in range(self.nStages):
+        for i in range(stage):
             r_kp1 = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
@@ -3161,8 +3172,8 @@ class Euler_SDC_QD(SDC):
                 lambda t: t.has_label(time_derivative),
                 map_if_true=drop,
                 map_if_false=lambda t: Constant(self.Qdelta[stage, i])*self.dt_coarse*t)
-
             residual += r_kp1
+        for i in range(self.nStages):
             r_k = self.residual.label_map(
                     lambda t: t.has_label(time_derivative),
                     map_if_true=drop,
@@ -3173,6 +3184,15 @@ class Euler_SDC_QD(SDC):
                 map_if_false=lambda t: Constant(self.Qdelta[stage, i])*self.dt_coarse*t)
 
             residual -= r_k
+        
+        r_imp = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.U_SDC, old_idx=self.idx))
+        r_imp = r_imp.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta[stage, stage])*self.dt_coarse*t)
+        residual +=r_imp
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
