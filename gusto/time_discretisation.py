@@ -1920,7 +1920,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
 class SDC(object, metaclass=ABCMeta):
 
-    def __init__(self, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None, final_update=True):
+    def __init__(self, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None, final_update=True, initial_guess="base"):
         with PETSc.Log.Event("SDC_init"):
             self.field_name=field_name
             self.domain = domain
@@ -1974,6 +1974,11 @@ class SDC(object, metaclass=ABCMeta):
 
             self.Qdelta_imp = sdc_dict['qDeltaI'][0]
             self.Qdelta_exp = sdc_dict['qDeltaE']
+
+            if (initial_guess == "base"):
+                self.base_flag = True
+            else:
+                self.base_flag=False
 
 
             # print(sdc_dict['qDeltaI'][0])
@@ -2157,8 +2162,8 @@ class SDC(object, metaclass=ABCMeta):
 
 class FE_SDC(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None, final_update=True):
-        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name, final_update=final_update)
+    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None, final_update=True, initial_guess="base"):
+        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name, final_update=final_update, initial_guess=initial_guess)
         self.base = base_scheme
 
 
@@ -2290,9 +2295,14 @@ class FE_SDC(SDC):
         self.Un.assign(x_in)
 
         self.Unodes[0].assign(self.Un)
-        for m in range(self.M):
-            self.base.dt = float(self.dtau[m])
-            self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        if (self.base_flag):
+            for m in range(self.M):
+                # self.Unodes[m+1].assign(self.Un)
+                self.base.dt = float(self.dtau[m])
+                self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        else:
+            for m in range(self.M):
+                self.Unodes[m+1].assign(self.Un)
 
         k = 0
         while k < self.maxk:
@@ -2336,8 +2346,8 @@ class FE_SDC(SDC):
 
 class BE_SDC(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None, final_update=True):
-        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name, final_update=final_update)
+    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None, final_update=True, initial_guess="base"):
+        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name, final_update=final_update, initial_guess=initial_guess)
         self.base = base_scheme
 
 
@@ -2468,9 +2478,14 @@ class BE_SDC(SDC):
         self.Un.assign(x_in)
 
         self.Unodes[0].assign(self.Un)
-        for m in range(self.M):
-            self.base.dt = self.dtau[m]
-            self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        if (self.base_flag):
+            for m in range(self.M):
+                # self.Unodes[m+1].assign(self.Un)
+                self.base.dt = float(self.dtau[m])
+                self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        else:
+            for m in range(self.M):
+                self.Unodes[m+1].assign(self.Un)
         k = 0
         while k < self.maxk:
             k += 1
@@ -2512,8 +2527,8 @@ class BE_SDC(SDC):
 
 class IMEX_SDC(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None,final_update=True):
-        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name,final_update=final_update)
+    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None,final_update=True, initial_guess="base"):
+        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name,final_update=final_update,initial_guess=initial_guess)
         self.base = base_scheme
 
     def setup(self, equation, apply_bcs=True, *active_labels):
@@ -2678,10 +2693,14 @@ class IMEX_SDC(SDC):
 
         self.Unodes[0].assign(self.Un)
         with PETSc.Log.Event("IMEX_SDC_precon"):
-            for m in range(self.M):
-                # self.Unodes[m+1].assign(self.Un)
-                self.base.dt = float(self.dtau[m])
-                self.base.apply(self.Unodes[m+1], self.Unodes[m])
+            if (self.base_flag):
+                for m in range(self.M):
+                    # self.Unodes[m+1].assign(self.Un)
+                    self.base.dt = float(self.dtau[m])
+                    self.base.apply(self.Unodes[m+1], self.Unodes[m])
+            else:
+                for m in range(self.M):
+                    self.Unodes[m+1].assign(self.Un)
 
         k = 0
         while k < self.maxk:
@@ -2735,8 +2754,8 @@ class IMEX_SDC(SDC):
 
 class IMEX_SDC_QD(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None,final_update=True):
-        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name,final_update=final_update)
+    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None,final_update=True,initial_guess="base"):
+        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name,final_update=final_update,initial_guess=initial_guess)
         self.base = base_scheme
         self.nStages = int(np.shape(self.Qdelta_imp)[1])
 
@@ -2987,10 +3006,15 @@ class IMEX_SDC_QD(SDC):
 
         self.Unodes[0].assign(self.Un)
         with PETSc.Log.Event("IMEX_SDC_precon"):
-            for m in range(self.M):
-                # self.Unodes[m+1].assign(self.Un)
-                self.base.dt = float(self.dtau[m])
-                self.base.apply(self.Unodes[m+1], self.Unodes[m])
+            if (self.base_flag):
+                for m in range(self.M):
+                    # self.Unodes[m+1].assign(self.Un)
+                    self.base.dt = float(self.dtau[m])
+                    self.base.apply(self.Unodes[m+1], self.Unodes[m])
+            else:
+                for m in range(self.M):
+                    self.Unodes[m+1].assign(self.Un)
+
 
         k = 0
         while k < self.maxk:
@@ -3043,8 +3067,8 @@ class IMEX_SDC_QD(SDC):
 
 class Euler_SDC_QD(SDC):
 
-    def __init__(self, scheme_type, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None,final_update=True):
-        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name,final_update=final_update)
+    def __init__(self, scheme_type, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=None,final_update=True,initial_guess="base"):
+        super().__init__(domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp, field_name=field_name,final_update=final_update,initial_guess=initial_guess)
         self.base = base_scheme
         self.nStages = int(np.shape(self.Qdelta_imp)[1])
 
@@ -3288,10 +3312,14 @@ class Euler_SDC_QD(SDC):
 
         self.Unodes[0].assign(self.Un)
         with PETSc.Log.Event("IMEX_SDC_precon"):
-            for m in range(self.M):
-                # self.Unodes[m+1].assign(self.Un)
-                self.base.dt = float(self.dtau[m])
-                self.base.apply(self.Unodes[m+1], self.Unodes[m])
+            if (self.base_flag):
+                for m in range(self.M):
+                    # self.Unodes[m+1].assign(self.Un)
+                    self.base.dt = float(self.dtau[m])
+                    self.base.apply(self.Unodes[m+1], self.Unodes[m])
+            else:
+                for m in range(self.M):
+                    self.Unodes[m+1].assign(self.Un)
 
         k = 0
         while k < self.maxk:
