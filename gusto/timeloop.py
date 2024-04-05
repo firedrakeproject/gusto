@@ -571,36 +571,28 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             if isinstance(scheme.field_name, list):
-                # Multiple fields are being transported simulatenously,
-                # to enable conservative transport
+                # This means that multiple fields are being transported simultaneously
                 for subfield in scheme.field_name:
-                    print(subfield)
                     assert subfield in equation_set.field_names
 
+                    # Check that there is a corresponding transport method for
+                    # each field in the list
                     method_found = False
-
                     for method in spatial_methods:
                         if subfield == method.variable and method.term_label == transport:
                             method_found = True
                     assert method_found, f'No transport method found for variable {scheme.field_name}'
-
                 self.active_transport.append((scheme.field_name, scheme))
-                
-                
             else:
                 assert scheme.field_name in equation_set.field_names
 
+                # Check that there is a corresponding transport method
                 method_found = False
-
                 for method in spatial_methods:
                     if scheme.field_name == method.variable and method.term_label == transport:
                         method_found = True
                         self.active_transport.append((scheme.field_name, scheme))
-
                 assert method_found, f'No transport method found for variable {scheme.field_name}'
-
-        print('self.active_transport is ',self.active_transport)
-        print('equation_set.field_names is ',equation_set.field_names)
 
         self.diffusion_schemes = []
         if diffusion_schemes is not None:
@@ -691,9 +683,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # TODO: apply_bcs should be False for advection but this means
         # tests with KGOs fail
         apply_bcs = True
-        print(self.equation.field_names)
         self.setup_equation(self.equation)
-        print(self.equation.field_name)
         for _, scheme in self.active_transport:
             scheme.setup(self.equation, apply_bcs, transport)
             self.setup_transporting_velocity(scheme)
@@ -755,22 +745,17 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'transporting velocity, outer iteration {outer}')
                 for name, scheme in self.active_transport:
-                    logger.info(f'SIQN: Transport {outer}: {name}')
                     # transports a field from xstar and puts result in xp
                     
-                    #print(dir(xp))
-                    #print(dir(xp('rho')))
-                    
                     if isinstance(name, list):
-                        print(name, scheme)
-                        # Evolve the mixed field.
-                        print(self.field_name)
+                        # Evolve the mixed field. This will transport any 
+                        # terms in the list, with the others remaining unchanged
+                        # from xstar into xp.
+                        logger.info(f'SIQN: Transport {outer}: Simultaneous transport of {name}')
                         scheme.apply(xp(self.field_name), xstar(self.field_name))
-                        
-                        # Place the output for each subfield back into the correct place?
-                        #for subname in name:
-                        #    xp(subname).assign(xp(self.field_name.subfunctions            
-                    scheme.apply(xp(name), xstar(name))
+                    else:
+                        logger.info(f'SIQN: Transport {outer}: {name}')
+                        scheme.apply(xp(name), xstar(name))
 
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:

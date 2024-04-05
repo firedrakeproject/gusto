@@ -142,39 +142,57 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 # Multiple fields are being solved simultaneously.
                 # This enables conservative transport to be implemented
                 # with SIQN.
-                bcs = []
-                
-                for subfield in self.field_name:
-                    idx = equation.field_names.index(subfield)
-                    
-                    first = True
-                    
-                    # Form the residual with just the terms in the list
-                    if first==True:
-                        residual = self.residual.label_map(
-                            lambda t: t.get(prognostic) == subfield,
-                            lambda t: Term(
-                                split_form(t.form)[idx].form,
-                                t.labels),
-                            drop)
-
-                        first = False
-                    else:
-                        residual += self.residual.label_map(
-                            lambda t: t.get(prognostic) == subfield,
-                            lambda t: Term(
-                                split_form(t.form)[idx].form,
-                                t.labels),
-                            drop)
-                            
-                    # Need to add dummy residual terms for the other variables not in the list?
-
-                self.residual = residual
                 
                 # Treat this like we would for the entire mixed space
-                self.field_name = equation.field_name
+                #self.field_name = equation.field_name
                 self.fs = equation.function_space
                 self.idx = None
+                #bcs = equation.bcs[self.field_name]
+                
+                # Note to Tim: look at how BCs are constructed for 
+                # the mixed function space.
+                bcs = []
+                
+                #for subfield in self.field_name:
+                #    idx = equation.field_names.index(subfield)
+                #    
+                #    first = True
+                    
+                    # Form the residual with just the terms in the list
+                #    if first==True:
+                #        residual = self.residual.label_map(
+                #            lambda t: t.get(prognostic) == subfield,
+                #            lambda t: Term(
+                #                split_form(t.form)[idx].form,
+                #                t.labels),
+                #            drop)
+
+                 #       first = False
+                 #   else:
+                 #       residual += self.residual.label_map(
+                 #           lambda t: t.get(prognostic) == subfield,
+                 #           lambda t: Term(
+                 #               split_form(t.form)[idx].form,
+                 #               t.labels),
+                 #           drop)
+                            
+                # Add 'no transport' terms for the prognostics 
+                # not to be simultaneously transported.
+                # Make this better once working correctly.
+                #for subfield in self.equation.field_names:
+                #    print(subfield)
+                #    if subfield in self.field_name:
+                #        print('name in list')
+                #    else:
+                #        print('adding dummy term')
+                #        dummy_residual += self.residual.label_map(
+                #            lambda t: t.get(prognostic) == subfield,
+                #            lambda t: Term(
+                #                split_form(t.form)[idx].form,
+                #                t.labels),
+                #            drop)
+
+                #self.residual = residual
                 
             else:
                 self.idx = equation.field_names.index(self.field_name)
@@ -185,18 +203,45 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         split_form(t.form)[self.idx].form,
                         t.labels),
                     drop)
+                    
+                bcs = equation.bcs[self.field_name]
 
         else:
             self.field_name = equation.field_name
             self.fs = equation.function_space
             self.idx = None
 
-        bcs = equation.bcs[self.field_name]
+            bcs = equation.bcs[self.field_name]
 
         if len(active_labels) > 0:
-            self.residual = self.residual.label_map(
-                lambda t: any(t.has_label(time_derivative, *active_labels)),
-                map_if_false=drop)
+            if isinstance(self.field_name, list):
+                # Firstly, keep all time derivative terms:
+                residual = self.residual.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    map_if_false=drop)
+                # Only keep active labels for prognostics in the list:
+                for subname in self.field_name:
+                    idx = equation.field_names.index(subname)
+                    field_residual = self.residual.label_map(
+                                lambda t: t.get(prognostic) == subname,
+                                lambda t: Term(
+                                    split_form(t.form)[idx].form,
+                                    t.labels),
+                                drop)
+                    residual += field_residual.label_map(
+                        lambda t: t.has_label(*active_labels),
+                        map_if_false=drop)
+                        
+                self.residual = residual
+            else:
+                self.residual = self.residual.label_map(
+                    lambda t: any(t.has_label(time_derivative, *active_labels)),
+                    map_if_false=drop)
+                    
+        # Set field name now, if it is a list.
+        if isinstance(self.field_name, list):
+            self.field_name = equation.field_name
+            bcs = equation.bcs[self.field_name]
 
         self.evaluate_source = []
         self.physics_names = []
