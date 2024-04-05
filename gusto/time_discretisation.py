@@ -138,14 +138,53 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.residual = equation.residual
 
         if self.field_name is not None and hasattr(equation, "field_names"):
-            self.idx = equation.field_names.index(self.field_name)
-            self.fs = equation.spaces[self.idx]
-            self.residual = self.residual.label_map(
-                lambda t: t.get(prognostic) == self.field_name,
-                lambda t: Term(
-                    split_form(t.form)[self.idx].form,
-                    t.labels),
-                drop)
+            if isinstance(self.field_name, list):
+                # Multiple fields are being solved simultaneously.
+                # This enables conservative transport to be implemented
+                # with SIQN.
+                bcs = []
+                
+                for subfield in self.field_name:
+                    idx = equation.field_names.index(subfield)
+                    
+                    first = True
+                    
+                    # Form the residual with just the terms in the list
+                    if first==True:
+                        residual = self.residual.label_map(
+                            lambda t: t.get(prognostic) == subfield,
+                            lambda t: Term(
+                                split_form(t.form)[idx].form,
+                                t.labels),
+                            drop)
+
+                        first = False
+                    else:
+                        residual += self.residual.label_map(
+                            lambda t: t.get(prognostic) == subfield,
+                            lambda t: Term(
+                                split_form(t.form)[idx].form,
+                                t.labels),
+                            drop)
+                            
+                    # Need to add dummy residual terms for the other variables not in the list?
+
+                self.residual = residual
+                
+                # Treat this like we would for the entire mixed space
+                self.field_name = equation.field_name
+                self.fs = equation.function_space
+                self.idx = None
+                
+            else:
+                self.idx = equation.field_names.index(self.field_name)
+                self.fs = equation.spaces[self.idx]
+                self.residual = self.residual.label_map(
+                    lambda t: t.get(prognostic) == self.field_name,
+                    lambda t: Term(
+                        split_form(t.form)[self.idx].form,
+                        t.labels),
+                    drop)
 
         else:
             self.field_name = equation.field_name
