@@ -144,7 +144,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 # with SIQN.
                 bcs = []
                 simult_spaces = []
-                self.idx = []
+                #self.idx = []
                 
                 first = True
                 
@@ -976,10 +976,30 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         """Set up the discretisation's left hand side (the time derivative)."""
 
         if self.increment_form:
-            l = self.residual.label_map(
-                lambda t: t.has_label(time_derivative),
-                map_if_true=replace_subject(self.x_out, self.idx),
-                map_if_false=drop)
+            if isinstance(self.idx, list):
+                first = True
+                simult_fields_name = "_".join(self.field_name)
+                new_idx = self.equation.field_names.index(simult_fields_name)
+                print('self.idx is', self.idx)
+                print('new idx is', new_idx)
+                for idx in self.idx:
+                    if first==True:
+                        l = self.residual.label_map(
+                            lambda t: t.has_label(time_derivative),
+                            map_if_true=replace_subject(self.x_out, old_idx=idx, new_idx=new_idx),
+                            map_if_false=drop)
+                        first=False
+                    else:
+                        l += self.residual.label_map(
+                            lambda t: t.has_label(time_derivative),
+                            map_if_true=replace_subject(self.x_out, old_idx=idx, new_idx=new_idx),
+                            map_if_false=drop)
+                        first=False
+            else:
+                l = self.residual.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    map_if_true=replace_subject(self.x_out, self.idx),
+                    map_if_false=drop)
 
             return l.form
 
@@ -999,9 +1019,24 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         """Set up the time discretisation's right hand side."""
 
         if self.increment_form:
-            r = self.residual.label_map(
-                all_terms,
-                map_if_true=replace_subject(self.x1, old_idx=self.idx))
+            if isinstance(self.idx, list):
+                simult_fields_name = "_".join(self.field_name)
+                new_idx = self.equation.field_names.index(simult_fields_name)
+            
+                first = True
+                for idx in self.idx:
+                    if first==True:
+                        r = self.residual.label_map(
+                            all_terms,
+                            map_if_true=replace_subject(self.x1, old_idx=idx, new_idx=new_idx))
+                    else:
+                        r += self.residual.label_map(
+                            all_terms,
+                            map_if_true=replace_subject(self.x1, old_idx=idx, new_idx=new_idx))
+            else:
+                r = self.residual.label_map(
+                    all_terms,
+                    map_if_true=replace_subject(self.x1, old_idx=self.idx))
 
             r = r.label_map(
                 lambda t: t.has_label(time_derivative),

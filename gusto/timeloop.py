@@ -708,11 +708,16 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.setup_transporting_velocity(scheme)
             scheme.courant_max = self.io.courant_max
             
-            #if isinstance(field_name, list):
-            #    simult_fields_name = "_".join(field_name)
-            #    idx = self.equation.field_names.index(simult_fields_name)
-            #    simult_fields_space = self.equation.spaces[idx]
-            #    self.fields.add_field(simult_fields_name, simult_fields_space, subfield_names=field_name)
+            if isinstance(field_name, list):
+                simult_field_names = []
+                count=0
+                for subname in field_name:
+                    simult_field_names.append(subname+"_aux")
+                    
+                simult_fields_name = "_".join(field_name)
+                idx = self.equation.field_names.index(simult_fields_name)
+                simult_fields_space = self.equation.spaces[idx]
+                self.fields.add_field(simult_fields_name, simult_fields_space, subfield_names=simult_field_names)
             
             # Create an intermediate field for conservative transport
             # variables, if required
