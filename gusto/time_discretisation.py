@@ -140,15 +140,13 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         if self.field_name is not None and hasattr(equation, "field_names"):
             if isinstance(self.field_name, list):
                 # Multiple fields are being solved simultaneously.
-                # This enables conservative transport to be implemented
-                # with SIQN.
-                
+                # This enables conservative transport to be implemented with SIQN.
+
                 # Use the full mixed space. The field_name and residual
                 # are set up later.
                 self.fs = equation.function_space
                 self.idx = None
-                bcs = []
-                
+
             else:
                 self.idx = equation.field_names.index(self.field_name)
                 self.fs = equation.spaces[self.idx]
@@ -158,7 +156,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         split_form(t.form)[self.idx].form,
                         t.labels),
                     drop)
-                    
+
                 bcs = equation.bcs[self.field_name]
 
         else:
@@ -178,8 +176,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 # Only keep active labels for prognostics in the list:
                 for subname in self.field_name:
                     field_residual = self.residual.label_map(
-                                  lambda t: t.get(prognostic) == subname,
-                                  map_if_false=drop)
+                        lambda t: t.get(prognostic) == subname,
+                        map_if_false=drop)
 
                     residual += field_residual.label_map(
                         lambda t: t.has_label(*active_labels),
@@ -190,8 +188,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 self.residual = self.residual.label_map(
                     lambda t: any(t.has_label(time_derivative, *active_labels)),
                     map_if_false=drop)
-                    
-        # Set field name now, if it is a list.
+
+        # Set field name and bcs for any simultaneous transport.
         if isinstance(self.field_name, list):
             self.field_name = equation.field_name
             bcs = equation.bcs[self.field_name]
