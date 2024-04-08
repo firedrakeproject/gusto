@@ -637,7 +637,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 self.tracers_to_copy.append(name)
 
         self.field_name = equation_set.field_name
-        print('self.field_name is', self.field_name)
         W = equation_set.function_space
         self.xrhs = Function(W)
         self.xrhs_phys = Function(W)

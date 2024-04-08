@@ -143,56 +143,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 # This enables conservative transport to be implemented
                 # with SIQN.
                 
-                # Treat this like we would for the entire mixed space
-                #self.field_name = equation.field_name
+                # Use the full mixed space. The field_name and residual
+                # are set up later.
                 self.fs = equation.function_space
                 self.idx = None
-                #bcs = equation.bcs[self.field_name]
-                
-                # Note to Tim: look at how BCs are constructed for 
-                # the mixed function space.
                 bcs = []
-                
-                #for subfield in self.field_name:
-                #    idx = equation.field_names.index(subfield)
-                #    
-                #    first = True
-                    
-                    # Form the residual with just the terms in the list
-                #    if first==True:
-                #        residual = self.residual.label_map(
-                #            lambda t: t.get(prognostic) == subfield,
-                #            lambda t: Term(
-                #                split_form(t.form)[idx].form,
-                #                t.labels),
-                #            drop)
-
-                 #       first = False
-                 #   else:
-                 #       residual += self.residual.label_map(
-                 #           lambda t: t.get(prognostic) == subfield,
-                 #           lambda t: Term(
-                 #               split_form(t.form)[idx].form,
-                 #               t.labels),
-                 #           drop)
-                            
-                # Add 'no transport' terms for the prognostics 
-                # not to be simultaneously transported.
-                # Make this better once working correctly.
-                #for subfield in self.equation.field_names:
-                #    print(subfield)
-                #    if subfield in self.field_name:
-                #        print('name in list')
-                #    else:
-                #        print('adding dummy term')
-                #        dummy_residual += self.residual.label_map(
-                #            lambda t: t.get(prognostic) == subfield,
-                #            lambda t: Term(
-                #                split_form(t.form)[idx].form,
-                #                t.labels),
-                #            drop)
-
-                #self.residual = residual
                 
             else:
                 self.idx = equation.field_names.index(self.field_name)
@@ -219,19 +174,17 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 residual = self.residual.label_map(
                     lambda t: t.has_label(time_derivative),
                     map_if_false=drop)
+
                 # Only keep active labels for prognostics in the list:
                 for subname in self.field_name:
-                    idx = equation.field_names.index(subname)
                     field_residual = self.residual.label_map(
-                                lambda t: t.get(prognostic) == subname,
-                                lambda t: Term(
-                                    split_form(t.form)[idx].form,
-                                    t.labels),
-                                drop)
+                                  lambda t: t.get(prognostic) == subname,
+                                  map_if_false=drop)
+
                     residual += field_residual.label_map(
                         lambda t: t.has_label(*active_labels),
                         map_if_false=drop)
-                        
+
                 self.residual = residual
             else:
                 self.residual = self.residual.label_map(
