@@ -32,7 +32,8 @@ from types import FunctionType
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
            "SourceSink", "SurfaceFluxes", "WindDrag", "StaticAdjustment",
-           "SuppressVerticalWind", "BoundaryLayerMixing", "TerminatorToy", "SWHeightRelax"]
+           "SuppressVerticalWind", "BoundaryLayerMixing", "TerminatorToy",
+           "SWHeightRelax", "SWCO2cond"]
 
 
 class PhysicsParametrisation(object, metaclass=ABCMeta):
@@ -1855,6 +1856,46 @@ class SWHeightRelax(PhysicsParametrisation):
         test = equation.tests[self.D_idx]
 
         height_expr = test * (self.D - H_rel)/tau_r * dx
+
+        equation.residual += self.label(subject(prognostic(height_expr, 'D'), equation.X), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Does something I don't understand
+
+        Args:
+            x_in : the field to be evolved
+            dt : the time interval for the scheme
+        """
+        self.D.assign(x_in.split()[self.D_idx])
+
+
+class SWCO2cond(PhysicsParametrisation):
+    """
+    Represents condensation of CO2 occuring when the height value (proxy for temperature) falls below a specified threshold
+    """
+
+    def __init__(self, equation, h_th, tau_c):
+        """
+        Args:
+            h_th: the threshold height below which `CO2 condensation' occurs
+            tau_c: the time constant for the relaxation to the threshold height
+        """
+
+        label_name = 'SWCO2cond'
+        super().__init__(equation, label_name, parameters=None)
+
+        self.D_idx = equation.field_names.index('D')
+
+        W = equation.function_space
+        Vd = W.sub(self.D_idx)
+        self.D = Function(Vd)
+
+        test = equation.tests[self.D_idx]
+
+        heaviside = self.D - h_th
+        heaviside = conditional(heaviside < 0, heaviside, 0)
+        height_expr = test * heaviside/tau_c * dx
 
         equation.residual += self.label(subject(prognostic(height_expr, 'D'), equation.X), self.evaluate)
 
