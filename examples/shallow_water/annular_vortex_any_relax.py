@@ -31,7 +31,7 @@ rel_sch = 'none'
 extra_name = ''
 
 ### max runtime currently 1 day
-tmax = 30 * day
+tmax = 50 * day
 ### timestep
 dt = 450.
 
