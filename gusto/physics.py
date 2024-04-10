@@ -1110,15 +1110,15 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         """
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
         if self.convective_feedback:
-            self.D.assign(x_in.split()[self.VD_idx])
+            self.D.assign(x_in.subfunctions[self.VD_idx])
         if self.thermal_feedback:
-            self.b.assign(x_in.split()[self.Vb_idx])
+            self.b.assign(x_in.subfunctions[self.Vb_idx])
         if self.time_varying_saturation:
             self.saturation_curve.interpolate(self.saturation_computation(x_in))
         if self.set_tau_to_dt:
             self.tau.assign(dt)
-        self.water_v.assign(x_in.split()[self.Vv_idx])
-        self.cloud.assign(x_in.split()[self.Vc_idx])
+        self.water_v.assign(x_in.subfunctions[self.Vv_idx])
+        self.cloud.assign(x_in.subfunctions[self.Vc_idx])
         if self.time_varying_gamma_v:
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
         for interpolator in self.source_interpolators:
