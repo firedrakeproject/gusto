@@ -21,7 +21,7 @@ from firedrake.utils import cached_property
 
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.labels import (time_derivative, prognostic, physics_label,
-                          implicit, explicit)
+                          implicit, explicit, transport)
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 
@@ -161,9 +161,22 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         self.evaluate_source = []
         self.physics_names = []
+        print(len(self.residual))
         for t in self.residual:
             if t.has_label(physics_label):
                 physics_name = t.get(physics_label)
+                prog_name = t.get(prognostic)
+                phys_filter = self.residual.label_map(
+                    lambda s: s.get(prognostic) == prog_name,
+                    map_if_false=drop)
+                print(phys_filter)
+                for q in phys_filter:
+                    print(q.has_label(transport))
+                    #if q.has_label(transport):
+                    #    print(q.label)
+                        
+                # If associated variable has a transport type of tracer conservative ... 
+                
                 if t.labels[physics_name] not in self.physics_names:
                     self.evaluate_source.append(t.labels[physics_name])
                     self.physics_names.append(t.labels[physics_name])

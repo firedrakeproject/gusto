@@ -271,9 +271,24 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             :class:`LabelledForm`: a labelled form containing the mass terms.
         """
 
+        tracer_names = [tracer.name for tracer in self.active_tracers]
+        print(tracer_names)
         for i, (test, field_name) in enumerate(zip(self.tests, self.field_names)):
             prog = split(self.X)[i]
-            mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
+            for j, ind_tracer_name in enumerate(tracer_names):
+                print(ind_tracer_name)
+                if field_name == ind_tracer_name:    
+                    print(self.active_tracers[j].name)
+                    if self.active_tracers[j].transport_eqn == TransportEquationType.tracer_conservative:
+                        ref_density_idx = self.field_names.index(self.active_tracers[j].density_name)
+                        ref_density = split(self.X)[ref_density_idx]
+                        q = prog*ref_density
+                        mass = subject(prognostic(inner(q, test)*dx,
+                                                  field_name), self.X)
+                        print('conservative mass form generated')
+            else: 
+                mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
+            
             if i == 0:
                 mass_form = time_derivative(mass)
             else:
