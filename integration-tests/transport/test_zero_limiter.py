@@ -167,7 +167,7 @@ def test_without_limiter(tmpdir):
 
     cloud_without_limiter = stepper_without_limiter.fields('cloud_water')
 
-    assert cloud_without_limiter.dat.data.min() < 0, "The minimum of cloud is negative"
+    assert cloud_without_limiter.dat.data.min() < 0, "The minimum of unlimited cloud should be negative"
 
 
 def test_with_limiter(tmpdir):
