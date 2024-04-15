@@ -21,7 +21,7 @@ from firedrake.utils import cached_property
 
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.labels import (time_derivative, prognostic, physics_label,
-                          implicit, explicit, transport)
+                          implicit, explicit, mass_weighted, transport)
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 
@@ -171,18 +171,33 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # Check if there is any conservative transport, which will be 
         # mean a 'mass_weighted' label is present.
         conservative_check = self.residual.label_map(
-                lambda t: t.has_label(mass_weighted),
-                map_if_false=drop) 
+            lambda t: t.has_label(mass_weighted),
+            map_if_false=drop) 
+        print('conservative terms are ', len(conservative_check))
         if len(conservative_check) > 0:
-            if len(self.physics_names) > 0:
-                raise ValueError('Conservative transport cannot be applied at the same time \
-                    as a physics scheme.')
+            transport_terms = self.residual.label_map(
+                lambda t: t.has_label(transport),
+                map_if_false=drop) 
+            if (len(transport_terms)) > 0:
+                if len(self.physics_names) > 0:
+                    raise ValueError('Conservative transport cannot be applied at the same time \
+                        as a physics scheme.')
+                else: 
+                    # Use mass_weighted forms for the transport:
+                    self.residual = self.residual.label_map(
+                        lambda t: t.has_label(mass_weighted),
+                        map_if_true=lambda t: Term(t.get(mass_weighted).form, t.labels))
+            #print('transport terms are', len(transport_terms))
+            #print('physics terms are', len(self.physics_names))
+            #print('total terms are', len(self.residual))
+            #if len(self.physics_names) > 0 and len(transport_terms) > 0:
+            #    raise ValueError('Conservative transport cannot be applied at the same time \
+            #        as a physics scheme.')
             
             # Use mass_weighted forms for the transport:
-            self.residual = self.residual_label_map(
-                lambda t: t.has_label(mass_weighted),
-                lambda t: Term(t.get(mass_weighted).form, t.labels),
-                drop)
+            #self.residual = self.residual.label_map(
+            #    lambda t: t.has_label(mass_weighted),
+            #    map_if_true=lambda t: Term(t.get(mass_weighted).form, t.labels))
 
         # -------------------------------------------------------------------- #
         # Set up Wrappers

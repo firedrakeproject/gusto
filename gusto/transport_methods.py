@@ -9,8 +9,7 @@ from firedrake import (
 from firedrake.fml import Term, keep, drop
 from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.labels import (prognostic, transport, transporting_velocity, ibp_label,
-    mass_weighted
-)
+                          mass_weighted)
 from gusto.logging import logger
 from gusto.spatial_methods import SpatialMethod
 
@@ -209,7 +208,7 @@ class DGUpwind(TransportMethod):
                                                  self.field,
                                                  ibp=ibp, outflow=outflow)
                                                  
-                form = mass_weighted(advective_form, mass_weighted_form)
+                form = mass_weighted_form#mass_weighted(advective_form, mass_weighted_form)
             else:
                 raise NotImplementedError('Upwind transport scheme has not been '
                                           + 'implemented for this transport equation type')

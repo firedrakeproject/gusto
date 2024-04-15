@@ -275,6 +275,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         tracer_names = [tracer.name for tracer in self.active_tracers]
         for i, (test, field_name) in enumerate(zip(self.tests, self.field_names)):
             prog = split(self.X)[i]
+            mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
             for j, ind_tracer_name in enumerate(tracer_names):
                 if field_name == ind_tracer_name:
                     if self.active_tracers[j].transport_eqn == TransportEquationType.tracer_conservative:
@@ -284,10 +285,10 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                         # Have the mass weighted version stored in the mass_weighted label
                         mass_weighted_form = subject(prognostic(inner(q, test)*dx,
                                                   field_name), self.X)
-                        mass = mass_weighted(subject(prognostic(inner(q, test)*dx,
+                        # Replace the existing mass form with one containing 
+                        # the mass_weighted label
+                        mass = mass_weighted(subject(prognostic(inner(prog, test)*dx,
                                                   field_name), self.X), mass_weighted_form)
-            else:
-                mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
 
             if i == 0:
                 mass_form = time_derivative(mass)
@@ -494,9 +495,14 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 elif tracer.transport_eqn == TransportEquationType.tracer_conservative:
                     ref_density_idx = self.field_names.index(tracer.density_name)
                     ref_density = split(self.X)[ref_density_idx]
-                    tracer_adv = prognostic(
+                    mass_weighted_tracer_adv = prognostic(
                         tracer_conservative_form(tracer_test, tracer_prog,
-                                                 ref_density, u), tracer.name)
+                                                 ref_density, u), 
+                        tracer.name)
+                    
+                    tracer_adv = mass_weighted(prognostic(
+                        advection_form(tracer_test, tracer_prog, u),
+                        tracer.name), mass_weighted_tracer_adv)
 
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
