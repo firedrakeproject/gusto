@@ -48,7 +48,6 @@ class Parareal(object):
         self.x = PararealFields(equation, self.n_intervals)
         self.xF = PararealFields(equation, self.n_intervals)
         self.xn = Function(equation.function_space)
-        self.xnp1 = Function(equation.function_space)
         self.xGk = PararealFields(equation, self.n_intervals)
         self.xGkm1 = PararealFields(equation, self.n_intervals)
         self.xFn = Function(equation.function_space)
@@ -94,6 +93,5 @@ class Parareal(object):
                 xFnp1 = self.xF(n+1)(self.name)
                 xnp1.assign(xGk - xGkm1 + xFnp1)
                 xGkm1.assign(xGk)
-                
 
         x_out.assign(xnp1)
