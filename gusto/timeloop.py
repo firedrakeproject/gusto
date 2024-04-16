@@ -2,20 +2,19 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, Projector, split, Constant
-from firedrake.fml import drop, Label, Term
+from firedrake.fml import drop, Label
 from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
 from gusto.fields import TimeLevelFields, StateFields
 from gusto.forcing import Forcing
 from gusto.labels import (
     transport, diffusion, time_derivative, linearisation, prognostic,
-    physics_label, transporting_velocity
+    physics_label
 )
 from gusto.linear_solvers import LinearTimesteppingSolver
 from gusto.logging import logger
 from gusto.time_discretisation import ExplicitTimeDiscretisation
 from gusto.transport_methods import TransportMethod
-import ufl
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SplitPrescribedTransport",
            "SemiImplicitQuasiNewton", "PrescribedTransport"]
@@ -131,13 +130,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         else:
             uadv = self.transporting_velocity
 
-        scheme.residual = scheme.residual.label_map(
-            lambda t: t.has_label(transporting_velocity),
-            map_if_true=lambda t:
-            Term(ufl.replace(t.form, {t.get(transporting_velocity): uadv}), t.labels)
-        )
-
-        scheme.residual = transporting_velocity.update_value(scheme.residual, uadv)
+        scheme.setup_transporting_velocity(uadv)
 
     def log_timestep(self):
         """
@@ -298,7 +291,7 @@ class Timestepper(BaseTimestepper):
     def setup_scheme(self):
         self.setup_equation(self.equation)
         self.scheme.setup(self.equation)
-        #self.setup_transporting_velocity(self.scheme)
+        self.setup_transporting_velocity(self.scheme)
         if self.io.output.log_courant:
             self.scheme.courant_max = self.io.courant_max
 

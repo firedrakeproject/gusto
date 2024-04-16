@@ -8,6 +8,7 @@ operator F.
 from abc import ABCMeta, abstractmethod, abstractproperty
 import math
 import numpy as np
+import ufl
 
 from firedrake import (
     Function, TestFunction, TestFunctions, NonlinearVariationalProblem,
@@ -21,7 +22,7 @@ from firedrake.utils import cached_property
 
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.labels import (time_derivative, prognostic, physics_label,
-                          implicit, explicit)
+                          implicit, explicit, transporting_velocity)
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 
@@ -238,6 +239,16 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         self.x_out = Function(self.fs)
         self.x1 = Function(self.fs)
+
+    def setup_transporting_velocity(self, uadv):
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(transporting_velocity),
+            map_if_true=lambda t:
+            Term(ufl.replace(t.form, {t.get(transporting_velocity): uadv}),
+                 t.labels)
+        )
+
+        self.residual = transporting_velocity.update_value(self.residual, uadv)
 
     @property
     def nlevels(self):

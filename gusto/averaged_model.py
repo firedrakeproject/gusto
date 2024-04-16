@@ -1,9 +1,11 @@
 from firedrake import (Function, TrialFunctions, LinearVariationalProblem,
                        LinearVariationalSolver, DirichletBC, Constant)
-from firedrake.fml import all_terms, drop, replace_subject
-from gusto.labels import time_derivative, transport, prognostic
+from firedrake.fml import all_terms, drop, replace_subject, Term
+from gusto.labels import (time_derivative, transport, prognostic,
+                          transporting_velocity)
 from gusto.rexi import Rexi
 import numpy as np
+import ufl
 
 
 class AveragedModel(object):
@@ -62,6 +64,16 @@ class AveragedModel(object):
         nprob = LinearVariationalProblem(a.form, self.residual.form,
                                          self.x_Nout, bcs)
         self.nsolver = LinearVariationalSolver(nprob)
+
+    def setup_transporting_velocity(self, uadv):
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(transporting_velocity),
+            map_if_true=lambda t:
+            Term(ufl.replace(t.form, {t.get(transporting_velocity): uadv}),
+                 t.labels)
+        )
+
+        self.residual = transporting_velocity.update_value(self.residual, uadv)
 
     def apply(self, x_out, x_in):
         pass

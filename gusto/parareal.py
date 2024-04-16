@@ -54,6 +54,10 @@ class Parareal(object):
         self.xFnp1 = Function(equation.function_space)
         self.name = equation.field_name
 
+    def setup_transporting_velocity(self, uadv):
+        self.coarse_scheme.setup_transporting_velocity(uadv)
+        self.fine_scheme.setup_transporting_velocity(uadv)
+
     def apply(self, x_out, x_in):
 
         self.xn.assign(x_in)
