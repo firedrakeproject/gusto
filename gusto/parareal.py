@@ -54,14 +54,10 @@ class Parareal(object):
         self.xFn = Function(equation.function_space)
         self.xFnp1 = Function(equation.function_space)
         self.name = equation.field_name
-        from firedrake import File
-        self.xGout = File("xGout.pvd")
-        self.xFout = File("xFout.pvd")
 
     def apply(self, x_out, x_in):
 
         self.xn.assign(x_in)
-        self.xGout.write(self.xn)
         x0 = self.x(0)(self.name)
         x0.assign(x_in)
         xF0 = self.xF(0)(self.name)
@@ -76,7 +72,6 @@ class Parareal(object):
             xnp1 = self.x(n+1)(self.name)
             xnp1.assign(xGnp1)
             self.xn.assign(xnp1)
-            self.xGout.write(self.xn)
 
         for k in range(self.max_its):
 
@@ -87,7 +82,6 @@ class Parareal(object):
                 self.xFn.assign(self.x(n)(self.name))
                 xFnp1 = self.xF(n+1)(self.name)
                 self.fine_scheme.apply(xFnp1, self.xFn)
-                self.xFout.write(xFnp1)
 
             # compute correction
             for n in range(k, self.n_intervals):
