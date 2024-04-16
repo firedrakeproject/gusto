@@ -168,6 +168,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     self.evaluate_source.append(t.labels[physics_name])
                     self.physics_names.append(t.labels[physics_name])
                         
+        print('before replacing check')
+        for t in self.residual:
+            print(t.form)
         # Check if there is any conservative transport, which will be 
         # mean a 'mass_weighted' label is present.
         conservative_check = self.residual.label_map(
@@ -187,17 +190,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     self.residual = self.residual.label_map(
                         lambda t: t.has_label(mass_weighted),
                         map_if_true=lambda t: Term(t.get(mass_weighted).form, t.labels))
-            #print('transport terms are', len(transport_terms))
-            #print('physics terms are', len(self.physics_names))
-            #print('total terms are', len(self.residual))
-            #if len(self.physics_names) > 0 and len(transport_terms) > 0:
-            #    raise ValueError('Conservative transport cannot be applied at the same time \
-            #        as a physics scheme.')
-            
-            # Use mass_weighted forms for the transport:
-            #self.residual = self.residual.label_map(
-            #    lambda t: t.has_label(mass_weighted),
-            #    map_if_true=lambda t: Term(t.get(mass_weighted).form, t.labels))
 
         # -------------------------------------------------------------------- #
         # Set up Wrappers

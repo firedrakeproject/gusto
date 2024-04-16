@@ -5,7 +5,7 @@ from firedrake import (
     TestFunction, Function, sin, pi, inner, dx, div, cross,
     FunctionSpace, MixedFunctionSpace, TestFunctions, TrialFunction,
     FacetNormal, jump, avg, dS_v, dS, DirichletBC, conditional,
-    SpatialCoordinate, split, Constant, action
+    SpatialCoordinate, split, Constant, action, replace_subject
 )
 from firedrake.fml import (
     Term, all_terms, keep, drop, Label, subject,
@@ -14,7 +14,7 @@ from firedrake.fml import (
 from gusto.fields import PrescribedFields
 from gusto.labels import (
     time_derivative, transport, prognostic, hydrostatic, linearisation,
-    mass_weighted, pressure_gradient, coriolis, divergence, gravity, 
+    mass_weighted, pressure_gradient, coriolis, divergence, gravity,
     incompressible, sponge
 )
 from gusto.thermodynamics import exner_pressure
@@ -285,10 +285,11 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                         # Have the mass weighted version stored in the mass_weighted label
                         mass_weighted_form = subject(prognostic(inner(q, test)*dx,
                                                   field_name), self.X)
-                        # Replace the existing mass form with one containing 
+                        standard_mass_form = mass
+
+                        # Replace the existing mass form with one containing
                         # the mass_weighted label
-                        mass = mass_weighted(subject(prognostic(inner(prog, test)*dx,
-                                                  field_name), self.X), mass_weighted_form)
+                        mass = mass_weighted(standard_mass_form, mass_weighted_form)
 
             if i == 0:
                 mass_form = time_derivative(mass)
@@ -484,6 +485,8 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 idx = self.field_names.index(tracer.name)
                 tracer_prog = split(self.X)[idx]
                 tracer_test = self.tests[idx]
+                print(tracer.name)
+                print(tracer.transport_eqn)
                 if tracer.transport_eqn == TransportEquationType.advective:
                     tracer_adv = prognostic(
                         advection_form(tracer_test, tracer_prog, u),
@@ -499,14 +502,13 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                         tracer_conservative_form(tracer_test, tracer_prog,
                                                  ref_density, u), 
                         tracer.name)
-                    
-                    tracer_adv = mass_weighted(prognostic(
+                    default_adv_form = prognostic(
                         advection_form(tracer_test, tracer_prog, u),
-                        tracer.name), mass_weighted_tracer_adv)
+                        tracer.name)
 
+                    tracer_adv = mass_weighted(default_adv_form, mass_weighted_tracer_adv)
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
-
                 if no_tracer_transported:
                     # We arrive here for the first tracer to be transported
                     adv_form = subject(tracer_adv, self.X)

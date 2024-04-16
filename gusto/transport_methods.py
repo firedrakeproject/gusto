@@ -35,7 +35,12 @@ class TransportMethod(SpatialMethod):
         # Inherited init method extracts original term to be replaced
         super().__init__(equation, variable, transport)
 
-        self.transport_equation_type = self.original_form.terms[0].get(transport)
+        # If this is term has a mass_weighted label, then we need to 
+        # use the tracer_conservative version of the transport method.
+        if self.original_form.terms[0].has_label(mass_weighted):
+            self.transport_equation_type = TransportEquationType.tracer_conservative
+        else:
+            self.transport_equation_type = self.original_form.terms[0].get(transport)
 
         if self.transport_equation_type == TransportEquationType.tracer_conservative:
             # Extract associated density of the variable
@@ -74,6 +79,12 @@ class TransportMethod(SpatialMethod):
             # Update transporting velocity
             new_transporting_velocity = self.form.terms[0].get(transporting_velocity)
             original_term = transporting_velocity.update_value(original_term, new_transporting_velocity)
+
+            # Check if this is a conservative transport:
+            if original_term.has_label(mass_weighted):
+                # Update the mass_weighted label
+                new_mass_weighted = self.form.terms[0].get(mass_weighted)
+                original_term = mass_weighted.update_value(original_term, new_mass_weighted)
 
             # Create new term
             new_term = Term(self.form.form, original_term.labels)
@@ -206,13 +217,14 @@ class DGUpwind(TransportMethod):
                                                        ibp=ibp)
                 advective_form = upwind_advection_form(self.domain, self.test,
                                                  self.field,
-                                                 ibp=ibp, outflow=outflow)
-                                                 
-                form = mass_weighted_form#mass_weighted(advective_form, mass_weighted_form)
+                                                 ibp=ibp)
+
+                form = mass_weighted(advective_form, mass_weighted_form)
+
             else:
                 raise NotImplementedError('Upwind transport scheme has not been '
                                           + 'implemented for this transport equation type')
-
+            print('DG upwind formed')
         self.form = form
 
 
