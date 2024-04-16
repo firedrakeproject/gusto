@@ -35,7 +35,7 @@ class TransportMethod(SpatialMethod):
         # Inherited init method extracts original term to be replaced
         super().__init__(equation, variable, transport)
 
-        # If this is term has a mass_weighted label, then we need to 
+        # If this is term has a mass_weighted label, then we need to
         # use the tracer_conservative version of the transport method.
         if self.original_form.terms[0].has_label(mass_weighted):
             self.transport_equation_type = TransportEquationType.tracer_conservative
@@ -212,12 +212,12 @@ class DGUpwind(TransportMethod):
 
             elif self.transport_equation_type == TransportEquationType.tracer_conservative:
                 mass_weighted_form = upwind_tracer_conservative_form(self.domain, self.test,
-                                                       self.field,
-                                                       self.conservative_density,
-                                                       ibp=ibp)
+                                                                     self.field,
+                                                                     self.conservative_density,
+                                                                     ibp=ibp)
                 advective_form = upwind_advection_form(self.domain, self.test,
-                                                 self.field,
-                                                 ibp=ibp)
+                                                       self.field,
+                                                       ibp=ibp)
 
                 form = mass_weighted(advective_form, mass_weighted_form)
 

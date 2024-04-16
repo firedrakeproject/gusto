@@ -5,7 +5,7 @@ from firedrake import (
     TestFunction, Function, sin, pi, inner, dx, div, cross,
     FunctionSpace, MixedFunctionSpace, TestFunctions, TrialFunction,
     FacetNormal, jump, avg, dS_v, dS, DirichletBC, conditional,
-    SpatialCoordinate, split, Constant, action, replace_subject
+    SpatialCoordinate, split, Constant, action
 )
 from firedrake.fml import (
     Term, all_terms, keep, drop, Label, subject,
@@ -284,7 +284,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                         q = prog*ref_density
                         # Have the mass weighted version stored in the mass_weighted label
                         mass_weighted_form = subject(prognostic(inner(q, test)*dx,
-                                                  field_name), self.X)
+                                                     field_name), self.X)
                         standard_mass_form = mass
 
                         # Replace the existing mass form with one containing
@@ -500,7 +500,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                     ref_density = split(self.X)[ref_density_idx]
                     mass_weighted_tracer_adv = prognostic(
                         tracer_conservative_form(tracer_test, tracer_prog,
-                                                 ref_density, u), 
+                                                 ref_density, u),
                         tracer.name)
                     default_adv_form = prognostic(
                         advection_form(tracer_test, tracer_prog, u),
