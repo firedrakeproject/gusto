@@ -29,3 +29,4 @@ from gusto.timeloop import *                         # noqa
 from gusto.transport_methods import *                # noqa
 from gusto.wrappers import *                         # noqa
 from gusto.averaged_model import *                   # noqa
+from gusto.parareal import *                         # noqa
