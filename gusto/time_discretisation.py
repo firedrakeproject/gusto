@@ -169,8 +169,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     self.physics_names.append(t.labels[physics_name])
 
         print('before replacing check')
-        for t in self.residual:
-            print(t.form)
+        #for t in self.residual:
+        #    print('the form')
+        #    print(t.form)
+        #    print('the labels')
+        #    print(t.labels)
         # Check if there is any conservative transport, which will be
         # mean a 'mass_weighted' label is present.
         conservative_check = self.residual.label_map(
@@ -187,10 +190,31 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         as a physics scheme.')
                 else:
                     # Use mass_weighted forms for the transport:
+                    # Nooo. replace the labels with those in 
+                    # the NEW FORM!!!!
+                    #self.residual = self.residual.label_map(
+                    #    lambda t: t.has_label(mass_weighted),
+                    #    map_if_true=lambda t: Term(t.get(mass_weighted).form, t.labels))
                     self.residual = self.residual.label_map(
                         lambda t: t.has_label(mass_weighted),
-                        map_if_true=lambda t: Term(t.get(mass_weighted).form, t.labels))
-
+                        map_if_true=lambda t: t.get(mass_weighted))
+                    #self.residual = self.residual.label_map(
+                    #    lambda t: t.has_label(mass_weighted),
+                    #    map_if_true=lambda t: Term(t.get(mass_weighted).form, t.get(mass_weighted).terms[0].labels))
+                    # Replace mass_weighted terms with the form in the label,
+                    # whilst ensuring the labels for the mass_weighted form
+                    # are passed to the new term.
+                    #self.residual = self.residual.label_map(
+                    #    lambda t: t.has_label(mass_weighted),
+                    #    map_if_true=lambda t: mass_weighted(t.get(mass_weighted).form, t))
+        
+        print('after replacing check')
+        #for t in self.residual:
+        #    print('the form')
+         #   print(t.form)
+         #   print('the labels')
+         #   print(t.labels)
+        
         # -------------------------------------------------------------------- #
         # Set up Wrappers
         # -------------------------------------------------------------------- #
@@ -857,6 +881,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                          limiter=limiter, options=options)
         self.butcher_matrix = butcher_matrix
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
+        
         self.increment_form = increment_form
 
     @property
@@ -873,6 +898,12 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                 the equation to include.
         """
         super().setup(equation, apply_bcs, *active_labels)
+
+        if len(self.residual.label_map( lambda t: t.has_label(mass_weighted) and \
+                                        t.has_label(transport),
+                                        map_if_false=drop)) > 1:
+            print('automatically detect increment form')
+            self.increment_form = False
 
         if not self.increment_form:
             self.field_i = [Function(self.fs) for i in range(self.nStages+1)]
