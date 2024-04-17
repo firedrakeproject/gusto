@@ -8,13 +8,13 @@ import numpy as np
 
 class AveragedModel(object):
 
-    def __init__(self, domain, params):
+    def __init__(self, domain, params, Mbar):
 
-        self.dt = Constant(60*60)
+        self.dt = domain.dt
+
         self.params = params
         self.nlevels = 1
 
-        Mbar = 9
         self.svals = np.arange(0.5, Mbar)/Mbar
         weights = np.exp(-1.0/self.svals/(1-self.svals))
         self.weights = weights / np.sum(weights)
@@ -37,18 +37,8 @@ class AveragedModel(object):
             map_if_false=drop)
 
         self.residual = equation.residual.label_map(
-            lambda t: t.has_label(transport) and t.get(prognostic) == "u",
+            lambda t: t.has_label(transport),
             map_if_true=replace_subject(self.x_Nin),
-            map_if_false=drop)
-
-        self.residual += equation.residual.label_map(
-            lambda t: t.has_label(transport) and t.get(prognostic) == "D",
-            map_if_true=replace_subject(self.x_Nin),
-            map_if_false=drop)
-
-        self.residual -= equation.residual.label_map(
-            lambda t: t.has_label(transport) and t.get(prognostic) == "D",
-            map_if_true=replace_subject(equation.prescribed_fields('topography'), old_idx=1),
             map_if_false=drop)
 
         self.residual = self.residual.label_map(
@@ -70,7 +60,7 @@ class AveragedModel(object):
 class AveragedRK4(AveragedModel):
 
     def setup(self, equation, apply_bcs=True, *active_labels):
-        super().setup(equation)
+        super().setup(equation, apply_bcs, *active_labels)
         self.nStages = 4
         self.V = [Function(self.fs) for i in range(self.nStages)]
         self.U = [Function(self.fs) for i in range(self.nStages)]
