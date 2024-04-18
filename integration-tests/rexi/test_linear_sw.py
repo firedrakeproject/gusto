@@ -16,7 +16,6 @@ import numpy as np
 
 def run_rexi_sw(tmpdir):
     # Parameters
-    dt = 0.001
     tmax = 0.1
     H = 1
     f = 1
@@ -27,7 +26,7 @@ def run_rexi_sw(tmpdir):
     L = 1
     n = 20
     mesh = PeriodicUnitSquareMesh(n, n, name=mesh_name)
-    domain = Domain(mesh, dt, 'BDM', 1)
+    domain = Domain(mesh, tmax, 'BDM', 1)
 
     # Equation
     parameters = ShallowWaterParameters(H=H, g=g)
@@ -66,7 +65,7 @@ def run_rexi_sw(tmpdir):
                                     checkpoint_pickup_filename=new_path,
                                     checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
-    check_domain = Domain(check_mesh, dt, 'BDM', 1)
+    check_domain = Domain(check_mesh, tmax, 'BDM', 1)
     check_eqn = ShallowWaterEquations(check_domain, parameters, fexpr=fexpr)
     check_io = IO(check_domain, output=check_output)
     check_stepper = Timestepper(check_eqn, RK4(check_domain), check_io)
@@ -89,5 +88,5 @@ def test_rexi_sw(tmpdir):
     uerror = np.linalg.norm(udiff_arr) / np.linalg.norm(usoln.dat.data)
     Derror = np.linalg.norm(Ddiff_arr) / np.linalg.norm(Dsoln.dat.data)
 
-    assert uerror < 0.04, 'u values in REXI linear shallow water wave test do not match KGO values'
-    assert Derror < 0.02, 'D values in REXI linear shallow water wave test do not match KGO values'
+    assert uerror < 1e-14, 'u values in REXI linear shallow water wave test do not match KGO values'
+    assert Derror < 1e-14, 'D values in REXI linear shallow water wave test do not match KGO values'
