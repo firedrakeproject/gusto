@@ -7,7 +7,7 @@ REXI applied to the compressible Boussinesq equations.
 from os.path import join, abspath, dirname
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
-                       exp, SpatialCoordinate, Function, pi)
+                       exp, SpatialCoordinate, Function)
 from firedrake.output import VTKFile
 
 
@@ -121,4 +121,3 @@ def test_rexi_linear_boussinesq(tmpdir):
         'p values in REXI compressible boussinesq test do not match KGO values'
     assert berror < 1e-14, \
         'b values in REXI compressible boussinesq test do not match KGO values'
-
