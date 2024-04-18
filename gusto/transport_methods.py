@@ -6,7 +6,7 @@ from firedrake import (
     dx, dS, dS_v, dS_h, ds_t, ds_b, ds_v, dot, inner, outer, jump,
     grad, div, FacetNormal, Function, sign, avg, cross, curl, split
 )
-from firedrake.fml import Term, keep, drop, subject
+from firedrake.fml import Term, keep, drop
 from gusto.configuration import IntegrateByParts, TransportEquationType
 from gusto.labels import (prognostic, transport, transporting_velocity, ibp_label,
                           mass_weighted)
@@ -79,7 +79,7 @@ class TransportMethod(SpatialMethod):
             # Update transporting velocity
             new_transporting_velocity = self.form.terms[0].get(transporting_velocity)
             original_term = transporting_velocity.update_value(original_term, new_transporting_velocity)
-            
+
             # Create new term
             new_term = Term(self.form.form, original_term.labels)
 
@@ -95,7 +95,7 @@ class TransportMethod(SpatialMethod):
                 new_mass_weighted_transporting_velocity = new_mass_weighted.terms[0].get(transporting_velocity)
                 new_mass_weighted_term = transporting_velocity.update_value(new_mass_weighted_term, new_mass_weighted_transporting_velocity)
 
-                # Add the discretised mass weighted transport term as the 
+                # Add the discretised mass weighted transport term as the
                 # new mass weighted label.
                 new_term = mass_weighted.update_value(new_term, new_mass_weighted_term)
 
@@ -235,7 +235,6 @@ class DGUpwind(TransportMethod):
             else:
                 raise NotImplementedError('Upwind transport scheme has not been '
                                           + 'implemented for this transport equation type')
-            print('DG upwind formed')
         self.form = form
 
 

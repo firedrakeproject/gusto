@@ -284,13 +284,13 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 if field_name == ind_tracer_name:
                     if self.active_tracers[j].transport_eqn == TransportEquationType.tracer_conservative:
                         standard_mass_form = mass
-                        
+
                         # We need to generate a mass form that is multiplied by the density
                         ref_density_idx = self.field_names.index(self.active_tracers[j].density_name)
                         ref_density = split(self.X)[ref_density_idx]
                         q = prog*ref_density
                         mass_weighted_form = time_derivative(subject(prognostic(inner(q, test)*dx,
-                                                     field_name), self.X))
+                                                             field_name), self.X))
 
                         # Store the mass form for any conservative transport
                         # in the mass_weighted label
@@ -489,8 +489,6 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 idx = self.field_names.index(tracer.name)
                 tracer_prog = split(self.X)[idx]
                 tracer_test = self.tests[idx]
-                print(tracer.name)
-                print(tracer.transport_eqn)
                 if tracer.transport_eqn == TransportEquationType.advective:
                     tracer_adv = subject(prognostic(
                         advection_form(tracer_test, tracer_prog, u),
@@ -503,7 +501,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                     default_adv_form = subject(prognostic(
                         advection_form(tracer_test, tracer_prog, u),
                         tracer.name), self.X)
-                        
+
                     ref_density_idx = self.field_names.index(tracer.density_name)
                     ref_density = split(self.X)[ref_density_idx]
                     mass_weighted_tracer_adv = subject(prognostic(

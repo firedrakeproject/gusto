@@ -180,7 +180,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     same time as a physics scheme.')
             else:
                 # Replace the terms with a mass_weighted label with the
-                # mass_weighted form. It is important that the labels from 
+                # mass_weighted form. It is important that the labels from
                 # this new form are used.
                 self.residual = self.residual.label_map(
                     lambda t: t.has_label(mass_weighted),
@@ -852,7 +852,6 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
                          limiter=limiter, options=options)
         self.butcher_matrix = butcher_matrix
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
-        
         self.increment_form = increment_form
 
     @property
@@ -870,9 +869,8 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         """
         super().setup(equation, apply_bcs, *active_labels)
 
-        if len(self.residual.label_map( lambda t: t.has_label(mass_weighted) and \
-                                        t.has_label(transport),
-                                        map_if_false=drop)) > 1:
+        if len(self.residual.label_map(lambda t: t.has_label(mass_weighted) and t.has_label(transport),
+                                       map_if_false=drop)) > 1:
             print('automatically detect increment form')
             self.increment_form = False
 
