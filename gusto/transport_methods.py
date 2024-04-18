@@ -83,28 +83,21 @@ class TransportMethod(SpatialMethod):
             # Create new term
             new_term = Term(self.form.form, original_term.labels)
 
-            # Check if this is a conservative transport:
+            # Check if this is a conservative transport
             if original_term.has_label(mass_weighted):
-                # Update the mass_weighted label
+                # Extract the original and discretised mass_weighted terms
                 original_mass_weighted_term = original_term.get(mass_weighted).terms[0]
                 new_mass_weighted = self.form.terms[0].get(mass_weighted)
-                
-                # New mass weighted term using the previous mass weighted labels
+
+                # Ensure the correct labels for the new mass weighted term
                 new_mass_weighted_term = Term(new_mass_weighted.form, original_mass_weighted_term.labels)
-                # Update the mass weighted transporting velocity:
+                # Update the mass weighted transporting velocity
                 new_mass_weighted_transporting_velocity = new_mass_weighted.terms[0].get(transporting_velocity)
                 new_mass_weighted_term = transporting_velocity.update_value(new_mass_weighted_term, new_mass_weighted_transporting_velocity)
-                
-                new_term = Term(self.form.form, original_term.labels)
-                
+
                 # Add the discretised mass weighted transport term as the 
                 # new mass weighted label.
                 new_term = mass_weighted.update_value(new_term, new_mass_weighted_term)
-                
-                #print('original_form labels \n', original_term.labels)
-                #print('original_form mass_weighted labels \n', original_mass_weighted_term.labels)
-                #print('new form labels \n', new_term.get(mass_weighted).labels)
-
 
             # Replace original term with new term
             equation.residual = equation.residual.label_map(
@@ -236,6 +229,8 @@ class DGUpwind(TransportMethod):
                                                        self.field,
                                                        ibp=ibp)
 
+                # Store the conservative transport form in the mass_weighted label,
+                # but by default use an advective form.
                 form = mass_weighted(advective_form, mass_weighted_form)
             else:
                 raise NotImplementedError('Upwind transport scheme has not been '

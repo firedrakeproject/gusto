@@ -168,53 +168,24 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     self.evaluate_source.append(t.labels[physics_name])
                     self.physics_names.append(t.labels[physics_name])
 
-        print('before replacing check')
-        #for t in self.residual:
-        #    print('the form')
-        #    print(t.form)
-        #    print('the labels')
-        #    print(t.labels)
-        # Check if there is any conservative transport, which will be
-        # mean a 'mass_weighted' label is present.
-        conservative_check = self.residual.label_map(
-            lambda t: t.has_label(mass_weighted),
+        # Check if there is any conservative transport, which will
+        # mean that there will be terms with both mass_weighted and
+        # transport labels.
+        conservative_transport_check = self.residual.label_map(
+            lambda t: t.has_label(mass_weighted) and t.has_label(transport),
             map_if_false=drop)
-        print('conservative terms are ', len(conservative_check))
-        if len(conservative_check) > 0:
-            transport_terms = self.residual.label_map(
-                lambda t: t.has_label(transport),
-                map_if_false=drop)
-            if (len(transport_terms)) > 0:
-                if len(self.physics_names) > 0:
-                    raise ValueError('Conservative transport cannot be applied at the same time \
-                        as a physics scheme.')
-                else:
-                    # Use mass_weighted forms for the transport:
-                    # Nooo. replace the labels with those in 
-                    # the NEW FORM!!!!
-                    #self.residual = self.residual.label_map(
-                    #    lambda t: t.has_label(mass_weighted),
-                    #    map_if_true=lambda t: Term(t.get(mass_weighted).form, t.labels))
-                    self.residual = self.residual.label_map(
-                        lambda t: t.has_label(mass_weighted),
-                        map_if_true=lambda t: t.get(mass_weighted))
-                    #self.residual = self.residual.label_map(
-                    #    lambda t: t.has_label(mass_weighted),
-                    #    map_if_true=lambda t: Term(t.get(mass_weighted).form, t.get(mass_weighted).terms[0].labels))
-                    # Replace mass_weighted terms with the form in the label,
-                    # whilst ensuring the labels for the mass_weighted form
-                    # are passed to the new term.
-                    #self.residual = self.residual.label_map(
-                    #    lambda t: t.has_label(mass_weighted),
-                    #    map_if_true=lambda t: mass_weighted(t.get(mass_weighted).form, t))
-        
-        print('after replacing check')
-        #for t in self.residual:
-        #    print('the form')
-         #   print(t.form)
-         #   print('the labels')
-         #   print(t.labels)
-        
+        if len(conservative_transport_check) > 0:
+            if len(self.physics_names) > 0:
+                raise ValueError('Conservative transport cannot be applied at the \
+                    same time as a physics scheme.')
+            else:
+                # Replace the terms with a mass_weighted label with the
+                # mass_weighted form. It is important that the labels from 
+                # this new form are used.
+                self.residual = self.residual.label_map(
+                    lambda t: t.has_label(mass_weighted),
+                    map_if_true=lambda t: t.get(mass_weighted))
+
         # -------------------------------------------------------------------- #
         # Set up Wrappers
         # -------------------------------------------------------------------- #

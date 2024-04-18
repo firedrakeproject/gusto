@@ -283,18 +283,18 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             for j, ind_tracer_name in enumerate(tracer_names):
                 if field_name == ind_tracer_name:
                     if self.active_tracers[j].transport_eqn == TransportEquationType.tracer_conservative:
+                        standard_mass_form = mass
+                        
+                        # We need to generate a mass form that is multiplied by the density
                         ref_density_idx = self.field_names.index(self.active_tracers[j].density_name)
                         ref_density = split(self.X)[ref_density_idx]
                         q = prog*ref_density
-                        # Have the mass weighted version stored in the mass_weighted label
-                        mass_weighted_form = subject(prognostic(inner(q, test)*dx,
-                                                     field_name), self.X)
-                        standard_mass_form = mass
+                        mass_weighted_form = time_derivative(subject(prognostic(inner(q, test)*dx,
+                                                     field_name), self.X))
 
-                        # Replace the existing mass form with one containing
-                        # the mass_weighted label
+                        # Store the mass form for any conservative transport
+                        # in the mass_weighted label
                         mass = mass_weighted(standard_mass_form, mass_weighted_form)
-
             if i == 0:
                 mass_form = time_derivative(mass)
             else:
@@ -500,17 +500,18 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                         continuity_form(tracer_test, tracer_prog, u),
                         tracer.name), self.X)
                 elif tracer.transport_eqn == TransportEquationType.tracer_conservative:
-                    ref_density_idx = self.field_names.index(tracer.density_name)
-                    ref_density = split(self.X)[ref_density_idx]
-
-                    mass_weighted_tracer_adv = subject(prognostic(
-                        tracer_conservative_form(tracer_test, tracer_prog,
-                                                 ref_density, u),
-                        tracer.name), self.X)
                     default_adv_form = subject(prognostic(
                         advection_form(tracer_test, tracer_prog, u),
                         tracer.name), self.X)
+                        
+                    ref_density_idx = self.field_names.index(tracer.density_name)
+                    ref_density = split(self.X)[ref_density_idx]
+                    mass_weighted_tracer_adv = subject(prognostic(
+                        tracer_conservative_form(tracer_test, tracer_prog, ref_density, u),
+                        tracer.name), self.X)
 
+                    # Store the conservative transport form in the mass_weighted label,
+                    # but by default use an advective form.
                     tracer_adv = mass_weighted(default_adv_form, mass_weighted_tracer_adv)
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
