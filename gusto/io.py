@@ -7,7 +7,7 @@ import sys
 import time
 from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.meshes import get_flat_latlon_mesh
-from firedrake import (Function, functionspaceimpl, Constant,
+from firedrake import (Function, functionspaceimpl, Constant, COMM_WORLD,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 from firedrake.output import VTKFile
 from pyop2.mpi import MPI
@@ -21,7 +21,7 @@ class GustoIOError(IOError):
     pass
 
 
-def pick_up_mesh(output, mesh_name):
+def pick_up_mesh(output, mesh_name, comm=COMM_WORLD):
     """
     Picks up a checkpointed mesh. This must be the first step of any model being
     picked up from a checkpointing run.
@@ -44,7 +44,7 @@ def pick_up_mesh(output, mesh_name):
     else:
         dumpdir = path.join("results", output.dirname)
         chkfile = path.join(dumpdir, "chkpt.h5")
-    with CheckpointFile(chkfile, 'r') as chk:
+    with CheckpointFile(chkfile, 'r', comm=comm) as chk:
         mesh = chk.load_mesh(mesh_name)
 
     if dumpdir:
@@ -533,7 +533,7 @@ class IO(object):
         if not pick_up:
             self.dump(state_fields, t, step=1)
 
-    def pick_up_from_checkpoint(self, state_fields):
+    def pick_up_from_checkpoint(self, state_fields, comm=COMM_WORLD):
         """
         Picks up the model's variables from a checkpoint file.
 
@@ -607,7 +607,7 @@ class IO(object):
                     step = chk.read_attribute("/", "step")
 
             else:
-                with CheckpointFile(chkfile, 'r') as chk:
+                with CheckpointFile(chkfile, 'r', comm) as chk:
                     mesh = self.domain.mesh
                     # Recover compulsory fields from the checkpoint
                     for field_name in self.to_pick_up:
