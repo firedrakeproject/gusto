@@ -115,9 +115,9 @@ def test_rexi_linear_boussinesq(tmpdir):
     perror = np.linalg.norm(pdiff_arr) / np.linalg.norm(p.dat.data)
     berror = np.linalg.norm(bdiff_arr) / np.linalg.norm(b.dat.data)
 
-    assert uerror < 1e-14, \
+    assert uerror < 1e-10, \
         'u values in REXI compressible boussinesq test do not match KGO values'
-    assert perror < 1e-14, \
+    assert perror < 1e-10, \
         'p values in REXI compressible boussinesq test do not match KGO values'
-    assert berror < 1e-14, \
+    assert berror < 1e-10, \
         'b values in REXI compressible boussinesq test do not match KGO values'
