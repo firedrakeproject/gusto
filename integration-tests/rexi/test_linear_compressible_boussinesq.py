@@ -96,8 +96,9 @@ def run_rexi_linear_boussinesq(tmpdir):
                                     checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
     check_domain = Domain(check_mesh, tmax, 'CG', 1)
-    check_eqn = ShallowWaterEquations(check_domain, parameters, fexpr=fexpr)
-    check_io = IO(check_domain, output=check_output)
+    check_eqn = LinearBoussinesqEquations(domain, parameters)
+    check_io = IO(check_domain, output=check_output,
+                  diagnostic_fields=[Perturbation('b')])
     check_stepper = Timestepper(check_eqn, RK4(check_domain), check_io)
     check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
     usoln = check_stepper.fields("u")
