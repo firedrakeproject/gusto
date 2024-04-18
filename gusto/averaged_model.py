@@ -8,9 +8,10 @@ import numpy as np
 
 class AveragedModel(object):
 
-    def __init__(self, domain, params, Mbar):
+    def __init__(self, domain, params, Mbar, ensemble=None):
 
         self.dt = domain.dt
+        self.ensemble = ensemble
 
         self.params = params
         self.nlevels = 1
@@ -25,7 +26,7 @@ class AveragedModel(object):
         self.x_Nin = Function(self.fs)
         self.x_Nout = Function(self.fs)
         self.x_out = Function(self.fs)
-        self.exp = Rexi(equation, self.params)
+        self.exp = Rexi(equation, self.params, self.ensemble)
 
         trials = TrialFunctions(self.fs)
         bcs = [DirichletBC(self.fs.sub(0), bc.function_arg,
