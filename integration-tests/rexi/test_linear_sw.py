@@ -26,21 +26,21 @@ def run_rexi_sw(tmpdir, ensemble=None):
     mesh_name = 'linear_sw_mesh'
     L = 1
     n = 20
+    write_output = True
     if ensemble is not None:
         comm = ensemble.comm
         mesh = PeriodicUnitSquareMesh(n, n, name=mesh_name, comm=comm)
         # REXI output
-        write_output = ensemble.ensemble_comm.rank == 0
-        if ensemble.ensemble_comm.rank == 0:
-            rexi_output = VTKFile(str(tmpdir)+"/waves_sw/rexi.pvd",
-                                  comm=ensemble.comm)
+        rexi_output = VTKFile(
+            str(tmpdir)+"/waves_sw/rexi.pvd",
+            comm=ensemble.comm
+        )
 
     else:
         comm = COMM_WORLD
         mesh = PeriodicUnitSquareMesh(n, n, name=mesh_name)
         # REXI output
         rexi_output = VTKFile(str(tmpdir)+"/waves_sw/rexi.pvd")
-        write_output = True
 
     domain = Domain(mesh, tmax, 'BDM', 1)
 
