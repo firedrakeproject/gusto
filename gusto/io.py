@@ -354,7 +354,7 @@ class IO(object):
             if fname in state_fields.to_dump:
                 self.diagnostics.register(fname)
 
-    def setup_dump(self, state_fields, t, pick_up=False):
+    def setup_dump(self, state_fields, t, ensemble, pick_up=False):
         """
         Sets up a series of things used for outputting.
 
@@ -385,7 +385,11 @@ class IO(object):
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
 
             # Raising exceptions needs to be done in parallel
-            if self.mesh.comm.Get_rank() == 0:
+            if ensemble is not None:
+                rank = ensemble.ensemble_comm.rank
+            else:
+                rank = self.mesh.comm.Get_rank()
+            if rank == 0:
                 # Create results directory if it doesn't already exist
                 if not path.exists(self.dumpdir):
                     try:
@@ -400,7 +404,10 @@ class IO(object):
 
             # Gather errors from each rank and raise appropriate error everywhere
             # This allreduce also ensures that all ranks are in sync wrt the results dir
-            raise_exception = self.mesh.comm.allreduce(raise_parallel_exception, op=MPI.MAX)
+            if ensemble is not None:
+                raise_exception = 0
+            else:
+                raise_exception = self.mesh.comm.allreduce(raise_parallel_exception, op=MPI.MAX)
             if raise_exception == 1:
                 raise GustoIOError(f'results directory {self.dumpdir} already exists')
             elif raise_exception == 2:
@@ -470,13 +477,17 @@ class IO(object):
 
         # we create new netcdf files to write to, unless pick_up=True and they
         # already exist, in which case we just need the filenames
+        if ensemble is not None:
+            comm = ensemble.ensemble_comm
+        else:
+            comm = self.mesh.comm
         if self.output.dump_diagnostics:
             diagnostics_filename = self.dumpdir+"/diagnostics.nc"
             to_create = not (path.isfile(diagnostics_filename) and pick_up)
             self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
                                                        self.diagnostics,
                                                        self.output.dirname,
-                                                       self.mesh.comm,
+                                                       comm,
                                                        create=to_create)
 
             # if picking-up, don't do initial dump

@@ -1,5 +1,6 @@
 from firedrake import Function
 from gusto.fields import Fields
+from firedrake.petsc import PETSc
 
 
 class PararealFields(object):
@@ -39,8 +40,9 @@ class Parareal(object):
         self.nF = nF
         self.n_intervals = n_intervals
         self.max_its = max_its
+        self.ensemble = ensemble
         if ensemble is not None:
-            assert ensemble.comm.size == n_intervals + 1
+            assert ensemble.ensemble_comm.size == n_intervals + 1
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         self.coarse_scheme.fixed_subcycles = self.nG
@@ -71,7 +73,7 @@ class Parareal(object):
 
             # compute first guess from coarse scheme
             for n in range(self.n_intervals):
-                print("computing first coarse guess for interval: ", n)
+                PETSc.Sys.Print("computing first coarse guess for interval: ", n)
                 # apply coarse scheme and save data as initial conditions for fine
                 xGnp1 = self.xGkm1(n+1)(self.name)
                 self.coarse_scheme.apply(xGnp1, self.xn)
@@ -83,9 +85,11 @@ class Parareal(object):
 
                 # apply fine scheme in each interval using previously
                 # calculated coarse data
-                for n in range(k, self.n_intervals):
-                    self.ensemble.send(self.x(n)(self.name), n+1)
-                    self.ensemble.recv(self.xF(n+1)(self.name), n+1)
+                for n in range(self.n_intervals):
+                    xn = self.x(n)(self.name)
+                    xFnp1 = self.xF(n+1)(self.name)
+                    self.ensemble.send(xn, n+1)
+                    self.ensemble.recv(xFnp1, n+1)
 
                 # compute correction
                 for n in range(k, self.n_intervals):
@@ -100,8 +104,9 @@ class Parareal(object):
                     xGkm1.assign(xGk)
 
         else:
-            self.ensemble.recv(self.xFn, 0)
-            self.fine_scheme.apply(self.xFnp1, self.xFn)
-            self.ensemble.send(self.xFnp1, 0)
+            for k in range(self.max_its):
+                self.ensemble.recv(self.xFn, 0)
+                self.fine_scheme.apply(self.xFnp1, self.xFn)
+                self.ensemble.send(self.xFnp1, 0)
 
         x_out.assign(xnp1)

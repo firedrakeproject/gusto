@@ -32,7 +32,7 @@ def compute_reference(tmpdir, domain, diffusion_params, f_init, tmax):
 
 
 def compute_parareal(tmpdir, domain, diffusion_params, f_init, tmax,
-                     n_intervals, n_iterations):
+                     n_intervals, n_iterations, ensemble):
 
     # ------------------------------------------------------------------------ #
     # Compute parareal solution
@@ -90,6 +90,6 @@ def test_parareal(tmpdir):
     n_intervals = 10
     n_iterations = 10
     parareal_sol = compute_parareal(dirname, domain, diffusion_params, f_init,
-                                    tmax, n_intervals, n_iterations)
+                                    tmax, n_intervals, n_iterations, ensemble)
 
     assert errornorm(parareal_sol, ref_sol) < 1e-15
