@@ -25,7 +25,7 @@ class PararealFields(object):
 class Parareal(object):
 
     def __init__(self, domain, coarse_scheme, fine_scheme, nG, nF,
-                 n_intervals, max_its):
+                 n_intervals, max_its, ensemble=None):
 
         assert coarse_scheme.nlevels == 1
         assert fine_scheme.nlevels == 1
@@ -39,6 +39,8 @@ class Parareal(object):
         self.nF = nF
         self.n_intervals = n_intervals
         self.max_its = max_its
+        if ensemble is not None:
+            assert ensemble.comm.size == n_intervals + 1
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         self.coarse_scheme.fixed_subcycles = self.nG
@@ -60,42 +62,46 @@ class Parareal(object):
 
     def apply(self, x_out, x_in):
 
-        self.xn.assign(x_in)
-        x0 = self.x(0)(self.name)
-        x0.assign(x_in)
-        xF0 = self.xF(0)(self.name)
-        xF0.assign(x_in)
+        if self.ensemble.ensemble_comm.rank == 0:
+            self.xn.assign(x_in)
+            x0 = self.x(0)(self.name)
+            x0.assign(x_in)
+            xF0 = self.xF(0)(self.name)
+            xF0.assign(x_in)
 
-        # compute first guess from coarse scheme
-        for n in range(self.n_intervals):
-            print("computing first coarse guess for interval: ", n)
-            # apply coarse scheme and save data as initial conditions for fine
-            xGnp1 = self.xGkm1(n+1)(self.name)
-            self.coarse_scheme.apply(xGnp1, self.xn)
-            xnp1 = self.x(n+1)(self.name)
-            xnp1.assign(xGnp1)
-            self.xn.assign(xnp1)
-
-        for k in range(self.max_its):
-
-            # apply fine scheme in each interval using previously
-            # calculated coarse data
-            for n in range(k, self.n_intervals):
-                print("computing fine guess for iteration and interval: ", k, n)
-                self.xFn.assign(self.x(n)(self.name))
-                xFnp1 = self.xF(n+1)(self.name)
-                self.fine_scheme.apply(xFnp1, self.xFn)
-
-            # compute correction
-            for n in range(k, self.n_intervals):
-                xn = self.x(n)(self.name)
-                xGk = self.xGk(n+1)(self.name)
-                # compute new coarse guess
-                self.coarse_scheme.apply(xGk, xn)
+            # compute first guess from coarse scheme
+            for n in range(self.n_intervals):
+                print("computing first coarse guess for interval: ", n)
+                # apply coarse scheme and save data as initial conditions for fine
+                xGnp1 = self.xGkm1(n+1)(self.name)
+                self.coarse_scheme.apply(xGnp1, self.xn)
                 xnp1 = self.x(n+1)(self.name)
-                xGkm1 = self.xGkm1(n+1)(self.name)
-                xFnp1 = self.xF(n+1)(self.name)
-                xnp1.assign(xGk - xGkm1 + xFnp1)
-                xGkm1.assign(xGk)
+                xnp1.assign(xGnp1)
+                self.xn.assign(xnp1)
+
+            for k in range(self.max_its):
+
+                # apply fine scheme in each interval using previously
+                # calculated coarse data
+                for n in range(k, self.n_intervals):
+                    self.ensemble.send(self.x(n)(self.name), n+1)
+                    self.ensemble.recv(self.xF(n+1)(self.name), n+1)
+
+                # compute correction
+                for n in range(k, self.n_intervals):
+                    xn = self.x(n)(self.name)
+                    xGk = self.xGk(n+1)(self.name)
+                    # compute new coarse guess
+                    self.coarse_scheme.apply(xGk, xn)
+                    xnp1 = self.x(n+1)(self.name)
+                    xGkm1 = self.xGkm1(n+1)(self.name)
+                    xFnp1 = self.xF(n+1)(self.name)
+                    xnp1.assign(xGk - xGkm1 + xFnp1)
+                    xGkm1.assign(xGk)
+
+        else:
+            self.ensemble.recv(self.xFn, 0)
+            self.fine_scheme.apply(self.xFnp1, self.xFn)
+            self.ensemble.send(self.xFnp1, 0)
 
         x_out.assign(xnp1)

@@ -1,9 +1,10 @@
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
-                       exp, errornorm, Function)
+                       exp, errornorm, Function, Ensemble, COMM_WORLD)
 from gusto import (Domain, IO, OutputParameters,
                    DiffusionParameters, DiffusionEquation,
                    InteriorPenaltyDiffusion,
                    Heun, Parareal, Timestepper)
+import pytest
 
 
 def compute_reference(tmpdir, domain, diffusion_params, f_init, tmax):
@@ -47,7 +48,8 @@ def compute_parareal(tmpdir, domain, diffusion_params, f_init, tmax,
     diffusion_methods = [InteriorPenaltyDiffusion(eqn, "f", diffusion_params)]
     timestepper = Timestepper(eqn,
                               Parareal(domain, coarse_scheme, fine_scheme,
-                                       1, 10, n_intervals, n_iterations),
+                                       1, 10, n_intervals, n_iterations,
+                                       ensemble=ensemble),
                               io, spatial_methods=diffusion_methods)
     timestepper.fields("f").interpolate(f_init)
     timestepper.run(0, tmax)
@@ -57,11 +59,16 @@ def compute_parareal(tmpdir, domain, diffusion_params, f_init, tmax,
     return ans
 
 
+@pytest.mark.parallel(nprocs=11)
 def test_parareal(tmpdir):
 
     dirname = str(tmpdir)
+
+    ensemble = Ensemble(COMM_WORLD, 1)
+    comm = ensemble.comm
+
     L = 10.
-    m = PeriodicIntervalMesh(50, L)
+    m = PeriodicIntervalMesh(50, L, comm=comm)
     mesh = ExtrudedMesh(m, layers=50, layer_height=L/50.)
 
     x = SpatialCoordinate(mesh)
