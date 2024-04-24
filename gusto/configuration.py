@@ -6,8 +6,8 @@ from firedrake import sqrt, Constant
 
 __all__ = [
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
-    "BoussinesqParameters", "CompressibleParameters",
-    "ShallowWaterParameters", "EadyParameters", "CompressibleEadyParameters",
+    "BoussinesqParameters", "CompressibleParameters", "ShallowWaterParameters",
+    "IncompressibleEadyParameters", "CompressibleEadyParameters",
     "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions", "MixedFSOptions",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
 ]
@@ -147,11 +147,9 @@ class ShallowWaterParameters(Configuration):
 
 
 class EadyParameters(Configuration):
-
     """
-    Physical parameters for Incompressible Eady
+    Base class of physical parameters for Eady problems
     """
-    Nsq = 2.5e-05  # squared Brunt-Vaisala frequency (1/s)
     dbdy = -1.0e-07
     H = None
     L = None
@@ -161,13 +159,20 @@ class EadyParameters(Configuration):
     fourthorder = False
 
 
+class IncompressibleEadyParameters(BoussinesqParameters, EadyParameters):
+    """
+    Base class of physical parameters for incompressible Eady problems
+    """
+    Nsq = BoussinesqParameters.N**2
+
+
 class CompressibleEadyParameters(CompressibleParameters, EadyParameters):
 
     """
     Physical parameters for Compressible Eady
     """
     g = 10.
-    N = sqrt(EadyParameters.Nsq)
+    Nsq = CompressibleParameters.N**2
     theta_surf = 300.
     dthetady = theta_surf/g*EadyParameters.dbdy
     Pi0 = 0.0

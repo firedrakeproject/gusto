@@ -44,7 +44,7 @@ domain = Domain(mesh, dt, "RTCF", 1)
 
 # Equation
 Omega = as_vector([0., 0., f*0.5])
-parameters = CompressibleEadyParameters(H=H, f=f, Pi0=Constant(1.0))
+parameters = CompressibleEadyParameters(N=sqrt(2.5e-5), H=H, f=f, Pi0=Constant(1.0))
 eqns = CompressibleEadyEquations(domain, parameters, Omega=Omega)
 
 # I/O

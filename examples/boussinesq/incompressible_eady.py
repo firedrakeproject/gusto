@@ -49,10 +49,11 @@ domain = Domain(mesh, dt, "RTCF", 1)
 
 # Equation
 Omega = as_vector([0., 0., f*0.5])
-parameters = EadyParameters(H=H, L=L, f=f,
-                            deltax=2.*L/float(columns),
-                            deltaz=H/float(nlayers),
-                            fourthorder=True)
+parameters = IncompressibleEadyParameters(H=H, L=L, f=f,
+                                          deltax=2.*L/float(columns),
+                                          deltaz=H/float(nlayers),
+                                          fourthorder=True,
+                                          N=sqrt(2.5e-5))
 eqns = IncompressibleEadyEquations(domain, parameters, Omega=Omega)
 
 # I/O
