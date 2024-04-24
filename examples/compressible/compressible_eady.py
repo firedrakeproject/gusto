@@ -27,7 +27,7 @@ if '--running-tests' in sys.argv:
     nlayers = 5  # horizontal layers
 else:
     tmax = 30*day
-    tdump = 5*day
+    tdump = day/2
     columns = 30  # number of columns
     nlayers = 30  # horizontal layers
 
@@ -51,8 +51,10 @@ eqns = CompressibleEadyEquations(domain, parameters, Omega=Omega)
 output = OutputParameters(dirname=dirname,
                           dumpfreq=int(tdump/dt))
 
-diagnostic_fields = [CourantNumber(), YComponent('u'),
-                     Exner(parameters), Exner(parameters, reference=True),
+diagnostic_fields = [CourantNumber(),
+                     XComponent('u'),
+                     Exner(parameters),
+                     Exner(parameters, reference=True),
                      CompressibleKineticEnergy(),
                      CompressibleKineticEnergyY(),
                      CompressibleEadyPotentialEnergy(parameters),
@@ -60,8 +62,10 @@ diagnostic_fields = [CourantNumber(), YComponent('u'),
                          "CompressibleEadyPotentialEnergy"),
                      Difference("CompressibleKineticEnergy",
                                 "CompressibleKineticEnergyY"),
-                     Perturbation('rho'), Perturbation('theta'),
-                     Perturbation('Exner')]
+                     Perturbation('rho'),
+                     Perturbation('theta'),
+                     Perturbation('Exner')
+                     ]
 
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 

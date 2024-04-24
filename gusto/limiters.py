@@ -8,11 +8,12 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
                        FiniteElement, TensorProductElement)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
-from gusto.kernels import LimitMidpoints
+from gusto.kernels import LimitMidpoints, ClipZero
 
 import numpy as np
 
-__all__ = ["DG1Limiter", "ThetaLimiter", "NoLimiter"]
+__all__ = ["DG1Limiter", "ThetaLimiter", "NoLimiter", "ZeroLimiter",
+           "MixedFSLimiter"]
 
 
 class DG1Limiter(object):
@@ -44,7 +45,7 @@ class DG1Limiter(object):
 
         # check that space is DG1
         degree = space.ufl_element().degree()
-        if (space.ufl_element().sobolev_space().name != 'L2'
+        if (space.ufl_element().sobolev_space.name != 'L2'
             or ((type(degree) is tuple and np.any([deg != 1 for deg in degree]))
                 and degree != 1)):
             raise ValueError('DG1 limiter can only be applied to DG1 space')
@@ -111,7 +112,7 @@ class ThetaLimiter(object):
             raise ValueError('The Theta Limiter can only be used on an extruded mesh')
 
         # check that horizontal degree is 1 and vertical degree is 2
-        sub_elements = space.ufl_element().sub_elements()
+        sub_elements = space.ufl_element().sub_elements
         if (sub_elements[0].family() not in ['Discontinuous Lagrange', 'DQ']
                 or sub_elements[1].family() != 'Lagrange'
                 or space.ufl_element().degree() != (1, 2)):
@@ -163,6 +164,52 @@ class ThetaLimiter(object):
         field.interpolate(self.field_hat)
 
 
+class ZeroLimiter(object):
+    """
+    A simple limiter to enforce non-negativity of a field pointwise.
+
+    Negative values are simply clipped to be zero. There is also the option to
+    project the field to another function space to enforce non-negativity there.
+    """
+
+    def __init__(self, space, clipping_space=None):
+        """
+        Args:
+            space (:class:`FunctionSpace`): the space of the incoming field to
+                clip.
+            clipping_space (:class:`FunctionSpace`, optional): the space in
+                which to clip the field. If not specified, the space of the
+                input field is used.
+        """
+
+        self.space = space
+        if clipping_space is not None:
+            self.clipping_space = clipping_space
+            self.map_to_clip = True
+            self.field_to_clip = Function(self.clipping_space)
+        else:
+            self.clipping_space = space
+            self.map_to_clip = False
+
+        self._kernel = ClipZero(self.clipping_space)
+
+    def apply(self, field):
+        """
+        The application of the limiter to the field.
+
+        Args:
+            field (:class:`Function`): the field to apply the limiter to.
+         """
+
+        # Obtain field in clipping space
+        if self.map_to_clip:
+            self.field_to_clip.interpolate(field)
+            self._kernel.apply(self.field_to_clip, self.field_to_clip)
+            field.interpolate(self.field_to_clip)
+        else:
+            self._kernel.apply(field, field)
+
+
 class NoLimiter(object):
     """A blank limiter that does nothing."""
 
@@ -178,3 +225,39 @@ class NoLimiter(object):
                 applied, if this was not a blank limiter.
         """
         pass
+
+
+class MixedFSLimiter(object):
+    """
+    An object to hold a dictionary that defines limiters for transported prognostic
+    variables. Different limiters may be applied to different fields and not every
+    transported variable needs a defined limiter.
+    """
+
+    def __init__(self, equation, sublimiters):
+        """
+        Args:
+            equation (:class: `PrognosticEquationSet`): the prognostic equation(s)
+            sublimiters (dict): A dictionary holding limiters defined for individual prognostic variables
+        Raises:
+            ValueError: If a limiter is defined for a field that is not in the prognostic variable set
+        """
+
+        self.sublimiters = sublimiters
+        self.field_idxs = {}
+
+        for field, _ in sublimiters.items():
+            # Check that the field is in the prognostic variable set:
+            if field not in equation.field_names:
+                raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
+            else:
+                self.field_idxs[field] = equation.field_names.index(field)
+
+    def apply(self, fields):
+        """
+        Apply the individual limiters to specific prognostic variables
+        """
+
+        for field, sublimiter in self.sublimiters.items():
+            field = fields.subfunctions[self.field_idxs[field]]
+            sublimiter.apply(field)

@@ -4,9 +4,10 @@ from firedrake import (
     Function, TrialFunctions, DirichletBC, LinearVariationalProblem,
     LinearVariationalSolver
 )
-from gusto.fml import drop, replace_subject, name
+from firedrake.fml import drop, replace_subject
 from gusto.labels import (
-    transport, diffusion, time_derivative, hydrostatic
+    transport, diffusion, time_derivative, hydrostatic, physics_label,
+    sponge, incompressible
 )
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 
@@ -35,7 +36,7 @@ class Forcing(object):
         """
 
         self.field_name = equation.field_name
-        implicit_terms = ["incompressibility", "sponge"]
+        implicit_terms = [incompressible, sponge]
         dt = equation.domain.dt
 
         W = equation.function_space
@@ -45,9 +46,10 @@ class Forcing(object):
         # set up boundary conditions on the u subspace of W
         bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
 
-        # drop terms relating to transport and diffusion
+        # drop terms relating to transport, diffusion and physics
         residual = equation.residual.label_map(
-            lambda t: any(t.has_label(transport, diffusion, return_tuple=True)), drop)
+            lambda t: any(t.has_label(transport, diffusion, physics_label,
+                                      return_tuple=True)), drop)
 
         # the lhs of both of the explicit and implicit solvers is just
         # the time derivative form
@@ -58,33 +60,36 @@ class Forcing(object):
 
         # the explicit forms are multiplied by (1-alpha) and moved to the rhs
         L_explicit = -(1-alpha)*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms or t.get(name) == "hydrostatic_form",
+            lambda t:
+                any(t.has_label(time_derivative, hydrostatic, *implicit_terms,
+                                return_tuple=True)),
             drop,
             replace_subject(self.x0))
 
         # the implicit forms are multiplied by alpha and moved to the rhs
         L_implicit = -alpha*dt*residual.label_map(
-            lambda t: t.has_label(time_derivative) or t.get(name) in implicit_terms or t.get(name) == "hydrostatic_form",
+            lambda t:
+                any(t.has_label(
+                    time_derivative, hydrostatic, *implicit_terms,
+                    return_tuple=True)),
             drop,
             replace_subject(self.x0))
 
         # now add the terms that are always fully implicit
-        if any(t.get(name) in implicit_terms for t in residual):
-            L_implicit -= dt*residual.label_map(
-                lambda t: t.get(name) in implicit_terms,
-                replace_subject(self.x0),
-                drop)
+        L_implicit -= dt*residual.label_map(
+            lambda t: any(t.has_label(*implicit_terms, return_tuple=True)),
+            replace_subject(self.x0),
+            drop)
 
         # the hydrostatic equations require some additional forms:
         if any([t.has_label(hydrostatic) for t in residual]):
-
             L_explicit += residual.label_map(
-                lambda t: t.get(name) == "hydrostatic_form",
+                lambda t: t.has_label(hydrostatic),
                 replace_subject(self.x0),
                 drop)
 
             L_implicit -= residual.label_map(
-                lambda t: t.get(name) == "hydrostatic_form",
+                lambda t: t.has_label(hydrostatic),
                 replace_subject(self.x0),
                 drop)
 

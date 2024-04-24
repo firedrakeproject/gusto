@@ -5,16 +5,17 @@ called.
 """
 
 from abc import ABCMeta, abstractmethod
-from firedrake import (FunctionSpace, Function, BrokenElement, Projector,
-                       Interpolator, VectorElement, Constant, as_ufl, dot, grad,
-                       TestFunction)
+from firedrake import (
+    FunctionSpace, Function, BrokenElement, Projector, Interpolator,
+    VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace
+)
+from firedrake.fml import Term
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
-from gusto.fml import Term
 from gusto.recovery import Recoverer, ReversibleRecoverer
 from gusto.labels import transporting_velocity
 import ufl
 
-__all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper"]
+__all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper", "MixedFSWrapper"]
 
 
 class Wrapper(object, metaclass=ABCMeta):
@@ -32,14 +33,23 @@ class Wrapper(object, metaclass=ABCMeta):
         self.time_discretisation = time_discretisation
         self.options = wrapper_options
         self.solver_parameters = None
+        self.original_space = None
 
     @abstractmethod
-    def setup(self):
+    def setup(self, original_space):
         """
-        Performs standard set up routines, and is to be called by the setup
-        method of the underlying time discretisation.
+        Store the original function space of the prognostic variable.
+
+        Within each child wrapper, setup performs standard set up routines,
+        and is to be called by the setup method of the underlying
+        time discretisation.
+
+        Args:
+            original_space (:class:`FunctionSpace`): the space that the
+        prognostic variable is defined on. This is a subset space of
+        a mixed function space when using a MixedFSWrapper.
         """
-        pass
+        self.original_space = original_space
 
     @abstractmethod
     def pre_apply(self):
@@ -75,13 +85,14 @@ class EmbeddedDGWrapper(Wrapper):
     the original space.
     """
 
-    def setup(self):
+    def setup(self, original_space):
         """Sets up function spaces and fields needed for this wrapper."""
 
         assert isinstance(self.options, EmbeddedDGOptions), \
             'Embedded DG wrapper can only be used with Embedded DG Options'
 
-        original_space = self.time_discretisation.fs
+        super().setup(original_space)
+
         domain = self.time_discretisation.domain
         equation = self.time_discretisation.equation
 
@@ -90,7 +101,7 @@ class EmbeddedDGWrapper(Wrapper):
         # -------------------------------------------------------------------- #
 
         if self.options.embedding_space is None:
-            V_elt = BrokenElement(original_space.ufl_element())
+            V_elt = BrokenElement(self.original_space.ufl_element())
             self.function_space = FunctionSpace(domain.mesh, V_elt)
         else:
             self.function_space = self.options.embedding_space
@@ -103,8 +114,9 @@ class EmbeddedDGWrapper(Wrapper):
 
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
+
         if self.time_discretisation.idx is None:
-            self.x_projected = Function(equation.function_space)
+            self.x_projected = Function(self.original_space)
         else:
             self.x_projected = Function(equation.spaces[self.time_discretisation.idx])
 
@@ -157,13 +169,14 @@ class RecoveryWrapper(Wrapper):
     field is then returned to the original space.
     """
 
-    def setup(self):
+    def setup(self, original_space):
         """Sets up function spaces and fields needed for this wrapper."""
 
         assert isinstance(self.options, RecoveryOptions), \
-            'Embedded DG wrapper can only be used with Recovery Options'
+            'Recovery wrapper can only be used with Recovery Options'
 
-        original_space = self.time_discretisation.fs
+        super().setup(original_space)
+
         domain = self.time_discretisation.domain
         equation = self.time_discretisation.equation
 
@@ -172,7 +185,7 @@ class RecoveryWrapper(Wrapper):
         # -------------------------------------------------------------------- #
 
         if self.options.embedding_space is None:
-            V_elt = BrokenElement(original_space.ufl_element())
+            V_elt = BrokenElement(self.original_space.ufl_element())
             self.function_space = FunctionSpace(domain.mesh, V_elt)
         else:
             self.function_space = self.options.embedding_space
@@ -183,11 +196,12 @@ class RecoveryWrapper(Wrapper):
         # Internal variables to be used
         # -------------------------------------------------------------------- #
 
-        self.x_in_tmp = Function(self.time_discretisation.fs)
+        self.x_in_tmp = Function(self.original_space)
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
+
         if self.time_discretisation.idx is None:
-            self.x_projected = Function(equation.function_space)
+            self.x_projected = Function(self.original_space)
         else:
             self.x_projected = Function(equation.spaces[self.time_discretisation.idx])
 
@@ -252,9 +266,9 @@ def is_cg(V):
     if isinstance(ele, BrokenElement):
         return False
     elif type(ele) == VectorElement:
-        return all([e.sobolev_space().name == "H1" for e in ele._sub_elements])
+        return all([e.sobolev_space.name == "H1" for e in ele._sub_elements])
     else:
-        return V.ufl_element().sobolev_space().name == "H1"
+        return V.ufl_element().sobolev_space.name == "H1"
 
 
 class SUPGWrapper(Wrapper):
@@ -292,7 +306,7 @@ class SUPGWrapper(Wrapper):
             if is_cg(self.function_space):
                 vals = default_vals
             else:
-                space = self.function_space.ufl_element().sobolev_space()
+                space = self.function_space.ufl_element().sobolev_space
                 if space.name in ["HDiv", "DirectionalH"]:
                     vals = [default_vals[i] if space[i].name == "H1"
                             else 0. for i in range(dim)]
@@ -360,3 +374,61 @@ class SUPGWrapper(Wrapper):
         new_residual = transporting_velocity.update_value(new_residual, self.transporting_velocity)
 
         return new_residual
+
+
+class MixedFSWrapper(object):
+    """
+    An object to hold a subwrapper dictionary with different wrappers for
+    different tracers. This means that different tracers can be solved
+    simultaneously using a CoupledTransportEquation, whilst being in
+    different spaces and needing different implementation options.
+    """
+
+    def __init__(self):
+
+        self.wrapper_spaces = None
+        self.field_names = None
+        self.subwrappers = {}
+
+    def setup(self):
+        """ Compute the new mixed function space from the subwrappers """
+
+        self.function_space = MixedFunctionSpace(self.wrapper_spaces)
+        self.x_in = Function(self.function_space)
+        self.x_out = Function(self.function_space)
+
+    def pre_apply(self, x_in):
+        """
+        Perform the pre-applications for all fields
+        with an associated subwrapper.
+        """
+
+        for field_name in self.field_names:
+            field_idx = self.field_names.index(field_name)
+            field = x_in.subfunctions[field_idx]
+            x_in_sub = self.x_in.subfunctions[field_idx]
+
+            if field_name in self.subwrappers:
+                subwrapper = self.subwrappers[field_name]
+                subwrapper.pre_apply(field)
+                x_in_sub.assign(subwrapper.x_in)
+            else:
+                x_in_sub.assign(field)
+
+    def post_apply(self, x_out):
+        """
+        Perform the post-applications for all fields
+        with an associated subwrapper.
+        """
+
+        for field_name in self.field_names:
+            field_idx = self.field_names.index(field_name)
+            field = self.x_out.subfunctions[field_idx]
+            x_out_sub = x_out.subfunctions[field_idx]
+
+            if field_name in self.subwrappers:
+                subwrapper = self.subwrappers[field_name]
+                subwrapper.x_out.assign(field)
+                subwrapper.post_apply(x_out_sub)
+            else:
+                x_out_sub.assign(field)

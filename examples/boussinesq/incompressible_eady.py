@@ -76,7 +76,7 @@ transport_schemes = [SSPRK3(domain, "u"), SSPRK3(domain, "b", options=b_opts)]
 transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "b", ibp=b_opts.ibp)]
 
 # Linear solve
-linear_solver = IncompressibleSolver(eqns)
+linear_solver = BoussinesqSolver(eqns)
 
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes,
@@ -130,8 +130,8 @@ b0.project(b_b + b_pert)
 
 # calculate hydrostatic pressure
 p_b = Function(Vp)
-incompressible_hydrostatic_balance(eqns, b_b, p_b)
-incompressible_hydrostatic_balance(eqns, b0, p0)
+boussinesq_hydrostatic_balance(eqns, b_b, p_b)
+boussinesq_hydrostatic_balance(eqns, b0, p0)
 
 # set x component of velocity
 dbdy = parameters.dbdy

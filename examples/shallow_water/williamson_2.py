@@ -62,7 +62,8 @@ for ref_level, dt in ref_dt.items():
         dump_nc=True,
     )
 
-    diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
+    diagnostic_fields = [RelativeVorticity(), SteadyStateError('RelativeVorticity'),
+                         PotentialVorticity(),
                          ShallowWaterKineticEnergy(),
                          ShallowWaterPotentialEnergy(parameters),
                          ShallowWaterPotentialEnstrophy(),
@@ -73,7 +74,7 @@ for ref_level, dt in ref_dt.items():
 
     # Transport schemes
     transported_fields = [TrapeziumRule(domain, "u"),
-                          SSPRK3(domain, "D", subcycles=2)]
+                          SSPRK3(domain, "D", fixed_subcycles=2)]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
     # Time stepper

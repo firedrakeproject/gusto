@@ -59,7 +59,7 @@ output = OutputParameters(
     checkpoint=False
 )
 diagnostic_fields = [RelativeHumidity(eqns), Perturbation('theta'),
-                     Perturbation('water_vapour'), Perturbation('rho')]
+                     Perturbation('water_vapour'), Perturbation('rho'), Perturbation('RelativeHumidity')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes -- specify options for using recovery wrapper
@@ -67,6 +67,7 @@ VDG1 = domain.spaces("DG1_equispaced")
 VCG1 = FunctionSpace(mesh, "CG", 1)
 Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
 Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
+Vt = domain.spaces("theta")
 
 u_opts = RecoveryOptions(embedding_space=Vu_DG1,
                          recovered_space=Vu_CG1,
@@ -92,10 +93,12 @@ linear_solver = CompressibleSolver(eqns)
 # Physics schemes
 # NB: can't yet use wrapper or limiter options with physics
 rainfall_method = DGUpwind(eqns, 'rain', outflow=True)
+zero_limiter = MixedFSLimiter(eqns, {'water_vapour': ZeroLimiter(Vt),
+                                     'cloud_water': ZeroLimiter(Vt)})
 physics_schemes = [(Fallout(eqns, 'rain', domain, rainfall_method), SSPRK3(domain)),
                    (Coalescence(eqns), ForwardEuler(domain)),
                    (EvaporationOfRain(eqns), ForwardEuler(domain)),
-                   (SaturationAdjustment(eqns), ForwardEuler(domain))]
+                   (SaturationAdjustment(eqns), ForwardEuler(domain, limiter=zero_limiter))]
 
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
@@ -116,7 +119,6 @@ rain0 = stepper.fields("rain")
 
 # spaces
 Vu = domain.spaces("HDiv")
-Vt = domain.spaces("theta")
 Vr = domain.spaces("DG")
 x, z = SpatialCoordinate(mesh)
 quadrature_degree = (4, 4)

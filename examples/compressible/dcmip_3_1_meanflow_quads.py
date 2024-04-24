@@ -82,13 +82,15 @@ output = OutputParameters(
     dirname=dirname,
     dumpfreq=dumpfreq,
 )
-diagnostic_fields = [Perturbation('theta'), Perturbation('rho'), CompressibleKineticEnergy()]
+diagnostic_fields = [Perturbation('theta'), Perturbation('rho'),
+                     CompressibleKineticEnergy(), PotentialEnergy(eqns)]
+
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
 transported_fields = [TrapeziumRule(domain, "u"),
-                      SSPRK3(domain, "rho", subcycles=2),
-                      SSPRK3(domain, "theta", options=SUPGOptions(), subcycles=2)]
+                      SSPRK3(domain, "rho", fixed_subcycles=2),
+                      SSPRK3(domain, "theta", options=SUPGOptions(), fixed_subcycles=2)]
 transport_methods = [DGUpwind(eqns, field) for field in ["u", "rho", "theta"]]
 
 # Linear solver
