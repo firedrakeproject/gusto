@@ -354,7 +354,7 @@ class IO(object):
             if fname in state_fields.to_dump:
                 self.diagnostics.register(fname)
 
-    def setup_dump(self, state_fields, t, pick_up=False):
+    def setup_dump(self, state_fields, t, ensemble, pick_up=False):
         """
         Sets up a series of things used for outputting.
 
@@ -377,6 +377,16 @@ class IO(object):
         raise_parallel_exception = 0
         error = None
 
+        if ensemble is not None:
+            ens_comm = ensemble.ensemble_comm
+            comm = ensemble.comm
+            create_dir = ens_comm.rank + comm.rank == 0
+            create_files = ens_comm.rank == 0
+        else:
+            comm = self.mesh.comm
+            create_dir = comm.Get_rank() == 0
+            create_files = True
+
         if any([self.output.dump_vtus, self.output.dump_nc,
                 self.output.dumplist_latlon, self.output.dump_diagnostics,
                 self.output.point_data, self.output.checkpoint and not pick_up]):
@@ -385,7 +395,7 @@ class IO(object):
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
 
             # Raising exceptions needs to be done in parallel
-            if self.mesh.comm.Get_rank() == 0:
+            if create_dir == 0:
                 # Create results directory if it doesn't already exist
                 if not path.exists(self.dumpdir):
                     try:
@@ -400,7 +410,10 @@ class IO(object):
 
             # Gather errors from each rank and raise appropriate error everywhere
             # This allreduce also ensures that all ranks are in sync wrt the results dir
-            raise_exception = self.mesh.comm.allreduce(raise_parallel_exception, op=MPI.MAX)
+            raise_exception = comm.allreduce(raise_parallel_exception, op=MPI.MAX)
+            if ensemble is not None:
+                raise_exception = ens_comm.allreduce(raise_parallel_exception, op=MPI.MAX)
+
             if raise_exception == 1:
                 raise GustoIOError(f'results directory {self.dumpdir} already exists')
             elif raise_exception == 2:
@@ -421,12 +434,12 @@ class IO(object):
         if pick_up:
             next(self.dumpcount)
 
-        if self.output.dump_vtus:
+        if self.output.dump_vtus and create_files:
             # setup pvd output file
             outfile_pvd = path.join(self.dumpdir, "field_output.pvd")
             self.pvd_dumpfile = VTKFile(
                 outfile_pvd, project_output=self.output.project_fields,
-                comm=self.mesh.comm)
+                comm=comm)
 
         if self.output.dump_nc:
             self.nc_filename = path.join(self.dumpdir, "field_output.nc")
