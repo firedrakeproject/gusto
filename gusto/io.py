@@ -140,7 +140,8 @@ class PointDataOutput(object):
 
 class DiagnosticsOutput(object):
     """Object for outputting global diagnostic data."""
-    def __init__(self, filename, diagnostics, description, ensemble, create=True):
+    def __init__(self, filename, diagnostics, description, comm,
+                 ensemble_comm=None, create=True):
         """
         Args:
             filename (str): name of file to output to.
@@ -154,10 +155,15 @@ class DiagnosticsOutput(object):
         """
         self.filename = filename
         self.diagnostics = diagnostics
-        self.ensemble = ensemble
+        self.comm = comm
+        self.ensemble_comm = ensemble_comm
         if not create:
             return
-        if ensemble.ensemble_comm.rank == 0 and ensemble.comm.rank == 0:
+        if ensemble_comm is not None:
+            self.create = ensemble_comm.rank == 0 and comm.rank == 0
+        else:
+            self.create = comm.rank == 0
+        if self.create:
             with Dataset(filename, "w") as dataset:
                 dataset.description = "Diagnostics data for simulation {desc}".format(desc=description)
                 dataset.history = "Created {t}".format(t=time.ctime())
@@ -185,7 +191,7 @@ class DiagnosticsOutput(object):
                 diagnostic = getattr(self.diagnostics, dname)
                 diagnostics.append((fname, dname, diagnostic(field)))
 
-        if self.ensemble.ensemble_comm.rank == 0 and self.ensemble.comm.rank == 0:
+        if self.create:
             with Dataset(self.filename, "a") as dataset:
                 idx = dataset.dimensions["time"].size
                 dataset.variables["time"][idx:idx + 1] = t
@@ -383,6 +389,7 @@ class IO(object):
             create_dir = ens_comm.rank + comm.rank == 0
             create_files = ens_comm.rank == 0
         else:
+            ens_comm = None
             comm = self.mesh.comm
             create_dir = comm.Get_rank() == 0
             create_files = True
@@ -491,7 +498,8 @@ class IO(object):
             self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
                                                        self.diagnostics,
                                                        self.output.dirname,
-                                                       ensemble,
+                                                       comm=comm,
+                                                       ensemble_comm=ens_comm,
                                                        create=to_create)
 
             # if picking-up, don't do initial dump
