@@ -17,19 +17,15 @@ def test_parallel_io(tmpdir, spatial_parallelism):
     domain = Domain(mesh, dt, "BDM", 1)
 
     # Equation
-    diffusion_params = DiffusionParameters(kappa=0.75, mu=5)
-    V = domain.spaces("DG")
-
-    equation = AdvectionDiffusionEquation(domain, V, "f",
-                                          diffusion_parameters=diffusion_params)
-    spatial_methods = [DGUpwind(equation, "f"),
-                       InteriorPenaltyDiffusion(equation, "f", diffusion_params)]
+    parameters = ShallowWaterParameters(H=100)
+    equation = ShallowWaterEquations(domain, parameters)
 
     # I/O
     output = OutputParameters(dirname=str(tmpdir))
     io = IO(domain, output)
 
     # Time stepper
+    spatial_methods = [DGUpwind(equation, "u"), DGUpwind(equation, "D")]
     stepper = Timestepper(equation, SSPRK3(domain), io, spatial_methods,
                           ensemble=ensemble)
 
