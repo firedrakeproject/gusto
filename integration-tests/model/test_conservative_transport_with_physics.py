@@ -54,7 +54,7 @@ def run_conservative_transport_with_physics(dirname):
 
     # Time stepper
     stepper = SplitPrescribedTransport(eqn, SSPRK3(domain), io, transport_method,
-                                  physics_schemes=physics_schemes)
+                                       physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -62,9 +62,9 @@ def run_conservative_transport_with_physics(dirname):
 
     rho0 = stepper.fields("rho_d")
     ash0 = stepper.fields("ash")
-    
+
     # Set an initial constant density field
-    rho0.interpolate(Constant(1.0))
+    rho0.interpolate(Constant(0.0))
     ash0.interpolate(Constant(0.0))
 
     # Constant wind
@@ -89,4 +89,4 @@ def test_conservative_transport_with_physics(tmpdir):
 
     tol = 1e-5
     assert np.abs(final_total_ash - 50.0) < tol, \
-            "Conservative transport did not correctly implement the Source physics"
+        "Conservative transport did not correctly implement the Source physics"
