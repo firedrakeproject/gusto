@@ -140,7 +140,8 @@ class PointDataOutput(object):
 
 class DiagnosticsOutput(object):
     """Object for outputting global diagnostic data."""
-    def __init__(self, filename, diagnostics, description, comm, create=True):
+    def __init__(self, filename, diagnostics, description, comm,
+                 ensemble_comm=None, create=True):
         """
         Args:
             filename (str): name of file to output to.
@@ -155,9 +156,14 @@ class DiagnosticsOutput(object):
         self.filename = filename
         self.diagnostics = diagnostics
         self.comm = comm
+        self.ensemble_comm = ensemble_comm
+        if ensemble_comm is not None:
+            self.write_to_file = ensemble_comm.rank == 0 and comm.rank == 0
+        else:
+            self.write_to_file = comm.rank == 0
         if not create:
             return
-        if self.comm.rank == 0:
+        if self.write_to_file:
             with Dataset(filename, "w") as dataset:
                 dataset.description = "Diagnostics data for simulation {desc}".format(desc=description)
                 dataset.history = "Created {t}".format(t=time.ctime())
@@ -185,7 +191,7 @@ class DiagnosticsOutput(object):
                 diagnostic = getattr(self.diagnostics, dname)
                 diagnostics.append((fname, dname, diagnostic(field)))
 
-        if self.comm.rank == 0:
+        if self.write_to_file:
             with Dataset(self.filename, "a") as dataset:
                 idx = dataset.dimensions["time"].size
                 dataset.variables["time"][idx:idx + 1] = t
@@ -377,6 +383,18 @@ class IO(object):
         raise_parallel_exception = 0
         error = None
 
+        if ensemble is not None:
+            ens_comm = ensemble.ensemble_comm
+            comm = ensemble.comm
+            create_dir = ens_comm.rank + comm.rank == 0
+            create_files = ens_comm.rank == 0
+        else:
+            ens_comm = None
+            comm = self.mesh.comm
+            create_dir = comm.Get_rank() == 0
+            create_files = True
+        self.ensemble = ensemble
+
         if any([self.output.dump_vtus, self.output.dump_nc,
                 self.output.dumplist_latlon, self.output.dump_diagnostics,
                 self.output.point_data, self.output.checkpoint and not pick_up]):
@@ -385,11 +403,7 @@ class IO(object):
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
 
             # Raising exceptions needs to be done in parallel
-            if ensemble is not None:
-                rank = ensemble.ensemble_comm.rank
-            else:
-                rank = self.mesh.comm.Get_rank()
-            if rank == 0:
+            if create_dir:
                 # Create results directory if it doesn't already exist
                 if not path.exists(self.dumpdir):
                     try:
@@ -404,10 +418,10 @@ class IO(object):
 
             # Gather errors from each rank and raise appropriate error everywhere
             # This allreduce also ensures that all ranks are in sync wrt the results dir
+            raise_exception = comm.allreduce(raise_parallel_exception, op=MPI.MAX)
             if ensemble is not None:
-                raise_exception = 0
-            else:
-                raise_exception = self.mesh.comm.allreduce(raise_parallel_exception, op=MPI.MAX)
+                raise_exception = ens_comm.allreduce(raise_exception, op=MPI.MAX)
+
             if raise_exception == 1:
                 raise GustoIOError(f'results directory {self.dumpdir} already exists')
             elif raise_exception == 2:
@@ -428,12 +442,12 @@ class IO(object):
         if pick_up:
             next(self.dumpcount)
 
-        if self.output.dump_vtus:
+        if self.output.dump_vtus and create_files:
             # setup pvd output file
             outfile_pvd = path.join(self.dumpdir, "field_output.pvd")
             self.pvd_dumpfile = VTKFile(
                 outfile_pvd, project_output=self.output.project_fields,
-                comm=self.mesh.comm)
+                comm=comm)
 
         if self.output.dump_nc:
             self.nc_filename = path.join(self.dumpdir, "field_output.nc")
@@ -460,10 +474,11 @@ class IO(object):
         # setup the latlon coordinate mesh and make output file
         if len(self.output.dumplist_latlon) > 0:
             mesh_ll = get_flat_latlon_mesh(self.mesh)
-            outfile_ll = path.join(self.dumpdir, "field_output_latlon.pvd")
-            self.dumpfile_ll = VTKFile(outfile_ll,
-                                       project_output=self.output.project_fields,
-                                       comm=self.mesh.comm)
+            if create_files:
+                outfile_ll = path.join(self.dumpdir, "field_output_latlon.pvd")
+                self.dumpfile_ll = VTKFile(outfile_ll,
+                                           project_output=self.output.project_fields,
+                                           comm=comm)
 
             # make functions on latlon mesh, as specified by dumplist_latlon
             self.to_dump_latlon = []
@@ -483,11 +498,12 @@ class IO(object):
             comm = self.mesh.comm
         if self.output.dump_diagnostics:
             diagnostics_filename = self.dumpdir+"/diagnostics.nc"
-            to_create = not (path.isfile(diagnostics_filename) and pick_up)
+            to_create = not (path.isfile(diagnostics_filename) and pick_up) and create_files
             self.diagnostic_output = DiagnosticsOutput(diagnostics_filename,
                                                        self.diagnostics,
                                                        self.output.dirname,
-                                                       comm,
+                                                       comm=comm,
+                                                       ensemble_comm=ens_comm,
                                                        create=to_create)
 
             # if picking-up, don't do initial dump

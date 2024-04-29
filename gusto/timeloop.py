@@ -33,6 +33,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.ensemble = ensemble
         self.equation = equation
         self.io = io
+        self.ensemble = ensemble
         self.dt = self.equation.domain.dt
         self.t = self.equation.domain.t
         self.reference_profiles_initialised = False
@@ -710,6 +711,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         with timed_stage("Apply forcing terms"):
             logger.info('SIQN: Explicit forcing')
+
             # Put explicit forcing into xstar
             self.forcing.apply(x_after_slow, xn, xstar(self.field_name), "explicit")
 

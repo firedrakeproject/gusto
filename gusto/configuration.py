@@ -62,7 +62,7 @@ class Configuration(object):
 
         When attributes are provided as floats or integers, these are converted
         to Firedrake :class:`Constant` objects, other than a handful of special
-        integers (dumpfreq, pddumpfreq, chkptfreq and log_level).
+        integers (dumpfreq, pddumpfreq and chkptfreq).
 
         Args:
             name: the attribute's name.
