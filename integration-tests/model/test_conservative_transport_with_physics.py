@@ -4,8 +4,7 @@ This tests the source/sink
 
 from gusto import *
 from firedrake import (as_vector, PeriodicSquareMesh, SpatialCoordinate,
-                       sqrt, sin, pi, assemble, Constant)
-import pytest
+                       assemble, Constant)
 
 
 def run_conservative_transport_with_physics(dirname):
@@ -26,17 +25,14 @@ def run_conservative_transport_with_physics(dirname):
     rho_d_space = 'DG'
     ash_space = 'DG'
 
-    V_rho = domain.spaces(rho_d_space)
-    V_ash = domain.spaces(ash_space)
-
     ash = ActiveTracer(name='ash', space=ash_space,
-                         variable_type=TracerVariableType.mixing_ratio,
-                         transport_eqn=TransportEquationType.tracer_conservative,
-                         density_name='rho_d')
+                       variable_type=TracerVariableType.mixing_ratio,
+                       transport_eqn=TransportEquationType.tracer_conservative,
+                       density_name='rho_d')
 
     rho_d = ActiveTracer(name='rho_d', space=rho_d_space,
-                     variable_type=TracerVariableType.density,
-                     transport_eqn=TransportEquationType.conservative)
+                         variable_type=TracerVariableType.density,
+                         transport_eqn=TransportEquationType.conservative)
 
     tracers = [ash, rho_d]
 
