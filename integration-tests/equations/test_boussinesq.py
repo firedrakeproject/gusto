@@ -1,6 +1,7 @@
 """
-This runs an incompressible example with a perturbation in a hydrostatic
-atmosphere, and checks the example against a known good checkpointed answer.
+This runs a Boussinesq example with a perturbation in a hydrostatic
+atmosphere, and checks the example against a known good checkpointed answer
+for both the compressible and incompressible forms of the equations.
 """
 
 from os.path import join, abspath, dirname
@@ -8,9 +9,10 @@ from gusto import *
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
                        sqrt, ExtrudedMesh, Function, as_vector)
 import numpy as np
+import pytest
 
 
-def run_incompressible(tmpdir):
+def run_boussinesq(tmpdir, compressible):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -23,35 +25,46 @@ def run_incompressible(tmpdir):
     ncols = 10  # number of columns
     Lx = 1000.0
     Lz = 1000.0
-    mesh_name = 'incompressible_mesh'
+    mesh_name = 'boussinesq_mesh'
     m = PeriodicIntervalMesh(ncols, Lx)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Lz/nlayers, name=mesh_name)
     domain = Domain(mesh, dt, "CG", 1)
 
     # Equation
-    parameters = CompressibleParameters()
-    eqn = IncompressibleBoussinesqEquations(domain, parameters)
+    parameters = BoussinesqParameters()
+    eqn = BoussinesqEquations(domain, parameters, compressible=compressible)
 
     # I/O
-    output = OutputParameters(dirname=tmpdir+"/incompressible",
+    if compressible:
+        output_dirname = tmpdir+"/boussinesq_compressible"
+    else:
+        output_dirname = tmpdir+"/boussinesq_incompressible"
+    output = OutputParameters(dirname=output_dirname,
                               dumpfreq=2, chkptfreq=2, checkpoint=True)
     io = IO(domain, output)
 
     # Transport Schemes
     b_opts = SUPGOptions()
-    transported_fields = [TrapeziumRule(domain, "u"),
-                          SSPRK3(domain, "b", options=b_opts)]
-    transport_methods = [DGUpwind(eqn, "u"),
-                         DGUpwind(eqn, "b", ibp=b_opts.ibp)]
+    if compressible:
+        transported_fields = [TrapeziumRule(domain, "u"),
+                              SSPRK3(domain, "p"),
+                              SSPRK3(domain, "b", options=b_opts)]
+        transport_methods = [DGUpwind(eqn, "u"),
+                             DGUpwind(eqn, "p"),
+                             DGUpwind(eqn, "b", ibp=b_opts.ibp)]
+    else:
+        transported_fields = [TrapeziumRule(domain, "u"),
+                              SSPRK3(domain, "b", options=b_opts)]
+        transport_methods = [DGUpwind(eqn, "u"),
+                             DGUpwind(eqn, "b", ibp=b_opts.ibp)]
 
     # Linear solver
-    linear_solver = IncompressibleSolver(eqn)
+    linear_solver = BoussinesqSolver(eqn)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
                                       transport_methods,
-                                      linear_solver=linear_solver,
-                                      num_outer=4, num_inner=1)
+                                      linear_solver=linear_solver)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -70,7 +83,7 @@ def run_incompressible(tmpdir):
     bref = z*(N**2)
 
     b_b = Function(b0.function_space()).interpolate(bref)
-    incompressible_hydrostatic_balance(eqn, b_b, p0)
+    boussinesq_hydrostatic_balance(eqn, b_b, p0)
     stepper.set_reference_profiles([('p', p0), ('b', b_b)])
 
     # Add perturbation
@@ -85,14 +98,17 @@ def run_incompressible(tmpdir):
     stepper.run(t=0, tmax=tmax)
 
     # State for checking checkpoints
-    checkpoint_name = 'incompressible_chkpt.h5'
+    if compressible:
+        checkpoint_name = 'compressible_boussinesq_chkpt.h5'
+    else:
+        checkpoint_name = 'incompressible_boussinesq_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
-    check_output = OutputParameters(dirname=tmpdir+"/incompressible",
+    check_output = OutputParameters(dirname=output_dirname,
                                     checkpoint_pickup_filename=new_path,
                                     checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
     check_domain = Domain(check_mesh, dt, "CG", 1)
-    check_eqn = IncompressibleBoussinesqEquations(check_domain, parameters)
+    check_eqn = BoussinesqEquations(check_domain, parameters, compressible)
     check_io = IO(check_domain, check_output)
     check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
     check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
@@ -100,10 +116,11 @@ def run_incompressible(tmpdir):
     return stepper, check_stepper
 
 
-def test_incompressible(tmpdir):
+@pytest.mark.parametrize("compressible", [True, False])
+def test_boussinesq(tmpdir, compressible):
 
     dirname = str(tmpdir)
-    stepper, check_stepper = run_incompressible(dirname)
+    stepper, check_stepper = run_boussinesq(dirname, compressible)
 
     for variable in ['u', 'b', 'p']:
         new_variable = stepper.fields(variable)

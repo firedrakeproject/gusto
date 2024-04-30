@@ -6,7 +6,8 @@ from firedrake import sqrt, Constant
 
 __all__ = [
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
-    "CompressibleParameters", "ShallowWaterParameters",
+    "BoussinesqParameters", "CompressibleParameters",
+    "ShallowWaterParameters",
     "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions", "MixedFSOptions",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
 ]
@@ -31,6 +32,8 @@ class TransportEquationType(Enum):
     conservative: ∂q/∂t + ∇.(u*q) = 0                                         \n
     vector_invariant: ∂q/∂t + (∇×q)×u + (1/2)∇(q.u) + (1/2)[(∇q).u -(∇u).q)] = 0
     circulation: ∂q/∂t + (∇×q)×u + non-transport terms = 0
+    tracer_conservative: ∂(q*rho)/∂t + ∇.(u*q*rho) = 0, for a reference density of rho
+    for the tracer, q.
     """
 
     no_transport = 702
@@ -38,6 +41,7 @@ class TransportEquationType(Enum):
     conservative = 291
     vector_invariant = 9081
     circulation = 512
+    tracer_conservative = 296
 
 
 class Configuration(object):
@@ -102,6 +106,14 @@ class OutputParameters(Configuration):
     # name and points is the points at which to dump them
     point_data = []
     tolerance = None
+
+
+class BoussinesqParameters(Configuration):
+    """Physical parameters for the Boussinesq equations."""
+
+    g = 9.810616
+    N = 0.01  # Brunt-Vaisala frequency (1/s)
+    cs = 340  # sound speed (for compressible case) (m/s)
 
 
 class CompressibleParameters(Configuration):

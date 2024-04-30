@@ -1,12 +1,14 @@
 """Common diagnostic fields."""
 
-from firedrake import op2, assemble, dot, dx, Function, sqrt, \
+from firedrake import assemble, dot, dx, Function, sqrt, \
     TestFunction, TrialFunction, Constant, grad, inner, curl, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
-    Projector, Interpolator, FunctionSpace
+    Projector, Interpolator, FunctionSpace, FiniteElement, \
+    TensorProductElement
 from firedrake.assign import Assigner
+from ufl.domain import extract_unique_domain
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 import gusto.thermodynamics as tde
@@ -15,6 +17,7 @@ from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.active_tracers import TracerVariableType, Phases
 from gusto.logging import logger
+from gusto.kernels import MinKernel, MaxKernel
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
@@ -62,39 +65,25 @@ class Diagnostics(object):
 
     @staticmethod
     def min(f):
-        # TODO check that this is correct. Maybe move the kernel elsewhere?
         """
         Finds the global minimum DoF value of a field.
 
         Args:
             f (:class:`Function`): field to compute diagnostic for.
         """
-
-        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=f._comm)
-        op2.par_loop(op2.Kernel("""
-static void minify(double *a, double *b) {
-    a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
-}
-""", "minify"), f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
-        return fmin.data[0]
+        min_kernel = MinKernel()
+        return min_kernel.apply(f)
 
     @staticmethod
     def max(f):
-        # TODO check that this is correct. Maybe move the kernel elsewhere?
         """
         Finds the global maximum DoF value of a field.
 
         Args:
             f (:class:`Function`): field to compute diagnostic for.
         """
-
-        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=f._comm)
-        op2.par_loop(op2.Kernel("""
-static void maxify(double *a, double *b) {
-    a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
-}
-""", "maxify"), f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
-        return fmax.data[0]
+        max_kernel = MaxKernel()
+        return max_kernel.apply(f)
 
     @staticmethod
     def rms(f):
@@ -105,7 +94,7 @@ static void maxify(double *a, double *b) {
             f (:class:`Function`): field to compute diagnostic for.
         """
 
-        area = assemble(1*dx(domain=f.ufl_domain()))
+        area = assemble(1*dx(domain=extract_unique_domain(f)))
         return sqrt(assemble(inner(f, f)*dx)/area)
 
     @staticmethod
@@ -1704,7 +1693,12 @@ class TracerDensity(DiagnosticField):
     """Diagnostic for computing the density of a tracer. This is
     computed as the product of a mixing ratio and dry density"""
 
-    name = "TracerDensity"
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field. This records
+        the mixing ratio and density names, in case multiple tracer
+        densities are used."""
+        return "TracerDensity_"+self.mixing_ratio_name+'_'+self.density_name
 
     def __init__(self, mixing_ratio_name, density_name, space=None, method='interpolate'):
         """
@@ -1713,12 +1707,15 @@ class TracerDensity(DiagnosticField):
             density_name (str): the name of the tracer density variable
             space (:class:`FunctionSpace`, optional): the function space to
                 evaluate the diagnostic field in. Defaults to None, in which
-                case a default space will be chosen for this diagnostic.
+                case a new space will be constructed for this diagnostic. This
+                space will have enough a high enough degree to accurately compute
+                the product of the mixing ratio and density.
             method (str, optional): a string specifying the method of evaluation
                 for this diagnostic. Valid options are 'interpolate', 'project' and
                 'assign'. Defaults to 'interpolate'.
         """
-        super().__init__(method=method, required_fields=(mixing_ratio_name, density_name))
+        super().__init__(space=space, method=method, required_fields=(mixing_ratio_name, density_name))
+
         self.mixing_ratio_name = mixing_ratio_name
         self.density_name = density_name
 
@@ -1733,4 +1730,40 @@ class TracerDensity(DiagnosticField):
         m_X = state_fields(self.mixing_ratio_name)
         rho_d = state_fields(self.density_name)
         self.expr = m_X*rho_d
-        super().setup(domain, state_fields)
+
+        if self.space is None:
+            # Construct a space for the diagnostic that has enough
+            # degrees to accurately capture the tracer density. This
+            # will be the sum of the degrees of the individual mixing ratio
+            # and density function spaces.
+            m_X_space = m_X.function_space()
+            rho_d_space = rho_d.function_space()
+
+            if domain.spaces.extruded_mesh:
+                # Extract the base horizontal and vertical elements
+                # for the mixing ratio and density.
+                m_X_horiz = m_X_space.ufl_element().sub_elements[0]
+                m_X_vert = m_X_space.ufl_element().sub_elements[1]
+                rho_d_horiz = rho_d_space.ufl_element().sub_elements[0]
+                rho_d_vert = rho_d_space.ufl_element().sub_elements[1]
+
+                horiz_degree = m_X_horiz.degree() + rho_d_horiz.degree()
+                vert_degree = m_X_vert.degree() + rho_d_vert.degree()
+
+                cell = domain.mesh._base_mesh.ufl_cell().cellname()
+                horiz_elt = FiniteElement('DG', cell, horiz_degree)
+                vert_elt = FiniteElement('DG', cell, vert_degree)
+                elt = TensorProductElement(horiz_elt, vert_elt)
+            else:
+                m_X_degree = m_X_space.ufl_element().degree()
+                rho_d_degree = rho_d_space.ufl_element().degree()
+                degree = m_X_degree + rho_d_degree
+
+                cell = domain.mesh.ufl_cell().cellname()
+                elt = FiniteElement('DG', cell, degree)
+
+            tracer_density_space = FunctionSpace(domain.mesh, elt, name='tracer_density_space')
+            super().setup(domain, state_fields, space=tracer_density_space)
+
+        else:
+            super().setup(domain, state_fields)

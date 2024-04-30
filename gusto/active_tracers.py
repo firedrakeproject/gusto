@@ -53,6 +53,7 @@ class ActiveTracer(object):
     """
     def __init__(self, name, space, variable_type,
                  transport_eqn=TransportEquationType.advective,
+                 density_name=None,
                  phase=Phases.gas, chemical=None):
         """
         Args:
@@ -63,6 +64,10 @@ class ActiveTracer(object):
             transport_eqn (:class:`TransportEquationType`, optional): enumerator
                 indicating the type of transport equation to be solved (e.g.
                 advective). Defaults to `TransportEquationType.advective`.
+            density_name (str): the name of the associated density for a mixing
+                ratio when using the tracer_conservative transport. Defaults to None,
+                but raises an error if tracer_conservative transport is used without
+                a specified density.
             phase (:class:`Phases`, optional): enumerator indicating the phase
                 of the tracer variable. Defaults to `Phases.gas`.
             chemical (str, optional): string to describe the chemical that this
@@ -75,20 +80,28 @@ class ActiveTracer(object):
         self.name = name
         self.space = space
         self.transport_eqn = transport_eqn
+        self.density_name = density_name
         self.variable_type = variable_type
         self.phase = phase
         self.chemical = chemical
 
-        if (variable_type == TracerVariableType.density and transport_eqn == TransportEquationType.advective):
+        if (variable_type == TracerVariableType.density
+                and transport_eqn == TransportEquationType.advective):
             logger.warning('Active tracer initialised which describes a '
                            + 'density but solving the advective transport eqn')
+
+        if (transport_eqn == TransportEquationType.tracer_conservative
+                and density_name is None):
+            raise ValueError(f'Active tracer {name} using tracer conservative '
+                             + 'transport needs an associated density.')
 
 
 class WaterVapour(ActiveTracer):
     """An object encoding the details of water vapour as a tracer."""
     def __init__(self, name='water_vapour', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
-                 transport_eqn=TransportEquationType.advective):
+                 transport_eqn=TransportEquationType.advective,
+                 density_name=None):
         """
         Args:
             name (str, optional): the variable's name. Defaults to
@@ -101,16 +114,22 @@ class WaterVapour(ActiveTracer):
             transport_eqn (:class:`TransportEquationType`, optional): enumerator
                 indicating the type of transport equation to be solved (e.g.
                 advective). Defaults to `TransportEquationType.advective`.
+            density_name (str): the name of the associated density for a mixing
+                ratio when using the tracer_conservative transport. Defaults to None,
+                as this argument is not needed for other transport types.
         """
         super().__init__(f'{name}', space, variable_type,
-                         transport_eqn=transport_eqn, phase=Phases.gas, chemical='H2O')
+                         transport_eqn=transport_eqn,
+                         density_name=density_name,
+                         phase=Phases.gas, chemical='H2O')
 
 
 class CloudWater(ActiveTracer):
     """An object encoding the details of cloud water as a tracer."""
     def __init__(self, name='cloud_water', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
-                 transport_eqn=TransportEquationType.advective):
+                 transport_eqn=TransportEquationType.advective,
+                 density_name=None):
         """
         Args:
             name (str, optional): the variable name. Default is 'cloud_water'.
@@ -122,16 +141,22 @@ class CloudWater(ActiveTracer):
             transport_eqn (:class:`TransportEquationType`, optional): enumerator
                 indicating the type of transport equation to be solved (e.g.
                 advective). Defaults to `TransportEquationType.advective`.
+            density_name (str): the name of the associated density for a mixing
+                ratio when using the tracer_conservative transport. Defaults to None,
+                as this argument is not needed for other transport types.
         """
         super().__init__(f'{name}', space, variable_type,
-                         transport_eqn=transport_eqn, phase=Phases.liquid, chemical='H2O')
+                         transport_eqn=transport_eqn,
+                         density_name=density_name,
+                         phase=Phases.liquid, chemical='H2O')
 
 
 class Rain(ActiveTracer):
     """An object encoding the details of rain as a tracer."""
     def __init__(self, name='rain', space='theta',
                  variable_type=TracerVariableType.mixing_ratio,
-                 transport_eqn=TransportEquationType.advective):
+                 transport_eqn=TransportEquationType.advective,
+                 density_name=None):
         """
         Args:
             name (str, optional): the name for the variable. Defaults to 'rain'.
@@ -143,6 +168,11 @@ class Rain(ActiveTracer):
             transport_eqn (:class:`TransportEquationType`, optional): enumerator
                 indicating the type of transport equation to be solved (e.g.
                 advective). Defaults to `TransportEquationType.advective`.
+            density_name (str): the name of the associated density for a mixing
+                ratio when using the tracer_conservative transport. Defaults to None,
+                as this argument is not needed for other transport types.
         """
         super().__init__(f'{name}', space, variable_type,
-                         transport_eqn=transport_eqn, phase=Phases.liquid, chemical='H2O')
+                         transport_eqn=transport_eqn,
+                         density_name=density_name,
+                         phase=Phases.liquid, chemical='H2O')

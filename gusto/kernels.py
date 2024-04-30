@@ -10,7 +10,8 @@ tested.
 """
 
 from firedrake import dx
-from firedrake.parloops import par_loop, READ, WRITE
+from firedrake.parloops import par_loop, READ, WRITE, MIN, MAX, op2
+import numpy as np
 
 
 class LimitMidpoints():
@@ -73,8 +74,7 @@ class LimitMidpoints():
         par_loop(self._kernel, dx,
                  {"field_hat": (field_hat, WRITE),
                   "field_DG1": (field_DG1, READ),
-                  "field_old": (field_old, READ)},
-                 is_loopy_kernel=True)
+                  "field_old": (field_old, READ)})
 
 
 class ClipZero():
@@ -110,5 +110,62 @@ class ClipZero():
         """
         par_loop(self._kernel, dx,
                  {"field": (field, WRITE),
-                  "field_in": (field_in, READ)},
-                 is_loopy_kernel=True)
+                  "field_in": (field_in, READ)})
+
+
+class MinKernel():
+    """Finds the minimum DoF value of a field."""
+
+    def __init__(self):
+
+        self._kernel = op2.Kernel("""
+            static void minify(double *a, double *b) {
+                a[0] = a[0] > b[0] ? b[0] : a[0];
+            }
+            """, "minify")
+
+    def apply(self, field):
+        """
+        Performs the par loop.
+
+        Args:
+            field (:class:`Function`): The field to take the minimum of.
+
+        Returns:
+            The minimum DoF value of the field.
+        """
+
+        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=field._comm)
+
+        op2.par_loop(self._kernel, field.dof_dset.set, fmin(MIN), field.dat(READ))
+
+        return fmin.data[0]
+
+
+class MaxKernel():
+    """Finds the maximum DoF value of a field."""
+
+    def __init__(self):
+
+        self._kernel = op2.Kernel("""
+            static void maxify(double *a, double *b) {
+                a[0] = a[0] < b[0] ? b[0] : a[0];
+            }
+            """, "maxify")
+
+    def apply(self, field):
+        """
+        Performs the par loop.
+
+        Args:
+            field (:class:`Function`): The field to take the maximum of.
+
+        Returns:
+            The maximum DoF value of the field.
+        """
+
+        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=field._comm)
+
+        op2.par_loop(self._kernel, field.dof_dset.set, fmax(MAX), field.dat(READ))
+
+        return fmax.data[0]
