@@ -53,7 +53,8 @@ def run_conservative_transport_with_physics(dirname):
     physics_schemes = [(SourceSink(eqn, 'ash', basic_expression), SSPRK3(domain))]
 
     # Time stepper
-    stepper = SplitPrescribedTransport(eqn, SSPRK3(domain), io, transport_method,
+    stepper = SplitPrescribedTransport(eqn, SSPRK3(domain, increment_form=False),
+                                       io, transport_method,
                                        physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #
