@@ -960,7 +960,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             self.x1.assign(x0)
 
             # Use x0 as a first guess (otherwise may not converge)
-            self.x_out.assign(x0)
+            # self.x_out.assign(x0)
 
             for i in range(stage):
                 self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
