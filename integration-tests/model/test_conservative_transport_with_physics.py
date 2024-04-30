@@ -1,5 +1,7 @@
 """
-This tests the source/sink
+This tests that the conservative transport is correctly working with a physics 
+scheme. The transport equations needs to have the tracer multiplied by the density,
+whilst the physics equation does not.
 """
 
 from gusto import *
