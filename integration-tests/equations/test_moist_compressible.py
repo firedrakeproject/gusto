@@ -9,9 +9,10 @@ import gusto.thermodynamics as tde
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
                        sqrt, ExtrudedMesh, as_vector)
 import numpy as np
+import pytest
 
 
-def run_moist_compressible(tmpdir):
+def run_moist_compressible(tmpdir, tracer_transport):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -31,7 +32,19 @@ def run_moist_compressible(tmpdir):
 
     # Equation
     parameters = CompressibleParameters()
-    tracers = [WaterVapour(name='vapour_mixing_ratio'), CloudWater(name='cloud_liquid_mixing_ratio')]
+    
+    if tracer_transport=='conservative':
+        tracers = [WaterVapour(name='vapour_mixing_ratio',
+                   transport_eqn=TransportEquationType.tracer_conservative,
+                   density_name='rho'),
+                   CloudWater(name='cloud_liquid_mixing_ratio'),
+                   transport_eqn=TransportEquationType.tracer_conservative,
+                   density_name='rho')]
+    else:
+        tracers = [WaterVapour(name='vapour_mixing_ratio'), 
+                   CloudWater(name='cloud_liquid_mixing_ratio')]
+    
+    
     eqn = CompressibleEulerEquations(domain, parameters, active_tracers=tracers)
 
     # I/O
@@ -40,12 +53,23 @@ def run_moist_compressible(tmpdir):
     io = IO(domain, output)
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"),
-                          SSPRK3(domain, "rho"),
-                          SSPRK3(domain, "theta")]
+    if tracer_transport=='conservative':
+        transported_fields = [TrapeziumRule(domain, "u"),
+                              SSPRK3(domain, ["rho", "vapour_mixing_ratio", "cloud_liquid_mixing_ratio"], increment_form=False),
+                              SSPRK3(domain, "theta")]
+    else:
+        transported_fields = [TrapeziumRule(domain, "u"),
+                              SSPRK3(domain, "rho"),
+                              SSPRK3(domain, "theta"),
+                              SSPRK3(domain, "vapour_mixing_ratio"),
+                              SSPRK3(domain, "cloud_liquid_mixing_ratio")]
+    
+    
     transport_methods = [DGUpwind(eqn, "u"),
                          DGUpwind(eqn, "rho"),
-                         DGUpwind(eqn, "theta")]
+                         DGUpwind(eqn, "theta"),
+                         DGUpwind(eqn, "vapour_mixing_ratio"),
+                         DGUpwind(eqn, "cloud_liquid_mixing_ratio")]
 
     # Linear solver
     linear_solver = CompressibleSolver(eqn)
@@ -112,17 +136,17 @@ def run_moist_compressible(tmpdir):
     return stepper, check_stepper
 
 
-def test_moist_compressible(tmpdir):
+@pytest.mark.parametrize("tracer_transport", ["advective", "conservative"])
+def test_moist_compressible(tmpdir, tracer_transport):
 
     dirname = str(tmpdir)
-    stepper, check_stepper = run_moist_compressible(dirname)
+    stepper, check_stepper = run_moist_compressible(dirname, tracer_transport)
 
     for variable in ['u', 'rho', 'theta', 'vapour_mixing_ratio']:
         new_variable = stepper.fields(variable)
         check_variable = check_stepper.fields(variable)
         diff_array = new_variable.dat.data - check_variable.dat.data
         error = np.linalg.norm(diff_array) / np.linalg.norm(check_variable.dat.data)
-
         # Slack values chosen to be robust to different platforms
         assert error < 1e-10, f'Values for {variable} in ' + \
             'Moist Compressible test do not match KGO values'
