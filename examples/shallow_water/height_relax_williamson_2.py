@@ -24,7 +24,9 @@ H = 17000.       ### probably this changes too!
 Omega = 2*np.pi/88774.
 g = 3.71
 
-tau_r = 1 * day
+tau_r = dt
+
+name_end = '_tau_r--dt'
 
 ### setup shallow water parameters - can also change g and Omega as required
 parameters = ShallowWaterParameters(H=H, g=g, Omega=Omega)
@@ -55,7 +57,7 @@ bexpr = 2000 * (1 - r/R0)
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
 
 # I/O (input/output)
-dirname = "no_relax_williamson_2"
+dirname = f"height_relax_williamson_2{name_end}"
 output = OutputParameters(dirname=dirname)
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Sum('D', 'topography')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
@@ -73,7 +75,7 @@ physics_schemes = [(height_relax, ForwardEuler(domain))]
 
 
 # Time stepper
-stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)#, physics_schemes=physics_schemes)
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods, physics_schemes=physics_schemes)
 
 # ------------------------------------------------------------------------ #
 # Initial conditions - these need changing!
