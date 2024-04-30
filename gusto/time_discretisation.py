@@ -869,11 +869,6 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
         """
         super().setup(equation, apply_bcs, *active_labels)
 
-        if len(self.residual.label_map(lambda t: t.has_label(mass_weighted) and t.has_label(transport),
-                                       map_if_false=drop)) > 1:
-            print('automatically detect increment form')
-            self.increment_form = False
-
         if not self.increment_form:
             self.field_i = [Function(self.fs) for i in range(self.nStages+1)]
         else:
