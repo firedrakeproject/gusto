@@ -726,7 +726,7 @@ class IO(object):
                 # dump fields
                 self.write_nc_dump(t)
 
-            if output.dump_vtus:
+            if output.dump_vtus and self.ensemble.ensemble_comm.rank == 0:
                 # dump fields
                 self.pvd_dumpfile.write(*self.to_dump)
 
