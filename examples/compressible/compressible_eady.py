@@ -45,7 +45,8 @@ domain = Domain(mesh, dt, "RTCF", 1)
 # Equation
 Omega = as_vector([0., 0., f*0.5])
 parameters = CompressibleEadyParameters(N=sqrt(2.5e-5), H=H, f=f, Pi0=Constant(1.0))
-eqns = CompressibleEadyEquations(domain, parameters, Omega=Omega)
+eqns = CompressibleEadyEquations(domain, parameters, Omega=Omega,
+                                 u_transport_option='vector_advection_form')
 
 # I/O
 output = OutputParameters(dirname=dirname,
@@ -84,7 +85,8 @@ linear_solver = CompressibleSolver(eqns)
 # Time stepper
 stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes,
                                   transport_methods,
-                                  linear_solver=linear_solver)
+                                  linear_solver=linear_solver,
+                                  num_outer=4, num_inner=1)
 
 # ---------------------------------------------------------------------------- #
 # Initial conditions
