@@ -688,6 +688,10 @@ class IO(object):
                 completed by a multi-level time scheme. Defaults to None.
         """
         output = self.output
+        if self.ensemble is not None:
+            write_file = self.ensemble.ensemble_comm.rank == 0
+        else:
+            write_file = True
 
         # Diagnostics:
         # Compute diagnostic fields
@@ -726,7 +730,7 @@ class IO(object):
                 # dump fields
                 self.write_nc_dump(t)
 
-            if output.dump_vtus and self.ensemble.ensemble_comm.rank == 0:
+            if output.dump_vtus and write_file:
                 # dump fields
                 self.pvd_dumpfile.write(*self.to_dump)
 
