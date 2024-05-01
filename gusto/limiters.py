@@ -242,20 +242,22 @@ class MixedFSLimiter(object):
         Raises:
             ValueError: If a limiter is defined for a field that is not in the prognostic variable set
         """
-        self.sublimiters = sublimiters
 
-        for field, sublimiter in sublimiters.items():
+        self.sublimiters = sublimiters
+        self.field_idxs = {}
+
+        for field, _ in sublimiters.items():
             # Check that the field is in the prognostic variable set:
             if field not in equation.field_names:
                 raise ValueError(f"The limiter defined for {field} is for a field that does not exist in the equation set")
             else:
-                self.sublimiters[field].idx = equation.field_names.index(field)
+                self.field_idxs[field] = equation.field_names.index(field)
 
     def apply(self, fields):
         """
         Apply the individual limiters to specific prognostic variables
         """
 
-        for _, sublimiter in self.sublimiters.items():
-            field = fields.subfunctions[sublimiter.idx]
+        for field, sublimiter in self.sublimiters.items():
+            field = fields.subfunctions[self.field_idxs[field]]
             sublimiter.apply(field)

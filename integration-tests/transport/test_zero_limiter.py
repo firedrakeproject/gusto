@@ -1,174 +1,199 @@
 """
-This tests the ZeroLimiter, which enforces non-negativity.
-A sharp bubble of warm air is generated in a vertical slice and then transported
-by a prescribed transport scheme. If the limiter is working, the transport
-should have produced no negative values.
+Testing the zero limiter. Without the limiter small amounts of negative cloud
+are produced after 1 timestep, so the first test will fail. The second test
+applies the limiter to the cloud field only, and should pass. In the third test
+the limiter is applied to both cloud and rain and to see if the application of
+the limiter to rain stops the limiter working on cloud.
 """
 
 from gusto import *
-from firedrake import (as_vector, PeriodicIntervalMesh, pi, SpatialCoordinate,
-                       ExtrudedMesh, FunctionSpace, Function, norm,
-                       conditional, sqrt)
-import numpy as np
-import pytest
+from firedrake import IcosahedralSphereMesh, SpatialCoordinate, sin, cos, exp
 
 
-def setup_zero_limiter(dirname, clipping_space):
+def setup_zero_limiter(dirname, limiter=False, rain=False):
 
-    # ------------------------------------------------------------------------ #
-    # Parameters for test case
-    # ------------------------------------------------------------------------ #
+    # ----------------------------------------------------------------- #
+    # Test case parameters
+    # ----------------------------------------------------------------- #
 
-    Ld = 1.
-    tmax = 0.2
-    dt = tmax / 40
-    rotations = 0.25
+    dt = 3000
+    tmax = 1*dt
+    ref = 3
+    R = 6371220.
+    u_max = 20
+    phi_0 = 3e4
+    epsilon = 1/300
+    theta_0 = epsilon*phi_0**2
+    g = 9.80616
+    H = phi_0/g
+    xi = 0
+    q0 = 200
+    beta2 = 10
 
-    # ------------------------------------------------------------------------ #
-    # Build model objects
-    # ------------------------------------------------------------------------ #
+    # ----------------------------------------------------------------- #
+    # Set up model objects
+    # ----------------------------------------------------------------- #
 
     # Domain
-    m = PeriodicIntervalMesh(20, Ld)
-    mesh = ExtrudedMesh(m, layers=20, layer_height=(Ld/20))
+    mesh = IcosahedralSphereMesh(radius=R, refinement_level=ref, degree=2)
     degree = 1
 
-    domain = Domain(mesh, dt, family="CG", degree=degree)
+    domain = Domain(mesh, dt, 'BDM', degree)
 
-    DG1 = FunctionSpace(mesh, 'DG', 1)
-    DG1_equispaced = domain.spaces('DG1_equispaced')
+    x = SpatialCoordinate(mesh)
 
-    Vpsi = domain.spaces('H1')
+    # Equations
+    parameters = ShallowWaterParameters(H=H, g=g)
+    Omega = parameters.Omega
+    fexpr = 2*Omega*x[2]/R
 
-    eqn = AdvectionEquation(domain, DG1, 'tracer')
-    output = OutputParameters(dirname=dirname+'/limiters',
-                              dumpfreq=1, dumplist=['u', 'tracer', 'true_tracer'])
+    if rain:
+        tracers = [WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')]
+    else:
+        tracers = [WaterVapour(space='DG'), CloudWater(space='DG')]
+
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
+                                 u_transport_option='vector_advection_form',
+                                 thermal=True, active_tracers=tracers)
+
+    output = OutputParameters(dirname=dirname, dumpfreq=1)
 
     io = IO(domain, output)
 
     # ------------------------------------------------------------------------ #
-    # Set up transport scheme
+    # Set up physics and transport schemes
     # ------------------------------------------------------------------------ #
 
-    if clipping_space is None:
-        limiter = ZeroLimiter(DG1)
-    elif clipping_space == 'equispaced':
-        limiter = ZeroLimiter(DG1, clipping_space=DG1_equispaced)
+    # Saturation function
+    def sat_func(x_in):
+        D = x_in.split()[1]
+        b = x_in.split()[2]
+        return q0/(g*D) * exp(20*(1 - b/g))
 
-    transport_schemes = SSPRK3(domain, limiter=limiter)
-    transport_method = DGUpwind(eqn, "tracer")
+    # Feedback proportionality is dependent on h and b
+    def gamma_v(x_in):
+        D = x_in.split()[1]
+        b = x_in.split()[2]
+        return (1 + 10*(20*q0/g*D * exp(20*(1 - b/g))))**(-1)
 
-    # Build time stepper
-    stepper = PrescribedTransport(eqn, transport_schemes, io, transport_method)
+    transport_methods = [DGUpwind(eqns, field_name) for field_name in eqns.field_names]
 
-    # ------------------------------------------------------------------------ #
-    # Initial condition
-    # ------------------------------------------------------------------------ #
+    linear_solver = ThermalSWSolver(eqns)
 
-    tracer0 = stepper.fields('tracer', DG1)
-    true_field = stepper.fields('true_tracer', space=DG1)
+    zerolimiter = ZeroLimiter(domain.spaces('DG'))
+    DG1limiter = DG1Limiter(domain.spaces('DG'))
 
-    x, z = SpatialCoordinate(mesh)
+    if rain:
+        physics_sublimiters = {'cloud_water': zerolimiter,
+                               'rain': zerolimiter}
+    else:
+        physics_sublimiters = {'cloud_water': zerolimiter}
 
-    tracer_min = 12.6
-    dtracer = 3.2
+    physics_limiter = MixedFSLimiter(eqns, physics_sublimiters)
 
-    # First time do initial conditions, second time do final conditions
-    for i in range(2):
+    sat_adj = SWSaturationAdjustment(eqns, sat_func,
+                                     time_varying_saturation=True,
+                                     parameters=parameters,
+                                     thermal_feedback=True,
+                                     beta2=beta2, gamma_v=gamma_v,
+                                     time_varying_gamma_v=True)
 
-        if i == 0:
-            x1_lower = 2 * Ld / 5
-            x1_upper = 3 * Ld / 5
-            z1_lower = 6 * Ld / 10
-            z1_upper = 8 * Ld / 10
-            x2_lower = 6 * Ld / 10
-            x2_upper = 8 * Ld / 10
-            z2_lower = 2 * Ld / 5
-            z2_upper = 3 * Ld / 5
-        elif i == 1:
-            # Rotated anti-clockwise by 90 degrees (x -> z, z -> -x)
-            x1_lower = 2 * Ld / 10
-            x1_upper = 4 * Ld / 10
-            z1_lower = 2 * Ld / 5
-            z1_upper = 3 * Ld / 5
-            x2_lower = 2 * Ld / 5
-            x2_upper = 3 * Ld / 5
-            z2_lower = 6 * Ld / 10
-            z2_upper = 8 * Ld / 10
-        else:
-            raise ValueError
+    if limiter:
+        physics_schemes = [(sat_adj, ForwardEuler(domain, limiter=physics_limiter))]
+    else:
+        physics_schemes = [(sat_adj, ForwardEuler(domain))]
 
-        expr_1 = conditional(x > x1_lower,
-                             conditional(x < x1_upper,
-                                         conditional(z > z1_lower,
-                                                     conditional(z < z1_upper, dtracer, 0.0),
-                                                     0.0),
-                                         0.0),
-                             0.0)
-
-        expr_2 = conditional(x > x2_lower,
-                             conditional(x < x2_upper,
-                                         conditional(z > z2_lower,
-                                                     conditional(z < z2_upper, dtracer, 0.0),
-                                                     0.0),
-                                         0.0),
-                             0.0)
-
-        if i == 0:
-            tracer0.interpolate(Constant(tracer_min) + expr_1 + expr_2)
-        elif i == 1:
-            true_field.interpolate(Constant(tracer_min) + expr_1 + expr_2)
-        else:
-            raise ValueError
+    transported_fields = [TrapeziumRule(domain, "u"),
+                          SSPRK3(domain, "D"),
+                          SSPRK3(domain, "b", limiter=DG1limiter),
+                          SSPRK3(domain, "water_vapour", limiter=DG1limiter),
+                          SSPRK3(domain, "cloud_water", limiter=DG1limiter),
+                          ]
+    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                      transport_methods,
+                                      linear_solver=linear_solver,
+                                      physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #
-    # Velocity profile
+    # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    psi = Function(Vpsi)
-    u = stepper.fields('u')
+    u0 = stepper.fields("u")
+    D0 = stepper.fields("D")
+    b0 = stepper.fields("b")
+    v0 = stepper.fields("water_vapour")
 
-    # set up solid body rotation for transport
-    # we do this slightly complicated stream function to make the velocity 0 at edges
-    # thus we avoid odd effects at boundaries
-    xc = Ld / 2
-    zc = Ld / 2
-    r = sqrt((x - xc) ** 2 + (z - zc) ** 2)
-    omega = rotations * 2 * pi / tmax
-    r_out = 9 * Ld / 20
-    r_in = 2 * Ld / 5
-    A = omega * r_in / (2 * (r_in - r_out))
-    B = - omega * r_in * r_out / (r_in - r_out)
-    C = omega * r_in ** 2 * r_out / (r_in - r_out) / 2
-    psi_expr = conditional(r < r_in,
-                           omega * r ** 2 / 2,
-                           conditional(r < r_out,
-                                       A * r ** 2 + B * r + C,
-                                       A * r_out ** 2 + B * r_out + C))
-    psi.interpolate(psi_expr)
+    _, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
 
-    gradperp = lambda v: as_vector([-v.dx(1), v.dx(0)])
-    u.project(gradperp(psi))
+    uexpr = xyz_vector_from_lonlatr(u_max*cos(phi), 0, 0, x)
+    g = parameters.g
+    w = Omega*R*u_max + (u_max**2)/2
+    sigma = w/10
 
-    return stepper, tmax, true_field
+    Dexpr = H - (1/g)*(w + sigma)*((sin(phi))**2)
+
+    numerator = theta_0 + sigma*((cos(phi))**2) * ((w + sigma)*(cos(phi))**2 + 2*(phi_0 - w - sigma))
+
+    denominator = phi_0**2 + (w + sigma)**2*(sin(phi))**4 - 2*phi_0*(w + sigma)*(sin(phi))**2
+
+    theta = numerator/denominator
+
+    bexpr = parameters.g * (1 - theta)
+
+    initial_msat = q0/(g*Dexpr) * exp(20*theta)
+    vexpr = (1 - xi) * initial_msat
+
+    u0.project(uexpr)
+    D0.interpolate(Dexpr)
+    b0.interpolate(bexpr)
+    v0.interpolate(vexpr)
+
+    # Set reference profiles
+    Dbar = Function(D0.function_space()).assign(H)
+    bbar = Function(b0.function_space()).interpolate(bexpr)
+    stepper.set_reference_profiles([('D', Dbar), ('b', bbar)])
+
+    return stepper, tmax
 
 
-@pytest.mark.parametrize('space', [None, 'equispaced'])
-def test_zero_limiter(tmpdir, space):
+def test_without_limiter(tmpdir):
 
-    # Setup and run
+    # Setup and run verison without limiter
     dirname = str(tmpdir)
 
-    stepper, tmax, true_field = setup_zero_limiter(dirname, space)
+    stepper_without_limiter, tmax = setup_zero_limiter(dirname)
 
-    stepper.run(t=0, tmax=tmax)
+    stepper_without_limiter.run(t=0, tmax=tmax)
 
-    final_field = stepper.fields('tracer')
+    cloud_without_limiter = stepper_without_limiter.fields('cloud_water')
 
-    # Check tracer is roughly in the correct place
-    assert norm(true_field - final_field) / norm(true_field) < 0.05, \
-        'Something appears to have gone wrong with transport of tracer using a limiter'
+    assert cloud_without_limiter.dat.data.min() < 0, "The minimum of unlimited cloud should be negative"
 
-    # Check for no new overshoots
-    assert np.min(final_field.dat.data) >= 0.0, \
-        'Application of limiter has not prevented negative values'
+
+def test_with_limiter(tmpdir):
+
+    # Setup and run verison with limiter
+    dirname = str(tmpdir)
+
+    stepper_with_limiter, tmax = setup_zero_limiter(dirname, limiter=True)
+
+    stepper_with_limiter.run(t=0, tmax=tmax)
+
+    cloud_with_limiter = stepper_with_limiter.fields('cloud_water')
+
+    assert cloud_with_limiter.dat.data.min() >= 0, "Application of the limiter has not stopped negative values in cloud"
+
+
+def test_limiter_with_rain(tmpdir):
+
+    # Setup and run verison with limiter where rain is also limited
+    dirname = str(tmpdir)
+
+    stepper_with_rain_limiter, tmax = setup_zero_limiter(dirname, limiter=True,
+                                                         rain=True)
+
+    stepper_with_rain_limiter.run(t=0, tmax=tmax)
+
+    cloud_with_rain_limiter = stepper_with_rain_limiter.fields('cloud_water')
+
+    assert cloud_with_rain_limiter.dat.data.min() >= 0, "Using the limiter on both cloud and rain has not stopped negatives in cloud"
