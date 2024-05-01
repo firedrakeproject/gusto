@@ -4,7 +4,7 @@
 from firedrake import assemble, dot, dx, Function, sqrt, ln, \
     TestFunction, TrialFunction, Constant, grad, inner, curl, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, cross, avg, jump, pi, \
+    ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
     Projector, Interpolator, FunctionSpace
 from firedrake.assign import Assigner
@@ -1744,6 +1744,7 @@ class RelativeVorticity(Vorticity):
             state_fields (:class:`StateFields`): the model's field container.
         """
         super().setup(domain, state_fields, vorticity_type="relative")
+
 
 class TracerDensity(DiagnosticField):
     """Diagnostic for computing the density of a tracer. This is

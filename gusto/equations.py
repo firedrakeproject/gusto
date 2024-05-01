@@ -5,7 +5,7 @@ from firedrake import (
     TestFunction, Function, sin, pi, inner, dx, div, cross,
     FunctionSpace, MixedFunctionSpace, TestFunctions, TrialFunction,
     FacetNormal, jump, avg, dS_v, dS, DirichletBC, conditional,
-    SpatialCoordinate, split, Constant, action, as_vector
+    SpatialCoordinate, split, Constant, action
 )
 from firedrake.fml import (
     Term, all_terms, keep, drop, Label, subject, name_label,
@@ -14,7 +14,7 @@ from firedrake.fml import (
 from gusto.fields import PrescribedFields
 from gusto.labels import (
     time_derivative, transport, prognostic, hydrostatic, linearisation,
-    pressure_gradient, coriolis
+    pressure_gradient, coriolis, gravity, sponge
 )
 from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (

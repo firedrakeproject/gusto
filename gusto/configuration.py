@@ -138,7 +138,6 @@ class CompressibleParameters(Configuration):
     w_sat4 = 610.9  # fourth const. in Teten's formula (Pa)
 
 
-
 class ShallowWaterParameters(Configuration):
     """Physical parameters for the shallow-water equations."""
 
