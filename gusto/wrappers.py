@@ -13,6 +13,7 @@ from firedrake.fml import Term
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
 from gusto.recovery import Recoverer, ReversibleRecoverer
 from gusto.labels import transporting_velocity
+from gusto.conservative_projection import ConservativeProjector
 import ufl
 
 __all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper", "MixedFSWrapper"]
@@ -124,6 +125,12 @@ class EmbeddedDGWrapper(Wrapper):
             self.x_out_projector = Projector(self.x_out, self.x_projected)
         elif self.options.project_back_method == 'recover':
             self.x_out_projector = Recoverer(self.x_out, self.x_projected)
+        elif self.options.project_back_method == 'conservative_project':
+            # TODO: work out what the rho fields are!!
+            # TODO: initialise the self.x_in_orig field
+            some_rho = Function(self.function_space)
+            self.x_in_projector = ConservativeProjector(some_rho, some_rho, self.x_in_orig, self.x_in)
+            self.x_out_projector = ConservativeProjector(some_rho, some_rho, self.x_out, self.x_projected)
         else:
             raise NotImplementedError(
                 'EmbeddedDG Wrapper: project_back_method'
@@ -142,10 +149,16 @@ class EmbeddedDGWrapper(Wrapper):
             x_in (:class:`Function`): the original input field.
         """
 
-        try:
-            self.x_in.interpolate(x_in)
-        except NotImplementedError:
-            self.x_in.project(x_in)
+        if self.options.project_back_method == 'conservative_project':
+            # TODO: work out what goes here!!
+            # In particular the rho fields!!
+            self.x_in_orig.assign(x_in)
+            self.x_in = self.x_in_projector.project()
+        else:
+            try:
+                self.x_in.interpolate(x_in)
+            except NotImplementedError:
+                self.x_in.project(x_in)
 
     def post_apply(self, x_out):
         """
