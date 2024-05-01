@@ -1726,14 +1726,22 @@ class Vorticity(DiagnosticField):
         super().setup(domain, state_fields, space=space)
 
         if self.method == 'solve':
-            vort = TrialFunction(space)
-            w = TestFunction(space)
-            n = FacetNormal(domain.mesh)
-            a = inner(vort, w) * dx
-            L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * dS_h
-            if vorticity_type == 'absolute':
-                Omega = as_vector((0, 0, self.parameters.Omega))
-                L += inner(2*Omega, w) * dx
+            if domain.mesh.topological_dimension() == 3:
+                vort = TrialFunction(space)
+                w = TestFunction(space)
+                n = FacetNormal(domain.mesh)
+                a = inner(vort, w) * dx
+                L = inner(u, curl(w)) * dx - jump(cross(w, u), n) * dS_h
+                if vorticity_type == 'absolute':
+                    Omega = as_vector((0, 0, self.parameters.Omega))
+                    L += inner(2*Omega, w) * dx
+            else:
+                space = domain.spaces("H1")
+                vort = TrialFunction(space)
+                gamma = TestFunction(space)
+                a = inner(vort, gamma) * dx
+                L = (- inner(domain.perp(grad(gamma)), u))*dx
+                # TODO implement absolute version, unsure atm how to get corioilis in vertical slice smartly
 
             problem = LinearVariationalProblem(a, L, self.field)
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={'ksp_type': 'cg'})
@@ -1754,7 +1762,7 @@ class RelativeVorticity(Vorticity):
                 'assign' and 'solve'. Defaults to 'solve'.
         """
         self.solve_implemented = True
-        super().__init__(space=space, method=method, required_fields=('u',))
+        super().__init__(space=space, method=method, required_fields=('u'))
 
     def setup(self, domain, state_fields):
         u"""
