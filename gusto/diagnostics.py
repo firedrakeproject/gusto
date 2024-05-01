@@ -28,7 +28,7 @@ __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent
            "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
-           "ShallowWaterPotentialVorticity", "ShallowWaterRelativeVorticity", "ShallowWaterAbsoluteVorticity", 
+           "ShallowWaterPotentialVorticity", "ShallowWaterRelativeVorticity", "ShallowWaterAbsoluteVorticity",
            "Vorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
            "BruntVaisalaFrequencySquared", "TracerDensity"]
 
@@ -812,8 +812,8 @@ class ShallowWaterPotentialEnstrophy(DiagnosticField):
                 for this diagnostic. Valid options are 'interpolate', 'project',
                 'assign' and 'solve'. Defaults to 'interpolate'.
         """
-        base_enstrophy_names = ["ShallowWaterPotentialVorticity", 
-                                "ShallowWaterRelativeVorticity", 
+        base_enstrophy_names = ["ShallowWaterPotentialVorticity",
+                                "ShallowWaterRelativeVorticity",
                                 "ShallowWaterAbsoluteVorticity"]
         if base_field_name not in base_enstrophy_names:
             raise ValueError(
@@ -1740,7 +1740,7 @@ class Vorticity(DiagnosticField):
 
 
 class RelativeVorticity(Vorticity):
-    u""" Diagnostic field for compressible euler relative vorticity  """
+    u""" Diagnostic field for compressible relative vorticity  """
     name = 'RelativeVorticity'
 
     def __init__(self, space=None, method='solve'):
