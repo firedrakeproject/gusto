@@ -26,7 +26,7 @@ class PararealFields(object):
 class Parareal(object):
 
     def __init__(self, domain, coarse_scheme, fine_scheme, nG, nF,
-                 n_intervals, max_its, ensemble=None):
+                 n_intervals, max_its):
 
         assert coarse_scheme.nlevels == 1
         assert fine_scheme.nlevels == 1
@@ -40,11 +40,8 @@ class Parareal(object):
         self.nF = nF
         self.n_intervals = n_intervals
         self.max_its = max_its
-        self.ensemble = ensemble
-        if ensemble is not None:
-            assert ensemble.ensemble_comm.size == n_intervals + 1
 
-    def setup(self, equation, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True, ensemble=None, *active_labels):
         self.coarse_scheme.fixed_subcycles = self.nG
         self.coarse_scheme.setup(equation, apply_bcs, *active_labels)
         self.fine_scheme.fixed_subcycles = self.nF
@@ -57,6 +54,9 @@ class Parareal(object):
         self.xFn = Function(equation.function_space)
         self.xFnp1 = Function(equation.function_space)
         self.name = equation.field_name
+        self.ensemble = ensemble
+        if ensemble is not None:
+            assert ensemble.ensemble_comm.size == self.n_intervals + 1
 
     def setup_transporting_velocity(self, uadv):
         self.coarse_scheme.setup_transporting_velocity(uadv)

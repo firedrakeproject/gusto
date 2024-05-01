@@ -292,7 +292,7 @@ class Timestepper(BaseTimestepper):
 
     def setup_scheme(self):
         self.setup_equation(self.equation)
-        self.scheme.setup(self.equation)
+        self.scheme.setup(self.equation, ensemble=self.ensemble)
         self.setup_transporting_velocity(self.scheme)
         if self.io.output.log_courant:
             self.scheme.courant_max = self.io.courant_max
