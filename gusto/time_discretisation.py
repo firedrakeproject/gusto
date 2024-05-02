@@ -488,6 +488,7 @@ class IMEXMultistage(TimeDiscretisation):
 
     def apply(self, x_out, x_in):
         self.x1.assign(x_in)
+        self.x_out.assign(x_in)
         solver_list = self.solvers
 
         for stage in range(self.nStages):

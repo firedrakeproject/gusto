@@ -59,7 +59,7 @@ class SDC(object, metaclass=ABCMeta):
     """Base class for Spectral Deferred Correction schemes."""
 
     def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
-                 field_name=None,
+                 formulation="node-to-node",field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
                  limiter=None, options=None, initial_guess="base"):
         """
@@ -105,6 +105,13 @@ class SDC(object, metaclass=ABCMeta):
                     preSweep="QDELTA", postSweep="QUADRATURE",
                     qDeltaInitial="BE", nodeDistr=node_dist
                     )
+        
+        if formulation == "node-to-node":
+            self.res = self.res_zero2n
+        elif formulation == "node-to-node":
+            self.res = self.res_n2n
+        else:
+            raise ValueError('Formulation not implemented')
 
         # get default linear and nonlinear solver options if none passed in
         if linear_solver_parameters is None:
@@ -196,7 +203,7 @@ class SDC(object, metaclass=ABCMeta):
         return residual_rhs.form
 
     @abstractproperty
-    def res_SDC(self):
+    def res_n2n(self):
         """Set up the residual for the SDC solve."""
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     map_if_false=lambda t: self.dt*t)
@@ -261,7 +268,7 @@ class SDC(object, metaclass=ABCMeta):
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
         # setup linear solver using SDC residual defined in derived class
-        prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
+        prob_SDC = NonlinearVariationalProblem(self.res, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.nonlinear_solver_parameters,
                                           options_prefix=solver_name)
@@ -379,7 +386,7 @@ class FE_SDC(SDC):
         return residual_rhs.form
 
     @property
-    def res_SDC(self):
+    def res_n2n(self):
         """Set up the residual for the SDC solve."""
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     map_if_false=lambda t: self.dt*t)
@@ -444,7 +451,7 @@ class FE_SDC(SDC):
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
         # setup linear solver using SDC residual defined in derived class
-        prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
+        prob_SDC = NonlinearVariationalProblem(self.res, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
@@ -602,7 +609,7 @@ class BE_SDC(SDC):
         return residual_final.form
 
     @property
-    def res_SDC(self):
+    def res_n2n(self):
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     map_if_false=lambda t: self.dt*t)
         # y_m^(k+1) + dt*F(y_m^(k+1))
@@ -641,7 +648,7 @@ class BE_SDC(SDC):
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
         # setup linear solver using SDC residual defined in derived class
-        prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
+        prob_SDC = NonlinearVariationalProblem(self.res, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.nonlinear_solver_parameters,
                                           options_prefix=solver_name)
@@ -800,7 +807,7 @@ class IMEX_SDC(SDC):
         return residual_final.form
 
     @property
-    def res_SDC(self):
+    def res_n2n(self):
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     map_if_false=lambda t: self.dt*t)
 
@@ -849,7 +856,7 @@ class IMEX_SDC(SDC):
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
         # setup linear solver using SDC residual defined in derived class
-        prob_SDC = NonlinearVariationalProblem(self.res_SDC, self.U_SDC, bcs=self.bcs)
+        prob_SDC = NonlinearVariationalProblem(self.res, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.nonlinear_solver_parameters,
                                           options_prefix=solver_name)
