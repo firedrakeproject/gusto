@@ -41,7 +41,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 import numpy as np
 from firedrake import (
     Function, NonlinearVariationalProblem,
-    NonlinearVariationalSolver
+    NonlinearVariationalSolver, Constant
 )
 from firedrake.fml import (
     replace_subject, all_terms, drop
@@ -102,7 +102,7 @@ class SDC(object, metaclass=ABCMeta):
         self.sdc_dict = getSetup(
                     nNodes=M, nodeType=node_type, nIter=maxk, 
                     qDeltaImplicit=qdelta_imp, qDeltaExplicit=qdelta_exp,
-                    preSweep="QDELTA", postSweep="LASTNODE",
+                    preSweep="QDELTA", postSweep="QUADRATURE",
                     qDeltaInitial="BE", nodeDistr=node_dist
                     )
 
@@ -325,8 +325,10 @@ class SDC(object, metaclass=ABCMeta):
 
 class FE_SDC(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,
-                 linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True):
+    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
+                 field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
+                 limiter=None, options=None, initial_guess="base"):
         """
         Initialise Forward Euler SDC scheme
         Args:
@@ -347,10 +349,10 @@ class FE_SDC(SDC):
             final_update (bool, optional): Whether to compute final update, or just take last
                 quadrature value. Defaults to True
         """
-        super().__init__(base_scheme, domain, M, maxk, quadrature, field_name=field_name,
-                         linear_solver_parameters=linear_solver_parameters,
-                         nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         final_update=final_update)
+        super().__init__(base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
+                        field_name=field_name,
+                        linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters, final_update=final_update,
+                        limiter=limiter, options=options, initial_guess=initial_guess)
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -524,8 +526,10 @@ class FE_SDC(SDC):
 
 class BE_SDC(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,
-                 linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True):
+    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
+                 field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
+                 limiter=None, options=None, initial_guess="base"):
         """
         Initialise Backward Euler SDC scheme
         Args:
@@ -546,10 +550,10 @@ class BE_SDC(SDC):
             final_update (bool, optional): Whether to compute final update, or just take last
                 quadrature value. Defaults to True
         """
-        super().__init__(base_scheme, domain, M, maxk, quadrature, field_name=field_name,
-                         linear_solver_parameters=linear_solver_parameters,
-                         nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         final_update=final_update)
+        super().__init__(base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
+                        field_name=field_name,
+                        linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters, final_update=final_update,
+                        limiter=limiter, options=options, initial_guess=initial_guess)
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -720,8 +724,10 @@ class BE_SDC(SDC):
 
 class IMEX_SDC(SDC):
 
-    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,
-                 linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True):
+    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
+                 field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
+                 limiter=None, options=None, initial_guess="base"):
         """
         Initialise IMEX (FWSW) Euler SDC scheme
         Args:
@@ -742,10 +748,10 @@ class IMEX_SDC(SDC):
             final_update (bool, optional): Whether to compute final update, or just take last
                 quadrature value. Defaults to True
         """
-        super().__init__(base_scheme, domain, M, maxk, quadrature, field_name=field_name,
-                         linear_solver_parameters=linear_solver_parameters,
-                         nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         final_update=final_update)
+        super().__init__(base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
+                        field_name=field_name,
+                        linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters, final_update=final_update,
+                        limiter=limiter, options=options, initial_guess=initial_guess)
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
