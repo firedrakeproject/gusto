@@ -49,8 +49,7 @@ from firedrake.fml import (
 from firedrake.utils import cached_property
 
 from gusto.labels import (time_derivative, implicit, explicit)
-import scipy
-from scipy.special import legendre
+from gusto.qmatrix import *
 
 
 __all__ = ["BE_SDC", "FE_SDC", "IMEX_SDC"]
@@ -59,9 +58,10 @@ __all__ = ["BE_SDC", "FE_SDC", "IMEX_SDC"]
 class SDC(object, metaclass=ABCMeta):
     """Base class for Spectral Deferred Correction schemes."""
 
-    def __init__(self, base_scheme, domain, M, maxk, quadrature, field_name=None,
+    def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
+                 field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
-                 limiter=None, options=None):
+                 limiter=None, options=None, initial_guess="base"):
         """
         Initialise SDC object
         Args:
@@ -71,8 +71,10 @@ class SDC(object, metaclass=ABCMeta):
                 mesh and the compatible function spaces.
             M (int): Number of quadrature nodes to compute spectral integration over
             maxk (int): Max number of correction interations
-            quadrature (str): Type of quadrature to be used. Options are gauss-legendre,
-                gauss-radau and gauss-lobotto.
+            node_type (str): Type of quadrature to be used. Options are
+            node_type (str): Node distribution to be used. Options are
+            qdelta_imp (str): Implicit Qdelta matrix to be used
+            qdelta_exp (str): Explicit Qdelta matrix to be used
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             linear_solver_parameters (dict, optional): dictionary of parameters to
@@ -87,6 +89,7 @@ class SDC(object, metaclass=ABCMeta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            initial_guess (str, optional): Initial guess to be base timestepper, or copy
         """
         self.base = base_scheme
         self.field_name = field_name
@@ -95,6 +98,13 @@ class SDC(object, metaclass=ABCMeta):
         self.M = M
         self.maxk = maxk
         self.final_update = final_update
+
+        self.sdc_dict = getSetup(
+                    nNodes=M, nodeType=node_type, nIter=maxk, 
+                    qDeltaImplicit=qdelta_imp, qDeltaExplicit=qdelta_exp,
+                    preSweep="QDELTA", postSweep="LASTNODE",
+                    qDeltaInitial="BE", nodeDistr=node_dist
+                    )
 
         # get default linear and nonlinear solver options if none passed in
         if linear_solver_parameters is None:
@@ -114,11 +124,19 @@ class SDC(object, metaclass=ABCMeta):
 
         # Set up quadrature nodes over [0.dt] and create
         # the various integration matrices
-        self.create_nodes(self.dt_coarse, quadrature)
-        self.Qmatrix()
-        self.Smatrix()
-        self.Qfinal()
-        self.dtau = np.diff(np.append(0, self.nodes))
+        self.nodes = self.rescale_nodes(self.sdc_dict["tauNodes"],0., self.dt_coarse,0,1)
+        self.Q=float(self.dt_coarse)*self.sdc_dict['qMatrix']
+        self.S=float(self.dt_coarse)*self.sdc_dict['sMatrix']
+        self.Qfin=float(self.dt_coarse)*self.sdc_dict['weights']
+        self.dtau = float(self.dt_coarse)*self.sdc_dict['deltaTau'][0:-1]
+        self.dtau=Constant(self.dtau)
+        self.Qdelta_imp = self.sdc_dict['qDeltaI'][0]
+        self.Qdelta_exp = self.sdc_dict['qDeltaE']
+
+        if (initial_guess == "base"):
+            self.base_flag = True
+        else:
+            self.base_flag=False
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -257,132 +275,12 @@ class SDC(object, metaclass=ABCMeta):
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
 
-    def create_nodes(self, b, quadrature, A=-1, B=1):
+    def rescale_nodes(self, nodes, a, b, A, B):
         """
-        Create quadrature nodes over range [0,b]
-        Args:
-            b (real): End of quadrature domain (start is a=0)
-            quadrature (str): Type of quadrature to be used. Options are gauss-legendre,
-                gauss-radau and gauss-lobotto.
+        Rescale nodes from between [A,B] to [a,b]
         """
-        M = self.M
-        a = 0.
-        nodes = np.zeros(M)
-        if quadrature == "gauss-radau":
-            # nodes and weights for gauss - radau IIA quadrature
-            # See Abramowitz & Stegun p 888
-            nodes[0] = A
-            p = np.poly1d([1, 1])
-            pn = legendre(M)
-            pn1 = legendre(M-1)
-            poly, remainder = (pn + pn1)/p  # [1] returns remainder from polynomial division
-            nodes[1:] = np.sort(poly.roots)
-        elif quadrature == "gauss-lobatto":
-            # nodes and weights for gauss - lobatto quadrature
-            pn = legendre(M-1)
-            pn_d = pn.deriv()
-            nodes[0] = A
-            nodes[-1] = B
-            nodes[1:-1] = np.sort(pn_d.roots)
-        elif quadrature == "gauss-legendre":
-            # nodes and weights for gauss - legendre quadrature
-            pn = legendre(M)
-            nodes = np.sort(pn.roots)
-
-        # rescale to be between [a,b] instead of [A,B]
         nodes = ((b - a) * nodes + a * B - b * A) / (B - A)
-        self.nodes = ((b + a) - nodes)[::-1]  # reverse nodes
-
-    def NewtonVM(self, t):
-        """
-        Create Newton Vandermode Matrix. Entries are in the lower
-        triangle. Polynomial can be created with
-        scipy.linalg.solve_triangular(NewtonVM(t),y,lower=True) where y
-        contains the points the polynomial need to pass through
-        Args:
-            t (numpy array): array or list containing nodes.
-        """
-        t = np.asarray(t)
-        dim = len(t)
-        VM = np.zeros([dim, dim])
-        VM[:, 0] = 1
-        for i in range(1, dim):
-            VM[:, i] = (t[:] - t[(i - 1)]) * VM[:, i - 1]
-
-        return VM
-
-    def Horner_newton(self, weights, xi, x):
-        """
-        Horner scheme to evaluate polynomials based on newton basis
-        Args:
-            weights (numpy array): Quadrature weights
-            xi (numpy array): Quadrature nodes
-            x (numpy array): Points to evalute polynomial on
-        """
-        y = np.zeros_like(x)
-        for i in range(len(weights)):
-            y = y * (x - xi[(-i - 1)]) + weights[(-i - 1)]
-
-        return y
-
-    def gauss_legendre(self, n, b, A=-1, B=1):
-        """
-        Genrates nodes and weights for gauss legendre quadrature
-        Args:
-            n (int): Number of quadrature nodes
-            b (real): End of quadrature domain (start is a=0)
-        """
-        a = 0
-        poly = legendre(n)
-        polyd = poly.deriv()
-        nodes = poly.roots
-        nodes = np.sort(nodes)
-        weights = 2/((1-nodes**2)*(np.polyval(polyd, nodes))**2)
-        gl_nodes = ((b - a) * nodes + a * B - b * A) / (B - A)
-        gl_weights = (b-a)/(B-A)*weights
-        return gl_nodes, gl_weights
-
-    def get_weights(self, b):
-        """
-        Genrates integration weights my integrating Lagrande polynomials to the
-        quadrature nodes.
-        Args:
-            b (real): End of quadrature domain (start is a=0)
-        """
-        M = self.M
-        nodes_m, weights_m = self.gauss_legendre(np.ceil(M/2), b)  # use gauss-legendre quadrature to integrate polynomials
-        weights = np.zeros(M)
-        for j in np.arange(M):
-            coeff = np.zeros(M)
-            coeff[j] = 1.0  # is unity because it needs to be scaled with y_j for interpolation we have  sum y_j*l_j
-            poly_coeffs = scipy.linalg.solve_triangular(self.NewtonVM(self.nodes), coeff, lower=True)
-            eval_newt_poly = self.Horner_newton(poly_coeffs, self.nodes, nodes_m)
-            weights[j] = np.dot(weights_m, eval_newt_poly)
-        return weights
-
-    def Qmatrix(self):
-        """
-        Integration Matrix
-        """
-        M = self.M
-        self.Q = np.zeros([M, M])
-
-        # for all nodes, get weights for the interval [tleft,node]
-        for m in np.arange(M):
-            w = self.get_weights(self.nodes[m])
-            self.Q[m, 0:] = w
-
-    def Qfinal(self):
-        """
-        Final Update Integration Vector
-        """
-        M = self.M
-        self.Qfin = np.zeros(M)
-
-        # Get weights for the interval [0,dt]
-        w = self.get_weights(self.dt_coarse)
-
-        self.Qfin[:] = w
+        return nodes
 
     def Smatrix(self):
         """
@@ -564,9 +462,13 @@ class FE_SDC(SDC):
         # Compute initial guess on quadrature nodes with low-order
         # base timestepper
         self.Unodes[0].assign(self.Un)
-        for m in range(self.M):
-            self.base.dt = float(self.dtau[m])
-            self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        if (self.base_flag):
+            for m in range(self.M):
+                self.base.dt = float(self.dtau[m])
+                self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        else:
+            for m in range(self.M):
+                self.Unodes[m+1].assign(self.Un)
 
         # Iterate through correction sweeps
         k = 0
@@ -755,9 +657,13 @@ class BE_SDC(SDC):
         # Compute initial guess on quadrature nodes with low-order
         # base timestepper
         self.Unodes[0].assign(self.Un)
-        for m in range(self.M):
-            self.base.dt = self.dtau[m]
-            self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        if (self.base_flag):
+            for m in range(self.M):
+                self.base.dt = float(self.dtau[m])
+                self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        else:
+            for m in range(self.M):
+                self.Unodes[m+1].assign(self.Un)
 
         # Iterate through correction sweeps
         k = 0
@@ -957,9 +863,13 @@ class IMEX_SDC(SDC):
         # Compute initial guess on quadrature nodes with low-order
         # base timestepper
         self.Unodes[0].assign(self.Un)
-        for m in range(self.M):
-            self.base.dt = float(self.dtau[m])
-            self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        if (self.base_flag):
+            for m in range(self.M):
+                self.base.dt = float(self.dtau[m])
+                self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        else:
+            for m in range(self.M):
+                self.Unodes[m+1].assign(self.Un)
 
         # Iterate through correction sweeps
         k = 0
