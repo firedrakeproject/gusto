@@ -41,7 +41,7 @@ def test_time_discretisationsdc(tmpdir, scheme, tracer_setup):
         eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
         eqn.label_terms(lambda t: t.has_label(transport), explicit)
         base_scheme = IMEX_Euler(domain)
-        scheme = IMEX_SDC(base_scheme, domain, M, k, node_type, node_dist, qdelta_imp, qdelta_exp, final_update=True, initial_guess="base")
+        scheme = IMEX_SDC(base_scheme, domain, M, k, node_type, node_dist, qdelta_imp, qdelta_exp, formulation="zero-to-node", final_update=True, initial_guess="base")
     elif scheme == "BE_SDC_Lo(3,3)":
         node_type="LOBATTO"
         M = 3

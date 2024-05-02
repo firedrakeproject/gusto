@@ -98,6 +98,7 @@ class SDC(object, metaclass=ABCMeta):
         self.M = M
         self.maxk = maxk
         self.final_update = final_update
+        self.formulation = formulation
 
         self.sdc_dict = getSetup(
                     nNodes=M, nodeType=node_type, nIter=maxk, 
@@ -106,10 +107,10 @@ class SDC(object, metaclass=ABCMeta):
                     qDeltaInitial="BE", nodeDistr=node_dist
                     )
         
-        if formulation == "node-to-node":
-            self.res = self.res_zero2n
+        if formulation == "zero-to-node":
+            self.compute_quad = self.compute_quad_zero2n
         elif formulation == "node-to-node":
-            self.res = self.res_n2n
+            self.compute_quad = self.compute_quad_n2n
         else:
             raise ValueError('Formulation not implemented')
 
@@ -232,7 +233,64 @@ class SDC(object, metaclass=ABCMeta):
 
         residual_SDC = a + F_exp + F0 + Q
         return residual_SDC.form
+        
+    def res_zero2n(self, stage):
+        """Set up the discretisation's residual for a given stage."""
+        # Add time derivative terms  y_s - y^n for stage s
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.U_SDC, old_idx=self.idx))
+        residual -= mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.Un, old_idx=self.idx))
+        # Loop through stages up to s-1 and calcualte/sum
+        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
+        # and
+        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
 
+        for i in range(stage):
+            r_kp1 = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.Unodes1[i], old_idx=self.idx))
+            r_kp1 = r_kp1.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=drop,
+                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
+            residual += r_kp1
+            r_k = self.residual.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    map_if_true=drop,
+                    map_if_false=replace_subject(self.Unodes[i], old_idx=self.idx))
+            r_k = r_k.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=drop,
+                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
+
+            residual -= r_k
+        r_kp1 = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.U_SDC, old_idx=self.idx))
+        r_kp1 = r_kp1.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
+        residual +=r_kp1
+        r_k = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.Unodes[stage], old_idx=self.idx))
+        r_k = r_k.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
+        residual -=r_k
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_, old_idx=self.idx),
+                                    drop)
+        residual += Q
+        return residual.form
+    
     @abstractproperty
     def res_fin(self):
         """Set up the residual for final solve."""
@@ -268,7 +326,7 @@ class SDC(object, metaclass=ABCMeta):
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
         # setup linear solver using SDC residual defined in derived class
-        prob_SDC = NonlinearVariationalProblem(self.res, self.U_SDC, bcs=self.bcs)
+        prob_SDC = NonlinearVariationalProblem(self.res_n2n, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.nonlinear_solver_parameters,
                                           options_prefix=solver_name)
@@ -281,6 +339,16 @@ class SDC(object, metaclass=ABCMeta):
         solver_name = self.field_name+self.__class__.__name__+"_rhs"
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
+   
+    @cached_property
+    def solvers(self):
+        """Set up a list of solvers for each problem at a stage."""
+        solvers = []
+        for stage in range(self.nStages):
+            # setup solver using residual defined in derived class
+            problem = NonlinearVariationalProblem(self.res_zero2n(stage), self.U_SDC, bcs=self.bcs)
+            solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
+            solvers.append(NonlinearVariationalSolver(problem,  solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
 
     def rescale_nodes(self, nodes, a, b, A, B):
         """
@@ -301,7 +369,7 @@ class SDC(object, metaclass=ABCMeta):
         for m in np.arange(1, M):
             self.S[m, :] = self.Q[m, :] - self.Q[m - 1, :]
 
-    def compute_quad(self):
+    def compute_quad_n2n(self):
         """
         Computes integration of F(y) on quadrature nodes
         """
@@ -309,6 +377,15 @@ class SDC(object, metaclass=ABCMeta):
             self.quad[j].assign(0.)
             for k in range(self.M):
                 self.quad[j] += float(self.S[j, k])*self.fUnodes[k]
+
+    def compute_quad_zero2n(self):
+        """
+        Computes integration of F(y) on quadrature nodes
+        """
+        for j in range(self.M):
+            self.quad[j].assign(0.)
+            for k in range(self.M):
+                self.quad[j] += float(self.Q[j, k])*self.fUnodes[k]
 
     def compute_quad_final(self):
         """
@@ -333,7 +410,7 @@ class SDC(object, metaclass=ABCMeta):
 class FE_SDC(SDC):
 
     def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
-                 field_name=None,
+                 formulation="node-to-node",field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
                  limiter=None, options=None, initial_guess="base"):
         """
@@ -357,7 +434,7 @@ class FE_SDC(SDC):
                 quadrature value. Defaults to True
         """
         super().__init__(base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
-                        field_name=field_name,
+                        formulation="node-to-node",field_name=field_name,
                         linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters, final_update=final_update,
                         limiter=limiter, options=options, initial_guess=initial_guess)
 
@@ -415,6 +492,63 @@ class FE_SDC(SDC):
 
         residual_SDC = a + F_exp + F0 + Q
         return residual_SDC.form
+    
+    def res_zero2n(self, stage):
+        """Set up the discretisation's residual for a given stage."""
+        # Add time derivative terms  y_s - y^n for stage s
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.U_SDC, old_idx=self.idx))
+        residual -= mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.Un, old_idx=self.idx))
+        # Loop through stages up to s-1 and calcualte/sum
+        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
+        # and
+        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
+
+        for i in range(stage):
+            r_kp1 = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.Unodes1[i], old_idx=self.idx))
+            r_kp1 = r_kp1.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=drop,
+                map_if_false=lambda t: Constant(self.Qdelta_exp[stage, i])*self.dt_coarse*t)
+            residual += r_kp1
+            r_k = self.residual.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    map_if_true=drop,
+                    map_if_false=replace_subject(self.Unodes[i], old_idx=self.idx))
+            r_k = r_k.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=drop,
+                map_if_false=lambda t: Constant(self.Qdelta_exp[stage, i])*self.dt_coarse*t)
+
+            residual -= r_k
+        r_kp1 = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.U_SDC, old_idx=self.idx))
+        r_kp1 = r_kp1.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta_exp[stage, stage])*self.dt_coarse*t)
+        residual +=r_kp1
+        r_k = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.Unodes[stage], old_idx=self.idx))
+        r_k = r_k.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta_exp[stage, stage])*self.dt_coarse*t)
+        residual -=r_k
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_, old_idx=self.idx),
+                                    drop)
+        residual += Q
+        return residual.form
 
     @property
     def res_fin(self):
@@ -451,7 +585,7 @@ class FE_SDC(SDC):
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
         # setup linear solver using SDC residual defined in derived class
-        prob_SDC = NonlinearVariationalProblem(self.res, self.U_SDC, bcs=self.bcs)
+        prob_SDC = NonlinearVariationalProblem(self.res_n2n, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
@@ -464,6 +598,16 @@ class FE_SDC(SDC):
         solver_name = self.field_name+self.__class__.__name__+"_rhs"
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
+
+    @cached_property
+    def solvers(self):
+        """Set up a list of solvers for each problem at a stage."""
+        solvers = []
+        for stage in range(self.nStages):
+            # setup solver using residual defined in derived class
+            problem = NonlinearVariationalProblem(self.res_zero2n(stage), self.U_SDC, bcs=self.bcs)
+            solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
+            solvers.append(NonlinearVariationalSolver(problem,  solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
 
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
@@ -503,10 +647,17 @@ class FE_SDC(SDC):
                 # Set initial guess for solver
                 self.U_SDC.assign(self.Unodes[m])
 
+                if self.formulation == "zero-to-node":
+                    self.solver = self.solvers[m-1]
+                elif self.formulation == "node-to-node":
+                    self.solver = self.solver_SDC
+                else:
+                    raise ValueError('Formulation not implemented')
+
                 # Compute
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m-1)^(k+1)) - F(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*F(y^k)
-                self.solver_SDC.solve()
+                self.solver.solve()
                 self.Unodes1[m].assign(self.U_SDC)
             for m in range(1, self.M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
@@ -534,7 +685,7 @@ class FE_SDC(SDC):
 class BE_SDC(SDC):
 
     def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
-                 field_name=None,
+                 formulation="node-to-node",field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
                  limiter=None, options=None, initial_guess="base"):
         """
@@ -558,7 +709,7 @@ class BE_SDC(SDC):
                 quadrature value. Defaults to True
         """
         super().__init__(base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
-                        field_name=field_name,
+                        formulation="node-to-node",field_name=field_name,
                         linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters, final_update=final_update,
                         limiter=limiter, options=options, initial_guess=initial_guess)
 
@@ -634,6 +785,63 @@ class BE_SDC(SDC):
 
         F_SDC = F_imp + F_exp + F01 + Q
         return F_SDC.form
+    
+    def res_zero2n(self, stage):
+        """Set up the discretisation's residual for a given stage."""
+        # Add time derivative terms  y_s - y^n for stage s
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.U_SDC, old_idx=self.idx))
+        residual -= mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.Un, old_idx=self.idx))
+        # Loop through stages up to s-1 and calcualte/sum
+        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
+        # and
+        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
+
+        for i in range(stage):
+            r_kp1 = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.Unodes1[i], old_idx=self.idx))
+            r_kp1 = r_kp1.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=drop,
+                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
+            residual += r_kp1
+            r_k = self.residual.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    map_if_true=drop,
+                    map_if_false=replace_subject(self.Unodes[i], old_idx=self.idx))
+            r_k = r_k.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=drop,
+                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
+
+            residual -= r_k
+        r_kp1 = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.U_SDC, old_idx=self.idx))
+        r_kp1 = r_kp1.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
+        residual +=r_kp1
+        r_k = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.Unodes[stage], old_idx=self.idx))
+        r_k = r_k.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
+        residual -=r_k
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_, old_idx=self.idx),
+                                    drop)
+        residual += Q
+        return residual.form
 
     @cached_property
     def solver_fin(self):
@@ -648,7 +856,7 @@ class BE_SDC(SDC):
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
         # setup linear solver using SDC residual defined in derived class
-        prob_SDC = NonlinearVariationalProblem(self.res, self.U_SDC, bcs=self.bcs)
+        prob_SDC = NonlinearVariationalProblem(self.res_n2n, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.nonlinear_solver_parameters,
                                           options_prefix=solver_name)
@@ -661,6 +869,15 @@ class BE_SDC(SDC):
         solver_name = self.field_name+self.__class__.__name__+"_rhs"
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
+    @cached_property
+    def solvers(self):
+        """Set up a list of solvers for each problem at a stage."""
+        solvers = []
+        for stage in range(self.nStages):
+            # setup solver using residual defined in derived class
+            problem = NonlinearVariationalProblem(self.res_zero2n(stage), self.U_SDC, bcs=self.bcs)
+            solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
+            solvers.append(NonlinearVariationalSolver(problem,  solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
 
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
@@ -701,10 +918,17 @@ class BE_SDC(SDC):
                 # Set initial guess for solver
                 self.U_SDC.assign(self.Unodes[m])
 
+                if self.formulation == "zero-to-node":
+                    self.solver = self.solvers[m-1]
+                elif self.formulation == "node-to-node":
+                    self.solver = self.solver_SDC
+                else:
+                    raise ValueError('Formulation not implemented')
+
                 # Compute
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k))
                 #             + sum(j=1,M) s_mj*F(y_m^k)
-                self.solver_SDC.solve()
+                self.solver.solve()
                 self.Unodes1[m].assign(self.U_SDC)
             for m in range(1, self.M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
@@ -732,7 +956,7 @@ class BE_SDC(SDC):
 class IMEX_SDC(SDC):
 
     def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
-                 field_name=None,
+                 formulation="node-to-node",field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
                  limiter=None, options=None, initial_guess="base"):
         """
@@ -756,7 +980,7 @@ class IMEX_SDC(SDC):
                 quadrature value. Defaults to True
         """
         super().__init__(base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
-                        field_name=field_name,
+                        formulation="node-to-node",field_name=field_name,
                         linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters, final_update=final_update,
                         limiter=limiter, options=options, initial_guess=initial_guess)
 
@@ -842,6 +1066,73 @@ class IMEX_SDC(SDC):
 
         F_SDC = F_imp + F_exp + F01 + F0 + Q
         return F_SDC.form
+    
+    def res_zero2n(self, stage):
+        """Set up the discretisation's residual for a given stage."""
+        # Add time derivative terms  y_s - y^n for stage s
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.U_SDC, old_idx=self.idx))
+        residual -= mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.Un, old_idx=self.idx))
+        # Loop through stages up to s-1 and calcualte/sum
+        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
+        # and
+        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
+
+        for i in range(stage):
+            r_kp1 = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.Unodes1[i], old_idx=self.idx))
+            r_kp1 = r_kp1.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=drop,
+                map_if_false=lambda t: Constant(self.Qdelta[stage, i])*self.dt_coarse*t)
+            residual += r_kp1
+            r_k = self.residual.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    map_if_true=drop,
+                    map_if_false=replace_subject(self.Unodes[i], old_idx=self.idx))
+            r_k = r_k.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=drop,
+                map_if_false=lambda t: Constant(self.Qdelta[stage, i])*self.dt_coarse*t)
+
+            residual -= r_k
+        r_kp1 = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.U_SDC, old_idx=self.idx))
+        r_kp1 = r_kp1.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta[stage, stage])*self.dt_coarse*t)
+        residual +=r_kp1
+        r_k = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop,
+            map_if_false=replace_subject(self.Unodes[stage], old_idx=self.idx))
+        r_k = r_k.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.Qdelta[stage, stage])*self.dt_coarse*t)
+        residual -=r_k
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_, old_idx=self.idx),
+                                    drop)
+        residual += Q
+        return residual.form
+    
+    @cached_property
+    def solvers(self):
+        """Set up a list of solvers for each problem at a stage."""
+        solvers = []
+        for stage in range(self.nStages):
+            # setup solver using residual defined in derived class
+            problem = NonlinearVariationalProblem(self.res_zero2n(stage), self.U_SDC, bcs=self.bcs)
+            solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
+            solvers.append(NonlinearVariationalSolver(problem,  solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
 
     @cached_property
     def solver_fin(self):
@@ -856,7 +1147,7 @@ class IMEX_SDC(SDC):
     def solver_SDC(self):
         """Set up the problem and the solver for SDC solve."""
         # setup linear solver using SDC residual defined in derived class
-        prob_SDC = NonlinearVariationalProblem(self.res, self.U_SDC, bcs=self.bcs)
+        prob_SDC = NonlinearVariationalProblem(self.res_n2n, self.U_SDC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_SDC"
         return NonlinearVariationalSolver(prob_SDC, solver_parameters=self.nonlinear_solver_parameters,
                                           options_prefix=solver_name)
@@ -908,12 +1199,19 @@ class IMEX_SDC(SDC):
 
                 # Set initial guess for solver
                 self.U_SDC.assign(self.Unodes[m])
+               
+                if self.formulation == "zero-to-node":
+                    self.solver = self.solvers[m-1]
+                elif self.formulation == "node-to-node":
+                    self.solver = self.solver_SDC
+                else:
+                    raise ValueError('Formulation not implemented')
 
                 # Compute
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
-                self.solver_SDC.solve()
+                self.solver.solve()
                 self.Unodes1[m].assign(self.U_SDC)
             for m in range(1, self.M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
