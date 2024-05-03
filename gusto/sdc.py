@@ -17,7 +17,7 @@ In matrix form this equation is:
 (I - dt*Q*F)(y)=y_0
 
 Computing y by Picard iteration through k we get:
-y^(k+1)=y^k + (y_0 - (I - dt*Q*F))(y^k)
+y^(k+1)=y^k + (y_0 - (I - dt*Q*F)(y^k))
 
 Finally, to get our SDC method we precondition this system, using some approximation
 of Q Q_delta:
@@ -72,9 +72,15 @@ class SDC(object, metaclass=ABCMeta):
             M (int): Number of quadrature nodes to compute spectral integration over
             maxk (int): Max number of correction interations
             node_type (str): Type of quadrature to be used. Options are
+            GAUSS, RADAU-LEFT, RADAU-RIGHT and LOBATTO
             node_type (str): Node distribution to be used. Options are
-            qdelta_imp (str): Implicit Qdelta matrix to be used
-            qdelta_exp (str): Explicit Qdelta matrix to be used
+            EQUID, LEGENDRE, CHEBY-1, CHEBY-2, CHEBY-3 and CHEBY-4
+            qdelta_imp (str): Implicit Qdelta matrix to be used. Options are
+            BE, LU, TRAP, EXACT, PIC, OPT, WEIRD, MIN-SR-NS, MIN-SR-S
+            qdelta_exp (str): Explicit Qdelta matrix to be used. Options are
+            FE, EXACT, PIC
+            formulation (str, optional): Whether to use node-to-node or zero-to-node
+            formulation. Defaults to node-to-node
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             linear_solver_parameters (dict, optional): dictionary of parameters to
@@ -160,7 +166,7 @@ class SDC(object, metaclass=ABCMeta):
         self.equation = self.base.equation
         self.residual = self.base.residual
 
-        # set up SDC variables
+        # Set up SDC variables
         if self.field_name is not None and hasattr(equation, "field_names"):
             self.idx = equation.field_names.index(self.field_name)
             W = equation.spaces[self.idx]
@@ -190,7 +196,7 @@ class SDC(object, metaclass=ABCMeta):
     def nlevels(self):
         return 1
 
-    @abstractproperty
+    @property
     def res_rhs(self):
         """Set up the residual for the calculation of F(Y)."""
         a = self.residual.label_map(lambda t: t.has_label(time_derivative),
@@ -203,7 +209,7 @@ class SDC(object, metaclass=ABCMeta):
         residual_rhs = a - L
         return residual_rhs.form
 
-    @abstractproperty
+    @property
     def res_n2n(self):
         """Set up the residual for the SDC solve."""
         F = self.residual.label_map(lambda t: t.has_label(time_derivative),
@@ -226,17 +232,18 @@ class SDC(object, metaclass=ABCMeta):
         F0 = F0.label_map(all_terms,
                           lambda t: -1*t)
 
-        # sum(j=1,M) s_mj*F(y_m^k
+        # sum(j=1,M) s_mj*F(y_m^k)
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
 
         residual_SDC = a + F_exp + F0 + Q
         return residual_SDC.form
-        
-    def res_zero2n(self, stage):
-        """Set up the discretisation's residual for a given stage."""
-        # Add time derivative terms  y_s - y^n for stage s
+
+    @property  
+    def res_zero2n(self, m):
+        """Set up the discretisation's residual for a given node m."""
+        # Add time derivative terms  y_m - y^n for node m
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=drop)
@@ -244,12 +251,9 @@ class SDC(object, metaclass=ABCMeta):
                                        map_if_true=replace_subject(self.U_SDC, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.Un, old_idx=self.idx))
-        # Loop through stages up to s-1 and calcualte/sum
-        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
-        # and
-        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
-
-        for i in range(stage):
+        # Loop through nodes up to m-1 and calcualte/sum
+        # sum(j=1,M) dtau_m*(F(y_(m-1)^(k+1)) - F(y_(m-1)^k))
+        for i in range(m):
             r_kp1 = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
@@ -257,7 +261,7 @@ class SDC(object, metaclass=ABCMeta):
             r_kp1 = r_kp1.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_true=drop,
-                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta_imp[m, i])*self.dt_coarse*t)
             residual += r_kp1
             r_k = self.residual.label_map(
                     lambda t: t.has_label(time_derivative),
@@ -266,7 +270,7 @@ class SDC(object, metaclass=ABCMeta):
             r_k = r_k.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_true=drop,
-                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta_imp[m, i])*self.dt_coarse*t)
 
             residual -= r_k
         r_kp1 = self.residual.label_map(
@@ -275,23 +279,25 @@ class SDC(object, metaclass=ABCMeta):
             map_if_false=replace_subject(self.U_SDC, old_idx=self.idx))
         r_kp1 = r_kp1.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta_imp[m, m])*self.dt_coarse*t)
         residual +=r_kp1
         r_k = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
-            map_if_false=replace_subject(self.Unodes[stage], old_idx=self.idx))
+            map_if_false=replace_subject(self.Unodes[m], old_idx=self.idx))
         r_k = r_k.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta_imp[m, m])*self.dt_coarse*t)
         residual -=r_k
+
+        # Add on error term sum(j=1,M) q_mj*F(y_m^k)
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
         residual += Q
         return residual.form
     
-    @abstractproperty
+    @property
     def res_fin(self):
         """Set up the residual for final solve."""
         # y^(n+1)
@@ -342,12 +348,12 @@ class SDC(object, metaclass=ABCMeta):
    
     @cached_property
     def solvers(self):
-        """Set up a list of solvers for each problem at a stage."""
+        """Set up a list of solvers for each problem at given node m."""
         solvers = []
-        for stage in range(self.nStages):
+        for m in range(self.M):
             # setup solver using residual defined in derived class
-            problem = NonlinearVariationalProblem(self.res_zero2n(stage), self.U_SDC, bcs=self.bcs)
-            solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
+            problem = NonlinearVariationalProblem(self.res_zero2n(m), self.U_SDC, bcs=self.bcs)
+            solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
             solvers.append(NonlinearVariationalSolver(problem,  solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
 
     def rescale_nodes(self, nodes, a, b, A, B):
@@ -410,7 +416,7 @@ class SDC(object, metaclass=ABCMeta):
 class FE_SDC(SDC):
 
     def __init__(self, base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
-                 formulation="node-to-node",field_name=None,
+                 formulation="node-to-node", field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
                  limiter=None, options=None, initial_guess="base"):
         """
@@ -422,8 +428,16 @@ class FE_SDC(SDC):
                 mesh and the compatible function spaces.
             M (int): Number of quadrature nodes to compute spectral integration over
             maxk (int): Max number of correction interations
-            quadrature (str): Type of quadrature to be used. Options are gauss-legendre,
-                gauss-radau and gauss-lobotto.
+            node_type (str): Type of quadrature to be used. Options are
+            GAUSS, RADAU-LEFT, RADAU-RIGHT and LOBATTO
+            node_type (str): Node distribution to be used. Options are
+            EQUID, LEGENDRE, CHEBY-1, CHEBY-2, CHEBY-3 and CHEBY-4
+            qdelta_imp (str): Implicit Qdelta matrix to be used. Options are
+            BE, LU, TRAP, EXACT, PIC, OPT, WEIRD, MIN-SR-NS, MIN-SR-S
+            qdelta_exp (str): Explicit Qdelta matrix to be used. Options are
+            FE, EXACT, PIC
+            formulation (str, optional): Whether to use node-to-node or zero-to-node
+            formulation. Defaults to node-to-node
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             linear_solver_parameters (dict, optional): dictionary of parameters to
@@ -432,9 +446,16 @@ class FE_SDC(SDC):
                 pass to the underlying nonlinear solver. Defaults to None.
             final_update (bool, optional): Whether to compute final update, or just take last
                 quadrature value. Defaults to True
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+            the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+            initial_guess (str, optional): Initial guess to be base timestepper, or copy
         """
         super().__init__(base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
-                        formulation="node-to-node",field_name=field_name,
+                        formulation=formulation, field_name=field_name,
                         linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters, final_update=final_update,
                         limiter=limiter, options=options, initial_guess=initial_guess)
 
@@ -493,9 +514,9 @@ class FE_SDC(SDC):
         residual_SDC = a + F_exp + F0 + Q
         return residual_SDC.form
     
-    def res_zero2n(self, stage):
-        """Set up the discretisation's residual for a given stage."""
-        # Add time derivative terms  y_s - y^n for stage s
+    def res_zero2n(self, m):
+        """Set up the discretisation's residual for a given node m."""
+        # Add time derivative terms  y_m - y^n for node m
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=drop)
@@ -503,12 +524,9 @@ class FE_SDC(SDC):
                                        map_if_true=replace_subject(self.U_SDC, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.Un, old_idx=self.idx))
-        # Loop through stages up to s-1 and calcualte/sum
-        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
-        # and
-        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
-
-        for i in range(stage):
+        # Loop through nodes up to m-1 and calcualte/sum
+        # sum(j=1,M) dtau_m*(F(y_(m-1)^(k+1)) - F(y_(m-1)^k))
+        for i in range(m):
             r_kp1 = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
@@ -516,7 +534,7 @@ class FE_SDC(SDC):
             r_kp1 = r_kp1.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_true=drop,
-                map_if_false=lambda t: Constant(self.Qdelta_exp[stage, i])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta_exp[m, i])*self.dt_coarse*t)
             residual += r_kp1
             r_k = self.residual.label_map(
                     lambda t: t.has_label(time_derivative),
@@ -525,7 +543,7 @@ class FE_SDC(SDC):
             r_k = r_k.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_true=drop,
-                map_if_false=lambda t: Constant(self.Qdelta_exp[stage, i])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta_exp[m, i])*self.dt_coarse*t)
 
             residual -= r_k
         r_kp1 = self.residual.label_map(
@@ -534,16 +552,18 @@ class FE_SDC(SDC):
             map_if_false=replace_subject(self.U_SDC, old_idx=self.idx))
         r_kp1 = r_kp1.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.Qdelta_exp[stage, stage])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta_exp[m, m])*self.dt_coarse*t)
         residual +=r_kp1
         r_k = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
-            map_if_false=replace_subject(self.Unodes[stage], old_idx=self.idx))
+            map_if_false=replace_subject(self.Unodes[m], old_idx=self.idx))
         r_k = r_k.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.Qdelta_exp[stage, stage])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta_exp[m, m])*self.dt_coarse*t)
         residual -=r_k
+
+        # Add on error term sum(j=1,M) q_mj*F(y_m^k)
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
@@ -601,12 +621,12 @@ class FE_SDC(SDC):
 
     @cached_property
     def solvers(self):
-        """Set up a list of solvers for each problem at a stage."""
+        """Set up a list of solvers for each problem at a given node m."""
         solvers = []
-        for stage in range(self.nStages):
+        for m in range(self.M):
             # setup solver using residual defined in derived class
-            problem = NonlinearVariationalProblem(self.res_zero2n(stage), self.U_SDC, bcs=self.bcs)
-            solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
+            problem = NonlinearVariationalProblem(self.res_zero2n(m), self.U_SDC, bcs=self.bcs)
+            solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
             solvers.append(NonlinearVariationalSolver(problem,  solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
 
     def apply(self, x_out, x_in):
@@ -628,7 +648,7 @@ class FE_SDC(SDC):
         while k < self.maxk:
             k += 1
 
-            # Compute sum(j=1,M) s_mj*F(y_m^k)
+            # Compute (for node-to-node) sum(j=1,M) s_mj*F(y_m^k)
             for m in range(1, self.M+1):
                 self.Uin.assign(self.Unodes[m])
                 self.solver_rhs.solve()
@@ -654,7 +674,7 @@ class FE_SDC(SDC):
                 else:
                     raise ValueError('Formulation not implemented')
 
-                # Compute
+                # Compute (for node-to-node)
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m-1)^(k+1)) - F(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*F(y^k)
                 self.solver.solve()
@@ -690,15 +710,23 @@ class BE_SDC(SDC):
                  limiter=None, options=None, initial_guess="base"):
         """
         Initialise Backward Euler SDC scheme
-        Args:
+       Args:
             base_scheme (:class:`TimeDiscretisation`): Base time stepping scheme to get first guess of solution on
                 quadrature nodes.
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             M (int): Number of quadrature nodes to compute spectral integration over
             maxk (int): Max number of correction interations
-            quadrature (str): Type of quadrature to be used. Options are gauss-legendre,
-                gauss-radau and gauss-lobotto.
+            node_type (str): Type of quadrature to be used. Options are
+            GAUSS, RADAU-LEFT, RADAU-RIGHT and LOBATTO
+            node_type (str): Node distribution to be used. Options are
+            EQUID, LEGENDRE, CHEBY-1, CHEBY-2, CHEBY-3 and CHEBY-4
+            qdelta_imp (str): Implicit Qdelta matrix to be used. Options are
+            BE, LU, TRAP, EXACT, PIC, OPT, WEIRD, MIN-SR-NS, MIN-SR-S
+            qdelta_exp (str): Explicit Qdelta matrix to be used. Options are
+            FE, EXACT, PIC
+            formulation (str, optional): Whether to use node-to-node or zero-to-node
+            formulation. Defaults to node-to-node
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             linear_solver_parameters (dict, optional): dictionary of parameters to
@@ -707,9 +735,16 @@ class BE_SDC(SDC):
                 pass to the underlying nonlinear solver. Defaults to None.
             final_update (bool, optional): Whether to compute final update, or just take last
                 quadrature value. Defaults to True
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+            the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+            initial_guess (str, optional): Initial guess to be base timestepper, or copy
         """
         super().__init__(base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
-                        formulation="node-to-node",field_name=field_name,
+                        formulation=formulation, field_name=field_name,
                         linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters, final_update=final_update,
                         limiter=limiter, options=options, initial_guess=initial_guess)
 
@@ -786,9 +821,9 @@ class BE_SDC(SDC):
         F_SDC = F_imp + F_exp + F01 + Q
         return F_SDC.form
     
-    def res_zero2n(self, stage):
-        """Set up the discretisation's residual for a given stage."""
-        # Add time derivative terms  y_s - y^n for stage s
+    def res_zero2n(self, m):
+        """Set up the discretisation's residual for a given node m."""
+        # Add time derivative terms  y_m - y^n for node m
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=drop)
@@ -796,12 +831,9 @@ class BE_SDC(SDC):
                                        map_if_true=replace_subject(self.U_SDC, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.Un, old_idx=self.idx))
-        # Loop through stages up to s-1 and calcualte/sum
-        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
-        # and
-        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
-
-        for i in range(stage):
+        # Loop through nodes up to m-1 and calcualte/sum
+        # sum(j=1,M) dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k))
+        for i in range(m):
             r_kp1 = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
@@ -809,7 +841,7 @@ class BE_SDC(SDC):
             r_kp1 = r_kp1.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_true=drop,
-                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta_imp[m, i])*self.dt_coarse*t)
             residual += r_kp1
             r_k = self.residual.label_map(
                     lambda t: t.has_label(time_derivative),
@@ -818,7 +850,7 @@ class BE_SDC(SDC):
             r_k = r_k.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_true=drop,
-                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, i])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta_imp[m, i])*self.dt_coarse*t)
 
             residual -= r_k
         r_kp1 = self.residual.label_map(
@@ -827,16 +859,18 @@ class BE_SDC(SDC):
             map_if_false=replace_subject(self.U_SDC, old_idx=self.idx))
         r_kp1 = r_kp1.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta_imp[m, m])*self.dt_coarse*t)
         residual +=r_kp1
         r_k = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
-            map_if_false=replace_subject(self.Unodes[stage], old_idx=self.idx))
+            map_if_false=replace_subject(self.Unodes[m], old_idx=self.idx))
         r_k = r_k.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.Qdelta_imp[stage, stage])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta_imp[m, m])*self.dt_coarse*t)
         residual -=r_k
+
+        # Add on error term sum(j=1,M) q_mj*F(y_m^k)
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
@@ -871,12 +905,12 @@ class BE_SDC(SDC):
                                           options_prefix=solver_name)
     @cached_property
     def solvers(self):
-        """Set up a list of solvers for each problem at a stage."""
+        """Set up a list of solvers for each problem at a node m."""
         solvers = []
-        for stage in range(self.nStages):
+        for m in range(self.M):
             # setup solver using residual defined in derived class
-            problem = NonlinearVariationalProblem(self.res_zero2n(stage), self.U_SDC, bcs=self.bcs)
-            solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
+            problem = NonlinearVariationalProblem(self.res_zero2n(m), self.U_SDC, bcs=self.bcs)
+            solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
             solvers.append(NonlinearVariationalSolver(problem,  solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
 
     def apply(self, x_out, x_in):
@@ -898,7 +932,7 @@ class BE_SDC(SDC):
         while k < self.maxk:
             k += 1
 
-            # Compute sum(j=1,M) s_mj*F(y_m^k)
+            # Compute (for node-to-node) sum(j=1,M) s_mj*F(y_m^k)
             for m in range(1, self.M+1):
                 self.Uin.assign(self.Unodes[m])
                 self.solver_rhs.solve()
@@ -925,7 +959,7 @@ class BE_SDC(SDC):
                 else:
                     raise ValueError('Formulation not implemented')
 
-                # Compute
+                # Compute (for node-to-node)
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k))
                 #             + sum(j=1,M) s_mj*F(y_m^k)
                 self.solver.solve()
@@ -961,15 +995,23 @@ class IMEX_SDC(SDC):
                  limiter=None, options=None, initial_guess="base"):
         """
         Initialise IMEX (FWSW) Euler SDC scheme
-        Args:
+     Args:
             base_scheme (:class:`TimeDiscretisation`): Base time stepping scheme to get first guess of solution on
                 quadrature nodes.
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             M (int): Number of quadrature nodes to compute spectral integration over
             maxk (int): Max number of correction interations
-            quadrature (str): Type of quadrature to be used. Options are gauss-legendre,
-                gauss-radau and gauss-lobotto.
+            node_type (str): Type of quadrature to be used. Options are
+            GAUSS, RADAU-LEFT, RADAU-RIGHT and LOBATTO
+            node_type (str): Node distribution to be used. Options are
+            EQUID, LEGENDRE, CHEBY-1, CHEBY-2, CHEBY-3 and CHEBY-4
+            qdelta_imp (str): Implicit Qdelta matrix to be used. Options are
+            BE, LU, TRAP, EXACT, PIC, OPT, WEIRD, MIN-SR-NS, MIN-SR-S
+            qdelta_exp (str): Explicit Qdelta matrix to be used. Options are
+            FE, EXACT, PIC
+            formulation (str, optional): Whether to use node-to-node or zero-to-node
+            formulation. Defaults to node-to-node
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             linear_solver_parameters (dict, optional): dictionary of parameters to
@@ -978,9 +1020,16 @@ class IMEX_SDC(SDC):
                 pass to the underlying nonlinear solver. Defaults to None.
             final_update (bool, optional): Whether to compute final update, or just take last
                 quadrature value. Defaults to True
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+            the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+            initial_guess (str, optional): Initial guess to be base timestepper, or copy
         """
         super().__init__(base_scheme, domain, M, maxk, node_type, node_dist, qdelta_imp, qdelta_exp,
-                        formulation="node-to-node",field_name=field_name,
+                        formulation=formulation, field_name=field_name,
                         linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters, final_update=final_update,
                         limiter=limiter, options=options, initial_guess=initial_guess)
 
@@ -1067,9 +1116,9 @@ class IMEX_SDC(SDC):
         F_SDC = F_imp + F_exp + F01 + F0 + Q
         return F_SDC.form
     
-    def res_zero2n(self, stage):
-        """Set up the discretisation's residual for a given stage."""
-        # Add time derivative terms  y_s - y^n for stage s
+    def res_zero2n(self, m):
+        """Set up the discretisation's residual for a given node m."""
+        # Add time derivative terms  y_m - y^n for node m
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=drop)
@@ -1077,12 +1126,9 @@ class IMEX_SDC(SDC):
                                        map_if_true=replace_subject(self.U_SDC, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.Un, old_idx=self.idx))
-        # Loop through stages up to s-1 and calcualte/sum
-        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
-        # and
-        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
-
-        for i in range(stage):
+        # Loop through nodes up to m-1 and calcualte/sum
+        # sum(j=1,M) dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k) + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+        for i in range(m):
             r_kp1 = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
@@ -1090,7 +1136,7 @@ class IMEX_SDC(SDC):
             r_kp1 = r_kp1.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_true=drop,
-                map_if_false=lambda t: Constant(self.Qdelta[stage, i])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta[m, i])*self.dt_coarse*t)
             residual += r_kp1
             r_k = self.residual.label_map(
                     lambda t: t.has_label(time_derivative),
@@ -1099,7 +1145,7 @@ class IMEX_SDC(SDC):
             r_k = r_k.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_true=drop,
-                map_if_false=lambda t: Constant(self.Qdelta[stage, i])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta[m, i])*self.dt_coarse*t)
 
             residual -= r_k
         r_kp1 = self.residual.label_map(
@@ -1108,16 +1154,18 @@ class IMEX_SDC(SDC):
             map_if_false=replace_subject(self.U_SDC, old_idx=self.idx))
         r_kp1 = r_kp1.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.Qdelta[stage, stage])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta[m, m])*self.dt_coarse*t)
         residual +=r_kp1
         r_k = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=drop,
-            map_if_false=replace_subject(self.Unodes[stage], old_idx=self.idx))
+            map_if_false=replace_subject(self.Unodes[m], old_idx=self.idx))
         r_k = r_k.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.Qdelta[stage, stage])*self.dt_coarse*t)
+                map_if_false=lambda t: Constant(self.Qdelta[m, m])*self.dt_coarse*t)
         residual -=r_k
+
+        # Add on error term sum(j=1,M) q_mj*F(y_m^k)
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
@@ -1126,12 +1174,12 @@ class IMEX_SDC(SDC):
     
     @cached_property
     def solvers(self):
-        """Set up a list of solvers for each problem at a stage."""
+        """Set up a list of solvers for each problem at a node m."""
         solvers = []
-        for stage in range(self.nStages):
+        for m in range(self.M):
             # setup solver using residual defined in derived class
-            problem = NonlinearVariationalProblem(self.res_zero2n(stage), self.U_SDC, bcs=self.bcs)
-            solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
+            problem = NonlinearVariationalProblem(self.res_zero2n(m), self.U_SDC, bcs=self.bcs)
+            solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
             solvers.append(NonlinearVariationalSolver(problem,  solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
 
     @cached_property
@@ -1180,7 +1228,7 @@ class IMEX_SDC(SDC):
         while k < self.maxk:
             k += 1
 
-            # Compute sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
+            # Compute (for node-to-node) sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
             for m in range(1, self.M+1):
                 self.Uin.assign(self.Unodes[m])
                 self.solver_rhs.solve()
@@ -1207,7 +1255,7 @@ class IMEX_SDC(SDC):
                 else:
                     raise ValueError('Formulation not implemented')
 
-                # Compute
+                # Compute (for node-to-node)
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
