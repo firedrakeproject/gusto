@@ -50,9 +50,10 @@ def run_conservative_transport_with_physics(dirname):
     transport_method = [DGUpwind(eqn, "rho_d"), DGUpwind(eqn, "ash")]
 
     # Physics scheme --------------------------------------------------------- #
-    # Source is a constant, so that the total ash value
-    # should be L**2 * T = 50.
-    basic_expression = -Constant(1.0)
+    # Source is a constant, but constrained to a box in the bottom left corner
+    # of size 1-by-1, such that the total ash value
+    # should be equal to tmax = 0.5.
+    basic_expression = conditional(x<1.0, conditional(y<1.0, -Constant(1.0), Constant(0.0)), Constant(0.0))
 
     physics_schemes = [(SourceSink(eqn, 'ash', basic_expression), SSPRK3(domain))]
 
@@ -68,13 +69,13 @@ def run_conservative_transport_with_physics(dirname):
     rho0 = stepper.fields("rho_d")
     ash0 = stepper.fields("ash")
 
-    # Set an initial constant density field
-    rho0.interpolate(Constant(0.0))
+    # Set a spatially varying density field and no ash
+    rho0.interpolate(1000.0*sin(pi*x/L)*sin(pi*y/L)+1000.0)
     ash0.interpolate(Constant(0.0))
 
     # Constant wind
     u = stepper.fields("u")
-    u.project(as_vector([1.0, 0.0]))
+    u.project(as_vector([0.5, 0.5]))
 
     # ------------------------------------------------------------------------ #
     # Run
@@ -91,6 +92,6 @@ def test_conservative_transport_with_physics(tmpdir):
 
     final_total_ash = assemble(final_ash*dx)
 
-    tol = 1e-5
-    assert np.abs(final_total_ash - 50.0) < tol, \
+    tol = 1e-3
+    assert np.abs(final_total_ash - 0.5) < tol, \
         "Conservative transport did not correctly implement the Source physics"
