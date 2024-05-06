@@ -1,9 +1,9 @@
 """
-This tests that the conservative transport is correctly working with a physics
-scheme. The transport equations require the tracer to be multiplied by the density 
-(through the 'mass_weighted' label) whilst the physics equation does not. 
-This checks that we correctly solve a problem where some tracer terms have 
-a mass_weighted label and some do not.
+This tests that conservative transport is correctly working with a physics
+scheme. The conservative transport equations require the tracer to be multiplied
+by the density through the 'mass_weighted' label, whilst the physics terms
+do not. Here, we test that we correctly replace the transport terms with the
+mass_weighted counterpart but leave the physics terms unchanged.
 """
 
 from gusto import *
@@ -53,7 +53,7 @@ def run_conservative_transport_with_physics(dirname):
     # Source is a constant, but constrained to a box in the bottom left corner
     # of size 1-by-1, such that the total ash value
     # should be equal to tmax = 0.5.
-    basic_expression = conditional(x<1.0, conditional(y<1.0, -Constant(1.0), Constant(0.0)), Constant(0.0))
+    basic_expression = conditional(x < 1.0, conditional(y < 1.0, -Constant(1.0), Constant(0.0)), Constant(0.0))
 
     physics_schemes = [(SourceSink(eqn, 'ash', basic_expression), SSPRK3(domain))]
 
