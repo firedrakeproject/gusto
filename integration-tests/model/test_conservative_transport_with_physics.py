@@ -1,7 +1,9 @@
 """
 This tests that the conservative transport is correctly working with a physics
-scheme. The transport equations needs to have the tracer multiplied by the density,
-whilst the physics equation does not.
+scheme. The transport equations require the tracer to be multiplied by the density 
+(through the 'mass_weighted' label) whilst the physics equation does not. 
+This checks that we correctly solve a problem where some tracer terms have 
+a mass_weighted label and some do not.
 """
 
 from gusto import *
@@ -88,7 +90,6 @@ def test_conservative_transport_with_physics(tmpdir):
     final_ash = stepper.fields("ash")
 
     final_total_ash = assemble(final_ash*dx)
-    print(final_total_ash)
 
     tol = 1e-5
     assert np.abs(final_total_ash - 50.0) < tol, \
