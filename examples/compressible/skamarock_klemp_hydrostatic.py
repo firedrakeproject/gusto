@@ -42,7 +42,7 @@ domain = Domain(mesh, dt, "RTCF", 1)
 parameters = CompressibleParameters()
 Omega = as_vector((0., 0., 0.5e-4))
 balanced_pg = as_vector((0., -1.0e-4*20, 0.))
-eqns = CompressibleEulerEquations(domain, parameters, , Omega=Omega, 
+eqns = CompressibleEulerEquations(domain, parameters, Omega=Omega, 
                                   extra_terms=[("u", balanced_pg)])
 
 # I/O
