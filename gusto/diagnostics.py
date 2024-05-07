@@ -1713,8 +1713,11 @@ class Vorticity(DiagnosticField):
                 raise ValueError('Potential vorticity has not yet been implemented')
             else:
                 raise ValueError(f'vorticity type must be one of {vorticity_types}, not {vorticity_type}')
+        if domain.mesh.topological_dimension() == 3:
+            space = domain.spaces('HCurl')
+        else:
+            space = domain.spaces('H1')
 
-        space = domain.spaces('HCurl')
         u = state_fields('u')
         if self.method != 'solve':
             if vorticity_type == 'relative':
@@ -1736,13 +1739,12 @@ class Vorticity(DiagnosticField):
                     Omega = as_vector((0, 0, self.parameters.Omega))
                     L += inner(2*Omega, w) * dx
             else:
-                space = domain.spaces("H1")
                 vort = TrialFunction(space)
                 gamma = TestFunction(space)
+                n = FacetNormal(domain.mesh)
                 a = inner(vort, gamma) * dx
-                L = (- inner(domain.perp(grad(gamma)), u))*dx
+                L = ( inner(domain.perp(grad(gamma)), u))*dx #- jump(inner(n, u)*gamma)*ds_v
                 # TODO implement absolute version, unsure atm how to get corioilis in vertical slice smartly
-
             problem = LinearVariationalProblem(a, L, self.field)
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={'ksp_type': 'cg'})
 
