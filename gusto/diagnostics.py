@@ -6,7 +6,7 @@ from firedrake import assemble, dot, dx, Function, sqrt, \
     ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
     Projector, Interpolator, FunctionSpace, FiniteElement, \
-    TensorProductElement
+    TensorProductElement, conditional
 from firedrake.assign import Assigner
 from ufl.domain import extract_unique_domain
 
@@ -29,7 +29,7 @@ __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
            "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
-           "BruntVaisalaFrequencySquared", "TracerDensity"]
+           "BruntVaisalaFrequencySquared", "TracerDensity", "Heaviside_flag_less"]
 
 
 class Diagnostics(object):
@@ -1767,3 +1767,38 @@ class TracerDensity(DiagnosticField):
 
         else:
             super().setup(domain, state_fields)
+
+
+class Heaviside_flag_less(DiagnosticField):
+    """Base diagnostic for calculating the difference between one field and a constant"""
+    def __init__(self, field_name, constant):
+        """
+        Args:
+            field_name (str): the name of the field to be subtracted from.
+            constant (Functionspace?): the constant to be subtracted.
+        """
+        super().__init__(method='interpolate', required_fields=(field_name))
+        self.field_name = field_name
+        self.constant = constant
+
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return self.field_name+"_minus_H_rel_flag_less"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+
+        field = state_fields(self.field_name)
+        constant = self.constant
+        heaviside = field - constant
+        condit_expr = conditional(heaviside < 0, 1, 0)
+        self.expr = condit_expr
+        space = field.function_space()
+        super().setup(domain, state_fields, space=space)
