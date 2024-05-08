@@ -23,12 +23,14 @@ phin = 70
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
 tau_r_ratio = 2
-tau_c_ratio = 0.5
+tau_c_ratio = 0.01
+alpha = 0.9
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'none'
+rel_sch = 'both'
+include_co2 = 'yes'
 
-extra_name = ''
+extra_name = '_working'
 
 ### max runtime currently 1 day
 tmax = 50 * day
@@ -37,10 +39,10 @@ dt = 450.
 
 
 if rel_sch == 'both':
-    rel_sch_name = f'tau_r--{tau_r_ratio}sol_tau_c--{tau_c_ratio}sol'
+    rel_sch_name = f'tau_r--{tau_r_ratio}sol_tau_c--{tau_c_ratio}sol_alpha--{alpha}'
     rel_sch_folder = 'Relax_to_pole_and_CO2'
 elif rel_sch == 'co2':
-    rel_sch_name = f'tau_c--{tau_c_ratio}sol'
+    rel_sch_name = f'tau_c--{tau_c_ratio}sol_alpha--{alpha}'
     rel_sch_folder = 'CO2'
 elif rel_sch == 'rad':
     rel_sch_name = f'tau_r--{tau_r_ratio}sol'
@@ -211,17 +213,19 @@ rlat_mp, uini_mp, hini_mp = initial_profiles(Omega, R, annulus=False)
 mesh = IcosahedralSphereMesh(radius=R,
                              refinement_level=4, degree=2)
 x = SpatialCoordinate(mesh)
-domain = Domain(mesh, dt, 'BDM', 1)
+domain = Domain(mesh, dt, 'BDM', degree=1)
 
 # Equation, including mountain given by bexpr
 fexpr = 2*Omega*x[2]/R
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
+H_rel = Function(domain.spaces('L2'))
+
 # I/O (input/output)
 dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}{extra_name}'
 print(f'directory name is {dirname}')
-output = OutputParameters(dirname=dirname, dump_nc=True)
-diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u')]
+output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=10)
+diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', min(hini)+alpha*H)]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
@@ -232,11 +236,13 @@ transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 H_rel = Function(domain.spaces('L2'))
 height_relax = SWHeightRelax(eqns, H_rel, tau_r=tau_r)
 
-co2_cond = SWCO2cond(eqns, h_th=min(hini), tau_c=tau_c)
+co2_cond = SWCO2cond(eqns, h_th=min(hini)+alpha*H, tau_c=tau_c)
 
 if rel_sch == 'both':
     physics_schemes = [(height_relax, ForwardEuler(domain)),
                         (co2_cond, ForwardEuler(domain))]
+    if include_co2 == 'no':
+        physics_schemes = [(height_relax, ForwardEuler(domain))]
 elif rel_sch == 'co2':
     physics_schemes = [(co2_cond, ForwardEuler(domain))]
 elif rel_sch == 'rad':
@@ -288,6 +294,13 @@ uzonal.dat.data[:] = initial_u(Xu.dat.data_ro)
 X = SpatialCoordinate(mesh)
 u0.project(xyz_vector_from_lonlatr(uzonal, Constant(0), Constant(0), X))
 
+uspace = u0.function_space()
+pcg = PCG64()
+rg = RandomGenerator(pcg)
+#f_normal = rg.normal(uspace, 0.0, 1.5)
+#u0 += f_normal
+
+
 VD = D0.function_space()
 Dmesh = VD.mesh()
 WD = VectorFunctionSpace(umesh, VD.ufl_element())
@@ -313,7 +326,10 @@ if rel_sch == 'both':
     H_rel.assign(D0_mp)
 elif rel_sch == 'rad':
     H_rel.assign(D0)
+    # H_rel.assign(H)
 D0 += f_normal
+
+
 #print(max(f_normal.dat.data))
 #print(min(f_normal.dat.data))
 
