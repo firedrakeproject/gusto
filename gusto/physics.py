@@ -32,7 +32,8 @@ from types import FunctionType
 __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain",
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
            "SourceSink", "SurfaceFluxes", "WindDrag", "StaticAdjustment",
-           "SuppressVerticalWind", "BoundaryLayerMixing", "TerminatorToy"]
+           "SuppressVerticalWind", "BoundaryLayerMixing", "TerminatorToy",
+           "SWMoistDynamics"]
 
 
 class PhysicsParametrisation(object, metaclass=ABCMeta):
@@ -1819,3 +1820,134 @@ class TerminatorToy(PhysicsParametrisation):
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
 
         pass
+
+
+class SWMoistDynamics(PhysicsParametrisation):
+    """
+    Represents the process of adjusting water vapour and cloud water according
+    to a saturation function, via condensation and evaporation processes, all
+    via the total moisture and the equivalent potential temperature.
+
+    """
+
+    def __init__(self, equation, moisture_name='total_moisture',
+                 q0=0.02, beta2=None, tau=None,
+                 parameters=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquationSet`): the model's equation
+            moisture_name (str, optional): name of the total moisture variable.
+                Defaults to 'total_moisture'.
+            beta2 (float, optional): Condensation proportionality constant
+                for thermal feedback. This is equivalent to the L_v
+                parameter in Zerroukat and Allen (2015).
+            q0 (float): Saturation function scaling factor. Defaults to 0.02
+                in line with a typical saturated value of specific humidity in
+                the atmosphere.
+            tau (float, optional): Timescale for condensation and evaporation.
+                Defaults to None, in which case the timestep dt is used.
+            parameters (:class:`Configuration`, optional): parameters containing
+                the values of constants. Defaults to None, in which case the
+                parameters are obtained from the equation.
+        """
+
+        self.explicit_only = True
+        label_name = 'moist_dynamics'
+        super().__init__(equation, label_name, parameters=parameters)
+
+        # Check for the correct fields
+        assert moisture_name in equation.field_names, f"Field {moisture_name} does not exist in the equation set"
+        assert "b_e" in equation.field_names, "Equivalent buoyancy field must exist for moist dynamics formulation"
+        assert beta2 is not None, "If moist dynamics is used beta2 parameter must be specified"
+
+        self.Vm_idx = equation.field_names.index(moisture_name)
+
+        # Obtain function spaces and functions
+        W = equation.function_space
+        Vm = W.sub(self.Vm_idx)
+        V_idxs = [self.Vm_idx]
+
+        # Functions for total moisture and vapour
+        self.moisture = Function(Vm)
+        self.water_v = Function(Vm)
+
+        # u, depth and equivalent buoyancy needed
+        self.Vu_idx = equation.field_names.index("u")
+        Vu = W.sub(self.Vu_idx)
+        self.u = Function(Vu)
+        V_idxs.append(self.Vu_idx)
+        self.VD_idx = equation.field_names.index("D")
+        VD = W.sub(self.VD_idx)
+        self.D = Function(VD)
+        V_idxs.append(self.VD_idx)
+        self.Vbe_idx = equation.field_names.index("b_e")
+        Vbe = W.sub(self.Vbe_idx)
+        self.b_e = Function(Vbe)
+        V_idxs.append(self.Vbe_idx)
+
+        # tau is the timescale for condensation/evaporation (may or may not be the timestep)
+        if tau is not None:
+            self.set_tau_to_dt = False
+            self.tau = tau
+        else:
+            self.set_tau_to_dt = True
+            self.tau = Constant(0)
+            logger.info("Timescale for moisture conversion between vapour and cloud has been set to dt. If this is not the intention then provide a tau parameter as an argument to MoistDynamics.")
+
+        # compute the saturation curve using Picard iterations
+        alpha = 0.8
+        first_guess = q0
+        n_iterations = 3
+        H = equation.parameters.H
+        g = equation.parameters.g
+
+        self.saturation_curve = Function(Vm)
+        self.saturation_computation = Function(Vm).interpolate(first_guess)
+        for i in range(n_iterations):
+            qsat_prev = self.saturation_computation
+
+            qsat_expr = (1.0-alpha)*qsat_prev + alpha*q0*H/(self.D)*exp(20*(1 - self.b_e/g + beta2*self.saturation_computation/g))
+
+            self.saturation_computation.interpolate(qsat_expr)
+
+        # Determine vapour: if total moisture is below saturation then all moisture is vapour, otherwise vapour is equal to saturation
+        self.water_v = conditional(self.moisture < self.saturation_curve,
+                                   self.moisture, self.saturation_curve)
+
+        # beta_2 is the factor multiplying all the necessary terms on the RHS
+        factor = beta2
+
+        # Test function from the u space
+        test = equation.tests[self.Vu_idx]
+
+        # Add terms to equations and make interpolators
+        from firedrake import FacetNormal, jump, avg, dS, dx, div
+        n = FacetNormal(equation.domain.mesh)
+        self.source = (-self.D*div(self.water_v*test)*dx
+                       - 0.5*self.water_v*div(self.D*test)*dx
+                       + jump(self.water_v*test, n)*avg(self.D)*dS
+                       + 0.5*jump(self.D*test, n)*avg(self.water_v)*dS)
+        self.source_interpolator = Interpolator(factor, self.source)
+
+        # Add source terms to residual
+        equation.residual += self.label(subject(self.source,
+                                                equation.X), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Evaluates the RHS of the u equation involving water vapour at each
+        timestep.
+
+
+        Args:
+            x_in: (:class: 'Function'): the (mixed) field to be evolved.
+            dt: (:class: 'Constant'): the timestep, which can be the time
+                interval for the scheme.
+        """
+        logger.info(f'Evaluating physics parametrisation {self.label.label}')
+        self.D.assign(x_in.subfunctions[self.VD_idx])
+        self.b_e.assign(x_in.subfunctions[self.Vbe_idx])
+        self.saturation_curve.interpolate(self.saturation_computation(x_in))
+        if self.set_tau_to_dt:
+            self.tau.assign(dt)
+        self.source_interpolator.interpolate()

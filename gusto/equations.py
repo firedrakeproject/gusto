@@ -634,7 +634,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
                  space_names=None, linearisation_map='default',
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None,
-                 thermal=False):
+                 thermal=False, moist_dynamics=False):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -669,12 +669,17 @@ class ShallowWaterEquations(PrognosticEquationSet):
             thermal (flag, optional): specifies whether the equations have a
                 thermal or buoyancy variable that feeds back on the momentum.
                 Defaults to False.
+            moist_dynamics (flag, optional): specifies whether the equations to
+                be solved are the moist thermal shallow water equations, where
+                the moist process are included with the dynamics rather than via
+                physics source terms.
 
         Raises:
             NotImplementedError: active tracers are not yet implemented.
         """
 
         self.thermal = thermal
+        self.moist_dynamics = moist_dynamics
         field_names = ['u', 'D']
 
         if space_names is None:
@@ -687,6 +692,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
             field_names.append('b')
             if 'b' not in space_names.keys():
                 space_names['b'] = 'L2'
+
+        if self.moist_dynamics:
+            field_names.append('b_e')
+            if 'b_e' not in space_names.keys():
+                space_names['b_e'] = 'L2'
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives, pressure gradient and
@@ -747,12 +757,18 @@ class ShallowWaterEquations(PrognosticEquationSet):
             b = split(self.X)[2]
             b_adv = prognostic(advection_form(gamma, b, u), 'b')
             adv_form += subject(b_adv, self.X)
+        # Add transport of equivalent buoyancy, if doing moist dynamics
+        if moist_dynamics:
+            gamma = self.tests[2]
+            b_e = split(self.X)[2]
+            b_e_adv = prognostic(advection_form(gamma, b_e, u), 'b_e')
+            adv_form += subject(b_e_adv, self.X)
 
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
-        # Add pressure gradient only if not doing thermal
-        if self.thermal:
+        # Add pressure gradient only if not doing thermal or moist dynamics
+        if self.thermal or self.moist_dynamics:
             residual = (mass_form + adv_form)
         else:
             pressure_gradient_form = pressure_gradient(
@@ -761,7 +777,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
             residual = (mass_form + adv_form + pressure_gradient_form)
 
         # -------------------------------------------------------------------- #
-        # Extra Terms (Coriolis, Topography and Thermal)
+        # Extra Terms (Coriolis, topography, thermal and moist dynamics)
         # -------------------------------------------------------------------- #
         # TODO: Is there a better way to store the Coriolis / topography fields?
         # The current approach is that these are prescribed fields, stored in
@@ -787,6 +803,12 @@ class ShallowWaterEquations(PrognosticEquationSet):
                                           (-topography*div(b*w)*dx
                                            + jump(b*w, n)*avg(topography)*dS,
                                            'u'), self.X)
+            elif self.moist_dynamics:
+                n = FacetNormal(domain.mesh)
+                topography_form = subject(prognostic
+                                          (-topography*div(b_e*w)*dx
+                                           + jump(b_e*w, n)*avg(topography)*dS,
+                                           'u'), self.X)
             else:
                 topography_form = subject(prognostic
                                           (-g*div(w)*topography*dx, 'u'),
@@ -800,6 +822,16 @@ class ShallowWaterEquations(PrognosticEquationSet):
                                              - 0.5*b*div(D*w)*dx
                                              + jump(b*w, n)*avg(D)*dS
                                              + 0.5*jump(D*w, n)*avg(b)*dS,
+                                             'u'), self.X)
+            residual += source_form
+
+        # moist dynamics terms not involving topography
+        if self.moist_dynamics:
+            n = FacetNormal(domain.mesh)
+            source_form = subject(prognostic(-D*div(b_e*w)*dx
+                                             - 0.5*b_e*div(D*w)*dx
+                                             + jump(b_e*w, n)*avg(D)*dS
+                                             + 0.5*jump(D*w, n)*avg(b_e)*dS,
                                              'u'), self.X)
             residual += source_form
 
