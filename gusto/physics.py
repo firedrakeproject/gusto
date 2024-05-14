@@ -1831,19 +1831,21 @@ class SWMoistDynamics(PhysicsParametrisation):
     """
 
     def __init__(self, equation, moisture_name='total_moisture',
-                 q0=0.02, beta2=None, tau=None,
+                 q0=0.007, initial_sat=None, beta2=None, tau=None,
                  parameters=None):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation
             moisture_name (str, optional): name of the total moisture variable.
                 Defaults to 'total_moisture'.
-            beta2 (float, optional): Condensation proportionality constant
-                for thermal feedback. This is equivalent to the L_v
-                parameter in Zerroukat and Allen (2015).
             q0 (float): Saturation function scaling factor. Defaults to 0.02
                 in line with a typical saturated value of specific humidity in
                 the atmosphere.
+            initial_sat (:class:`ufl.Expr` or func): the initial saturation
+                curve, below which all moisture is vapour.
+            beta2 (float, optional): Condensation proportionality constant
+                for thermal feedback. This is equivalent to the L_v
+                parameter in Zerroukat and Allen (2015).
             tau (float, optional): Timescale for condensation and evaporation.
                 Defaults to None, in which case the timestep dt is used.
             parameters (:class:`Configuration`, optional): parameters containing
@@ -1862,16 +1864,23 @@ class SWMoistDynamics(PhysicsParametrisation):
 
         self.Vm_idx = equation.field_names.index(moisture_name)
 
+        # store what is needed in evaluate method
+        self.q0 = q0
+        self.initial_sat = initial_sat
+        self.beta2 = beta2
+        self.g = equation.parameters.g
+        self.H = equation.parameters.H
+
         # Obtain function spaces and functions
         W = equation.function_space
-        Vm = W.sub(self.Vm_idx)
+        self.Vm = W.sub(self.Vm_idx)
         V_idxs = [self.Vm_idx]
 
         # Functions for total moisture and vapour
-        self.moisture = Function(Vm)
-        self.water_v = Function(Vm)
+        self.moisture = Function(self.Vm)
+        self.water_v = Function(self.Vm)
 
-        # u, depth and equivalent buoyancy needed
+        # u, depth, equivalent buoyancy and total moisture needed
         self.Vu_idx = equation.field_names.index("u")
         Vu = W.sub(self.Vu_idx)
         self.u = Function(Vu)
@@ -1884,6 +1893,9 @@ class SWMoistDynamics(PhysicsParametrisation):
         Vbe = W.sub(self.Vbe_idx)
         self.b_e = Function(Vbe)
         V_idxs.append(self.Vbe_idx)
+        Vm = W.sub(self.Vm_idx)
+        self.m = Function(Vm)
+        V_idxs.append(self.Vm_idx)
 
         # tau is the timescale for condensation/evaporation (may or may not be the timestep)
         if tau is not None:
@@ -1894,44 +1906,24 @@ class SWMoistDynamics(PhysicsParametrisation):
             self.tau = Constant(0)
             logger.info("Timescale for moisture conversion between vapour and cloud has been set to dt. If this is not the intention then provide a tau parameter as an argument to MoistDynamics.")
 
-        # compute the saturation curve using Picard iterations
-        alpha = 0.8
-        first_guess = q0
-        n_iterations = 3
-        H = equation.parameters.H
-        g = equation.parameters.g
-
-        self.saturation_curve = Function(Vm)
-        self.saturation_computation = Function(Vm).interpolate(first_guess)
-        for i in range(n_iterations):
-            qsat_prev = self.saturation_computation
-
-            qsat_expr = (1.0-alpha)*qsat_prev + alpha*q0*H/(self.D)*exp(20*(1 - self.b_e/g + beta2*self.saturation_computation/g))
-
-            self.saturation_computation.interpolate(qsat_expr)
-
-        # Determine vapour: if total moisture is below saturation then all moisture is vapour, otherwise vapour is equal to saturation
-        self.water_v = conditional(self.moisture < self.saturation_curve,
-                                   self.moisture, self.saturation_curve)
-
         # beta_2 is the factor multiplying all the necessary terms on the RHS
         factor = beta2
 
         # Test function from the u space
         test = equation.tests[self.Vu_idx]
 
-        # Add terms to equations and make interpolators
+        # Add terms to the equation
         from firedrake import FacetNormal, jump, avg, dS, dx, div
         n = FacetNormal(equation.domain.mesh)
-        self.source = (-self.D*div(self.water_v*test)*dx
-                       - 0.5*self.water_v*div(self.D*test)*dx
-                       + jump(self.water_v*test, n)*avg(self.D)*dS
-                       + 0.5*jump(self.D*test, n)*avg(self.water_v)*dS)
-        self.source_interpolator = Interpolator(factor, self.source)
+        self.RHS = (-self.D*div(self.water_v*test)*dx
+                    - 0.5*self.water_v*div(self.D*test)*dx
+                    + jump(self.water_v*test, n)*avg(self.D)*dS
+                    + 0.5*jump(self.D*test, n)*avg(self.water_v)*dS)
 
-        # Add source terms to residual
-        equation.residual += self.label(subject(self.source,
+        # Add pressure gradient-like terms to residual
+        equation.residual += self.label(subject(self.RHS,
                                                 equation.X), self.evaluate)
+
 
     def evaluate(self, x_in, dt):
         """
@@ -1947,7 +1939,49 @@ class SWMoistDynamics(PhysicsParametrisation):
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
         self.D.assign(x_in.subfunctions[self.VD_idx])
         self.b_e.assign(x_in.subfunctions[self.Vbe_idx])
-        self.saturation_curve.interpolate(self.saturation_computation(x_in))
+        self.m.assign(x_in.subfunctions[self.Vm_idx])
         if self.set_tau_to_dt:
             self.tau.assign(dt)
-        self.source_interpolator.interpolate()
+
+        self.saturation_curve = Function(self.Vm).interpolate(self.initial_sat)
+        print("this is the saturation curve we start with")
+        print(self.saturation_curve.dat.data.max())
+        print("this is the moisture we start with")
+        print(self.m.dat.data.max())
+
+        # if total moisture is above saturation then vapour should become the
+        # saturation value - set vapour equal to sat in the sat expression and
+        # iterate to find it
+        def iterate():
+            alpha = 0.8
+            n_iterations = 3
+            H = self.H
+            g = self.g
+
+            for i in range(n_iterations):
+                qsat_prev = self.saturation_curve
+                qsat_iterate_expr = (1.0-alpha)*qsat_prev + alpha*self.q0*H/(self.D)*exp(20*(1 - self.b_e/g + self.beta2*self.saturation_curve/g))
+
+                self.saturation_curve.interpolate(qsat_iterate_expr)
+            
+            return qsat_iterate_expr
+
+        # if total moisture is below saturation then all of it is vapour and so
+        # we know vapour, and can use it in evaluating the sat expression
+        qsat_expr = self.q0*self.H/(self.D) * exp(20*(1 - self.b_e/self.g + self.beta2*self.m/self.g))
+
+        # use a conditional to check which version of the sat expression we use
+        self.saturation_curve.interpolate(conditional(
+            self.m < self.saturation_curve, qsat_expr, iterate()))
+            
+        # Determine vapour using this updated saturation curve: if total
+        # moisture is below saturation then all moisture is vapour, otherwise
+        # vapour is equal to saturation
+        self.water_v.interpolate(conditional(self.m < self.saturation_curve,
+                                   self.m, self.saturation_curve))
+        print("this is the updated saturation curve")
+        print(self.saturation_curve.dat.data.max())
+        print("this is the updated water vapour")
+        print(self.water_v.dat.data.max())
+        print("this is the total moisture")
+        print(self.m.dat.data.max())
