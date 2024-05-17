@@ -13,7 +13,7 @@ from firedrake import (
     max_value, Constant, pi, Projector, grad, TestFunctions, split,
     inner, TestFunction, exp, avg, outer, FacetNormal,
     SpatialCoordinate, dS_v, NonlinearVariationalProblem,
-    NonlinearVariationalSolver
+    NonlinearVariationalSolver, jump, dS, div
 )
 from firedrake.fml import identity, Term, subject
 from gusto.active_tracers import Phases, TracerVariableType
@@ -1908,18 +1908,20 @@ class SWMoistDynamics(PhysicsParametrisation):
         # Test function from the u space
         test = equation.tests[self.Vu_idx]
 
+        topography = equation.prescribed_fields('topography', space=VD)
+
         # Add terms to the equation
-        from firedrake import FacetNormal, jump, avg, dS, dx, div
         n = FacetNormal(equation.domain.mesh)
         self.RHS = (+ self.D*div(self.water_v*test)*dx
                     + 0.5*self.water_v*div(self.D*test)*dx
                     - jump(self.water_v*test, n)*avg(self.D)*dS
-                    - 0.5*jump(self.D*test, n)*avg(self.water_v)*dS)
+                    - 0.5*jump(self.D*test, n)*avg(self.water_v)*dS
+                    + topography*div(self.water_v*test)*dx
+                    - jump(self.water_v*test, n)*avg(topography)*dS)
 
         # Add pressure gradient-like terms to residual
         equation.residual += self.label(subject(beta2*self.RHS,
                                                 equation.X), self.evaluate)
-
 
     def evaluate(self, x_in, dt):
         """
@@ -1955,7 +1957,7 @@ class SWMoistDynamics(PhysicsParametrisation):
                 qsat_iterate_expr = (1.0-alpha)*qsat_prev + alpha*self.q0*H/(self.D)*exp(20*(1 - self.b_e/g + self.beta2*self.saturation_curve/g))
 
                 self.saturation_curve.interpolate(qsat_iterate_expr)
-            
+
             return qsat_iterate_expr
 
         # if total moisture is below saturation then all of it is vapour and so
@@ -1965,9 +1967,9 @@ class SWMoistDynamics(PhysicsParametrisation):
         # use a conditional to check which version of the sat expression we use
         self.saturation_curve.interpolate(conditional(
             self.m < self.saturation_curve, qsat_expr, iterate()))
-            
+
         # Determine vapour using this updated saturation curve: if total
         # moisture is below saturation then all moisture is vapour, otherwise
         # vapour is equal to saturation
         self.water_v.interpolate(conditional(self.m < self.saturation_curve,
-                                   self.m, self.saturation_curve))
+                                             self.m, self.saturation_curve))
