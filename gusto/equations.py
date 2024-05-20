@@ -8,19 +8,21 @@ from firedrake import (
     SpatialCoordinate, split, Constant, action
 )
 from firedrake.fml import (
-    Term, all_terms, keep, drop, Label, subject, name_label,
+    Term, all_terms, keep, drop, Label, subject,
     replace_subject, replace_trial_function
 )
 from gusto.fields import PrescribedFields
 from gusto.labels import (
     time_derivative, transport, prognostic, hydrostatic, linearisation,
-    pressure_gradient, coriolis
+    pressure_gradient, coriolis, divergence, gravity, incompressible, sponge
 )
 from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (
-    advection_form, continuity_form, vector_invariant_form,
+    advection_form, advection_form_1d, continuity_form,
+    continuity_form_1d, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form,
-    diffusion_form, linear_continuity_form, linear_advection_form,
+    diffusion_form, diffusion_form_1d,
+    linear_continuity_form, linear_continuity_form_1d, linear_advection_form,
     tracer_conservative_form
 )
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
@@ -879,6 +881,186 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         self.linearise_equation_set()
 
 
+class ShallowWaterEquations_1d(PrognosticEquationSet):
+
+    u"""
+    Class for the (rotating) 1D shallow-water equations, which describe
+    the velocity 'u', 'v' and the depth field 'D', solving some variant of:  \n
+    ∂u/∂t + u∂u/∂x - fv + g*∂D/∂x = 0,                                       \n
+    ∂v/∂t + fu = 0,                                                          \n
+    ∂D/∂t + ∂(uD)/∂x = 0,                                                    \n
+    for mean depth 'H', Coriolis parameter 'f' and gravity 'g'.
+
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        parameters (:class:`Configuration`, optional): an object containing
+            the model's physical parameters.
+        fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
+            parameter. Defaults to None.
+        space_names (dict, optional): a dictionary of strings for names of
+            the function spaces to use for the spatial discretisation. The
+            keys are the names of the prognostic variables. Defaults to None
+            in which case the spaces are taken from the de Rham complex.
+        linearisation_map (func, optional): a function specifying which
+            terms in the equation set to linearise. If None is specified
+            then no terms are linearised. Defaults to the string 'default',
+            in which case the linearisation includes both time derivatives,
+            the 'D' transport term, pressure gradient and Coriolis terms.
+        no_normal_flow_bc_ids (list, optional): a list of IDs of domain
+            boundaries at which no normal flow will be enforced. Defaults to
+            None.
+        active_tracers (list, optional): a list of `ActiveTracer` objects
+            that encode the metadata for any active tracers to be included
+            in the equations. Defaults to None.
+    """
+
+    def __init__(self, domain, parameters,
+                 fexpr=None,
+                 space_names=None, linearisation_map='default',
+                 diffusion_options=None,
+                 no_normal_flow_bc_ids=None, active_tracers=None):
+
+        field_names = ['u', 'v', 'D']
+        space_names = {'u': 'HDiv', 'v': 'L2', 'D': 'L2'}
+
+        if active_tracers is not None:
+            raise NotImplementedError('Tracers not implemented for 1D shallow water equations')
+
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives, pressure gradient,
+            # Coriolis and transport term from depth equation
+            linearisation_map = lambda t: \
+                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                 or (t.get(prognostic) == 'D' and t.has_label(transport)))
+
+        super().__init__(field_names, domain, space_names,
+                         linearisation_map=linearisation_map,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
+
+        self.parameters = parameters
+        g = parameters.g
+        H = parameters.H
+
+        w1, w2, phi = self.tests
+        u, v, D = split(self.X)
+        u_trial = split(self.trials)[0]
+
+        # -------------------------------------------------------------------- #
+        # Time Derivative Terms
+        # -------------------------------------------------------------------- #
+        mass_form = self.generate_mass_terms()
+
+        # -------------------------------------------------------------------- #
+        # Transport Terms
+        # -------------------------------------------------------------------- #
+        # Velocity transport term
+        u_adv = prognostic(advection_form_1d(w1, u, u), 'u')
+        v_adv = prognostic(advection_form_1d(w2, v, u), 'v')
+
+        # Depth transport term
+        D_adv = prognostic(continuity_form_1d(phi, D, u), 'D')
+
+        # Transport term needs special linearisation
+        if self.linearisation_map(D_adv.terms[0]):
+            linear_D_adv = linear_continuity_form_1d(phi, H, u_trial)
+            # Add linearisation to D_adv
+            D_adv = linearisation(D_adv, linear_D_adv)
+
+        adv_form = subject(u_adv + v_adv + D_adv, self.X)
+
+        pressure_gradient_form = pressure_gradient(subject(
+            prognostic(-g * D * w1.dx(0) * dx, "u"), self.X))
+
+        self.residual = (mass_form + adv_form
+                         + pressure_gradient_form)
+
+        if fexpr is not None:
+            V = FunctionSpace(domain.mesh, 'CG', 1)
+            f = self.prescribed_fields('coriolis', V).interpolate(fexpr)
+            coriolis_form = coriolis(subject(
+                prognostic(-f * v * w1 * dx, "u")
+                + prognostic(f * u * w2 * dx, "v"), self.X))
+            self.residual += coriolis_form
+
+        if diffusion_options is not None:
+            for field, diffusion in diffusion_options:
+                idx = self.field_names.index(field)
+                test = self.tests[idx]
+                fn = split(self.X)[idx]
+                self.residual += subject(
+                    prognostic(diffusion_form_1d(test, fn, diffusion.kappa),
+                               field),
+                    self.X)
+
+        # -------------------------------------------------------------------- #
+        # Linearise equations
+        # -------------------------------------------------------------------- #
+        # Add linearisations to equations
+        self.residual = self.generate_linear_terms(self.residual,
+                                                   self.linearisation_map)
+
+
+class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
+    u"""
+    Class for the linear (rotating) 1D shallow-water equations, which describe
+    the velocity 'u', 'v' and the depth field 'D', solving some variant of:  \n
+    ∂u/∂t - fv + g*∂D/∂x = 0,                                                \n
+    ∂v/∂t + fu = 0,                                                          \n
+    ∂D/∂t + H*∂u/∂x = 0,                                                     \n
+    for mean depth 'H', Coriolis parameter 'f' and gravity 'g'.
+
+    This is set up the from the underlying :class:`ShallowWaterEquations_1d`,
+    which is then linearised.
+    """
+
+    def __init__(self, domain, parameters, fexpr=None,
+                 space_names=None, linearisation_map='default',
+                 no_normal_flow_bc_ids=None, active_tracers=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
+            fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
+                parameter. Defaults to None.
+            space_names (dict, optional): a dictionary of strings for names of
+                the function spaces to use for the spatial discretisation. The
+                keys are the names of the prognostic variables. Defaults to None
+                in which case the spaces are taken from the de Rham complex. Any
+                buoyancy variable is taken by default to lie in the L2 space.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes both time derivatives,
+                the 'D' transport term, pressure gradient and Coriolis terms.
+            no_normal_flow_bc_ids (list, optional): a list of IDs of domain
+                boundaries at which no normal flow will be enforced. Defaults to
+                None.
+            active_tracers (list, optional): a list of `ActiveTracer` objects
+                that encode the metadata for any active tracers to be included
+                in the equations. Defaults to None.
+        """
+
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives, pressure gradient,
+            # Coriolis and transport term from depth equation
+            linearisation_map = lambda t: \
+                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                 or (t.get(prognostic) == 'D' and t.has_label(transport)))
+
+        super().__init__(domain, parameters,
+                         fexpr=fexpr, space_names=space_names,
+                         linearisation_map=linearisation_map,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
+
+        # Use the underlying routine to do a first linearisation of the equations
+        self.linearise_equation_set()
+
+
 class CompressibleEulerEquations(PrognosticEquationSet):
     """
     Class for the compressible Euler equations, which evolve the velocity 'u',
@@ -892,7 +1074,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
     pressure.
     """
 
-    def __init__(self, domain, parameters, Omega=None, sponge=None,
+    def __init__(self, domain, parameters, Omega=None, sponge_options=None,
                  extra_terms=None, space_names=None,
                  linearisation_map='default',
                  u_transport_option="vector_invariant_form",
@@ -907,8 +1089,9 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 the model's physical parameters.
             Omega (:class:`ufl.Expr`, optional): an expression for the planet's
                 rotation vector. Defaults to None.
-            sponge (:class:`ufl.Expr`, optional): an expression for a sponge
-                layer. Defaults to None.
+            sponge_options (:class:`SpongeLayerParameters`, optional): any
+                parameters for applying a sponge layer to the upper boundary.
+                Defaults to None.
             extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
                 included in the equation set. Defaults to None.
             space_names (dict, optional): a dictionary of strings for names of
@@ -925,9 +1108,9 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 'vector_invariant_form', 'vector_advection_form' and
                 'circulation_form'.
                 Defaults to 'vector_invariant_form'.
-            diffusion_options (:class:`DiffusionOptions`, optional): any options
-                to specify for applying diffusion terms to variables. Defaults
-                to None.
+            diffusion_options (:class:`DiffusionParameters`, optional): any
+                options to specify for applying diffusion terms to variables.
+                Defaults to None.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
                 None.
@@ -1023,17 +1206,18 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 raise NotImplementedError('Only mixing ratio tracers are implemented')
         theta_v = theta / (Constant(1.0) + tracer_mr_total)
 
-        pressure_gradient_form = name_label(subject(prognostic(
+        pressure_gradient_form = pressure_gradient(subject(prognostic(
             cp*(-div(theta_v*w)*exner*dx
-                + jump(theta_v*w, n)*avg(exner)*dS_v), 'u'), self.X), "pressure_gradient")
+                + jump(theta_v*w, n)*avg(exner)*dS_v), 'u'), self.X))
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = name_label(subject(prognostic(Term(g*inner(domain.k, w)*dx),
-                                                     'u'), self.X), "gravity")
+        gravity_form = gravity(subject(prognostic(g*inner(domain.k, w)*dx,
+                                                  'u'), self.X))
 
-        residual = (mass_form + adv_form + pressure_gradient_form + gravity_form)
+        residual = (mass_form + adv_form + pressure_gradient_form
+                    + gravity_form)
 
         # -------------------------------------------------------------------- #
         # Moist Thermodynamic Divergence Term
@@ -1073,26 +1257,26 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Extra Terms (Coriolis, Sponge, Diffusion and others)
         # -------------------------------------------------------------------- #
         if Omega is not None:
-            # TODO: add linearisation and label for this
-            residual += subject(prognostic(
-                inner(w, cross(2*Omega, u))*dx, "u"), self.X)
+            # TODO: add linearisation
+            residual += coriolis(subject(prognostic(
+                inner(w, cross(2*Omega, u))*dx, "u"), self.X))
 
-        if sponge is not None:
+        if sponge_options is not None:
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
             x = SpatialCoordinate(domain.mesh)
             z = x[len(x)-1]
-            H = sponge.H
-            zc = sponge.z_level
+            H = sponge_options.H
+            zc = sponge_options.z_level
             assert float(zc) < float(H), \
                 "The sponge level is set above the height the your domain"
-            mubar = sponge.mubar
+            mubar = sponge_options.mubar
             muexpr = conditional(z <= zc,
                                  0.0,
                                  mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
             self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
 
-            residual += name_label(subject(prognostic(
-                self.mu*inner(w, domain.k)*inner(u, domain.k)*dx, 'u'), self.X), "sponge")
+            residual += sponge(subject(prognostic(
+                self.mu*inner(w, domain.k)*inner(u, domain.k)*dx, 'u'), self.X))
 
         if diffusion_options is not None:
             for field, diffusion in diffusion_options:
@@ -1196,12 +1380,11 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
 
         k = self.domain.k
         u = split(self.X)[0]
-        self.residual += name_label(
+        self.residual += hydrostatic(
             subject(
                 prognostic(
                     -inner(k, self.tests[0]) * inner(k, u) * dx, "u"),
-                self.X),
-            "hydrostatic_form")
+                self.X))
 
     def hydrostatic_projection(self, t):
         """
@@ -1325,7 +1508,7 @@ class BoussinesqEquations(PrognosticEquationSet):
 
         w, phi, gamma = self.tests[0:3]
         u, p, b = split(self.X)
-        u_trial = split(self.trials)[0]
+        u_trial, p_trial, _ = split(self.trials)
         _, p_bar, b_bar = split(self.X_ref)
 
         # -------------------------------------------------------------------- #
@@ -1370,30 +1553,35 @@ class BoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
-        pressure_gradient_form = subject(prognostic(-div(w)*p*dx, 'u'), self.X)
+        pressure_gradient_form = pressure_gradient(subject(prognostic(
+            -div(w)*p*dx, 'u'), self.X))
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = subject(prognostic(-b*inner(w, domain.k)*dx, 'u'), self.X)
+        gravity_form = gravity(subject(prognostic(
+            -b*inner(w, domain.k)*dx, 'u'), self.X))
 
         # -------------------------------------------------------------------- #
         # Divergence Term
         # -------------------------------------------------------------------- #
-
         if compressible:
             cs = parameters.cs
-            divergence_form = subject(
-                prognostic(cs**2 * phi * div(u) * dx, 'p'), self.X)
+            linear_div_form = divergence(subject(
+                prognostic(cs**2 * phi * div(u_trial) * dx, 'p'), self.X))
+            divergence_form = divergence(linearisation(
+                subject(prognostic(cs**2 * phi * div(u) * dx, 'p'), self.X),
+                linear_div_form))
         else:
             # This enforces that div(u) = 0
             # The p features here so that the div(u) evaluated in the
             # "forcing" step replaces the whole pressure field, rather than
             # merely providing an increment to it.
-            divergence_form = name_label(
+            linear_div_form = incompressible(
+                subject(prognostic(phi*(p_trial-div(u_trial))*dx, 'p'), self.X))
+            divergence_form = incompressible(linearisation(
                 subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
-                "incompressibility"
-            )
+                linear_div_form))
 
         residual = (mass_form + adv_form + divergence_form
                     + pressure_gradient_form + gravity_form)
@@ -1402,12 +1590,99 @@ class BoussinesqEquations(PrognosticEquationSet):
         # Extra Terms (Coriolis)
         # -------------------------------------------------------------------- #
         if Omega is not None:
-            # TODO: add linearisation and label for this
-            residual += subject(prognostic(
-                inner(w, cross(2*Omega, u))*dx, 'u'), self.X)
+            # TODO: add linearisation
+            residual += coriolis(subject(prognostic(
+                inner(w, cross(2*Omega, u))*dx, 'u'), self.X))
 
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
+
+
+class LinearBoussinesqEquations(BoussinesqEquations):
+    """
+    Class for the Boussinesq equations, which evolve the velocity
+    'u', the pressure 'p' and the buoyancy 'b'. Can be compressible or
+    incompressible, depending on the value of the input flag, which defaults
+    to compressible.
+
+    The compressible form of the equations is
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
+    ∂p/∂t + cs**2 ∇.u = p,                                                    \n
+    ∂b/∂t + (u.∇)b = 0,                                                       \n
+    where k is the vertical unit vector, Ω is the planet's rotation vector
+    and cs is the sound speed.
+
+    For the incompressible form of the equations, the pressure features as
+    a Lagrange multiplier to enforce incompressibility. The equations are     \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
+    ∇.u = p,                                                                  \n
+    ∂b/∂t + (u.∇)b = 0,                                                       \n
+    where k is the vertical unit vector and Ω is the planet's rotation vector.
+    """
+
+    def __init__(self, domain, parameters,
+                 compressible=True,
+                 Omega=None,
+                 space_names=None,
+                 linearisation_map='default',
+                 u_transport_option="vector_invariant_form",
+                 no_normal_flow_bc_ids=None,
+                 active_tracers=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
+            compressible (bool, optional): flag to indicate whether the
+                equations are compressible. Defaults to True
+            Omega (:class:`ufl.Expr`, optional): an expression for the planet's
+                rotation vector. Defaults to None.
+            space_names (dict, optional): a dictionary of strings for names of
+                the function spaces to use for the spatial discretisation. The
+                keys are the names of the prognostic variables. Defaults to None
+                in which case the spaces are taken from the de Rham complex.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
+            u_transport_option (str, optional): specifies the transport term
+                used for the velocity equation. Supported options are:
+                'vector_invariant_form', 'vector_advection_form' and
+                'circulation_form'.
+                Defaults to 'vector_invariant_form'.
+            no_normal_flow_bc_ids (list, optional): a list of IDs of domain
+                boundaries at which no normal flow will be enforced. Defaults to
+                None.
+            active_tracers (list, optional): a list of `ActiveTracer` objects
+                that encode the metadata for any active tracers to be included
+                in the equations.. Defaults to None.
+
+        Raises:
+            NotImplementedError: active tracers are not implemented.
+        """
+
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives, pressure gradient,
+            # Coriolis and transport term from depth equation
+            linearisation_map = lambda t: \
+                (any(t.has_label(time_derivative, pressure_gradient, coriolis,
+                                 gravity, divergence, incompressible))
+                 or (t.get(prognostic) in ['p', 'b'] and t.has_label(transport)))
+        super().__init__(domain=domain,
+                         parameters=parameters,
+                         compressible=compressible,
+                         Omega=Omega,
+                         space_names=space_names,
+                         linearisation_map=linearisation_map,
+                         u_transport_option=u_transport_option,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers)
+
+        # Use the underlying routine to do a first linearisation of
+        # the equations
+        self.linearise_equation_set()

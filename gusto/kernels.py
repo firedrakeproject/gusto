@@ -74,8 +74,7 @@ class LimitMidpoints():
         par_loop(self._kernel, dx,
                  {"field_hat": (field_hat, WRITE),
                   "field_DG1": (field_DG1, READ),
-                  "field_old": (field_old, READ)},
-                 is_loopy_kernel=True)
+                  "field_old": (field_old, READ)})
 
 
 class ClipZero():
@@ -111,8 +110,7 @@ class ClipZero():
         """
         par_loop(self._kernel, dx,
                  {"field": (field, WRITE),
-                  "field_in": (field_in, READ)},
-                 is_loopy_kernel=True)
+                  "field_in": (field_in, READ)})
 
 
 class MinKernel():
