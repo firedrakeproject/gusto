@@ -1908,7 +1908,7 @@ class SWMoistDynamics(PhysicsParametrisation):
         # Test function from the u space
         test = equation.tests[self.Vu_idx]
 
-        topography = equation.prescribed_fields('topography', space=VD)
+        self.topography = equation.prescribed_fields('topography', space=VD)
 
         # Add terms to the equation
         n = FacetNormal(equation.domain.mesh)
@@ -1916,8 +1916,8 @@ class SWMoistDynamics(PhysicsParametrisation):
                     + 0.5*self.water_v*div(self.D*test)*dx
                     - jump(self.water_v*test, n)*avg(self.D)*dS
                     - 0.5*jump(self.D*test, n)*avg(self.water_v)*dS
-                    + topography*div(self.water_v*test)*dx
-                    - jump(self.water_v*test, n)*avg(topography)*dS)
+                    + self.topography*div(self.water_v*test)*dx
+                    - jump(self.water_v*test, n)*avg(self.topography)*dS)
 
         # Add pressure gradient-like terms to residual
         equation.residual += self.label(subject(beta2*self.RHS,
@@ -1954,7 +1954,7 @@ class SWMoistDynamics(PhysicsParametrisation):
 
             for i in range(n_iterations):
                 qsat_prev = self.saturation_curve
-                qsat_iterate_expr = (1.0-alpha)*qsat_prev + alpha*self.q0*H/(self.D)*exp(20*(1 - self.b_e/g + self.beta2*self.saturation_curve/g))
+                qsat_iterate_expr = (1.0-alpha)*qsat_prev + alpha*self.q0*H/(self.D + self.topography)*exp(20*(1 - self.b_e/g + self.beta2*self.saturation_curve/g))
 
                 self.saturation_curve.interpolate(qsat_iterate_expr)
 
@@ -1962,7 +1962,7 @@ class SWMoistDynamics(PhysicsParametrisation):
 
         # if total moisture is below saturation then all of it is vapour and so
         # we know vapour, and can use it in evaluating the sat expression
-        qsat_expr = self.q0*self.H/(self.D) * exp(20*(1 - self.b_e/self.g + self.beta2*self.m/self.g))
+        qsat_expr = self.q0*self.H/(self.D + self.topography) * exp(20*(1 - self.b_e/self.g + self.beta2*self.m/self.g))
 
         # use a conditional to check which version of the sat expression we use
         self.saturation_curve.interpolate(conditional(
