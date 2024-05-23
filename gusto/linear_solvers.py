@@ -24,7 +24,7 @@ from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver", "ThermalSWSolver", "MoistConvectiveSWSolver"]
+__all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver", "ThermalSWSolver", "MoistConvectiveSWSolver", "MoistDynamicsSWSolver"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -887,3 +887,154 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
         D = dy.subfunctions[1]
         u.assign(u1)
         D.assign(D1)
+
+
+class MoistDynamicsSWSolver(TimesteppingSolver):
+    """
+    Linear solver object for the moist shallow water equations, written with
+    all moisture in the dynamics.
+
+    This solves a linear problem for the moist shallow water equations with
+    prognostic variables u (velocity), D (depth) and b_e ( equivalent buoyancy).
+    It follows the following strategy:
+
+    (1) Eliminate b_e
+    (2) Solve the resulting system for (u, D) using a hybrid-mixed method
+    (3) Reconstruct b_e
+     """
+
+    solver_parameters = {
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': {'ksp_type': 'cg',
+                          'pc_type': 'gamg',
+                          'ksp_rtol': 1e-8,
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'}}
+    }
+
+    @timed_function("Gusto:SolverSetup")
+    def _setup_solver(self):
+        equation = self.equations      # just cutting down line length a bit
+        dt = self.dt
+        beta_ = dt*self.alpha
+        Vu = equation.domain.spaces("HDiv")
+        VD = equation.domain.spaces("DG")
+        Vb = equation.domain.spaces("DG")
+
+        # Check that the third field is buoyancy
+        if not equation.field_names[2] == 'b_e':
+            raise NotImplementedError("Field 'b_e' must exist to use the moist dynamics linear solver in the SIQN scheme")
+
+        # Store time-stepping coefficients as UFL Constants
+        beta = Constant(beta_)
+
+        # Split up the rhs vector
+        self.xrhs = Function(self.equations.function_space)
+        u_in = split(self.xrhs)[0]
+        D_in = split(self.xrhs)[1]
+        b_e_in = split(self.xrhs)[2]
+
+        # Build the reduced function space for u, D
+        M = MixedFunctionSpace((Vu, VD))
+        w, phi = TestFunctions(M)
+        u, D = TrialFunctions(M)
+
+        # Get background buoyancy and depth
+        Dbar = split(equation.X_ref)[1]
+        bbar = split(equation.X_ref)[2]
+
+        # Approximate elimination of b
+        b_e = -dot(u, grad(bbar))*beta + b_e_in
+
+        n = FacetNormal(equation.domain.mesh)
+
+        eqn = (
+            inner(w, (u - u_in)) * dx
+            - beta * (D - Dbar) * div(w*bbar) * dx
+            + beta * jump(w*bbar, n) * avg(D-Dbar) * dS
+            - beta * 0.5 * Dbar * bbar * div(w) * dx
+            - beta * 0.5 * Dbar * b_e * div(w) * dx
+            - beta * 0.5 * bbar * div(w*(D-Dbar)) * dx
+            + beta * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
+            + inner(phi, (D - D_in)) * dx
+            + beta * phi * Dbar * div(u) * dx
+        )
+
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
+
+        # Place to put results of (u,D) solver
+        self.uD = Function(M)
+
+        # Boundary conditions
+        bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
+
+        # Solver for u, D
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs)
+
+        # Provide callback for the nullspace of the trace system
+        def trace_nullsp(T):
+            return VectorSpaceBasis(constant=True)
+
+        appctx = {"trace_nullspace": trace_nullsp}
+        self.uD_solver = LinearVariationalSolver(uD_problem,
+                                                 solver_parameters=self.solver_parameters,
+                                                 appctx=appctx)
+        # Reconstruction of b
+        b_e = TrialFunction(Vb)
+        gamma = TestFunction(Vb)
+
+        u, D = self.uD.subfunctions
+        self.b_e = Function(Vb)
+
+        b_e_eqn = gamma*(b_e - b_e_in + inner(u, grad(bbar))*beta) * dx
+
+        b_e_problem = LinearVariationalProblem(lhs(b_e_eqn),
+                                               rhs(b_e_eqn),
+                                               self.b_e)
+        self.b_e_solver = LinearVariationalSolver(b_e_problem)
+
+        # Log residuals on hybridized solver
+        self.log_ksp_residuals(self.uD_solver.snes.ksp)
+
+    @timed_function("Gusto:LinearSolve")
+    def solve(self, xrhs, dy):
+        """
+        Solve the linear problem.
+
+        Args:
+            xrhs (:class:`Function`): the right-hand side field in the
+                appropriate :class:`MixedFunctionSpace`.
+            dy (:class:`Function`): the resulting field in the appropriate
+                :class:`MixedFunctionSpace`.
+        """
+        self.xrhs.assign(xrhs)
+
+        # Check that the b reference profile has been set
+        bbar = split(self.equations.X_ref)[2]
+        b_e = dy.subfunctions[2]
+        bbar_func = Function(b_e.function_space()).interpolate(bbar)
+        if bbar_func.dat.data.max() == 0 and bbar_func.dat.data.min() == 0:
+            logger.warning("The reference profile for b_e in the linear solver is zero. To set a non-zero profile add b_e to the set_reference_profiles argument.")
+
+        with timed_region("Gusto:VelocityDepthSolve"):
+            logger.info('Moist dynamics linear solver: mixed solve')
+            self.uD_solver.solve()
+
+        u1, D1 = self.uD.subfunctions
+        u = dy.subfunctions[0]
+        D = dy.subfunctions[1]
+        b_e = dy.subfunctions[2]
+        u.assign(u1)
+        D.assign(D1)
+
+        with timed_region("Gusto:BuoyancyRecon"):
+            logger.info('Moist dynamics linear solver: buoyancy reconstruction')
+            self.b_e_solver.solve()
+
+        b_e.assign(self.b_e)
