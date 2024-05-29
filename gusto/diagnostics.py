@@ -684,7 +684,7 @@ class RichardsonNumber(DiagnosticField):
 
 
 class Entropy(DiagnosticField):
-    """ base diagnostic field for entropy diagnostic """
+    """Base diagnostic field for entropy diagnostic """
 
     def __init__(self, equations, space=None, method="interpolate"):
         """
@@ -708,6 +708,7 @@ class Entropy(DiagnosticField):
 
 
 class PhysicalEntropy(Entropy):
+    u"""Physical entropy ρ*ln(θ) for Compressible Euler equations"""
     name = "PhysicalEntropy"
 
     def setup(self, domain, state_fields):
@@ -725,6 +726,7 @@ class PhysicalEntropy(Entropy):
 
 
 class DynamicEntropy(Entropy):
+    u"""Dynamic entropy 0.5*ρ*θ^2 for Compressible Euler equations"""
     name = "DynamicEntropy"
 
     def setup(self, domain, state_fields):
