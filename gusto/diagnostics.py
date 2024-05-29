@@ -1743,7 +1743,7 @@ class Vorticity(DiagnosticField):
                 gamma = TestFunction(space)
                 n = FacetNormal(domain.mesh)
                 a = inner(vort, gamma) * dx
-                L = ( inner(domain.perp(grad(gamma)), u))*dx - jump(inner(domain.perp(n), u)*gamma)*ds_h
+                L = -( inner(domain.perp(grad(gamma)), u)) * dx #- jump(inner(domain.perp(n), u) * gamma) * (dS_h + dS_v)
                 # TODO implement absolute version, unsure atm how to get corioilis in vertical slice smartly
             problem = LinearVariationalProblem(a, L, self.field)
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={'ksp_type': 'cg'})
