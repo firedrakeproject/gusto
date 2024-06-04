@@ -697,6 +697,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
             field_names.append('b_e')
             if 'b_e' not in space_names.keys():
                 space_names['b_e'] = 'L2'
+            field_names.append('q_t')
+            if 'q_t' not in space_names.keys():
+                space_names['q_t'] = 'L2'
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives, pressure gradient and
@@ -763,6 +766,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
             b_e = split(self.X)[2]
             b_e_adv = prognostic(advection_form(gamma, b_e, u), 'b_e')
             adv_form += subject(b_e_adv, self.X)
+            gamma_q = self.tests[3]
+            q_t = split(self.X)[3]
+            q_t_adv = prognostic(advection_form(gamma_q, q_t, u), 'q_t')
+            adv_form += subject(q_t_adv, self.X)
+
 
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
@@ -807,7 +815,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 n = FacetNormal(domain.mesh)
                 topography_form = subject(prognostic
                                           (-topography*div(b_e*w)*dx
-                                           + jump(b_e*w, n)*avg(topography)*dS,
+                                           + jump(b_e*w, n)*avg(topography)*dS
+                                           + beta2*topography*div(q_v*w)*dx
+                                           - beta2*jump(q_v*w, n)*avg(topography)*dS,
                                            'u'), self.X)
             else:
                 topography_form = subject(prognostic
@@ -827,11 +837,23 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         # moist dynamics terms not involving topography
         if self.moist_dynamics:
+            q0 = 0.007
+            beta2 = 10
+            from firedrake import exp
+            q_sat_expr = q0*g*H/(g*D) * exp(20*(1-b_e/g))
+            VD = FunctionSpace(domain.mesh, 'DG', 1)
+            q_sat_func = Function(VD).interpolate(q_sat_expr)
+            q_v = Function(VD)
+            q_v.interpolate(conditional(q_t < q_sat_func, q_t, q_sat_func))
             n = FacetNormal(domain.mesh)
             source_form = subject(prognostic(-D*div(b_e*w)*dx
                                              - 0.5*b_e*div(D*w)*dx
                                              + jump(b_e*w, n)*avg(D)*dS
-                                             + 0.5*jump(D*w, n)*avg(b_e)*dS,
+                                             + 0.5*jump(D*w, n)*avg(b_e)*dS
+                                             + beta2*D*div(q_v*w)*dx
+                                             + 0.5*beta2*q_v*div(D*w)*dx
+                                             - beta2*jump(q_v*w, n)*avg(D)*dS
+                                             - beta2*0.5*jump(D*w, n)*avg(q_v)*dS,
                                              'u'), self.X)
             residual += source_form
 
