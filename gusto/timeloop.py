@@ -24,7 +24,7 @@ __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SplitPrescribedTransport",
 class BaseTimestepper(object, metaclass=ABCMeta):
     """Base class for timesteppers."""
 
-    def __init__(self, equation, io):
+    def __init__(self, equation, io, ensemble=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation.
@@ -33,6 +33,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         self.equation = equation
         self.io = io
+        self.ensemble = ensemble
         self.dt = self.equation.domain.dt
         self.t = self.equation.domain.t
         self.reference_profiles_initialised = False
@@ -177,7 +178,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         # Set up dump, which may also include an initial dump
         with timed_stage("Dump output"):
-            self.io.setup_dump(self.fields, t, pick_up)
+            self.io.setup_dump(self.fields, t, self.ensemble, pick_up)
 
         self.t.assign(t)
 
@@ -249,7 +250,7 @@ class Timestepper(BaseTimestepper):
     """
 
     def __init__(self, equation, scheme, io, spatial_methods=None,
-                 physics_parametrisations=None):
+                 physics_parametrisations=None, ensemble=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
@@ -284,7 +285,7 @@ class Timestepper(BaseTimestepper):
         else:
             self.physics_parametrisations = []
 
-        super().__init__(equation=equation, io=io)
+        super().__init__(equation=equation, io=io, ensemble=ensemble)
 
     @property
     def transporting_velocity(self):
@@ -716,6 +717,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         with timed_stage("Apply forcing terms"):
             logger.info('SIQN: Explicit forcing')
+
             # Put explicit forcing into xstar
             self.forcing.apply(x_after_slow, xn, xstar(self.field_name), "explicit")
 
