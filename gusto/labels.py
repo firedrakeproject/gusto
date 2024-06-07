@@ -95,6 +95,7 @@ explicit = Label("explicit")
 transporting_velocity = Label("transporting_velocity", validator=lambda value: type(value) in [Function, ufl.tensors.ListTensor, ufl.indexed.Indexed])
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)
 linearisation = Label("linearisation", validator=lambda value: type(value) in [LabelledForm, Term])
+mass_weighted = Label("mass_weighted", validator=lambda value: type(value) in [LabelledForm, Term])
 ibp_label = Label("ibp", validator=lambda value: type(value) == IntegrateByParts)
 
 # labels for terms in the equations

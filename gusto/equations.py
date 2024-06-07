@@ -14,7 +14,8 @@ from firedrake.fml import (
 from gusto.fields import PrescribedFields
 from gusto.labels import (
     time_derivative, transport, prognostic, hydrostatic, linearisation,
-    pressure_gradient, coriolis, divergence, gravity, incompressible, sponge
+    mass_weighted, pressure_gradient, coriolis, divergence, gravity,
+    incompressible, sponge
 )
 from gusto.thermodynamics import exner_pressure
 from gusto.common_forms import (
@@ -271,9 +272,29 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             :class:`LabelledForm`: a labelled form containing the mass terms.
         """
 
+        if self.active_tracers is None:
+            tracer_names = []
+        else:
+            tracer_names = [tracer.name for tracer in self.active_tracers]
+
         for i, (test, field_name) in enumerate(zip(self.tests, self.field_names)):
             prog = split(self.X)[i]
             mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
+            for j, ind_tracer_name in enumerate(tracer_names):
+                if field_name == ind_tracer_name:
+                    if self.active_tracers[j].transport_eqn == TransportEquationType.tracer_conservative:
+                        standard_mass_form = mass
+
+                        # We need to generate a mass form that is multiplied by the density
+                        ref_density_idx = self.field_names.index(self.active_tracers[j].density_name)
+                        ref_density = split(self.X)[ref_density_idx]
+                        q = prog*ref_density
+                        mass_weighted_form = time_derivative(subject(prognostic(inner(q, test)*dx,
+                                                             field_name), self.X))
+
+                        # Store the mass form for any conservative transport
+                        # in the mass_weighted label
+                        mass = mass_weighted(standard_mass_form, mass_weighted_form)
             if i == 0:
                 mass_form = time_derivative(mass)
             else:
@@ -433,43 +454,6 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             else:
                 raise TypeError(f'Tracers must be ActiveTracer objects, not {type(tracer)}')
 
-    def generate_tracer_mass_terms(self, active_tracers):
-        """
-        Adds the mass forms for the active tracers to the equation set.
-
-        Args:
-            active_tracers (list): A list of :class:`ActiveTracer` objects that
-                encode the metadata for the active tracers.
-
-        Returns:
-            :class:`LabelledForm`: a labelled form containing the mass
-                terms for the active tracers. This is the usual mass form
-                unless using tracer_conservative, where it is multiplied
-                by the reference density.
-        """
-
-        for i, tracer in enumerate(active_tracers):
-            idx = self.field_names.index(tracer.name)
-            tracer_prog = split(self.X)[idx]
-            tracer_test = self.tests[idx]
-
-            if tracer.transport_eqn == TransportEquationType.tracer_conservative:
-                ref_density_idx = self.field_names.index(tracer.density_name)
-                ref_density = split(self.X)[ref_density_idx]
-                q = tracer_prog*ref_density
-                mass = subject(prognostic(inner(q, tracer_test)*dx,
-                                          self.field_names[idx]), self.X)
-            else:
-                mass = subject(prognostic(inner(tracer_prog, tracer_test)*dx,
-                                          self.field_names[idx]), self.X)
-
-            if i == 0:
-                mass_form = time_derivative(mass)
-            else:
-                mass_form += time_derivative(mass)
-
-        return mass_form
-
     def generate_tracer_transport_terms(self, active_tracers):
         """
         Adds the transport forms for the active tracers to the equation set.
@@ -506,29 +490,35 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 tracer_prog = split(self.X)[idx]
                 tracer_test = self.tests[idx]
                 if tracer.transport_eqn == TransportEquationType.advective:
-                    tracer_adv = prognostic(
+                    tracer_adv = subject(prognostic(
                         advection_form(tracer_test, tracer_prog, u),
-                        tracer.name)
+                        tracer.name), self.X)
                 elif tracer.transport_eqn == TransportEquationType.conservative:
-                    tracer_adv = prognostic(
+                    tracer_adv = subject(prognostic(
                         continuity_form(tracer_test, tracer_prog, u),
-                        tracer.name)
+                        tracer.name), self.X)
                 elif tracer.transport_eqn == TransportEquationType.tracer_conservative:
+                    default_adv_form = subject(prognostic(
+                        advection_form(tracer_test, tracer_prog, u),
+                        tracer.name), self.X)
+
                     ref_density_idx = self.field_names.index(tracer.density_name)
                     ref_density = split(self.X)[ref_density_idx]
-                    tracer_adv = prognostic(
-                        tracer_conservative_form(tracer_test, tracer_prog,
-                                                 ref_density, u), tracer.name)
+                    mass_weighted_tracer_adv = subject(prognostic(
+                        tracer_conservative_form(tracer_test, tracer_prog, ref_density, u),
+                        tracer.name), self.X)
 
+                    # Store the conservative transport form in the mass_weighted label,
+                    # but by default use an advective form.
+                    tracer_adv = mass_weighted(default_adv_form, mass_weighted_tracer_adv)
                 else:
                     raise ValueError(f'Transport eqn {tracer.transport_eqn} not recognised')
-
                 if no_tracer_transported:
                     # We arrive here for the first tracer to be transported
-                    adv_form = subject(tracer_adv, self.X)
+                    adv_form = tracer_adv
                     no_tracer_transported = False
                 else:
-                    adv_form += subject(tracer_adv, self.X)
+                    adv_form += tracer_adv
 
         return adv_form
 
@@ -609,9 +599,8 @@ class CoupledTransportEquation(PrognosticEquationSet):
         self.tests = TestFunctions(W)
         self.X = Function(W)
 
-        # Add mass forms for the tracers, which will use
-        # mass*density for any tracer_conservative terms
-        self.residual = self.generate_tracer_mass_terms(active_tracers)
+        # Add mass forms for the tracers
+        self.residual = self.generate_mass_terms()
 
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)

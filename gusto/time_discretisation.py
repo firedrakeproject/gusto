@@ -21,7 +21,7 @@ from firedrake.utils import cached_property
 
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.labels import (time_derivative, prognostic, physics_label,
-                          implicit, explicit)
+                          implicit, explicit, mass_weighted, transport)
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 
@@ -167,6 +167,24 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 if t.labels[physics_name] not in self.physics_names:
                     self.evaluate_source.append(t.labels[physics_name])
                     self.physics_names.append(t.labels[physics_name])
+
+        # Check if there is any conservative transport, which will
+        # mean that there will be terms with both mass_weighted and
+        # transport labels.
+        conservative_transport_check = self.residual.label_map(
+            lambda t: t.has_label(mass_weighted) and t.has_label(transport),
+            map_if_false=drop)
+        if len(conservative_transport_check) > 0:
+            if len(self.physics_names) > 0:
+                raise ValueError('Conservative transport cannot be applied at the \
+                    same time as a physics scheme.')
+            else:
+                # Replace the terms with a mass_weighted label with the
+                # mass_weighted form. It is important that the labels from
+                # this new form are used.
+                self.residual = self.residual.label_map(
+                    lambda t: t.has_label(mass_weighted),
+                    map_if_true=lambda t: t.get(mass_weighted))
 
         # -------------------------------------------------------------------- #
         # Set up Wrappers
