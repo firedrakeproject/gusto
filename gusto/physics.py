@@ -1057,7 +1057,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
 
     """
 
-    def __init__(self, equation, saturation_curve, L_v=None,
+    def __init__(self, equation, saturation_curve,
                  time_varying_saturation=False, vapour_name='water_vapour',
                  cloud_name='cloud_water', convective_feedback=False,
                  beta1=None, thermal_feedback=False, beta2=None, gamma_v=1,
@@ -1075,11 +1075,6 @@ class SWSaturationAdjustment(PhysicsParametrisation):
                 prognostic field.
             time_varying_saturation (bool, optional): set this to True if the
                 saturation curve is changing in time. Defaults to False.
-            L_v (float, optional): The air expansion factor multiplied by the
-                latent heat due to phase change divided by the specific heat
-                capacity. For the atmosphere we take L_v to be 10, following A.2
-                in Zerroukat and Allen (2015). Defaults to None but must be
-                specified if using thermal feedback.
             vapour_name (str, optional): name of the water vapour variable.
                 Defaults to 'water_vapour'.
             cloud_name (str, optional): name of the cloud variable. Defaults to
@@ -1094,7 +1089,8 @@ class SWSaturationAdjustment(PhysicsParametrisation):
                 affect the buoyancy equation. Defaults to False.
             beta2 (float, optional): Condensation proportionality constant
                 for thermal feedback. Defaults to None, but must be specified
-                if thermal_feedback is True.
+                if thermal_feedback is True. This is equivalent to the L_v
+                parameter in Zerroukat and Allen (2015).
             gamma_v (ufl expression or :class: `function`): The proportion of
                 moist species that is converted when a conversion between
                 vapour and cloud is taking place. Defaults to one, in which
@@ -1134,7 +1130,6 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         if self.thermal_feedback:
             assert "b" in equation.field_names, "Buoyancy field must exist for thermal feedback"
             assert beta2 is not None, "If thermal feedback is used, beta2 parameter must be specified"
-            assert L_v is not None, "If thermal feedback is used, L_v parameter must be specified"
 
         # Obtain function spaces and functions
         W = equation.function_space
@@ -1205,7 +1200,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         if convective_feedback:
             factors.append(self.gamma_v*beta1)
         if thermal_feedback:
-            factors.append(parameters.g*L_v*self.gamma_v*beta2)
+            factors.append(parameters.g*self.gamma_v*beta2)
 
         # Add terms to equations and make interpolators
         self.source = [Function(Vc) for factor in factors]
@@ -1233,15 +1228,15 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         """
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
         if self.convective_feedback:
-            self.D.assign(x_in.split()[self.VD_idx])
+            self.D.assign(x_in.subfunctions[self.VD_idx])
         if self.thermal_feedback:
-            self.b.assign(x_in.split()[self.Vb_idx])
+            self.b.assign(x_in.subfunctions[self.Vb_idx])
         if self.time_varying_saturation:
             self.saturation_curve.interpolate(self.saturation_computation(x_in))
         if self.set_tau_to_dt:
             self.tau.assign(dt)
-        self.water_v.assign(x_in.split()[self.Vv_idx])
-        self.cloud.assign(x_in.split()[self.Vc_idx])
+        self.water_v.assign(x_in.subfunctions[self.Vv_idx])
+        self.cloud.assign(x_in.subfunctions[self.Vc_idx])
         if self.time_varying_gamma_v:
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
         for interpolator in self.source_interpolators:

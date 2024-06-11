@@ -10,7 +10,8 @@ tested.
 """
 
 from firedrake import dx
-from firedrake.parloops import par_loop, READ, WRITE
+from firedrake.parloops import par_loop, READ, WRITE, MIN, MAX, op2
+import numpy as np
 
 
 class LimitMidpoints():
@@ -73,5 +74,98 @@ class LimitMidpoints():
         par_loop(self._kernel, dx,
                  {"field_hat": (field_hat, WRITE),
                   "field_DG1": (field_DG1, READ),
-                  "field_old": (field_old, READ)},
-                 is_loopy_kernel=True)
+                  "field_old": (field_old, READ)})
+
+
+class ClipZero():
+    """Clips any negative field values to be zero."""
+
+    def __init__(self, V):
+        """
+        Args:
+            V (:class:`FunctionSpace`): The space of the field to be clipped.
+        """
+        shapes = {'nDOFs': V.finat_element.space_dimension()}
+        domain = "{{[i]: 0 <= i < {nDOFs}}}".format(**shapes)
+
+        instrs = ("""
+                  for i
+                      if field_in[i] < 0.0
+                          field[i] = 0.0
+                      else
+                          field[i] = field_in[i]
+                      end
+                  end
+                  """)
+
+        self._kernel = (domain, instrs)
+
+    def apply(self, field, field_in):
+        """
+        Performs the par loop.
+
+        Args:
+            field (:class:`Function`): The field to be written to.
+            field_in (:class:`Function`): The field to be clipped.
+        """
+        par_loop(self._kernel, dx,
+                 {"field": (field, WRITE),
+                  "field_in": (field_in, READ)})
+
+
+class MinKernel():
+    """Finds the minimum DoF value of a field."""
+
+    def __init__(self):
+
+        self._kernel = op2.Kernel("""
+            static void minify(double *a, double *b) {
+                a[0] = a[0] > b[0] ? b[0] : a[0];
+            }
+            """, "minify")
+
+    def apply(self, field):
+        """
+        Performs the par loop.
+
+        Args:
+            field (:class:`Function`): The field to take the minimum of.
+
+        Returns:
+            The minimum DoF value of the field.
+        """
+
+        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=field._comm)
+
+        op2.par_loop(self._kernel, field.dof_dset.set, fmin(MIN), field.dat(READ))
+
+        return fmin.data[0]
+
+
+class MaxKernel():
+    """Finds the maximum DoF value of a field."""
+
+    def __init__(self):
+
+        self._kernel = op2.Kernel("""
+            static void maxify(double *a, double *b) {
+                a[0] = a[0] < b[0] ? b[0] : a[0];
+            }
+            """, "maxify")
+
+    def apply(self, field):
+        """
+        Performs the par loop.
+
+        Args:
+            field (:class:`Function`): The field to take the maximum of.
+
+        Returns:
+            The maximum DoF value of the field.
+        """
+
+        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=field._comm)
+
+        op2.par_loop(self._kernel, field.dof_dset.set, fmax(MAX), field.dat(READ))
+
+        return fmax.data[0]

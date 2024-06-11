@@ -6,7 +6,7 @@ using the advective form and a density for the conservative form.
 
 """
 
-from firedrake import norm
+from firedrake import norm, BrokenElement
 from gusto import *
 import pytest
 
@@ -63,3 +63,53 @@ def test_coupled_transport_scalar(tmpdir, geometry, equation_form1, equation_for
         'The transport error for tracer 1 is greater than the permitted tolerance'
     assert error2 < setup.tol, \
         'The transport error for tracer 2 is greater than the permitted tolerance'
+
+
+@pytest.mark.parametrize("m_X_space", ['DG', 'theta'])
+def test_conservative_coupled_transport(tmpdir, m_X_space, tracer_setup):
+
+    setup = tracer_setup(tmpdir, "slice")
+    domain = setup.domain
+    mesh = domain.mesh
+
+    rho_d = ActiveTracer(name='f1', space='DG',
+                         variable_type=TracerVariableType.density,
+                         transport_eqn=TransportEquationType.conservative)
+
+    m_X = ActiveTracer(name='f2', space=m_X_space,
+                       variable_type=TracerVariableType.mixing_ratio,
+                       transport_eqn=TransportEquationType.tracer_conservative,
+                       density_name='f1')
+
+    tracers = [rho_d, m_X]
+
+    V = domain.spaces("HDiv")
+    eqn = CoupledTransportEquation(domain, active_tracers=tracers, Vu=V)
+
+    if m_X_space == 'theta':
+        V_m_X = domain.spaces(m_X_space)
+        Vt_brok = FunctionSpace(mesh, BrokenElement(V_m_X.ufl_element()))
+        suboptions = {'f1': RecoveryOptions(embedding_space=Vt_brok,
+                                            recovered_space=V_m_X,
+                                            project_low_method='recover'),
+                      'f2': EmbeddedDGOptions()}
+        opts = MixedFSOptions(suboptions=suboptions)
+
+        transport_scheme = SSPRK3(domain, options=opts, increment_form=False)
+    else:
+        transport_scheme = SSPRK3(domain, increment_form=False)
+
+    transport_method = [DGUpwind(eqn, 'f1'), DGUpwind(eqn, 'f2')]
+
+    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
+
+    # Initial conditions
+    timestepper.fields("f1").interpolate(setup.f_init)
+    timestepper.fields("f2").interpolate(setup.f_init)
+    timestepper.fields("u").project(setup.uexpr)
+
+    error1, error2 = run(timestepper, setup.tmax, setup.f_end)
+    assert error1 < setup.tol, \
+        'The transport error for rho_d is greater than the permitted tolerance'
+    assert error2 < setup.tol, \
+        'The transport error for m_X is greater than the permitted tolerance'
