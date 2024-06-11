@@ -28,6 +28,7 @@ from gusto import thermodynamics
 from gusto.linear_interpolator import linearinterpolator
 from numpy import (linspace, around)
 import ufl
+import numpy as np
 import math
 from enum import Enum
 from types import FunctionType
@@ -182,7 +183,15 @@ class Relaxation(PhysicsParametrisation):
         """
         label_name = f'relaxation_{variable_name}'
         super().__init__(equation, label_name, parameters=None)
-        self.parameters = equation.parameters
+
+        if equation.domain.on_sphere:
+            x, y, z = SpatialCoordinate(equation.domain.mesh)
+            _, lat, _ = lonlatr_from_xyz(x, y, z)
+        else:
+            # TODO: this could be determined some other way
+            # Take a mid-latitude
+            lat = pi / 4
+
         self.X = Function(equation.X.function_space())
         X = self.X
         theta_idx = equation.field_names.index('theta')
@@ -195,11 +204,14 @@ class Relaxation(PhysicsParametrisation):
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
         self.rho_averaged = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
+        self.exner = Function(Vt)
+        self.exner_interpolator = Interpolator(
+            thermodynamics.exner_pressure(equation.parameters,
+                                          self.rho_averaged, self.theta), self.exner)
 
         # switch to determine if sigma is calculated by a surface term or direct
         # interpolation
-        self.sigma_method = 'interpolation'
+        self.sigma_method = 'column_calculation'
         if self.sigma_method == 'interpolation':
             # interpolation data for height to sigma co-ords
             sigma_vals = linspace(1.0 , 0.01, 33)
@@ -229,24 +241,24 @@ class Relaxation(PhysicsParametrisation):
             self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
             # calculates sigma in the field
             self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
+        
+        elif self.sigma_method =='column_calculation':
+            self.sigma = Function(Vt) 
         else:
             raise NotImplementedError(f'sigma calculation method is not interpolation or calculation')
+        
 
         T0stra = 200 # Stratosphere temp
         T0surf = 315 # Surface temperature at equator
         T0horiz = 60 # Equator to pole temperature difference
         T0vert = 10 # Stability parameter
-        self.kappa = self.parameters.kappa
+        self.kappa = equation.parameters.kappa
         sigmab = 0.7
         d = 24 * 60 * 60 
         taod = 40 * d
         taou = 4 * d
         a = 6.371229e6  # radius of earth
         H = 30975.0
-
-        mesh = equation.domain.mesh
-        x, y, z = SpatialCoordinate(mesh)
-        _, lat, r = lonlatr_from_xyz(x, y, z)
 
         T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner) * cos(lat)**2 / self.kappa) * self.exner
         Teq = conditional(ge(T0stra, T_condition), T0stra, T_condition)
@@ -274,15 +286,24 @@ class Relaxation(PhysicsParametrisation):
         """ 
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
+        self.exner_interpolator.interpolate
 
         if self.sigma_method == 'interpolation':
             self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
+
         elif self.sigma_method =='calculation':
             self.exner_field.interpolate(self.exner)
             self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
                     self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]  
             self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
+
+        elif self.sigma_method == 'column_calculation':
+            # Determine sigma:= exner / exner_surf
+            exner_columnwise, index_data = self.domain.coords.get_column_data(self.exner, self.domain)
+            sigma_columnwise = np.zeros_like(exner_columnwise)
+            for col in range(len(exner_columnwise[:,0])):
+                sigma_columnwise[col,:] = exner_columnwise[col,:] / exner_columnwise[col,0]
+            self.domain.coords.set_field_from_column_data(self.sigma, sigma_columnwise, index_data)
 
 class SaturationAdjustment(PhysicsParametrisation):
     """
@@ -1445,21 +1466,28 @@ class RayleighFriction(PhysicsParametrisation):
         label_name = 'rayleigh_friction'
         super().__init__(equation, label_name, parameters=None)
         self.parameters = equation.parameters
+
         self.X = Function(equation.X.function_space())
         X = self.X
         k = equation.domain.k
         u_idx = equation.field_names.index('u')
+        u = split(X)[u_idx]
         theta_idx = equation.field_names.index('theta')
+        self.theta = X.subfunctions[theta_idx]
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
-        self.theta = X.subfunctions[theta_idx]
-      
-        Vt = equation.domain.spaces('theta')
+        Vt = equation.domain.spaces('theta')              
+        u_hori = u - k*dot(u, k)
+
+
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
         self.rho_averaged = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged,  boundary_method=boundary_method)
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
-        self.sigma_method = 'interpolation'
+        self.exner_interpolator = Interpolator(
+            thermodynamics.exner_pressure(equation.parameters,
+                                          self.rho_averaged, self.theta), self.exner)
+
+        self.sigma_method = 'column_calculation'
         # self.sigma_method = 'interpolation'
         if self.sigma_method == 'interpolation':
             # interpolation data for height to sigma co-ords
@@ -1490,12 +1518,14 @@ class RayleighFriction(PhysicsParametrisation):
             self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]
             # calculates sigma in the field
             self.sigma = Function(Vt).interpolate(self.exner_field / self.exner_surface)
+        
+        elif self.sigma_method == 'column_calculation':
+            self.sigma = Function(Vt)
         else:
             raise NotImplementedError(f'sigma calculation method is not interpolation or calculation')
 
 
-        u = split(X)[u_idx]
-        u_hori = u - k*dot(u, k)
+
         sigmab = 0.7
         self.kappa = self.parameters.kappa
         taofric = 24 * 60 * 60
@@ -1529,12 +1559,20 @@ class RayleighFriction(PhysicsParametrisation):
 
         if self.sigma_method == 'interpolation':
             self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
+
         elif self.sigma_method =='calculation':
             self.exner_field.interpolate(self.exner)
             self.exner_surface.dat.data[self.exner_surface.cell_node_map().values] =  \
                     self.exner_field.dat.data_ro[self.exner_field_map.values[:, self.exner_surface_mask]]  
             self.sigma.interpolate((self.exner_field / self.exner_surface)**-self.kappa)
 
+        elif self.sigma_method == 'column_calculation':
+            # Determine sigma:= exner / exner_surf
+            exner_columnwise, index_data = self.domain.coords.get_column_data(self.exner, self.domain)
+            sigma_columnwise = np.zeros_like(exner_columnwise)
+            for col in range(len(exner_columnwise[:,0])):
+                sigma_columnwise[col,:] = exner_columnwise[col,:] / exner_columnwise[col,0]
+            self.domain.coords.set_field_from_column_data(self.sigma, sigma_columnwise, index_data)
 
 
 class WindDrag(PhysicsParametrisation):
