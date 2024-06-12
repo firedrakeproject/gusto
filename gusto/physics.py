@@ -1533,15 +1533,13 @@ class RayleighFriction(PhysicsParametrisation):
 
         tao_cond = (self.sigma - sigmab) / (1 - sigmab)
         wind_timescale = conditional(ge(0, tao_cond), 0, tao_cond) / taofric
-        self.forcing_expr = -u_hori * wind_timescale 
+        forcing_expr = -u_hori * wind_timescale 
 
         tests = equation.tests
         test = tests[u_idx]
         dx_reduced = dx(degree=4)
-        self.source_expr = inner(test, self.forcing_expr) * dx_reduced
-      #  self.source= Function(HDiv)
-
-        equation.residual -= self.label(subject(prognostic(self.source_expr, 'u'), X), self.evaluate)
+        source_expr = inner(test, forcing_expr) * dx_reduced
+        equation.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
