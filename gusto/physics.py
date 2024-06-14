@@ -183,7 +183,7 @@ class Relaxation(PhysicsParametrisation):
         """
         label_name = f'relaxation_{variable_name}'
         super().__init__(equation, label_name, parameters=None)
-
+        self.domain = equation.domain
         if equation.domain.on_sphere:
             x, y, z = SpatialCoordinate(equation.domain.mesh)
             _, lat, _ = lonlatr_from_xyz(x, y, z)
@@ -1466,7 +1466,7 @@ class RayleighFriction(PhysicsParametrisation):
         label_name = 'rayleigh_friction'
         super().__init__(equation, label_name, parameters=None)
         self.parameters = equation.parameters
-
+        self.domain = equation.domain
         self.X = Function(equation.X.function_space())
         X = self.X
         k = equation.domain.k
@@ -1483,6 +1483,7 @@ class RayleighFriction(PhysicsParametrisation):
         boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
         self.rho_averaged = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged,  boundary_method=boundary_method)
+        self.exner = Function(Vt)
         self.exner_interpolator = Interpolator(
             thermodynamics.exner_pressure(equation.parameters,
                                           self.rho_averaged, self.theta), self.exner)
