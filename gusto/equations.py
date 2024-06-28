@@ -634,7 +634,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
                  space_names=None, linearisation_map='default',
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None,
-                 thermal=False):
+                 thermal=False, sponge=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -669,6 +669,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
             thermal (flag, optional): specifies whether the equations have a
                 thermal or buoyancy variable that feeds back on the momentum.
                 Defaults to False.
+            sponge (:class:`ufl.Expr`, optional): an expression for a sponge
+                layer, used to impement a numerical sponge boundary condition.
+                Defaults to None.
 
         Raises:
             NotImplementedError: active tracers are not yet implemented.
@@ -761,7 +764,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
             residual = (mass_form + adv_form + pressure_gradient_form)
 
         # -------------------------------------------------------------------- #
-        # Extra Terms (Coriolis, Topography and Thermal)
+        # Extra Terms (Coriolis, Topography, Thermal and Sponge)
         # -------------------------------------------------------------------- #
         # TODO: Is there a better way to store the Coriolis / topography fields?
         # The current approach is that these are prescribed fields, stored in
@@ -802,6 +805,14 @@ class ShallowWaterEquations(PrognosticEquationSet):
                                              + 0.5*jump(D*w, n)*avg(b)*dS,
                                              'u'), self.X)
             residual += source_form
+
+        if sponge is not None:
+            sponge_form_u = sponge * w[0] * u[0] * dx
+            sponge_form_v = sponge * w[1] * u[1] * dx
+            print("residual before sponge:", len(residual))
+            residual += subject(prognostic(sponge_form_u, "u"), self.X)
+            residual += subject(prognostic(sponge_form_v, "u"), self.X)
+            print("residual after sponge:", len(residual))
 
         # -------------------------------------------------------------------- #
         # Linearise equations
