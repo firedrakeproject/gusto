@@ -1534,7 +1534,7 @@ class RayleighFriction(PhysicsParametrisation):
 
         tao_cond = (self.sigma - sigmab) / (1 - sigmab)
         wind_timescale = conditional(ge(0, tao_cond), 0, tao_cond) / taofric
-        forcing_expr = -u_hori * wind_timescale 
+        forcing_expr = u_hori * wind_timescale 
 
         tests = equation.tests
         test = tests[u_idx]
@@ -1554,7 +1554,7 @@ class RayleighFriction(PhysicsParametrisation):
         """
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        self.exner = thermodynamics.exner_pressure(self.parameters, self.rho_averaged, self.theta)
+        self.exner_interpolator.interpolate 
 
         if self.sigma_method == 'interpolation':
             self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
