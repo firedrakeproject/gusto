@@ -1480,8 +1480,9 @@ class RayleighFriction(PhysicsParametrisation):
         u_hori = u - k*dot(u, k)
 
 
-        boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
+        boundary_method = BoundaryMethod.extruded if self.domain == 0 else None
         self.rho_averaged = Function(Vt)
+        self.exner = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged,  boundary_method=boundary_method)
         self.exner = Function(Vt)
         self.exner_interpolator = Interpolator(
@@ -1526,7 +1527,6 @@ class RayleighFriction(PhysicsParametrisation):
             raise NotImplementedError(f'sigma calculation method is not interpolation or calculation')
 
 
-
         sigmab = 0.7
         self.kappa = self.parameters.kappa
         taofric = 24 * 60 * 60
@@ -1540,7 +1540,7 @@ class RayleighFriction(PhysicsParametrisation):
         test = tests[u_idx]
         dx_reduced = dx(degree=4)
         source_expr = inner(test, forcing_expr) * dx_reduced
-        equation.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
+        equation.residual += self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -1554,7 +1554,7 @@ class RayleighFriction(PhysicsParametrisation):
         """
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        self.exner_interpolator.interpolate 
+        self.exner_interpolator.interpolate
 
         if self.sigma_method == 'interpolation':
             self.sigma.dat.data[:] = self.sigma_interpolator.interpolate(self.r_Vt.dat.data[:])
