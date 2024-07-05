@@ -5,7 +5,7 @@ from firedrake import (
     TestFunction, Function, sin, pi, inner, dx, div, cross,
     FunctionSpace, MixedFunctionSpace, TestFunctions, TrialFunction,
     FacetNormal, jump, avg, dS_v, dS, DirichletBC, conditional,
-    SpatialCoordinate, split, Constant, action
+    SpatialCoordinate, split, Constant, action, exp
 )
 from firedrake.fml import (
     Term, all_terms, keep, drop, Label, subject,
@@ -634,7 +634,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
                  space_names=None, linearisation_map='default',
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None,
-                 thermal=False, moist_dynamics=False):
+                 thermal=False, moist_dynamics=False, beta2=None, q0=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -673,6 +673,12 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 be solved are the moist thermal shallow water equations, where
                 the moist process are included with the dynamics rather than via
                 physics source terms.
+            beta2 (float, optional): Factor that multiplies the vapour in the
+                equivalent buoyancy definition for the moist dynamics
+                formulation. Defaults to None, but must be specified if
+                moist_dynamics=True.
+            q0 (float, optional): Scaling factor for the saturation function.
+                Defaults to None, but must be specified if moist_dynamics=True.
 
         Raises:
             NotImplementedError: active tracers are not yet implemented.
@@ -700,6 +706,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
             field_names.append('q_t')
             if 'q_t' not in space_names.keys():
                 space_names['q_t'] = 'L2'
+            assert beta2 is not None, "If moist dynamics is used beta2 parameter must be specified"
+            assert q0 is not None, "If moist dynamics is used q0 parameter must be specified"
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives, pressure gradient and
@@ -837,9 +845,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         # moist dynamics terms not involving topography
         if self.moist_dynamics:
-            q0 = 0.007
-            beta2 = 10
-            from firedrake import exp
+            beta2 = Constant(beta2)
             q_sat_expr = q0*g*H/(g*D) * exp(20*(1-b_e/g))
             VD = FunctionSpace(domain.mesh, 'DG', 1)
             q_sat_func = Function(VD).interpolate(q_sat_expr)
