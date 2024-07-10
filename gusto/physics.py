@@ -1476,7 +1476,8 @@ class RayleighFriction(PhysicsParametrisation):
         self.theta = X.subfunctions[theta_idx]
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
-        Vt = equation.domain.spaces('theta')              
+        Vt = equation.domain.spaces('theta') 
+        Vu = equation.domain.spaces('u')            
         u_hori = u - k*dot(u, k)
 
 
@@ -1530,8 +1531,14 @@ class RayleighFriction(PhysicsParametrisation):
         self.kappa = self.parameters.kappa
         taofric = 24 * 60 * 60
 
+        # averaging sigma to HDiv
+        boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
+       
+        self.sigma_averaged = Function(Vu)
+        self.sigma_recoverer = Recoverer(self.sigma, self.rho_averaged, boundary_method=boundary_method)
 
-        tao_cond = (self.sigma - sigmab) / (1 - sigmab)
+
+        tao_cond = (self.sigma_averaged - sigmab) / (1 - sigmab)
         wind_timescale = conditional(ge(0, tao_cond), 0, tao_cond) / taofric
         forcing_expr = u_hori * wind_timescale 
 
@@ -1571,6 +1578,8 @@ class RayleighFriction(PhysicsParametrisation):
             for col in range(len(exner_columnwise[:,0])):
                 sigma_columnwise[col,:] = exner_columnwise[col,:] / exner_columnwise[col,0]
             self.domain.coords.set_field_from_column_data(self.sigma, sigma_columnwise, index_data)
+
+        self.sigma_recoverer.project()
 
 
 class WindDrag(PhysicsParametrisation):
