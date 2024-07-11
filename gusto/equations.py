@@ -172,7 +172,8 @@ class AdvectionDiffusionEquation(PrognosticEquation):
                 equation's prognostic is defined on.
             field_name (str): name of the prognostic field.
             Vu (:class:`FunctionSpace`, optional): the function space for the
-                velocity field. If this is  Defaults to None.
+                velocity field. Defaults to None in which case use the
+                HDiv space.
             diffusion_parameters (:class:`DiffusionParameters`, optional):
                 parameters describing the diffusion to be applied.
         """
