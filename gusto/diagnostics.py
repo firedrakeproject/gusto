@@ -1,6 +1,7 @@
 """Common diagnostic fields."""
 
-from firedrake import assemble, dot, dx, Function, sqrt, \
+
+from firedrake import assemble, dot, dx, Function, sqrt, ln, \
     TestFunction, TrialFunction, Constant, grad, inner, curl, \
     LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
     ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
@@ -11,10 +12,10 @@ from firedrake.assign import Assigner
 from ufl.domain import extract_unique_domain
 
 from abc import ABCMeta, abstractmethod, abstractproperty
+from gusto.equations import CompressibleEulerEquations
 import gusto.thermodynamics as tde
 from gusto.coord_transforms import rotated_lonlatr_vectors
 from gusto.recovery import Recoverer, BoundaryMethod
-from gusto.equations import CompressibleEulerEquations
 from gusto.active_tracers import TracerVariableType, Phases
 from gusto.logging import logger
 from gusto.kernels import MinKernel, MaxKernel
@@ -22,8 +23,8 @@ import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
            "ZComponent", "MeridionalComponent", "ZonalComponent", "RadialComponent",
-           "RichardsonNumber", "Energy", "KineticEnergy", "ShallowWaterKineticEnergy",
-           "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy",
+           "RichardsonNumber", "Entropy", "PhysicalEntropy", "DynamicEntropy", "Energy", "KineticEnergy",
+           "ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy",
            "CompressibleKineticEnergy", "Exner", "Sum", "Difference", "SteadyStateError",
            "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
@@ -679,6 +680,66 @@ class RichardsonNumber(DiagnosticField):
             denom += gradu[i, z_dim]**2
         Nsq = self.factor*grad_density[z_dim]
         self.expr = Nsq/denom
+        super().setup(domain, state_fields)
+
+
+class Entropy(DiagnosticField):
+    """Base diagnostic field for entropy diagnostic """
+
+    def __init__(self, equations, space=None, method="interpolate"):
+        """
+        Args:
+            equations (:class:`PrognosticEquationSet`): the equation set being
+                solved by the model.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.equations = equations
+        if isinstance(equations, CompressibleEulerEquations):
+            required_fields = ['rho', 'theta']
+        else:
+            raise NotImplementedError(f'entropy not yet implemented for {type(equations)}')
+
+        super().__init__(space=space, method=method, required_fields=tuple(required_fields))
+
+
+class PhysicalEntropy(Entropy):
+    u"""Physical entropy ρ*ln(θ) for Compressible Euler equations"""
+    name = "PhysicalEntropy"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        rho = state_fields('rho')
+        theta = state_fields('theta')
+        self.expr = rho * ln(theta)
+        super().setup(domain, state_fields)
+
+
+class DynamicEntropy(Entropy):
+    u"""Dynamic entropy 0.5*ρ*θ^2 for Compressible Euler equations"""
+    name = "DynamicEntropy"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        rho = state_fields('rho')
+        theta = state_fields('theta')
+        self.expr = 0.5 * rho * theta**2
         super().setup(domain, state_fields)
 
 
@@ -1577,9 +1638,9 @@ class Vorticity(DiagnosticField):
 
         if self.method != 'solve':
             if vorticity_type == "potential":
-                self.expr = curl(u + f) / D
+                self.expr = (curl(u) + f) / D
             elif vorticity_type == "absolute":
-                self.expr = curl(u + f)
+                self.expr = curl(u) + f
             elif vorticity_type == "relative":
                 self.expr = curl(u)
 
