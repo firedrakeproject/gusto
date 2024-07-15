@@ -847,10 +847,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         if self.moist_dynamics:
             beta2 = Constant(beta2)
             q_sat_expr = q0*g*H/(g*D) * exp(20*(1-b_e/g))
-            VD = FunctionSpace(domain.mesh, 'DG', 1)
-            q_sat_func = Function(VD).interpolate(q_sat_expr)
-            q_v = Function(VD)
-            q_v.interpolate(conditional(q_t < q_sat_func, q_t, q_sat_func))
+            q_v = conditional(q_t < q_sat_expr, q_t, q_sat_expr)
             n = FacetNormal(domain.mesh)
             source_form = subject(prognostic(-D*div(b_e*w)*dx
                                              - 0.5*b_e*div(D*w)*dx
