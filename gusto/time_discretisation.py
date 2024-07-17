@@ -961,7 +961,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             self.x1.assign(x0)
 
             for i in range(stage):
-                self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
+                self.x1.assign(self.x1 + self.dt*Constant(self.butcher_matrix[stage-1, i])*self.k[i])
             for evaluate in self.evaluate_source:
                 evaluate(self.x1, self.dt)
             if self.limiter is not None:
@@ -973,7 +973,7 @@ class ExplicitMultistage(ExplicitTimeDiscretisation):
             if (stage == self.nStages - 1):
                 self.x1.assign(x0)
                 for i in range(self.nStages):
-                    self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage, i]*self.k[i])
+                    self.x1.assign(self.x1 + self.dt*Constant(self.butcher_matrix[stage, i])*self.k[i])
                 self.x1.assign(self.x1)
 
                 if self.limiter is not None:
