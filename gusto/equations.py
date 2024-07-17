@@ -811,21 +811,13 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 
-        if bexpr is not None:
+        if bexpr is not None and not self.moist_dynamics:
             topography = self.prescribed_fields('topography', domain.spaces('DG')).interpolate(bexpr)
             if self.thermal:
                 n = FacetNormal(domain.mesh)
                 topography_form = subject(prognostic
                                           (-topography*div(b*w)*dx
                                            + jump(b*w, n)*avg(topography)*dS,
-                                           'u'), self.X)
-            elif self.moist_dynamics:
-                n = FacetNormal(domain.mesh)
-                topography_form = subject(prognostic
-                                          (-topography*div(b_e*w)*dx
-                                           + jump(b_e*w, n)*avg(topography)*dS
-                                           + beta2*topography*div(q_v*w)*dx
-                                           - beta2*jump(q_v*w, n)*avg(topography)*dS,
                                            'u'), self.X)
             else:
                 topography_form = subject(prognostic
@@ -859,6 +851,18 @@ class ShallowWaterEquations(PrognosticEquationSet):
                                              - beta2*0.5*jump(D*w, n)*avg(q_v)*dS,
                                              'u'), self.X)
             residual += source_form
+
+            # moist dynamics terms involving topography
+            if bexpr is not None:
+                topography = self.prescribed_fields('topography', domain.spaces('DG')).interpolate(bexpr)
+                n = FacetNormal(domain.mesh)
+                topography_form = subject(prognostic
+                                          (-topography*div(b_e*w)*dx
+                                           + jump(b_e*w, n)*avg(topography)*dS
+                                           + beta2*topography*div(q_v*w)*dx
+                                           - beta2*jump(q_v*w, n)*avg(topography)*dS,
+                                           'u'), self.X)
+                residual += topography_form
 
         # -------------------------------------------------------------------- #
         # Linearise equations
