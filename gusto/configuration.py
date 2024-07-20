@@ -8,7 +8,8 @@ __all__ = [
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
     "BoussinesqParameters", "CompressibleParameters",
     "ShallowWaterParameters",
-    "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions", "MixedFSOptions",
+    "EmbeddedDGOptions", "RecoveryOptions", "ConservativeRecoveryOptions",
+    "SUPGOptions", "MixedFSOptions",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
 ]
 
@@ -173,6 +174,15 @@ class RecoveryOptions(WrapperOptions):
     project_high_method = 'interpolate'
     project_low_method = 'project'
     broken_method = 'interpolate'
+
+
+class ConservativeRecoveryOptions(RecoveryOptions):
+    """Specifies options for a conservative recovery wrapper method."""
+
+    name = "conservative_recovered"
+    density_name = None
+    project_high_method = 'conservative_projection'
+    project_low_method = 'conservative_projection'
 
 
 class SUPGOptions(WrapperOptions):
