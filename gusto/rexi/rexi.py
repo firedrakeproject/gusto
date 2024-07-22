@@ -72,19 +72,20 @@ class Rexi(object):
                 self.N = m
                 self.idx = rank*m + p
 
-        # set dummy constants for tau and A_i
+        # set dummy constants for tau and A_i and Beta
+        self.br = Constant(1.)
+        self.bi = Constant(1.)
         self.ar = Constant(1.)
         self.ai = Constant(1.)
         self.tau = Constant(1.)
 
         # set up functions, problem and solver
         W_ = equation.function_space
-        self.w_out = Function(W_)
         W = cpx.FunctionSpace(W_)
 
-        self.U0 = Function(W)
+        self.U0 = Function(W).assign(0)
         self.w = Function(W)
-        self.w_ = Function(W)
+        self.wrk = Function(W_)
         tests = TestFunctions(W)
         trials = TrialFunctions(W)
         tests_r = tests[::2]
@@ -202,9 +203,7 @@ class Rexi(object):
         # assign tau and U0 and initialise solution to 0.
         self.tau.assign(dt)
         cpx.set_real(self.U0, x_in)
-        self.w_.assign(0.)
-        w_ = self.w_.subfunctions
-        w = self.w.subfunctions
+        x_out.assign(0.)
 
         # loop over solvers, assigning a_i, solving and accumulating the sum
         for i in range(self.N):
@@ -212,14 +211,17 @@ class Rexi(object):
             self.ar.assign(self.alpha[j].real)
             self.ai.assign(self.alpha[j].imag)
             self.solver.solve()
-            for k in range(len(x_in.subfunctions)):
-                wk = w_[2*k]
-                wk += Constant(self.beta[j].real)*w[2*k] - Constant(self.beta[j].imag)*w[2*k+1]
+
+            self.br.assign(self.beta[j].real)
+            self.bi.assign(self.beta[j].imag)
+
+            cpx.get_real(self.w, self.wrk)
+            x_out += self.br*self.wrk
+
+            cpx.get_imag(self.w, self.wrk)
+            x_out -= self.bi*self.wrk
 
         # in parallel we have to accumulate the sum over all processes
-        cpx.get_real(self.w_, self.w_out)
         if self.manager is not None:
-            self.manager.allreduce(self.w_out, x_out)
-            self.w_out.assign(x_out)
-        else:
-            x_out.assign(self.w_out)
+            self.wrk.assign(x_out)
+            self.manager.allreduce(self.wrk, x_out)
