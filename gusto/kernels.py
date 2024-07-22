@@ -36,22 +36,23 @@ class LimitMidpoints():
         shapes = {'nDOFs': Vt_brok.finat_element.space_dimension(),
                   'nDOFs_base': int(Vt_brok.finat_element.space_dimension() / 3)}
         domain = "{{[i,j]: 0 <= i < {nDOFs_base} and 0 <= j < 2}}".format(**shapes)
-
+        # field_hat is in the broken theta space, assume DoFs are ordered
+        # (0,1,2) in the vertical direction
         instrs = ("""
                   <float64> max_value = 0.0
                   <float64> min_value = 0.0
                   for i
                       for j
-                          field_hat[i*3+j] = field_DG1[i*2+j]
+                          field_hat[i*3+2*j] = field_DG1[i*2+j]
                       end
                       max_value = fmax(field_DG1[i*2], field_DG1[i*2+1])
                       min_value = fmin(field_DG1[i*2], field_DG1[i*2+1])
-                      if field_old[i*3+2] > max_value
-                          field_hat[i*3+2] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
-                      elif field_old[i*3+2] < min_value
-                          field_hat[i*3+2] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
+                      if field_old[i*3+1] > max_value
+                          field_hat[i*3+1] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
+                      elif field_old[i*3+1] < min_value
+                          field_hat[i*3+1] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
                       else
-                          field_hat[i*3+2] = field_old[i*3+2]
+                          field_hat[i*3+1] = field_old[i*3+1]
                       end
                   end
                   """)
