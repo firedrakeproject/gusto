@@ -1,13 +1,14 @@
 from gusto.rexi.rexi_coefficients import *
 from firedrake import Function, TrialFunctions, TestFunctions, \
     Constant, DirichletBC, \
-    LinearVariationalProblem, LinearVariationalSolver, MixedFunctionSpace
+    LinearVariationalProblem, LinearVariationalSolver
 from gusto.labels import time_derivative, prognostic, linearisation
 from firedrake.fml import (
     Term, all_terms, drop, subject,
     replace_subject, replace_test_function, replace_trial_function
 )
 from firedrake.formmanipulation import split_form
+from asQ.complex_proxy import mixed as cpx
 
 
 NullTerm = Term(None)
@@ -79,11 +80,8 @@ class Rexi(object):
         # set up functions, problem and solver
         W_ = equation.function_space
         self.w_out = Function(W_)
-        spaces = []
-        for i in range(len(W_)):
-            spaces.append(W_[i])
-            spaces.append(W_[i])
-        W = MixedFunctionSpace(spaces)
+        W = cpx.FunctionSpace(W_)
+
         self.U0 = Function(W)
         self.w_sum = Function(W)
         self.w = Function(W)
