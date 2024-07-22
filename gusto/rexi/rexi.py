@@ -83,7 +83,6 @@ class Rexi(object):
         W = cpx.FunctionSpace(W_)
 
         self.U0 = Function(W)
-        self.w_sum = Function(W)
         self.w = Function(W)
         self.w_ = Function(W)
         tests = TestFunctions(W)
@@ -218,10 +217,9 @@ class Rexi(object):
                 wk += Constant(self.beta[j].real)*w[2*k] - Constant(self.beta[j].imag)*w[2*k+1]
 
         # in parallel we have to accumulate the sum over all processes
+        cpx.get_real(self.w_, self.w_out)
         if self.manager is not None:
-            self.manager.allreduce(self.w_, self.w_sum)
+            self.manager.allreduce(self.w_out, x_out)
+            self.w_out.assign(x_out)
         else:
-            self.w_sum.assign(self.w_)
-
-        cpx.get_real(self.w_sum, self.w_out)
-        cpx.get_real(self.w_sum, x_out)
+            x_out.assign(self.w_out)
