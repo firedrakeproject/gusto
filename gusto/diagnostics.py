@@ -333,7 +333,7 @@ class CourantNumber(DiagnosticField):
         n = FacetNormal(domain.mesh)
 
         # Check if the velocity is a vector or scalar field
-        if domain.mesh.geometric_dimension() == 1:
+        if len(u.function_space().shape) == 0:
             un = 0.5*(-u_expr * n[0] + abs(-u_expr * n[0]))
         else:
             un = 0.5*(inner(-u_expr, n) + abs(inner(-u_expr, n)))
