@@ -331,7 +331,12 @@ class CourantNumber(DiagnosticField):
 
         # Set up form for DG flux
         n = FacetNormal(domain.mesh)
-        un = 0.5*(inner(-u_expr, n) + abs(inner(-u_expr, n)))
+
+        # Check if the velocity is a vector or scalar field
+        if u_expr.function_space().mesh().geometric_dimension() == 1:
+            un = 0.5*(-u_expr * n[0] + abs(-u_expr * n[0]))
+        else:
+            un = 0.5*(inner(-u_expr, n) + abs(inner(-u_expr, n)))
         self.cell_flux_form = 2*avg(un*test)*dS_calc + un*test*ds_calc
 
         # Final Courant number expression
