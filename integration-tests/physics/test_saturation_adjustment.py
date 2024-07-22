@@ -10,7 +10,7 @@ from gusto import *
 from firedrake import (norm, Constant, PeriodicIntervalMesh,
                        SpatialCoordinate, ExtrudedMesh, Function, sqrt,
                        conditional)
-from firedrake.fml import identity
+from firedrake.fml import identity, drop
 from netCDF4 import Dataset
 import pytest
 

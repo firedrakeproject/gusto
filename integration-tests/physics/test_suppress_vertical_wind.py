@@ -6,8 +6,8 @@ up period.
 from gusto import *
 from gusto.core.labels import physics_label
 from firedrake import (Constant, PeriodicIntervalMesh, as_vector, sin, norm,
-                       SpatialCoordinate, ExtrudedMesh, Function, dot)
-from firedrake.fml import identity
+                       SpatialCoordinate, ExtrudedMesh, Function, dot, pi)
+from firedrake.fml import identity, drop
 
 
 def run_suppress_vertical_wind(dirname):

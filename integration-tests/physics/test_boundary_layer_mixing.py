@@ -6,7 +6,7 @@ from gusto import *
 from gusto.core.labels import physics_label
 from firedrake import (VectorFunctionSpace, PeriodicIntervalMesh, as_vector,
                        exp, SpatialCoordinate, ExtrudedMesh, Function)
-from firedrake.fml import identity
+from firedrake.fml import identity, drop
 import pytest
 
 
