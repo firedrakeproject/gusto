@@ -1476,7 +1476,8 @@ class RayleighFriction(PhysicsParametrisation):
         self.theta = X.subfunctions[theta_idx]
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
-        Vt = equation.domain.spaces('theta') 
+        Vt = equation.domain.spaces('theta')
+        breakpoint() 
         Vu = equation.domain.spaces('u')            
         u_hori = u - k*dot(u, k)
 
