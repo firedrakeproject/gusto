@@ -1,7 +1,7 @@
 """Gusto Logging Module
 
 All logging functionality for Gusto is controlled from
-``gusto.logging``. A logger object ``logging.getLogger("gusto")`` is
+``gusto.core.logging``. A logger object ``logging.getLogger("gusto")`` is
 created internally.
 
 The primary means of configuration is via environment variables, the

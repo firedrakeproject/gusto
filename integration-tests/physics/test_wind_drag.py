@@ -3,8 +3,8 @@ This tests the physics routine to apply drag to the wind.
 """
 
 from gusto import *
-import gusto.thermodynamics as td
-from gusto.labels import physics_label
+import gusto.equations.thermodynamics as td
+from gusto.core.labels import physics_label
 from firedrake import (norm, Constant, PeriodicIntervalMesh, as_vector, dot,
                        SpatialCoordinate, ExtrudedMesh, Function, conditional)
 from firedrake.fml import identity

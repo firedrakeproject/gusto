@@ -7,7 +7,7 @@ from firedrake import (dx, dot, grad, div, inner, outer, cross, curl, split,
 from firedrake.fml import subject, drop
 from gusto.core.configuration import TransportEquationType
 from gusto.core.labels import (transport, transporting_velocity, diffusion,
-                          prognostic, linearisation)
+                               prognostic, linearisation)
 
 __all__ = ["advection_form", "advection_form_1d", "continuity_form",
            "continuity_form_1d", "vector_invariant_form",

@@ -5,8 +5,8 @@ that afterwards the surface temperature is correct.
 """
 
 from gusto import *
-import gusto.thermodynamics as td
-from gusto.labels import physics_label
+import gusto.equations.thermodynamics as td
+from gusto.core.labels import physics_label
 from firedrake import (norm, Constant, PeriodicIntervalMesh, as_vector,
                        SpatialCoordinate, ExtrudedMesh, Function, conditional)
 from firedrake.fml import identity

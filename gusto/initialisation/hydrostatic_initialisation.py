@@ -1,4 +1,4 @@
-"""Tools for computing initial conditions, such as hydrostatic balance."""
+"""Tools for computing hydrostatically balanced initial conditions."""
 
 from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     TestFunction, TrialFunction, \

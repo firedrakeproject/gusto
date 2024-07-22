@@ -353,7 +353,7 @@ class CompressibleSolver(TimesteppingSolver):
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.hybridized_solver.snes.ksp)
         # Log residuals on the trace system too
-        from gusto.logging import attach_custom_monitor
+        from gusto.core.logging import attach_custom_monitor
         python_context = self.hybridized_solver.snes.ksp.pc.getPythonContext()
         attach_custom_monitor(python_context, logging_ksp_monitor_true_residual)
 

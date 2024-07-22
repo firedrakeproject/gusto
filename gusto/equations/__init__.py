@@ -1,0 +1,9 @@
+from gusto.equations.active_tracers import *                 # noqa
+from gusto.equations.common_forms import *                   # noqa
+from gusto.equations.prognostic_equations import *           # noqa
+from gusto.equations.transport_equations import *            # noqa
+from gusto.equations.diffusion_equations import *            # noqa
+from gusto.equations.advection_diffusion_equations import *  # noqa
+from gusto.equations.shallow_water_equations import *        # noqa
+from gusto.equations.boussinesq_equations import *           # noqa
+from gusto.equations.compressible_euler_equations import *   # noqa
