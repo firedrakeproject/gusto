@@ -1,5 +1,5 @@
 from gusto.rexi.rexi_coefficients import *
-from firedrake import Function, TrialFunctions, TestFunctions, \
+from firedrake import Function, TrialFunction, TestFunction, \
     Constant, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver
 from gusto.labels import time_derivative, prognostic, linearisation
@@ -86,12 +86,16 @@ class Rexi(object):
         self.U0 = Function(W).assign(0)
         self.w = Function(W)
         self.wrk = Function(W_)
-        tests = TestFunctions(W)
-        trials = TrialFunctions(W)
-        tests_r = tests[::2]
-        tests_i = tests[1::2]
-        trials_r = trials[::2]
-        trials_i = trials[1::2]
+
+        test = TestFunction(W)
+        trial = TrialFunction(W)
+        tests_r = cpx.split(test, cpx.re)
+        tests_i = cpx.split(test, cpx.im)
+        trials_r = cpx.split(trial, cpx.re)
+        trials_i = cpx.split(trial, cpx.im)
+
+        U0r = cpx.subfunctions(self.U0, cpx.re)
+        U0i = cpx.subfunctions(self.U0, cpx.im)
 
         ar, ai = self.ar, self.ai
         a = NullTerm
@@ -119,8 +123,8 @@ class Rexi(object):
             )
 
             L += (
-                m.label_map(all_terms, replace_subject(self.U0.subfunctions[2*i], i))
-                + m.label_map(all_terms, replace_subject(self.U0.subfunctions[2*i+1], old_idx=i))
+                m.label_map(all_terms, replace_subject(U0r[i], i))
+                + m.label_map(all_terms, replace_subject(U0i[i], old_idx=i))
             )
 
             m = mass_form.label_map(
@@ -135,9 +139,9 @@ class Rexi(object):
 
             L += (
                 m.label_map(all_terms,
-                            replace_subject(self.U0.subfunctions[2*i], i))
+                            replace_subject(U0r[i], i))
                 - m.label_map(all_terms,
-                              replace_subject(self.U0.subfunctions[2*i+1], i))
+                              replace_subject(U0i[i], i))
             )
 
             L_form = ith_res.label_map(
