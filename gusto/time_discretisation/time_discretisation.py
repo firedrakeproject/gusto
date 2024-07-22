@@ -19,11 +19,11 @@ from firedrake.fml import (
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
-from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
-from gusto.labels import (time_derivative, prognostic, physics_label,
+from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
+from gusto.core.labels import (time_derivative, prognostic, physics_label,
                           implicit, explicit)
-from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
-from gusto.wrappers import *
+from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
+from gusto.time_discretisation.wrappers import *
 
 
 __all__ = ["ForwardEuler", "BackwardEuler", "ExplicitMultistage",

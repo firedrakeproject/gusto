@@ -11,13 +11,13 @@ from firedrake.fml import (
     Term, all_terms, keep, drop, Label, subject,
     replace_subject, replace_trial_function
 )
-from gusto.fields import PrescribedFields
-from gusto.labels import (
+from gusto.core import PrescribedFields
+from gusto.core.labels import (
     time_derivative, transport, prognostic, hydrostatic, linearisation,
     pressure_gradient, coriolis, divergence, gravity, incompressible, sponge
 )
-from gusto.thermodynamics import exner_pressure
-from gusto.common_forms import (
+from gusto.equations.thermodynamics import exner_pressure
+from gusto.equations.common_forms import (
     advection_form, advection_form_1d, continuity_form,
     continuity_form_1d, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form,
@@ -25,8 +25,8 @@ from gusto.common_forms import (
     linear_continuity_form, linear_continuity_form_1d, linear_advection_form,
     tracer_conservative_form
 )
-from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
-from gusto.configuration import TransportEquationType
+from gusto.equations.active_tracers import ActiveTracer, Phases, TracerVariableType
+from gusto.core.configuration import TransportEquationType
 import ufl
 
 

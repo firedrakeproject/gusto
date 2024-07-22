@@ -16,13 +16,13 @@ from firedrake import (
     NonlinearVariationalSolver
 )
 from firedrake.fml import identity, Term, subject
-from gusto.active_tracers import Phases, TracerVariableType
-from gusto.configuration import BoundaryLayerParameters
+from gusto.equations import Phases, TracerVariableType
+from gusto.core.configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.labels import PhysicsLabel, transporting_velocity, transport, prognostic
-from gusto.logging import logger
-from gusto import thermodynamics
+from gusto.core.labels import PhysicsLabel, transporting_velocity, transport, prognostic
+from gusto.core.logging import logger
+from gusto.equations import thermodynamics
 import ufl
 import math
 from enum import Enum

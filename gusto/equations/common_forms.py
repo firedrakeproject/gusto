@@ -5,8 +5,8 @@ geophysical fluid dynamics."""
 from firedrake import (dx, dot, grad, div, inner, outer, cross, curl, split,
                        TestFunction, TestFunctions, TrialFunctions)
 from firedrake.fml import subject, drop
-from gusto.configuration import TransportEquationType
-from gusto.labels import (transport, transporting_velocity, diffusion,
+from gusto.core.configuration import TransportEquationType
+from gusto.core.labels import (transport, transporting_velocity, diffusion,
                           prognostic, linearisation)
 
 __all__ = ["advection_form", "advection_form_1d", "continuity_form",

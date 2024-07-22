@@ -5,16 +5,16 @@ from firedrake import Function, Projector, split, Constant
 from firedrake.fml import drop, Label, Term
 from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
-from gusto.fields import TimeLevelFields, StateFields
+from gusto.core import TimeLevelFields, StateFields
 from gusto.forcing import Forcing
-from gusto.labels import (
+from gusto.core.labels import (
     transport, diffusion, time_derivative, linearisation, prognostic,
     physics_label, transporting_velocity
 )
-from gusto.linear_solvers import LinearTimesteppingSolver
-from gusto.logging import logger
-from gusto.time_discretisation import ExplicitTimeDiscretisation
-from gusto.transport_methods import TransportMethod
+from gusto.solvers import LinearTimesteppingSolver
+from gusto.core.logging import logger
+from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
+from gusto.spatial_methods.transport_methods import TransportMethod
 import ufl
 
 __all__ = ["Timestepper", "SplitPhysicsTimestepper", "SplitPrescribedTransport",

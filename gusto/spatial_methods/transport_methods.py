@@ -7,10 +7,10 @@ from firedrake import (
     grad, div, FacetNormal, Function, sign, avg, cross, curl, split
 )
 from firedrake.fml import Term, keep, drop
-from gusto.configuration import IntegrateByParts, TransportEquationType
-from gusto.labels import prognostic, transport, transporting_velocity, ibp_label
-from gusto.logging import logger
-from gusto.spatial_methods import SpatialMethod
+from gusto.core.configuration import IntegrateByParts, TransportEquationType
+from gusto.core.labels import prognostic, transport, transporting_velocity, ibp_label
+from gusto.core.logging import logger
+from gusto.spatial_methods.spatial_methods import SpatialMethod
 
 __all__ = ["DefaultTransport", "DGUpwind"]
 

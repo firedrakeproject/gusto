@@ -5,11 +5,11 @@ from firedrake import (
     LinearVariationalSolver
 )
 from firedrake.fml import drop, replace_subject
-from gusto.labels import (
+from gusto.core.labels import (
     transport, diffusion, time_derivative, hydrostatic, physics_label,
     sponge, incompressible
 )
-from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
+from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 
 
 __all__ = ["Forcing"]

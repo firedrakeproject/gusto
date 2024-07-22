@@ -3,7 +3,7 @@
 import ufl
 from firedrake import Function
 from firedrake.fml import Term, Label, LabelledForm
-from gusto.configuration import IntegrateByParts, TransportEquationType
+from gusto.core.configuration import IntegrateByParts, TransportEquationType
 from types import MethodType
 
 dynamics_label = Label("dynamics", validator=lambda value: type(value) is str)

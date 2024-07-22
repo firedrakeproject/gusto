@@ -1,8 +1,8 @@
 """Provides discretisations for diffusion terms."""
 
 from firedrake import inner, outer, grad, avg, dx, dS_h, dS_v, dS, FacetNormal
-from gusto.labels import diffusion
-from gusto.spatial_methods import SpatialMethod
+from gusto.core.labels import diffusion
+from gusto.spatial_methods.spatial_methods import SpatialMethod
 
 
 __all__ = ["InteriorPenaltyDiffusion", "CGDiffusion"]

@@ -4,8 +4,8 @@ the set of compatible function spaces defined upon it. It also contains the
 model's time interval.
 """
 
-from gusto.coordinates import Coordinates
-from gusto.function_spaces import Spaces, check_degree_args
+from gusto.core.coordinates import Coordinates
+from gusto.core.function_spaces import Spaces, check_degree_args
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
                        inner, grad, VectorFunctionSpace, Function, FunctionSpace,
                        perp)

@@ -3,7 +3,7 @@ This module contains routines to generate the compatible function spaces to be
 used by the model.
 """
 
-from gusto import logger
+from gusto.core.logging import logger
 from firedrake import (HCurl, HDiv, FunctionSpace, FiniteElement,
                        TensorProductElement, interval)
 

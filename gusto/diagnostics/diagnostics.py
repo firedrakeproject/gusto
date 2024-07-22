@@ -13,12 +13,12 @@ from ufl.domain import extract_unique_domain
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.equations import CompressibleEulerEquations
-import gusto.thermodynamics as tde
-from gusto.coord_transforms import rotated_lonlatr_vectors
+import gusto.equations.thermodynamics as tde
+from gusto.core.coord_transforms import rotated_lonlatr_vectors
 from gusto.recovery import Recoverer, BoundaryMethod
-from gusto.active_tracers import TracerVariableType, Phases
-from gusto.logging import logger
-from gusto.kernels import MinKernel, MaxKernel
+from gusto.equations import TracerVariableType, Phases
+from gusto.core.logging import logger
+from gusto.core.kernels import MinKernel, MaxKernel
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",

@@ -16,10 +16,10 @@ from firedrake.fml import Term, drop
 from firedrake.petsc import flatten_parameters
 from pyop2.profiling import timed_function, timed_region
 
-from gusto.active_tracers import TracerVariableType
-from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
-from gusto.labels import linearisation, time_derivative, hydrostatic
-from gusto import thermodynamics
+from gusto.equations.active_tracers import TracerVariableType
+from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
+from gusto.core.labels import linearisation, time_derivative, hydrostatic
+from gusto.equations import thermodynamics
 from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 

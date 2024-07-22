@@ -6,13 +6,13 @@ from netCDF4 import Dataset
 import sys
 import time
 from gusto.diagnostics import Diagnostics, CourantNumber
-from gusto.meshes import get_flat_latlon_mesh
+from gusto.core.meshes import get_flat_latlon_mesh
 from firedrake import (Function, functionspaceimpl, Constant,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 from firedrake.output import VTKFile
 from pyop2.mpi import MPI
 import numpy as np
-from gusto.logging import logger, update_logfile_location
+from gusto.core.logging import logger, update_logfile_location
 
 __all__ = ["pick_up_mesh", "IO"]
 

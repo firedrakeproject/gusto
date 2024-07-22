@@ -10,9 +10,9 @@ from firedrake import (
     VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace
 )
 from firedrake.fml import Term
-from gusto.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
+from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
 from gusto.recovery import Recoverer, ReversibleRecoverer
-from gusto.labels import transporting_velocity
+from gusto.core.labels import transporting_velocity
 import ufl
 
 __all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper", "MixedFSWrapper"]
