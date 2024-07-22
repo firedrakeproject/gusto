@@ -168,13 +168,15 @@ class Rexi(object):
         else:
             aP = None
 
-        # Boundary conditions (assumes extruded mesh)
-        # BCs are declared for the plain velocity space. As we need them in
-        # extended mixed problem, we replicate the BCs but for subspace of W
-        bcs = []
-        for bc in equation.bcs['u']:
-            bcs.append(DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain))
-            bcs.append(DirichletBC(W.sub(1), bc.function_arg, bc.sub_domain))
+        # BCs are declared for the plain velocity space.
+        # First we need to transfer the velocity boundary conditions to the
+        # velocity component of the mixed space.
+        uidx = equation.field_names.index('u')
+        ubcs = (DirichletBC(W_.sub(uidx), bc.function_arg, bc.sub_domain)
+                for bc in equation.bcs['u'])
+
+        # now we can transfer the velocity boundary conditions to the complex space
+        bcs = tuple(cb for bc in ubcs for cb in cpx.DirichletBC(W, W_, bc))
 
         rexi_prob = LinearVariationalProblem(a.form, L.form, self.w, aP=aP,
                                              bcs=bcs,
