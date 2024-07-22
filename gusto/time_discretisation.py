@@ -21,7 +21,7 @@ from firedrake.utils import cached_property
 
 from gusto.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.labels import (time_derivative, prognostic, physics_label,
-                          implicit, explicit, mass_weighted, transport)
+                          implicit, explicit, mass_weighted)
 from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.wrappers import *
 
@@ -168,7 +168,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     self.evaluate_source.append(t.labels[physics_name])
                     self.physics_names.append(t.labels[physics_name])
 
-
         # Check if we have any mass_weighted terms:
         if len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0:
 
@@ -178,9 +177,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             for field in equation.field_names:
                 field_terms = self.residual.label_map(lambda t: t.get(prognostic) == field and not t.has_label(time_derivative), map_if_false=drop)
 
-                if len(field_terms.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0  and len(field_terms.label_map(lambda t: not t.has_label(mass_weighted), map_if_false=drop)) > 0:
+                if len(field_terms.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0 and len(field_terms.label_map(lambda t: not t.has_label(mass_weighted), map_if_false=drop)) > 0:
                     raise ValueError(f"Mass weighted and non-mass weighted terms are present in the timestepping equation for {field}. These types of term cannot be used simultaneously,so a split timestepping method should be used instead.")
-            
+
             # Replace the terms with a mass_weighted label with the
             # mass_weighted form. It is important that the labels from
             # this new form are used.
