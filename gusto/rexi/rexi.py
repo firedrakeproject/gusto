@@ -202,10 +202,7 @@ class Rexi(object):
 
         # assign tau and U0 and initialise solution to 0.
         self.tau.assign(dt)
-        Uin = x_in.subfunctions
-        U0 = self.U0.subfunctions
-        for i in range(len(Uin)):
-            U0[2*i].assign(Uin[i])
+        cpx.set_real(self.U0, x_in)
         self.w_.assign(0.)
         w_ = self.w_.subfunctions
         w = self.w.subfunctions
@@ -216,7 +213,7 @@ class Rexi(object):
             self.ar.assign(self.alpha[j].real)
             self.ai.assign(self.alpha[j].imag)
             self.solver.solve()
-            for k in range(len(Uin)):
+            for k in range(len(x_in.subfunctions)):
                 wk = w_[2*k]
                 wk += Constant(self.beta[j].real)*w[2*k] - Constant(self.beta[j].imag)*w[2*k+1]
 
@@ -226,9 +223,5 @@ class Rexi(object):
         else:
             self.w_sum.assign(self.w_)
 
-        w_sum = self.w_sum.subfunctions
-        w_out = self.w_out.subfunctions
-        for i in range(len(w_out)):
-            w_out[i].assign(w_sum[2*i])
-
-        x_out.assign(self.w_out)
+        cpx.get_real(self.w_sum, self.w_out)
+        cpx.get_real(self.w_sum, x_out)
