@@ -12,9 +12,9 @@ setup(name="gusto",
                 "gusto.diagnostics",
                 "gusto.equations",
                 "gusto.initialisation",
-                "gusto.physics"
+                "gusto.physics",
                 "gusto.recovery",
                 "gusto.solvers",
                 "gusto.spatial_methods",
                 "gusto.time_discretisation",
-                "gusto.timeloop"])
+                "gusto.timestepping"])
