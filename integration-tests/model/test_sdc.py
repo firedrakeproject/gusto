@@ -10,7 +10,7 @@ def run(timestepper, tmax, f_end):
 
 @pytest.mark.parametrize(
     "scheme", ["IMEX_SDC_Le(1,1)", "IMEX_SDC_R(2,2)", "BE_SDC_Lo(3,3)", "FE_SDC_Le(3,5)"])
-def test_time_discretisationsdc(tmpdir, scheme, tracer_setup):
+def test_sdc(tmpdir, scheme, tracer_setup):
     geometry = "sphere"
     setup = tracer_setup(tmpdir, geometry)
     domain = setup.domain

@@ -53,9 +53,9 @@ from firedrake.fml import (
     replace_subject, replace_test_function, all_terms, drop
 )
 from firedrake.utils import cached_property
-from gusto.wrappers import *
-from gusto.time_discretisation import wrapper_apply
-from gusto.labels import (time_derivative, implicit, explicit)
+from gusto.time_discretisation.wrappers import *
+from gusto.time_discretisation.time_discretisation import wrapper_apply
+from gusto.core.labels import (time_derivative, implicit, explicit)
 
 from qmat import genQCoeffs, genQDeltaCoeffs
 
