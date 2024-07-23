@@ -4,7 +4,7 @@ Test the formulae for finding shortest distances between two points.
 import importlib
 import numpy as np
 import firedrake as fd
-from gusto.coord_transforms import *
+from gusto.core.coord_transforms import *
 import pytest
 
 tol = 1e-12
