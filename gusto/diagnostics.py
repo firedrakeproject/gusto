@@ -6,7 +6,7 @@ from firedrake import assemble, dot, dx, Function, sqrt, \
     ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
     Projector, Interpolator, FunctionSpace, FiniteElement, \
-    TensorProductElement, exp, conditional
+    TensorProductElement, conditional
 from firedrake.assign import Assigner
 from ufl.domain import extract_unique_domain
 
@@ -18,6 +18,7 @@ from gusto.equations import CompressibleEulerEquations
 from gusto.active_tracers import TracerVariableType, Phases
 from gusto.logging import logger
 from gusto.kernels import MinKernel, MaxKernel
+from gusto.physics import compute_saturation
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
@@ -1810,7 +1811,12 @@ class SW_vapour(DiagnosticField):
         b_e = state_fields("b_e")
         g = self.parameters.g
         H = self.parameters.H
-        q_sat_expr = self.q0*g*H/(g*D) * exp(20*(1-b_e/g))
+        # check if there is topography
+        if hasattr(state_fields, "topography"):
+            B = state_fields("topography")
+        else:
+            B = None
+        q_sat_expr = compute_saturation(self.q0, H, g, D, b_e, B)
         self.expr = conditional(q_t < q_sat_expr, q_t, q_sat_expr)
 
         space = domain.spaces("DG")
@@ -1858,7 +1864,12 @@ class SW_cloud(DiagnosticField):
         b_e = state_fields("b_e")
         g = self.parameters.g
         H = self.parameters.H
-        q_sat_expr = self.q0*g*H/(g*D) * exp(20*(1-b_e/g))
+        # check if there is topography
+        if hasattr(state_fields, "topography"):
+            B = state_fields("topography")
+        else:
+            B = None
+        q_sat_expr = compute_saturation(self.q0, H, g, D, b_e, B)
         vapour = conditional(q_t < q_sat_expr, q_t, q_sat_expr)
         self.expr = q_t - vapour
 
