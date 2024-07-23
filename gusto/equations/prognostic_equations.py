@@ -134,19 +134,19 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
     def generate_mass_terms(self):
         """
         Builds the weak time derivative terms for the equation set.
-    
+
         Generates the weak time derivative terms ("mass terms") for all the
         prognostic variables of the equation set.
-    
+
         Returns:
             :class:`LabelledForm`: a labelled form containing the mass terms.
         """
-    
+
         if self.active_tracers is None:
             tracer_names = []
         else:
             tracer_names = [tracer.name for tracer in self.active_tracers]
-    
+
         for i, (test, field_name) in enumerate(zip(self.tests, self.field_names)):
             prog = split(self.X)[i]
             mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
@@ -154,14 +154,14 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 if field_name == ind_tracer_name:
                     if self.active_tracers[j].transport_eqn == TransportEquationType.tracer_conservative:
                         standard_mass_form = mass
-    
+
                         # We need to generate a mass form that is multiplied by the density
                         ref_density_idx = self.field_names.index(self.active_tracers[j].density_name)
                         ref_density = split(self.X)[ref_density_idx]
                         q = prog*ref_density
                         mass_weighted_form = time_derivative(subject(prognostic(inner(q, test)*dx,
                                                              field_name), self.X))
-    
+
                         # Store the mass form for any conservative transport
                         # in the mass_weighted label
                         mass = mass_weighted(standard_mass_form, mass_weighted_form)
@@ -169,9 +169,9 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 mass_form = time_derivative(mass)
             else:
                 mass_form += time_derivative(mass)
-    
+
         return mass_form
-  
+
     # ======================================================================== #
     # Linearisation Routines
     # ======================================================================== #
