@@ -168,24 +168,28 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     self.evaluate_source.append(t.labels[physics_name])
                     self.physics_names.append(t.labels[physics_name])
 
-        # Check if we have any mass_weighted terms:
-        if len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0:
+        # Check if we have any mass-weighted terms:
+        if len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0: 
 
-            # Check that the equation for each prognostic variable does not involve
-            # both mass_weighted and non-mass weighted terms; if so, a split
-            # timestepping method should be used instead.
             for field in equation.field_names:
-                field_terms = self.residual.label_map(lambda t: t.get(prognostic) == field and not t.has_label(time_derivative), map_if_false=drop)
+                # Check if the mass term for this prognostic is mass-weighted
+                if len(self.residual.label_map(lambda t: t.get(prognostic) == field and t.has_label(time_derivative) and t.has_label(mass_weighted), map_if_false=drop)) == 1:
 
-                if len(field_terms.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0 and len(field_terms.label_map(lambda t: not t.has_label(mass_weighted), map_if_false=drop)) > 0:
-                    raise ValueError(f"Mass weighted and non-mass weighted terms are present in the timestepping equation for {field}. These types of term cannot be used simultaneously,so a split timestepping method should be used instead.")
+                    field_terms = self.residual.label_map(lambda t: t.get(prognostic) == field and not t.has_label(time_derivative), map_if_false=drop)
 
-            # Replace the terms with a mass_weighted label with the
-            # mass_weighted form. It is important that the labels from
-            # this new form are used.
-            self.residual = self.residual.label_map(
-                lambda t: t.has_label(mass_weighted),
-                map_if_true=lambda t: t.get(mass_weighted))
+                    # Check that the equation for this prognostic does not involve
+                    # both mass-weighted and non-mass-weighted terms; if so, a split
+                    # timestepper should be used instead.
+                    if len(field_terms.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0:
+                        if len(field_terms.label_map(lambda t: not t.has_label(mass_weighted), map_if_false=drop)) > 0:
+                            raise ValueError(f"Mass-weighted and non-mass-weighted terms are present in a timestepping equation for {field}. As these terms cannot be solved for simultaneously, a split timestepping method should be used instead.")
+                        else:
+                        # Replace the terms with a mass_weighted label with the
+                        # mass_weighted form. It is important that the labels from
+                        # this new form are used.
+                            self.residual = self.residual.label_map(
+                                lambda t: t.get(prognostic) == field and t.has_label(mass_weighted),
+                                map_if_true=lambda t: t.get(mass_weighted))
 
         # -------------------------------------------------------------------- #
         # Set up Wrappers
