@@ -12,7 +12,7 @@
 from os import path
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, acos, sin, cos, Constant, norm,
-                       max_value, min_value)
+                       max_value, min_value, pi, conditional)
 from netCDF4 import Dataset
 import pytest
 

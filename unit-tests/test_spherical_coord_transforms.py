@@ -4,7 +4,7 @@ Test the formulae for transforming between spherical and Cartesian coordinates.
 import importlib
 import numpy as np
 import firedrake as fd
-from gusto.coord_transforms import *
+from gusto.core.coord_transforms import *
 import pytest
 
 tol = 1e-12
