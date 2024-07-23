@@ -6,7 +6,7 @@ that interact and checks the results agains a known checkpointed answer.
 from os.path import join, abspath, dirname
 from gusto import *
 from firedrake import (PeriodicSquareMesh, SpatialCoordinate, Function,
-                       cos, pi, as_vector)
+                       cos, pi, as_vector, sin)
 import numpy as np
 
 
