@@ -8,7 +8,7 @@ from firedrake.fml import (
     replace_subject, replace_test_function, replace_trial_function
 )
 from firedrake.formmanipulation import split_form
-from asQ.complex_proxy import mixed as cpx
+from asQ.complex_proxy import vector as cpx
 
 
 NullTerm = Term(None)
@@ -101,6 +101,7 @@ class Rexi(object):
         b = NullTerm
 
         for i in range(len(W_)):
+            # residual only for prognostic i
             ith_res = residual.label_map(
                 lambda t: t.get(prognostic) == equation.field_names[i],
                 lambda t: Term(
@@ -108,34 +109,20 @@ class Rexi(object):
                     t.labels),
                 map_if_false=drop)
 
+            # mass matrix terms for real/imaginary components
             mass_form = ith_res.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_false=drop)
 
-            m = mass_form.label_map(
+            mr = mass_form.label_map(
                 all_terms,
                 replace_test_function(tests_r[i]))
-            a += (
-                (ar + ai) * m.label_map(all_terms,
-                                        replace_subject(trials_r[i], old_idx=i))
-                + (ar - ai) * m.label_map(all_terms,
-                                          replace_subject(trials_i[i], old_idx=i))
-            )
 
-            b += m.label_map(all_terms, replace_subject(U0r[i], i))
-
-            m = mass_form.label_map(
+            mi = mass_form.label_map(
                 all_terms,
                 replace_test_function(tests_i[i]))
-            a += (
-                (ar - ai) * m.label_map(all_terms,
-                                        replace_subject(trials_r[i], old_idx=i))
-                + (-ar - ai) * m.label_map(all_terms,
-                                           replace_subject(trials_i[i], old_idx=i))
-            )
 
-            b += m.label_map(all_terms, replace_subject(U0r[i], i))
-
+            # linear operator for real/imaginary components
             L_form = ith_res.label_map(
                 lambda t: t.has_label(time_derivative),
                 drop)
@@ -143,18 +130,28 @@ class Rexi(object):
             Lr = L_form.label_map(
                 all_terms,
                 replace_test_function(tests_r[i]))
-            a -= self.tau * Lr.label_map(all_terms,
-                                         replace_subject(trials_r))
-            a -= self.tau * Lr.label_map(all_terms,
-                                         replace_subject(trials_i))
 
             Li = L_form.label_map(
                 all_terms,
                 replace_test_function(tests_i[i]))
-            a -= self.tau * Li.label_map(all_terms,
-                                         replace_subject(trials_r))
-            a += self.tau * Li.label_map(all_terms,
-                                         replace_subject(trials_i))
+
+            # real matrix M multiplied by complex number (ar + i*ai)
+            a += (
+                + ar * mr.label_map(all_terms, replace_subject(trials_r[i], old_idx=i))
+                - ai * mr.label_map(all_terms, replace_subject(trials_i[i], old_idx=i))
+            )
+
+            a += (
+                + ai * mi.label_map(all_terms, replace_subject(trials_r[i], old_idx=i))
+                + ar * mi.label_map(all_terms, replace_subject(trials_i[i], old_idx=i))
+            )
+
+            # real matrix M multiplied by real number tau
+            a -= self.tau * Lr.label_map(all_terms, replace_subject(trials_r))
+            a -= self.tau * Li.label_map(all_terms, replace_subject(trials_i))
+
+            # right hand side only has real valued component
+            b += mr.label_map(all_terms, replace_subject(U0r[i], i))
 
         a = a.label_map(lambda t: t is NullTerm, drop)
         b = b.label_map(lambda t: t is NullTerm, drop)
