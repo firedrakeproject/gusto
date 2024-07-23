@@ -36,9 +36,9 @@ class Rexi(object):
                 can be 'mixed' or 'vector'.
         """
         if cpx_type == 'mixed':
-            from asQ.complex_proxy import mixed as cpx
+            from gusto.complex_proxy import mixed as cpx
         elif cpx_type == 'vector':
-            from asQ.complex_proxy import vector as cpx
+            from gusto.complex_proxy import vector as cpx
         else:
             raise ValueError("cpx_type must be 'mixed' or 'vector'")
         self.cpx = cpx
