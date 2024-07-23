@@ -4,16 +4,19 @@ from gusto.core.function_spaces import DeRhamComplex
 from gusto.core.configuration import RecoveryOptions
 
 
-
 class RecoverySpaces():
+    """
+    Finds or builds necessary spaces to carry out recovery transport for lowest
+    and mixed order domains (0,0), (0,1) and  (1,0)
+    """
 
     def __init__(self, domain):
 
         family = domain.family
         self.domain = domain
         self.mesh = domain.mesh
-        #Need spaces from current deRham and a higher order deRham
-        self.de_Rham = DeRhamComplex(self.mesh, family, 
+        # Need spaces from current deRham and a higher order deRham
+        self.de_Rham = DeRhamComplex(self.mesh, family,
                                      horizontal_degree=1,
                                      vertical_degree=1,
                                      complex_name='recovery_de_Rham')
@@ -24,19 +27,19 @@ class RecoverySpaces():
             self.build_theta_options()
         else:
             self.cell = self.mesh.ufl_cell().cellname()
+
         self.build_DG_options()
         self.build_HDiv_options()
 
     def build_DG_options(self):
         DG_embedding_space = self.domain.spaces.DG1_equispaced
-        #TODO the H1 spaces seems to be what we want but im unsure if this is true for triangular cells
         DG_recovered_space = self.domain.spaces.H1
 
         self.DG_options = RecoveryOptions(embedding_space=DG_embedding_space,
                                           recovered_space=DG_recovered_space)
 
     def build_theta_options(self):
-        # TODO I Dont think these spaces are built anytwhere so have to build them here
+        # Theta spaces need to manually be built as they dont exist in de-Rham
         DG_hori_ele = FiniteElement('DG', self.cell, 1, variant='equispaced')
         DG_vert_ele = FiniteElement('DG', interval, 2, variant='equispaced')
         CG_hori_ele = FiniteElement('CG', self.cell, 1)
@@ -52,9 +55,8 @@ class RecoverySpaces():
 
     def build_HDiv_options(self):
 
-        HDiv_embedding_Space = getattr(self.de_Rham, f'HDiv')
-        HDiv_recovered_Space = getattr(self.de_Rham, f'HCurl')
-        # TODO Do we want a check if the spaces exist with an option to build
+        HDiv_embedding_Space = getattr(self.de_Rham, 'HDiv')
+        HDiv_recovered_Space = getattr(self.de_Rham, 'HCurl')
 
         self.HDiv_options = RecoveryOptions(embedding_space=HDiv_embedding_Space,
                                             recovered_space=HDiv_recovered_Space,
