@@ -1,26 +1,29 @@
 
 from firedrake import (interval, FiniteElement, TensorProductElement, FunctionSpace)
-from gusto import (RecoveryOptions)
+from gusto.core.function_spaces import DeRhamComplex
+from gusto.core.configuration import RecoveryOptions
+
 
 
 class RecoverySpaces():
 
     def __init__(self, domain):
 
+        family = domain.family
         self.domain = domain
         self.mesh = domain.mesh
-        self.extruded_mesh = hasattr(self.mesh, "_base_mesh")
+        #Need spaces from current deRham and a higher order deRham
+        self.de_Rham = DeRhamComplex(self.mesh, family, 
+                                     horizontal_degree=1,
+                                     vertical_degree=1,
+                                     complex_name='recovery_de_Rham')
 
+        self.extruded_mesh = hasattr(self.mesh, "_base_mesh")
         if self.extruded_mesh:
             self.cell = self.mesh._base_mesh.ufl_cell().cellname()
             self.build_theta_options()
         else:
             self.cell = self.mesh.ufl_cell().cellname()
-
-        self.h_degree = domain.horizontal_degree
-        self.v_degree = domain.vertical_degree
-
-        # Call methods to find / build the various spaces
         self.build_DG_options()
         self.build_HDiv_options()
 
@@ -49,8 +52,8 @@ class RecoverySpaces():
 
     def build_HDiv_options(self):
 
-        HDiv_embedding_Space = getattr(self.domain.spaces, f'HDiv')
-        HDiv_recovered_Space = getattr(self.domain.spaces, f'HCurl')
+        HDiv_embedding_Space = getattr(self.de_Rham, f'HDiv')
+        HDiv_recovered_Space = getattr(self.de_Rham, f'HCurl')
         # TODO Do we want a check if the spaces exist with an option to build
 
         self.HDiv_options = RecoveryOptions(embedding_space=HDiv_embedding_Space,
