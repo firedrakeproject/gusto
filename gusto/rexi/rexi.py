@@ -1,7 +1,7 @@
 from gusto.rexi.rexi_coefficients import *
 from firedrake import Function, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver
-from gusto.labels import time_derivative, prognostic, linearisation
+from gusto.core.labels import time_derivative, prognostic, linearisation
 from firedrake.fml import (
     Term, all_terms, drop, subject,
     replace_subject, replace_test_function, replace_trial_function
