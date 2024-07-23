@@ -2,7 +2,7 @@
 Test the formulae for rotating spherical vectors.
 """
 import numpy as np
-from gusto.coord_transforms import *
+from gusto.core.coord_transforms import *
 
 tol = 1e-12
 
