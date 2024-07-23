@@ -6,7 +6,7 @@ from firedrake import assemble, dot, dx, Function, sqrt, \
     ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
     TensorFunctionSpace, SpatialCoordinate, as_vector, \
     Projector, Interpolator, FunctionSpace, FiniteElement, \
-    TensorProductElement
+    TensorProductElement, exp, conditional
 from firedrake.assign import Assigner
 from ufl.domain import extract_unique_domain
 
@@ -29,7 +29,7 @@ __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent
            "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
            "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
            "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
-           "BruntVaisalaFrequencySquared", "TracerDensity"]
+           "BruntVaisalaFrequencySquared", "TracerDensity", "SW_vapour", "SW_cloud"]
 
 
 class Diagnostics(object):
@@ -1767,3 +1767,100 @@ class TracerDensity(DiagnosticField):
 
         else:
             super().setup(domain, state_fields)
+
+
+class SW_vapour(DiagnosticField):
+    """Diagnostic for computing the vapour in the moist dynamics formulation."""
+    def __init__(self, parameters, q0, name='q_t', space=None,
+                 method='interpolate'):
+        """
+        Args:
+            parameters (:class:`ShallowWaterParameters`): the configuration
+                object containing the physical parameters for this equation.
+            name (str, optional): name of the total moisture field to use to
+                compute the vapour from.
+            q0 (float, optional): Scaling factor for the saturation function.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case the default space is the domain's DG space.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.fname = name
+        self.parameters = parameters
+        self.q0 = q0
+        super().__init__(space=space, method=method, required_fields=(self.fname,))
+
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return self.fname+"_vapour_portion"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        q_t = state_fields(self.fname)
+        D = state_fields("D")
+        b_e = state_fields("b_e")
+        g = self.parameters.g
+        H = self.parameters.H
+        q_sat_expr = self.q0*g*H/(g*D) * exp(20*(1-b_e/g))
+        self.expr = conditional(q_t < q_sat_expr, q_t, q_sat_expr)
+
+        space = domain.spaces("DG")
+        super().setup(domain, state_fields, space=space)
+
+
+class SW_cloud(DiagnosticField):
+    """Diagnostic for computing the cloud in the moist dynamics formulation."""
+    def __init__(self, parameters, q0, name='q_t', space=None,
+                 method='interpolate'):
+        """
+        Args:
+            parameters (:class:`ShallowWaterParameters`): the configuration
+                object containing the physical parameters for this equation.
+            name (str, optional): name of the total moisture field to use to
+                compute the vapour from.
+            q0 (float, optional): Scaling factor for the saturation function.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case the default space is the domain's DG space.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.fname = name
+        self.parameters = parameters
+        self.q0 = q0
+        super().__init__(space=space, method=method, required_fields=(self.fname,))
+
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return self.fname+"_cloud_portion"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        q_t = state_fields(self.fname)
+        D = state_fields("D")
+        b_e = state_fields("b_e")
+        g = self.parameters.g
+        H = self.parameters.H
+        q_sat_expr = self.q0*g*H/(g*D) * exp(20*(1-b_e/g))
+        vapour = conditional(q_t < q_sat_expr, q_t, q_sat_expr)
+        self.expr = q_t - vapour
+
+        space = domain.spaces("DG")
+        super().setup(domain, state_fields, space=space)
