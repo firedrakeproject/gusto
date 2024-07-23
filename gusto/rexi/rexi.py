@@ -7,7 +7,6 @@ from firedrake.fml import (
     replace_subject, replace_test_function, replace_trial_function
 )
 from firedrake.formmanipulation import split_form
-from asQ.complex_proxy import vector as cpx
 
 NullTerm = Term(None)
 
@@ -22,7 +21,7 @@ class Rexi(object):
     """
 
     def __init__(self, equation, rexi_parameters, *, solver_parameters=None,
-                 manager=None):
+                 manager=None, cpx_type='mixed'):
 
         """
         Args:
@@ -33,7 +32,17 @@ class Rexi(object):
                 pass to the solver. Defaults to None.
             manager (:class:`.Ensemble`): the space and ensemble sub-
                 communicators. Defaults to None.
+            cpx_type (str, optional): implementation of complex-valued space,
+                can be 'mixed' or 'vector'.
         """
+        if cpx_type == 'mixed':
+            from asQ.complex_proxy import mixed as cpx
+        elif cpx_type == 'vector':
+            from asQ.complex_proxy import vector as cpx
+        else:
+            raise ValueError("cpx_type must be 'mixed' or 'vector'")
+        self.cpx = cpx
+
         residual = equation.residual.label_map(
             lambda t: t.has_label(linearisation),
             map_if_true=lambda t: Term(t.get(linearisation).form, t.labels),
@@ -187,7 +196,7 @@ class Rexi(object):
         :arg dt: the value of tau
 
         """
-
+        cpx = self.cpx
         # assign tau and U0 and initialise solution to 0.
         self.tau.assign(dt)
         self.U0.assign(x_in)
