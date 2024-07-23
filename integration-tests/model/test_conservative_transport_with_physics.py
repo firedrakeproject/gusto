@@ -8,7 +8,7 @@ mass_weighted counterpart but leave the physics terms unchanged.
 
 from gusto import *
 from firedrake import (as_vector, PeriodicSquareMesh, SpatialCoordinate,
-                       assemble, Constant)
+                       assemble, Constant, conditional, sin, pi)
 
 
 def run_conservative_transport_with_physics(dirname):
