@@ -160,14 +160,13 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 if t.labels[physics_name] not in self.physics_names:
                     self.evaluate_source.append(t.labels[physics_name])
                     self.physics_names.append(t.labels[physics_name])
-        print(len(self.residual))
-        # Check if we have any mass-weighted terms:
-        if len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0: 
+
+        # Check if there are any mass-weighted terms:
+        if len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0:
             for field in equation.field_names:
-                print('field')
+
                 # Check if the mass term for this prognostic is mass-weighted
                 if len(self.residual.label_map(lambda t: t.get(prognostic) == field and t.has_label(time_derivative) and t.has_label(mass_weighted), map_if_false=drop)) == 1:
-                    print('yup')
                     field_terms = self.residual.label_map(lambda t: t.get(prognostic) == field and not t.has_label(time_derivative), map_if_false=drop)
 
                     # Check that the equation for this prognostic does not involve
@@ -177,10 +176,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         if len(field_terms.label_map(lambda t: not t.has_label(mass_weighted), map_if_false=drop)) > 0:
                             raise ValueError(f"Mass-weighted and non-mass-weighted terms are present in a timestepping equation for {field}. As these terms cannot be solved for simultaneously, a split timestepping method should be used instead.")
                         else:
-                        # Replace the terms with a mass_weighted label with the
-                        # mass_weighted form. It is important that the labels from
-                        # this new form are used.
-                            print('replacing')
+                            # Replace the terms with a mass_weighted label with the
+                            # mass_weighted form. It is important that the labels from
+                            # this new form are used.
                             self.residual = self.residual.label_map(
                                 lambda t: t.get(prognostic) == field and t.has_label(mass_weighted),
                                 map_if_true=lambda t: t.get(mass_weighted))
