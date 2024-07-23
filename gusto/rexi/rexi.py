@@ -1,14 +1,12 @@
 from gusto.rexi.rexi_coefficients import *
-from firedrake import Function, TrialFunctions, TestFunctions, \
-    Constant, DirichletBC, \
-    LinearVariationalProblem, LinearVariationalSolver, MixedFunctionSpace
+from firedrake import Function, DirichletBC, \
+    LinearVariationalProblem, LinearVariationalSolver
 from gusto.labels import time_derivative, prognostic, linearisation
 from firedrake.fml import (
     Term, all_terms, drop, subject,
     replace_subject, replace_test_function, replace_trial_function
 )
 from firedrake.formmanipulation import split_form
-
 
 NullTerm = Term(None)
 
@@ -23,7 +21,7 @@ class Rexi(object):
     """
 
     def __init__(self, equation, rexi_parameters, *, solver_parameters=None,
-                 manager=None):
+                 manager=None, cpx_type='mixed'):
 
         """
         Args:
@@ -34,7 +32,17 @@ class Rexi(object):
                 pass to the solver. Defaults to None.
             manager (:class:`.Ensemble`): the space and ensemble sub-
                 communicators. Defaults to None.
+            cpx_type (str, optional): implementation of complex-valued space,
+                can be 'mixed' or 'vector'.
         """
+        if cpx_type == 'mixed':
+            from gusto.complex_proxy import mixed as cpx
+        elif cpx_type == 'vector':
+            from gusto.complex_proxy import vector as cpx
+        else:
+            raise ValueError("cpx_type must be 'mixed' or 'vector'")
+        self.cpx = cpx
+
         residual = equation.residual.label_map(
             lambda t: t.has_label(linearisation),
             map_if_true=lambda t: Term(t.get(linearisation).form, t.labels),
@@ -71,114 +79,101 @@ class Rexi(object):
                 self.N = m
                 self.idx = rank*m + p
 
-        # set dummy constants for tau and A_i
-        self.ar = Constant(1.)
-        self.ai = Constant(1.)
-        self.tau = Constant(1.)
-
-        # set up functions, problem and solver
+        # set up complex function space
         W_ = equation.function_space
-        self.w_out = Function(W_)
-        spaces = []
-        for i in range(len(W_)):
-            spaces.append(W_[i])
-            spaces.append(W_[i])
-        W = MixedFunctionSpace(spaces)
-        self.U0 = Function(W)
-        self.w_sum = Function(W)
-        self.w = Function(W)
-        self.w_ = Function(W)
-        tests = TestFunctions(W)
-        trials = TrialFunctions(W)
-        tests_r = tests[::2]
-        tests_i = tests[1::2]
-        trials_r = trials[::2]
-        trials_i = trials[1::2]
+        W = cpx.FunctionSpace(W_)
 
-        ar, ai = self.ar, self.ai
-        a = NullTerm
-        L = NullTerm
-        for i in range(len(W_)):
-            ith_res = residual.label_map(
-                lambda t: t.get(prognostic) == equation.field_names[i],
-                lambda t: Term(
-                    split_form(t.form)[i].form,
-                    t.labels),
-                map_if_false=drop)
+        self.U0 = Function(W_)   # right hand side function
+        self.w = Function(W)     # solution
+        self.wrk = Function(W_)  # working buffer
 
-            mass_form = ith_res.label_map(
-                lambda t: t.has_label(time_derivative),
-                map_if_false=drop)
+        ncpts = len(W_)
 
-            m = mass_form.label_map(
+        # split equation into mass matrix and linear operator
+        mass = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+
+        function = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop)
+
+        # generate ufl for mass matrix over given trial/tests
+        def form_mass(*trials_and_tests):
+            trials = trials_and_tests[:ncpts]
+            tests = trials_and_tests[ncpts:]
+            m = mass.label_map(
                 all_terms,
-                replace_test_function(tests_r[i]))
-            a += (
-                (ar + ai) * m.label_map(all_terms,
-                                        replace_subject(trials_r[i], old_idx=i))
-                + (ar - ai) * m.label_map(all_terms,
-                                          replace_subject(trials_i[i], old_idx=i))
-            )
-
-            L += (
-                m.label_map(all_terms, replace_subject(self.U0.subfunctions[2*i], i))
-                + m.label_map(all_terms, replace_subject(self.U0.subfunctions[2*i+1], old_idx=i))
-            )
-
-            m = mass_form.label_map(
+                replace_test_function(tests))
+            m = m.label_map(
                 all_terms,
-                replace_test_function(tests_i[i]))
-            a += (
-                (ar - ai) * m.label_map(all_terms,
-                                        replace_subject(trials_r[i], old_idx=i))
-                + (-ar - ai) * m.label_map(all_terms,
-                                           replace_subject(trials_i[i], old_idx=i))
-            )
+                replace_subject(trials))
+            return m
 
-            L += (
-                m.label_map(all_terms,
-                            replace_subject(self.U0.subfunctions[2*i], i))
-                - m.label_map(all_terms,
-                              replace_subject(self.U0.subfunctions[2*i+1], i))
-            )
+        # generate ufl for linear operator over given trial/tests
+        def form_function(*trials_and_tests):
+            trials = trials_and_tests[:ncpts]
+            tests = trials_and_tests[ncpts:]
 
-            L_form = ith_res.label_map(
-                lambda t: t.has_label(time_derivative),
-                drop)
+            f = NullTerm
+            for i in range(ncpts):
+                fi = function.label_map(
+                    lambda t: t.get(prognostic) == equation.field_names[i],
+                    lambda t: Term(
+                        split_form(t.form)[i].form,
+                        t.labels),
+                    map_if_false=drop)
 
-            Lr = L_form.label_map(
+                fi = fi.label_map(
+                    all_terms,
+                    replace_test_function(tests[i]))
+
+                fi = fi.label_map(
+                    all_terms,
+                    replace_subject(trials))
+
+                f += fi
+            f = f.label_map(lambda t: t is NullTerm, drop)
+            return f
+
+        # generate ufl for right hand side over given trial/tests
+        def form_rhs(*tests):
+            rhs = mass.label_map(
                 all_terms,
-                replace_test_function(tests_r[i]))
-            a -= self.tau * Lr.label_map(all_terms,
-                                         replace_subject(trials_r))
-            a -= self.tau * Lr.label_map(all_terms,
-                                         replace_subject(trials_i))
-
-            Li = L_form.label_map(
+                replace_test_function(tests))
+            rhs = rhs.label_map(
                 all_terms,
-                replace_test_function(tests_i[i]))
-            a -= self.tau * Li.label_map(all_terms,
-                                         replace_subject(trials_r))
-            a += self.tau * Li.label_map(all_terms,
-                                         replace_subject(trials_i))
+                replace_subject(self.U0))
+            return rhs
 
-        a = a.label_map(lambda t: t is NullTerm, drop)
-        L = L.label_map(lambda t: t is NullTerm, drop)
+        # complex Constants for alpha and beta values
+        self.ac = cpx.ComplexConstant(1)
+        self.bc = cpx.ComplexConstant(1)
+
+        # alpha*M and tau*L
+        aM = cpx.BilinearForm(W, self.ac, form_mass)
+        aL, self.tau, _ = cpx.BilinearForm(W, 1, form_function, return_z=True)
+        a = aM - aL
+
+        # right hand side is just U0
+        b = cpx.LinearForm(W, 1, form_rhs)
 
         if hasattr(equation, "aP"):
             aP = equation.aP(trial, self.ai, self.tau)
         else:
             aP = None
 
-        # Boundary conditions (assumes extruded mesh)
-        # BCs are declared for the plain velocity space. As we need them in
-        # extended mixed problem, we replicate the BCs but for subspace of W
-        bcs = []
-        for bc in equation.bcs['u']:
-            bcs.append(DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain))
-            bcs.append(DirichletBC(W.sub(1), bc.function_arg, bc.sub_domain))
+        # BCs are declared for the plain velocity space.
+        # First we need to transfer the velocity boundary conditions to the
+        # velocity component of the mixed space.
+        uidx = equation.field_names.index('u')
+        ubcs = (DirichletBC(W_.sub(uidx), bc.function_arg, bc.sub_domain)
+                for bc in equation.bcs['u'])
 
-        rexi_prob = LinearVariationalProblem(a.form, L.form, self.w, aP=aP,
+        # now we can transfer the velocity boundary conditions to the complex space
+        bcs = tuple(cb for bc in ubcs for cb in cpx.DirichletBC(W, W_, bc))
+
+        rexi_prob = LinearVariationalProblem(a.form, b.form, self.w, aP=aP,
                                              bcs=bcs,
                                              constant_jacobian=False)
 
@@ -197,40 +192,35 @@ class Rexi(object):
 
         multiplies by the corresponding B_n and sums over n.
 
-        :arg U0: the mixed function on the rhs.
+        :arg x_in: the mixed function on the rhs.
         :arg dt: the value of tau
 
         """
-
+        cpx = self.cpx
         # assign tau and U0 and initialise solution to 0.
         self.tau.assign(dt)
-        Uin = x_in.subfunctions
-        U0 = self.U0.subfunctions
-        for i in range(len(Uin)):
-            U0[2*i].assign(Uin[i])
-        self.w_.assign(0.)
-        w_ = self.w_.subfunctions
-        w = self.w.subfunctions
+        self.U0.assign(x_in)
+        x_out.assign(0.)
 
         # loop over solvers, assigning a_i, solving and accumulating the sum
         for i in range(self.N):
             j = self.idx + i
-            self.ar.assign(self.alpha[j].real)
-            self.ai.assign(self.alpha[j].imag)
+            self.ac.real.assign(self.alpha[j].real)
+            self.ac.imag.assign(self.alpha[j].imag)
+
+            self.bc.real.assign(self.beta[j].real)
+            self.bc.imag.assign(self.beta[j].imag)
+
             self.solver.solve()
-            for k in range(len(Uin)):
-                wk = w_[2*k]
-                wk += Constant(self.beta[j].real)*w[2*k] - Constant(self.beta[j].imag)*w[2*k+1]
+
+            # accumulate real part of beta*w
+            cpx.get_real(self.w, self.wrk)
+            x_out += self.bc.real*self.wrk
+
+            cpx.get_imag(self.w, self.wrk)
+            x_out -= self.bc.imag*self.wrk
 
         # in parallel we have to accumulate the sum over all processes
         if self.manager is not None:
-            self.manager.allreduce(self.w_, self.w_sum)
-        else:
-            self.w_sum.assign(self.w_)
-
-        w_sum = self.w_sum.subfunctions
-        w_out = self.w_out.subfunctions
-        for i in range(len(w_out)):
-            w_out[i].assign(w_sum[2*i])
-
-        x_out.assign(self.w_out)
+            self.wrk.assign(x_out)
+            self.manager.allreduce(self.wrk, x_out)
