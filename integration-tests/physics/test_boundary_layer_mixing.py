@@ -3,10 +3,10 @@ This tests the physics routine to mix fields in the boundary layer.
 """
 
 from gusto import *
-from gusto.labels import physics_label
+from gusto.core.labels import physics_label
 from firedrake import (VectorFunctionSpace, PeriodicIntervalMesh, as_vector,
                        exp, SpatialCoordinate, ExtrudedMesh, Function)
-from firedrake.fml import identity
+from firedrake.fml import identity, drop
 import pytest
 
 

@@ -4,7 +4,7 @@ to the Williamson et al test 5 but with additional thermodynamic equations.
 """
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, pi, sqrt, min_value, exp, cos)
+                       as_vector, pi, sqrt, min_value, exp, cos, sin)
 import sys
 
 # ----------------------------------------------------------------- #
