@@ -1,10 +1,13 @@
+import numpy as np
+
 from firedrake import *
 from gusto import *
+from pyop2.mpi import MPI
 
 L = 2*pi
 n = 128
 delta = L/n
-mesh = PeriodicIntervalMesh(128, 2*pi)
+mesh = PeriodicIntervalMesh(128, L)
 dt = 0.0001
 
 domain = Domain(mesh, dt, 'CG', 1)
@@ -41,15 +44,19 @@ stepper = Timestepper(eqns, RK4(domain), io,
 D = stepper.fields("D")
 x = SpatialCoordinate(mesh)[0]
 hexpr = (
-    exp(-4*(x-0.5*pi)**2) * sin((x-0.5*pi))
-    + exp(-2*(x-1*pi)**2) * sin(8*(x-1*pi))
+    sin(x - pi/2) * exp(-4*(x - pi/2)**2)
+    + sin(8*(x - pi)) * exp(-2*(x - pi)**2)
 )
 h = Function(D.function_space()).interpolate(hexpr)
 
 A = assemble(h*dx)
-B = h.dat.data.max()
-C0 = 1/(1-2*pi*B/A)
-C1 = (1-C0)/B
+
+# B must be the maximum value of h (across all ranks)
+B = np.zeros(1)
+COMM_WORLD.Allreduce(h.dat.data_ro.max(), B, MPI.MAX)
+
+C0 = 1/(1 - 2*pi*B[0]/A)
+C1 = (1 - C0)/B[0]
 H = parameters.H
 D.interpolate(C1*hexpr + C0)
 
