@@ -1,6 +1,5 @@
 from gusto.rexi.rexi_coefficients import *
-from firedrake import Function, TrialFunction, TestFunction, \
-    Constant, DirichletBC, \
+from firedrake import Function, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver
 from gusto.labels import time_derivative, prognostic, linearisation
 from firedrake.fml import (
@@ -9,7 +8,6 @@ from firedrake.fml import (
 )
 from firedrake.formmanipulation import split_form
 from asQ.complex_proxy import vector as cpx
-
 
 NullTerm = Term(None)
 
@@ -72,35 +70,17 @@ class Rexi(object):
                 self.N = m
                 self.idx = rank*m + p
 
-        # set dummy constants for tau and A_i and Beta
-        self.br = Constant(1.)
-        self.bi = Constant(1.)
-        # self.ar = Constant(1.)
-        # self.ai = Constant(1.)
-        self.tau = Constant(1.)
-
-        # set up functions, problem and solver
+        # set up complex function space
         W_ = equation.function_space
         W = cpx.FunctionSpace(W_)
 
-        self.U0 = Function(W).assign(0)
-        self.w = Function(W)
-        self.wrk = Function(W_)
-
-        test = TestFunction(W)
-        trial = TrialFunction(W)
-        tests_r = cpx.split(test, cpx.re)
-        tests_i = cpx.split(test, cpx.im)
-        trials_r = cpx.split(trial, cpx.re)
-        trials_i = cpx.split(trial, cpx.im)
-
-        U0r = cpx.subfunctions(self.U0, cpx.re)
-
-        a = NullTerm
-        b = NullTerm
+        self.U0 = Function(W_)   # right hand side function
+        self.w = Function(W)     # solution
+        self.wrk = Function(W_)  # working buffer
 
         ncpts = len(W_)
 
+        # split equation into mass matrix and linear operator
         mass = residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=drop)
@@ -109,6 +89,7 @@ class Rexi(object):
             lambda t: t.has_label(time_derivative),
             map_if_true=drop)
 
+        # generate ufl for mass matrix over given trial/tests
         def form_mass(*trials_and_tests):
             trials = trials_and_tests[:ncpts]
             tests = trials_and_tests[ncpts:]
@@ -120,58 +101,53 @@ class Rexi(object):
                 replace_subject(trials))
             return m
 
+        # generate ufl for linear operator over given trial/tests
         def form_function(*trials_and_tests):
             trials = trials_and_tests[:ncpts]
             tests = trials_and_tests[ncpts:]
-            f = function.label_map(
-                all_terms,
-                replace_test_function(tests))
-            f = f.label_map(
-                all_terms,
-                replace_subject(trials))
+
+            f = NullTerm
+            for i in range(ncpts):
+                fi = function.label_map(
+                    lambda t: t.get(prognostic) == equation.field_names[i],
+                    lambda t: Term(
+                        split_form(t.form)[i].form,
+                        t.labels),
+                    map_if_false=drop)
+
+                fi = fi.label_map(
+                    all_terms,
+                    replace_test_function(tests[i]))
+
+                fi = fi.label_map(
+                    all_terms,
+                    replace_subject(trials))
+
+                f += fi
+            f = f.label_map(lambda t: t is NullTerm, drop)
             return f
 
+        # generate ufl for right hand side over given trial/tests
         def form_rhs(*tests):
             rhs = mass.label_map(
                 all_terms,
                 replace_test_function(tests))
             rhs = rhs.label_map(
                 all_terms,
-                replace_subject(U0r))
+                replace_subject(self.U0))
             return rhs
 
-        a, self.ar, self.ai = cpx.BilinearForm(W, 1, form_mass, return_z=True)
+        # complex Constants for alpha and beta values
+        self.ac = cpx.ComplexConstant(1)
+        self.bc = cpx.ComplexConstant(1)
 
+        # alpha*M and tau*L
+        aM = cpx.BilinearForm(W, self.ac, form_mass)
+        aL, self.tau, _ = cpx.BilinearForm(W, 1, form_function, return_z=True)
+        a = aM - aL
+
+        # right hand side is just U0
         b = cpx.LinearForm(W, 1, form_rhs)
-
-        for i in range(len(W_)):
-            # residual only for prognostic i
-            ith_res = residual.label_map(
-                lambda t: t.get(prognostic) == equation.field_names[i],
-                lambda t: Term(
-                    split_form(t.form)[i].form,
-                    t.labels),
-                map_if_false=drop)
-
-            # linear operator for real/imaginary components
-            L_form = ith_res.label_map(
-                lambda t: t.has_label(time_derivative),
-                drop)
-
-            Lr = L_form.label_map(
-                all_terms,
-                replace_test_function(tests_r[i]))
-
-            Li = L_form.label_map(
-                all_terms,
-                replace_test_function(tests_i[i]))
-
-            # real matrix M multiplied by real number tau
-            a -= self.tau * Lr.label_map(all_terms, replace_subject(trials_r))
-            a -= self.tau * Li.label_map(all_terms, replace_subject(trials_i))
-
-        a = a.label_map(lambda t: t is NullTerm, drop)
-        b = b.label_map(lambda t: t is NullTerm, drop)
 
         if hasattr(equation, "aP"):
             aP = equation.aP(trial, self.ai, self.tau)
@@ -207,32 +183,33 @@ class Rexi(object):
 
         multiplies by the corresponding B_n and sums over n.
 
-        :arg U0: the mixed function on the rhs.
+        :arg x_in: the mixed function on the rhs.
         :arg dt: the value of tau
 
         """
 
         # assign tau and U0 and initialise solution to 0.
         self.tau.assign(dt)
-        cpx.set_real(self.U0, x_in)
+        self.U0.assign(x_in)
         x_out.assign(0.)
 
         # loop over solvers, assigning a_i, solving and accumulating the sum
         for i in range(self.N):
             j = self.idx + i
-            self.ar.assign(self.alpha[j].real)
-            self.ai.assign(self.alpha[j].imag)
+            self.ac.real.assign(self.alpha[j].real)
+            self.ac.imag.assign(self.alpha[j].imag)
 
-            self.br.assign(self.beta[j].real)
-            self.bi.assign(self.beta[j].imag)
+            self.bc.real.assign(self.beta[j].real)
+            self.bc.imag.assign(self.beta[j].imag)
 
             self.solver.solve()
 
+            # accumulate real part of beta*w
             cpx.get_real(self.w, self.wrk)
-            x_out += self.br*self.wrk
+            x_out += self.bc.real*self.wrk
 
             cpx.get_imag(self.w, self.wrk)
-            x_out -= self.bi*self.wrk
+            x_out -= self.bc.imag*self.wrk
 
         # in parallel we have to accumulate the sum over all processes
         if self.manager is not None:
