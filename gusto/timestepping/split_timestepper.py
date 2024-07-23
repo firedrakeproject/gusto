@@ -1,9 +1,9 @@
 """Split timestepping methods for generically solving terms separately."""
 
 from firedrake import Projector
-from firedrake.fml import Label
+from firedrake.fml import Label, drop
 from pyop2.profiling import timed_stage
-from gusto.core.labels import time_derivative, physics_label
+from gusto.core.labels import time_derivative, physics_label, dynamics_label
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import Timestepper
 
@@ -18,7 +18,7 @@ class SplitTimestepper(Timestepper):
     """
     
     def __init__(self, equation, term_splitting, io, spatial_methods=None,
-                 physics_schemes=None):
+                 dynamics_schemes=None, physics_schemes=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
@@ -30,6 +30,8 @@ class SplitTimestepper(Timestepper):
                 for each transported/diffused variable. Defaults to None,
                 in which case the terms follow the original discretisation in
                 the equation.
+            dynamics_schemes: (:class:`TimeDiscretisation`, optional) A list of time
+            discretisations for use with any dynamics schemes. Defaults to None.
             physics_schemes: (list, optional): a list of tuples of the form
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`),
                 pairing physics parametrisations and timestepping schemes to use
@@ -42,8 +44,12 @@ class SplitTimestepper(Timestepper):
         # passed to the super __init__
         super().__init__(equation, scheme, io, spatial_methods=spatial_methods)
         
-        if physics_schemes is not None:
-            self.physics_schemes = physics_schemes
+        # If we have physics schemes, extract these first.
+        if physics in term_splitting:
+            if physics_schemes is None:
+                raise ValueError('Physics schemes need to be specified when splitting physics terms in the SplitTimestepper')
+            else:
+                self.physics_schemes = physics_schemes
         else:
             self.physics_schemes = []
             
@@ -56,14 +62,19 @@ class SplitTimestepper(Timestepper):
             apply_bcs = False
             phys_scheme.setup(equation, apply_bcs, parametrisation.label)
             
+        # Extract all non-physics or time derivative terms.
+        other_terms = self.residual.label_map(lambda t: t.has_label(label), map_if_true=keep)
+            
         # Check that the labels in term_splitting are used in the equation
         for label in term_splitting:
-            assert len(self.residual.label_map(lambda t: t.has_label(label), map_if_true=keep) > 0):
-                raise ValueError(f'The {label} term in the term_splitting list does not correspond to any components in the equation.')
+            if term == dynamics:
+                terms = other_terms.label_map(lambda t: t.has_label(dynamics_label), map_if_true=drop)
+            else:
+                terms = other_terms.label_map(lambda t: t.has_label(label), map_if_true=drop)
+            assert len(self.residual.label_map(lambda t: t.has_label(label), map_if_true=keep)) > 0, \
+                f'The {label} term in the term_splitting list does not correspond to any components in the equation.'
         
-
-
-        @property
+    @property
     def transporting_velocity(self):
         return "prognostic"
 
@@ -72,18 +83,65 @@ class SplitTimestepper(Timestepper):
 
         # Check that all terms in the equation have been specified in the 
         # term_splitting list.
-        terms = self.residual.label_map(lambda t: t.has_label(time_derivative), map_if_true=drop)
-        for term in term_splitting
-            terms = terms.label_map(lambda t: t.has_label(term), map_if_true=drop)
+        terms = self.residual.label_map(lambda t: not any(t.has_label(time_derivative, physics_label), map_if_true=keep)
+        for term in term_splitting:
+            if term == dynamics:
+                terms = terms.label_map(lambda t: t.has_label(term), map_if_true=drop)
+            else:
             
-        if len(terms) > 0:
-            raise ValueError('The term_splitting list for the SplitTimestepper has not covered all terms in the equation.')
+            if len(terms) > 0:
+                raise ValueError('The term_splitting list for the SplitTimestepper has not covered all terms in the equation.')
 
         apply_bcs = True
-        self.scheme.setup(self.equation, apply_bcs, ... )
-        self.setup_transporting_velocity(self.scheme)
-        if self.io.output.log_courant:
-            self.scheme.courant_max = self.io.courant_max
+        
+        for term_type, scheme in dynamics_schemes:
+            scheme.setup(self.equation, apply_bcs, term_type)
+            self.setup_transporting_velocity(self.scheme)
+            if term_type == transport:
+            if self.io.output.log_courant:
+                self.scheme.courant_max = self.io.courant_max
+                
+        def timestep(self):
+
+        super().timestep()
+
+        with timed_stage("Physics"):
+            for _, scheme in self.physics_schemes:
+                scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+            
+            
+class SplitPhysicsDynamicsTimestepper(SplitTimestepper):
+    """
+    A version of the SplitTimestepper that separates the physics from the other
+    terms, which are labelled as the dynamics.
+    """
+    def __init__(self, equation, scheme, io, spatial_methods=None,
+                 physics_schemes=None):
+                 
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the prognostic equation
+            dynamics_scheme (:class:`TimeDiscretisation`): the scheme to use to
+                timestep the prognostic equation
+            io (:class:`IO`): the model's object for controlling input/output.
+            spatial_methods (iter,optional): a list of objects describing the
+                methods to use for discretising transport or diffusion terms
+                for each transported/diffused variable. Defaults to None,
+                in which case the terms follow the original discretisation in
+                the equation.
+            physics_schemes: (list, optional): a list of tuples of the form
+                (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`),
+                pairing physics parametrisations and timestepping schemes to use
+                for each. Timestepping schemes for physics must be explicit.
+                Defaults to None.
+        """
+        term_splitting = ['dynamics', 'physics']
+        
+        dynamics_schemes = [('dynamics', scheme(self.equation.domain)]
+        
+        super.init(self, equation, term_splitting, io, spatial_methods=None,
+                   dynamics_schemes=dynamics_schemes, 
+                   physics_schemes=physics_schemes)
 
 class SplitPhysicsTimestepper(Timestepper):
     """
