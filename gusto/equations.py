@@ -838,7 +838,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # moist dynamics terms not involving topography
         if self.moist_dynamics:
             beta2 = Constant(beta2)
-            q_sat_expr = q0*g*H/(g*D) * exp(20*(1-b_e/g))
+            if bexpr is not None:
+                topography = self.prescribed_fields('topography', domain.spaces('DG')).interpolate(bexpr)
+                q_sat_expr = compute_saturation(q0, H, g, D, b_e, topography)
+            else:
+                q_sat_expr = compute_saturation(q0, H, g, D, b_e)
             q_v = conditional(q_t < q_sat_expr, q_t, q_sat_expr)
             n = FacetNormal(domain.mesh)
             source_form = subject(prognostic(-D*div(b_e*w)*dx
@@ -854,8 +858,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
             # moist dynamics terms involving topography
             if bexpr is not None:
-                topography = self.prescribed_fields('topography', domain.spaces('DG')).interpolate(bexpr)
-                n = FacetNormal(domain.mesh)
                 topography_form = subject(prognostic
                                           (-topography*div(b_e*w)*dx
                                            + jump(b_e*w, n)*avg(topography)*dS
