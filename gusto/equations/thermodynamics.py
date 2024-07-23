@@ -1,10 +1,10 @@
 """Some expressions representing common thermodynamic variables."""
 
-from firedrake import exp, ln
+from firedrake import exp
 
 __all__ = ["theta", "exner_pressure", "dexner_drho", "dexner_dtheta", "p", "T",
            "rho", "r_sat", "Lv", "theta_e", "internal_energy", "RH", "e_sat",
-           "r_v", "T_dew"]
+           "r_v"]
 
 
 def theta(parameters, T, p):
@@ -301,4 +301,3 @@ def r_v(parameters, H, T, p):
     rsat = r_sat(parameters, T, p)
 
     return H * rsat / (1 + (1 - H) * rsat / epsilon)
-

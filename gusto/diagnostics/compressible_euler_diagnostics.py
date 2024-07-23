@@ -3,7 +3,7 @@
 from firedrake import (dot, dx, Function, ln, TestFunction, TrialFunction,
                        Constant, grad, inner, LinearVariationalProblem,
                        LinearVariationalSolver, FacetNormal, ds_b, dS_v, div,
-                       avg, jump, SpatialCoordinate, exp)
+                       avg, jump, SpatialCoordinate)
 
 from gusto.diagnostics.diagnostics import (
     DiagnosticField, Energy, IterativeDiagnosticField
@@ -465,8 +465,8 @@ class DewpointTemperature(IterativeDiagnosticField):
         if 'water_vapour' in state_fields._field_names:
             r_v = state_fields('water_vapour')
         else:
-            raise RuntimeError('Dewpoint temperature diagnostic should only' +
-                               'be used with water vapour')
+            raise RuntimeError('Dewpoint temperature diagnostic should only'
+                               + 'be used with water vapour')
 
         exner = tde.exner_pressure(self.parameters, rho, theta)
         pressure = tde.p(self.parameters, exner)
@@ -474,7 +474,6 @@ class DewpointTemperature(IterativeDiagnosticField):
         r_sat = tde.r_sat(self.parameters, self.field, pressure)
 
         return self.field - temperature*(r_sat - r_v)
-
 
     def set_first_guess(self, domain, state_fields):
         """
@@ -489,8 +488,8 @@ class DewpointTemperature(IterativeDiagnosticField):
         if 'water_vapour' in state_fields._field_names:
             r_v = state_fields('water_vapour')
         else:
-            raise RuntimeError('Dewpoint temperature diagnostic should only' +
-                               'be used with water vapour')
+            raise RuntimeError('Dewpoint temperature diagnostic should only'
+                               + 'be used with water vapour')
 
         exner = tde.exner_pressure(self.parameters, rho, theta)
         temperature = tde.T(self.parameters, theta, exner, r_v=r_v)
@@ -562,8 +561,6 @@ class WetBulbTemperature(IterativeDiagnosticField):
         B = self.parameters.cv
 
         return - b / a + (a*temperature + b) / a * ((A*r_sat + B) / (A*r_v + B))**(a/A)
-
-
 
     def set_first_guess(self, domain, state_fields):
         """
