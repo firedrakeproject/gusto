@@ -27,8 +27,7 @@ eqns = ShallowWaterEquations_1d(domain, parameters,
                                 diffusion_options=diffusion_options)
 
 output = OutputParameters(dirname="1dsw_%s" % str(epsilon),
-                          dumpfreq=50,
-                          log_courant=False)
+                          dumpfreq=50)
 io = IO(domain, output)
 
 transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "v"),
