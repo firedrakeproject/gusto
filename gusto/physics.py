@@ -33,7 +33,7 @@ __all__ = ["SaturationAdjustment", "Fallout", "Coalescence", "EvaporationOfRain"
            "AdvectedMoments", "InstantRain", "SWSaturationAdjustment",
            "SourceSink", "SurfaceFluxes", "WindDrag", "StaticAdjustment",
            "SuppressVerticalWind", "BoundaryLayerMixing", "TerminatorToy",
-           "SWMoistDynamics", "compute_saturation"]
+           "SWMoistDynamics"]
 
 
 class PhysicsParametrisation(object, metaclass=ABCMeta):
@@ -1973,11 +1973,3 @@ class SWMoistDynamics(PhysicsParametrisation):
         # vapour is equal to saturation
         self.water_v.interpolate(conditional(self.m < self.saturation_curve,
                                              self.m, self.saturation_curve))
-
-
-def compute_saturation(q0, H, g, D, b, B=None):
-    if B is None:
-        sat_expr = q0*H/(D) * exp(20*(1-b/g))
-    else:
-        sat_expr = q0*H/(D+B) * exp(20*(1-b/g))
-    return sat_expr
