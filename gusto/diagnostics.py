@@ -18,7 +18,7 @@ from gusto.equations import CompressibleEulerEquations
 from gusto.active_tracers import TracerVariableType, Phases
 from gusto.logging import logger
 from gusto.kernels import MinKernel, MaxKernel
-from gusto.physics import compute_saturation
+from gusto.saturation_function import compute_saturation
 import numpy as np
 
 __all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
