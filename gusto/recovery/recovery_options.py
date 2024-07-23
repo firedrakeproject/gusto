@@ -32,6 +32,7 @@ class RecoverySpaces():
         self.build_HDiv_options()
 
     def build_DG_options(self):
+        # Method to build the DG options for recovery 
         DG_embedding_space = self.domain.spaces.DG1_equispaced
         DG_recovered_space = self.domain.spaces.H1
 
@@ -39,7 +40,7 @@ class RecoverySpaces():
                                           recovered_space=DG_recovered_space)
 
     def build_theta_options(self):
-        # Theta spaces need to manually be built as they dont exist in de-Rham
+        # Method to build the theta options for recovery 
         DG_hori_ele = FiniteElement('DG', self.cell, 1, variant='equispaced')
         DG_vert_ele = FiniteElement('DG', interval, 2, variant='equispaced')
         CG_hori_ele = FiniteElement('CG', self.cell, 1)
@@ -54,7 +55,7 @@ class RecoverySpaces():
                                              recovered_space=VCG_theta)
 
     def build_HDiv_options(self):
-
+        # Method to build the HDiv options for recovery 
         HDiv_embedding_Space = getattr(self.de_Rham, 'HDiv')
         HDiv_recovered_Space = getattr(self.de_Rham, 'HCurl')
 
