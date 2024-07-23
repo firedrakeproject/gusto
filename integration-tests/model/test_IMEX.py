@@ -22,13 +22,13 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
     eqn.label_terms(lambda t: t.has_label(transport), explicit)
 
     if scheme == "ssp3":
-        transport_scheme = SSP3(domain)
+        transport_scheme = IMEX_SSP3(domain)
     elif scheme == "ark2":
-        transport_scheme = ARK2(domain)
+        transport_scheme = IMEX_ARK2(domain)
     elif scheme == "ars3":
-        transport_scheme = ARS3(domain)
+        transport_scheme = IMEX_ARS3(domain)
     elif scheme == "trap2":
-        transport_scheme = Trap2(domain)
+        transport_scheme = IMEX_Trap2(domain)
     elif scheme == "euler":
         transport_scheme = IMEX_Euler(domain)
 
