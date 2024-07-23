@@ -75,8 +75,8 @@ class Rexi(object):
         # set dummy constants for tau and A_i and Beta
         self.br = Constant(1.)
         self.bi = Constant(1.)
-        self.ar = Constant(1.)
-        self.ai = Constant(1.)
+        # self.ar = Constant(1.)
+        # self.ai = Constant(1.)
         self.tau = Constant(1.)
 
         # set up functions, problem and solver
@@ -96,9 +96,53 @@ class Rexi(object):
 
         U0r = cpx.subfunctions(self.U0, cpx.re)
 
-        ar, ai = self.ar, self.ai
         a = NullTerm
         b = NullTerm
+
+        ncpts = len(W_)
+
+        mass = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+
+        function = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=drop)
+
+        def form_mass(*trials_and_tests):
+            trials = trials_and_tests[:ncpts]
+            tests = trials_and_tests[ncpts:]
+            m = mass.label_map(
+                all_terms,
+                replace_test_function(tests))
+            m = m.label_map(
+                all_terms,
+                replace_subject(trials))
+            return m
+
+        def form_function(*trials_and_tests):
+            trials = trials_and_tests[:ncpts]
+            tests = trials_and_tests[ncpts:]
+            f = function.label_map(
+                all_terms,
+                replace_test_function(tests))
+            f = f.label_map(
+                all_terms,
+                replace_subject(trials))
+            return f
+
+        def form_rhs(*tests):
+            rhs = mass.label_map(
+                all_terms,
+                replace_test_function(tests))
+            rhs = rhs.label_map(
+                all_terms,
+                replace_subject(U0r))
+            return rhs
+
+        a, self.ar, self.ai = cpx.BilinearForm(W, 1, form_mass, return_z=True)
+
+        b = cpx.LinearForm(W, 1, form_rhs)
 
         for i in range(len(W_)):
             # residual only for prognostic i
@@ -108,19 +152,6 @@ class Rexi(object):
                     split_form(t.form)[i].form,
                     t.labels),
                 map_if_false=drop)
-
-            # mass matrix terms for real/imaginary components
-            mass_form = ith_res.label_map(
-                lambda t: t.has_label(time_derivative),
-                map_if_false=drop)
-
-            mr = mass_form.label_map(
-                all_terms,
-                replace_test_function(tests_r[i]))
-
-            mi = mass_form.label_map(
-                all_terms,
-                replace_test_function(tests_i[i]))
 
             # linear operator for real/imaginary components
             L_form = ith_res.label_map(
@@ -135,23 +166,9 @@ class Rexi(object):
                 all_terms,
                 replace_test_function(tests_i[i]))
 
-            # real matrix M multiplied by complex number (ar + i*ai)
-            a += (
-                + ar * mr.label_map(all_terms, replace_subject(trials_r[i], old_idx=i))
-                - ai * mr.label_map(all_terms, replace_subject(trials_i[i], old_idx=i))
-            )
-
-            a += (
-                + ai * mi.label_map(all_terms, replace_subject(trials_r[i], old_idx=i))
-                + ar * mi.label_map(all_terms, replace_subject(trials_i[i], old_idx=i))
-            )
-
             # real matrix M multiplied by real number tau
             a -= self.tau * Lr.label_map(all_terms, replace_subject(trials_r))
             a -= self.tau * Li.label_map(all_terms, replace_subject(trials_i))
-
-            # right hand side only has real valued component
-            b += mr.label_map(all_terms, replace_subject(U0r[i], i))
 
         a = a.label_map(lambda t: t is NullTerm, drop)
         b = b.label_map(lambda t: t is NullTerm, drop)
