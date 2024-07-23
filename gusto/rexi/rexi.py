@@ -95,11 +95,11 @@ class Rexi(object):
         trials_i = cpx.split(trial, cpx.im)
 
         U0r = cpx.subfunctions(self.U0, cpx.re)
-        U0i = cpx.subfunctions(self.U0, cpx.im)
 
         ar, ai = self.ar, self.ai
         a = NullTerm
-        L = NullTerm
+        b = NullTerm
+
         for i in range(len(W_)):
             ith_res = residual.label_map(
                 lambda t: t.get(prognostic) == equation.field_names[i],
@@ -122,10 +122,7 @@ class Rexi(object):
                                           replace_subject(trials_i[i], old_idx=i))
             )
 
-            L += (
-                m.label_map(all_terms, replace_subject(U0r[i], i))
-                + m.label_map(all_terms, replace_subject(U0i[i], old_idx=i))
-            )
+            b += m.label_map(all_terms, replace_subject(U0r[i], i))
 
             m = mass_form.label_map(
                 all_terms,
@@ -137,12 +134,7 @@ class Rexi(object):
                                            replace_subject(trials_i[i], old_idx=i))
             )
 
-            L += (
-                m.label_map(all_terms,
-                            replace_subject(U0r[i], i))
-                - m.label_map(all_terms,
-                              replace_subject(U0i[i], i))
-            )
+            b += m.label_map(all_terms, replace_subject(U0r[i], i))
 
             L_form = ith_res.label_map(
                 lambda t: t.has_label(time_derivative),
@@ -165,7 +157,7 @@ class Rexi(object):
                                          replace_subject(trials_i))
 
         a = a.label_map(lambda t: t is NullTerm, drop)
-        L = L.label_map(lambda t: t is NullTerm, drop)
+        b = b.label_map(lambda t: t is NullTerm, drop)
 
         if hasattr(equation, "aP"):
             aP = equation.aP(trial, self.ai, self.tau)
@@ -182,7 +174,7 @@ class Rexi(object):
         # now we can transfer the velocity boundary conditions to the complex space
         bcs = tuple(cb for bc in ubcs for cb in cpx.DirichletBC(W, W_, bc))
 
-        rexi_prob = LinearVariationalProblem(a.form, L.form, self.w, aP=aP,
+        rexi_prob = LinearVariationalProblem(a.form, b.form, self.w, aP=aP,
                                              bcs=bcs,
                                              constant_jacobian=False)
 
@@ -216,10 +208,11 @@ class Rexi(object):
             j = self.idx + i
             self.ar.assign(self.alpha[j].real)
             self.ai.assign(self.alpha[j].imag)
-            self.solver.solve()
 
             self.br.assign(self.beta[j].real)
             self.bi.assign(self.beta[j].imag)
+
+            self.solver.solve()
 
             cpx.get_real(self.w, self.wrk)
             x_out += self.br*self.wrk
