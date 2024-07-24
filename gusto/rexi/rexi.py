@@ -138,13 +138,7 @@ class Rexi(object):
 
         # generate ufl for right hand side over given trial/tests
         def form_rhs(*tests):
-            rhs = mass.label_map(
-                all_terms,
-                replace_test_function(tests))
-            rhs = rhs.label_map(
-                all_terms,
-                replace_subject(self.U0))
-            return rhs
+            return form_mass(*self.U0.subfunctions, *tests)
 
         # complex Constants for alpha and beta values
         self.ac = cpx.ComplexConstant(1)
