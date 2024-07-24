@@ -10,7 +10,8 @@ from firedrake import (
     TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
     rhs, FacetNormal, div, dx, jump, avg, dS, dS_v, dS_h, ds_v, ds_t, ds_b,
     ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis,
-    BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC
+    BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC,
+    conditional, Interpolator
 )
 from firedrake.fml import Term, drop
 from firedrake.petsc import flatten_parameters
@@ -21,6 +22,7 @@ from gusto.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.labels import linearisation, time_derivative, hydrostatic
 from gusto import thermodynamics
 from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
+from gusto.saturation_function import compute_saturation
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
@@ -895,7 +897,7 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
     all moisture in the dynamics.
 
     This solves a linear problem for the moist shallow water equations with
-    prognostic variables u (velocity), D (depth) and b_e ( equivalent buoyancy).
+    prognostic variables u (velocity), D (depth) and b_e (equivalent buoyancy).
     It follows the following strategy:
 
     (1) Eliminate b_e
@@ -929,6 +931,8 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
         # Check that the third field is buoyancy
         if not equation.field_names[2] == 'b_e':
             raise NotImplementedError("Field 'b_e' must exist to use the moist dynamics linear solver in the SIQN scheme")
+        if not equation.field_names[3] == 'q_t':
+            raise NotImplementedError("Field 'q_t' must exist to use the moist dynamics linear solver in the SIQN scheme")
 
         # Store time-stepping coefficients as UFL Constants
         beta = Constant(beta_)
@@ -939,6 +943,12 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
         D_in = split(self.xrhs)[1]
         b_e_in = split(self.xrhs)[2]
 
+        # Split up the xn vector
+        self.xn = Function(self.equations.function_space)
+        D_xn = split(self.xn)[1]
+        b_e_xn = split(self.xn)[2]
+        q_t_xn = split(self.xn)[3]
+
         # Build the reduced function space for u, D
         M = MixedFunctionSpace((Vu, VD))
         w, phi = TestFunctions(M)
@@ -946,19 +956,40 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
 
         # Get background buoyancy and depth
         Dbar = split(equation.X_ref)[1]
-        bbar = split(equation.X_ref)[2]
+        b_ebar = split(equation.X_ref)[2]
 
-        # Approximate elimination of b
-        b_e = -dot(u, grad(bbar))*beta + b_e_in
+        # Approximate elimination of b_e
+        b_e = -dot(u, grad(b_ebar))*beta + b_e_in
 
         n = FacetNormal(equation.domain.mesh)
+
+        # compute q_v using q_sat to partition q_t into q_v and q_c
+        g = equation.parameters.g
+        H = equation.parameters.H
+        q0 = equation.q0
+
+        # check for topography
+        if hasattr(equation.field_names, "topography"):
+            B = equation.fields("topography")  # I don't think this will work
+        else:
+            B = None
+
+        self.q_sat_func = Function(VD)
+        self.q_v_func = Function(VD)
+
+        # set up interpolators that use the xn values for D and b_e
+        self.q_sat_expr_interpolator = Interpolator(compute_saturation(q0, H, g, D_xn, b_e_xn, B), VD)
+        self.q_v_interpolator = Interpolator(conditional(q_t_xn < self.q_sat_func, q_t_xn, self.q_sat_func), VD)
+
+        b = b_e - equation.beta2 * self.q_v_func  # should this be the residual?
+        bbar = b_ebar - equation.beta2 * self.q_v_func
 
         eqn = (
             inner(w, (u - u_in)) * dx
             - beta * (D - Dbar) * div(w*bbar) * dx
             + beta * jump(w*bbar, n) * avg(D-Dbar) * dS
             - beta * 0.5 * Dbar * bbar * div(w) * dx
-            - beta * 0.5 * Dbar * b_e * div(w) * dx
+            - beta * 0.5 * Dbar * b * div(w) * dx
             - beta * 0.5 * bbar * div(w*(D-Dbar)) * dx
             + beta * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
             + inner(phi, (D - D_in)) * dx
@@ -985,14 +1016,14 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
         self.uD_solver = LinearVariationalSolver(uD_problem,
                                                  solver_parameters=self.solver_parameters,
                                                  appctx=appctx)
-        # Reconstruction of b
+        # Reconstruction of b_e
         b_e = TrialFunction(Vb)
         gamma = TestFunction(Vb)
 
         u, D = self.uD.subfunctions
         self.b_e = Function(Vb)
 
-        b_e_eqn = gamma*(b_e - b_e_in + inner(u, grad(bbar))*beta) * dx
+        b_e_eqn = gamma*(b_e - b_e_in + inner(u, grad(b_ebar))*beta) * dx
 
         b_e_problem = LinearVariationalProblem(lhs(b_e_eqn),
                                                rhs(b_e_eqn),
@@ -1003,7 +1034,7 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -1014,16 +1045,25 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
                 :class:`MixedFunctionSpace`.
         """
         self.xrhs.assign(xrhs)
+        self.xn.assign(xn)
 
         # Check that the b reference profile has been set
-        bbar = split(self.equations.X_ref)[2]
+        b_ebar = split(self.equations.X_ref)[2]
         b_e = dy.subfunctions[2]
-        bbar_func = Function(b_e.function_space()).interpolate(bbar)
-        if bbar_func.dat.data.max() == 0 and bbar_func.dat.data.min() == 0:
+
+        b_ebar_func = Function(b_e.function_space()).interpolate(b_ebar)
+        if b_ebar_func.dat.data.max() == 0 and b_ebar_func.dat.data.min() == 0:
             logger.warning("The reference profile for b_e in the linear solver is zero. To set a non-zero profile add b_e to the set_reference_profiles argument.")
 
         with timed_region("Gusto:VelocityDepthSolve"):
             logger.info('Moist dynamics linear solver: mixed solve')
+
+            self.q_sat_func.assign(self.q_sat_expr_interpolator.interpolate())
+            print("q_sat_func used to partition q_t before the velocity-depth solve:", self.q_sat_func.dat.data.min(), self.q_sat_func.dat.data.max())
+
+            self.q_v_func.assign(self.q_v_interpolator.interpolate())
+            print("q_v before the velocity depth solve:", self.q_v_func.dat.data.min(), self.q_v_func.dat.data.max())
+
             self.uD_solver.solve()
 
         u1, D1 = self.uD.subfunctions
