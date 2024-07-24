@@ -5,7 +5,7 @@ and checks the example against a known good checkpointed answer.
 
 from os.path import join, abspath, dirname
 from gusto import *
-import gusto.thermodynamics as tde
+import gusto.equations.thermodynamics as tde
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
                        sqrt, ExtrudedMesh, as_vector)
 import numpy as np
