@@ -44,7 +44,7 @@ jobs:
             --timeout=3600 \
             --timeout-method=thread \
             -o faulthandler_timeout=3660 \
-            -v examples
+            -v unit-tests integration-tests examples
         timeout-minutes: 120
       - name: Prepare logs
         if: always()
