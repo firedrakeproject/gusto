@@ -1,3 +1,13 @@
+"""
+This runs a simple transport test on the sphere using the SDC time discretisations to
+test whether the errors are within tolerance. The test is run for the following schemes:
+- IMEX_SDC_Le(1,1) - IMEX SDC with 1 quadrature node of Gauss type (2nd order scheme)
+- IMEX_SDC_R(2,2)  - IMEX SDC with 2 qaudrature nodes of Radau type (3rd order scheme) using
+                     LU decomposition for the implicit update
+- BE_SDC_Lo(3,3)   - Implicit SDC with 3 quadrature nodes of Lobatto type (4th order scheme).
+- FE_SDC_Le(3,5)   - Explicit SDC with 3 quadrature nodes of Gauss type (6th order scheme).
+"""
+
 from firedrake import norm
 from gusto import *
 import pytest

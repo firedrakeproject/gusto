@@ -317,7 +317,7 @@ class SDC(object, metaclass=ABCMeta):
 
     @property
     def res_rhs(self):
-        """Set up the residual for the calculation of F(Y)."""
+        """Set up the residual for the calculation of F(y)."""
         a = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Urhs, old_idx=self.idx),
                                     drop)
@@ -331,11 +331,11 @@ class SDC(object, metaclass=ABCMeta):
     @property
     def res_fin(self):
         """Set up the residual for final solve."""
-        # y^(n+1)
+        # y_(n+1)
         a = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.U_fin, old_idx=self.idx),
                                     drop)
-        # y^n
+        # y_n
         F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                         replace_subject(self.Un, old_idx=self.idx),
                                         drop)
@@ -352,7 +352,7 @@ class SDC(object, metaclass=ABCMeta):
 
     def res(self, m):
         """Set up the discretisation's residual for a given node m."""
-        # Add time derivative terms  y^(k+1)_m - y_start for node m. y_start is y^n for Z2N formulation
+        # Add time derivative terms  y^(k+1)_m - y_start for node m. y_start is y_n for Z2N formulation
         # and y^(k)_m for N2N formulation
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
@@ -525,7 +525,7 @@ class SDC(object, metaclass=ABCMeta):
                     self.solver_rhs.solve()
                     self.fUnodes[m-1].assign(self.Urhs)
                 self.compute_quad_final()
-                # Compute y^(n+1) = y^n + sum(j=1,M) q_j*F(y_j)
+                # Compute y_(n+1) = y_n + sum(j=1,M) q_j*F(y_j)
                 self.solver_fin.solve()
                 x_out.assign(self.U_fin)
             else:
