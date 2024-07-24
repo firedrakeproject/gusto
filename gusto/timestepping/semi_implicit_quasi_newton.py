@@ -300,7 +300,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     # transports a field from xstar and puts result in xp
 
                     if isinstance(name, list):
-                        # Evolve the mixed field. This will transport any
+                        # Evolve the entire mixed field. This will transport any
                         # terms in the list, with the others remaining unchanged
                         # from xstar into xp.
                         logger.info(f'SIQN: Transport {outer}: Simultaneous transport of {name}')
