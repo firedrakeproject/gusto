@@ -6,9 +6,9 @@ errornorm for the resulting field to ensure that the result is reasonable.
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp, as_vector,
                        norm, Constant, conditional, sqrt, VectorFunctionSpace)
 from gusto import *
+import pytest
 
-
-def run_advection_diffusion(tmpdir):
+def run_advection_diffusion(tmpdir, timestepper):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -36,7 +36,12 @@ def run_advection_diffusion(tmpdir):
     io = IO(domain, output)
 
     # Time stepper
-    stepper = PrescribedTransport(equation, SSPRK3(domain), io, spatial_methods)
+    if timestepper == 'prescribed':
+        stepper = PrescribedTransport(equation, SSPRK3(domain), io, spatial_methods)
+    else:
+        transport_scheme = SSPRK3(domain)
+        diffusion_scheme = SSPRK3(domain)
+        stepper = SplitTransportDiffusionTimestepper(equation, transport_scheme, diffusion_scheme, io, spatial_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -77,9 +82,10 @@ def run_advection_diffusion(tmpdir):
     return error
 
 
-def test_advection_diffusion(tmpdir):
+@pytest.mark.parametrize("timestepper", ['prescribed','split'])
+def test_advection_diffusion(tmpdir, timestepper):
 
     tol = 0.015
-    error = run_advection_diffusion(tmpdir)
+    error = run_advection_diffusion(tmpdir, timestepper)
     assert error < tol, 'The error in the advection-diffusion ' + \
         'equation is greater than the permitted tolerance'

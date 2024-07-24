@@ -10,9 +10,10 @@ minimum of the rain is zero.
 from gusto import *
 from firedrake import (Constant, PeriodicSquareMesh, SpatialCoordinate,
                        sqrt, conditional, cos, pi, FunctionSpace)
+import pytest
 
 
-def run_instant_rain(dirname):
+def run_instant_rain(dirname, timestepper):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -56,9 +57,13 @@ def run_instant_rain(dirname):
     physics_schemes = [(InstantRain(eqns, saturation, rain_name="rain"),
                         RK4(domain))]
 
-    # Time stepper
-    stepper = SplitPhysicsTimestepper(eqns, RK4(domain), io, transport_method,
+    # Timestepper
+    if timestepper == 'split_physics':
+        stepper = SplitPhysicsTimestepper(eqns, RK4(domain), io, transport_method,
                                       physics_schemes=physics_schemes)
+    else:
+        stepper = SplitPhysicsDynamicsTimestepper(eqns, RK4(domain), io, spatial_methods=transport_method,
+                                                  physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -91,9 +96,10 @@ def run_instant_rain(dirname):
     return stepper, saturation, initial_vapour, vapour_true, rain_true
 
 
-def test_instant_rain_setup(tmpdir):
+@pytest.mark.parametrize("timestepper", ['split_physics','split_physics_dynamics'])
+def test_instant_rain_setup(tmpdir, timestepper):
     dirname = str(tmpdir)
-    stepper, saturation, initial_vapour, vapour_true, rain_true = run_instant_rain(dirname)
+    stepper, saturation, initial_vapour, vapour_true, rain_true = run_instant_rain(dirname,timestepper)
     v = stepper.fields("water_vapour")
     r = stepper.fields("rain")
 
