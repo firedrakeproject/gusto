@@ -119,8 +119,16 @@ class CompressibleSolver(TimesteppingSolver):
     """
 
     solver_parameters = {
+        'mat_type': 'matfree',
         'ksp_type': 'preonly',
-        'pc_type': 'lu',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.SCPC',
+        'pc_sc_eliminate_fields': '0, 1',
+        # The reduced operator is not symmetric
+        'condensed_field': {
+            'ksp_type': 'preonly',
+            'pc_type': 'lu'
+        }
     }
 
     def __init__(self, equations, alpha=0.5,
