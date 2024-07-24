@@ -118,22 +118,18 @@ class CompressibleSolver(TimesteppingSolver):
     (3) Reconstruct theta
     """
 
-    solver_parameters = {'mat_type': 'matfree',
-                         'ksp_type': 'preonly',
-                         'pc_type': 'python',
-                         'pc_python_type': 'firedrake.SCPC',
-                         'pc_sc_eliminate_fields': '0, 1',
-                         # The reduced operator is not symmetric
-                         'condensed_field': {'ksp_type': 'fgmres',
-                                             'ksp_rtol': 1.0e-8,
-                                             'ksp_atol': 1.0e-8,
-                                             'ksp_max_it': 100,
-                                             'pc_type': 'gamg',
-                                             'pc_gamg_sym_graph': None,
-                                             'mg_levels': {'ksp_type': 'gmres',
-                                                           'ksp_max_it': 5,
-                                                           'pc_type': 'bjacobi',
-                                                           'sub_pc_type': 'ilu'}}}
+    solver_parameters = {
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.SCPC',
+        'pc_sc_eliminate_fields': '0, 1',
+        # The reduced operator is not symmetric
+        'condensed_field': {
+            'ksp_type': 'preonly',
+            'pc_type': 'lu'
+        }
+    }
 
     def __init__(self, equations, alpha=0.5,
                  quadrature_degree=None, solver_parameters=None,
@@ -383,6 +379,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Solve the hybridized system
         logger.info('Compressible linear solver: hybridized solve')
+        logger.debug('Hangs on this solve ??? :')
         self.hybridized_solver.solve()
 
         broken_u, rho1, _ = self.urhol0.subfunctions
