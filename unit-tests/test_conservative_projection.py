@@ -6,7 +6,7 @@ mass is conserved.
 
 from firedrake import (UnitSquareMesh, FunctionSpace, Constant,
                        Function, assemble, dx, sin, SpatialCoordinate)
-from gusto import ConservativeProjector, ContinuousConservativeProjector
+from gusto import ConservativeProjector
 import pytest
 
 @pytest.mark.parametrize("projection", ["discontinuous", "continuous"])
@@ -31,7 +31,8 @@ def test_conservative_projection(projection):
 
     # Projector object
     if projection == "continuous":
-        projector = ContinuousConservativeProjector(rho_DG1, rho_DG0, m_DG1, m_CG1)
+        projector = ConservativeProjector(rho_DG1, rho_DG0, m_DG1, m_CG1,
+                                          subtract_mean=True)
     else:
         projector = ConservativeProjector(rho_DG1, rho_DG0, m_DG1, m_DG0)
 

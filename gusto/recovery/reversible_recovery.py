@@ -3,7 +3,7 @@ This file provides an object for reconstructing a discontinuous field in a
 higher-order function space.
 """
 
-from gusto import ConservativeProjector, ContinuousConservativeProjector
+from gusto.core.conservative_projection import ConservativeProjector
 from firedrake import (Projector, Function, Interpolator)
 from .recovery import Recoverer
 
@@ -139,13 +139,12 @@ class ConservativeRecoverer(object):
 
         # Obtain the correction in the lower order space
         # Swap density arguments!
-        # TODO: should this depend on continuity of target space?
-        self.projector_low = ContinuousConservativeProjector(target_density, source_density,
-                                                             self.q_rec_high, self.q_corr_low)
+        self.projector_low = ConservativeProjector(target_density, source_density,
+                                                   self.q_rec_high, self.q_corr_low,
+                                                   subtract_mean=True)
 
         # Final injection operator
         # Should identify low order field in higher order space
-        # TODO: should this depend on continuity of target space?
         self.injector = ConservativeProjector(source_density, target_density,
                                               self.q_corr_low, self.q_corr_high)
 

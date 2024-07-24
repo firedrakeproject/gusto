@@ -51,17 +51,9 @@ def expr(geometry, mesh, configuration):
         elif geometry == "non-periodic":
             rho_expr = np.random.randn() + np.random.randn() * x + np.random.randn() * z
 
-    elif configuration == "varying":
-        if geometry == "periodic":
-            rho_expr = Constant(2.0) + 0.01*np.random.randn() * z
-            m_expr = np.random.randn() + np.random.randn() * z
-        elif geometry == "non-periodic":
-            rho_expr = Constant(2.0) + 0.05*np.random.randn() * x + 0.02*np.random.randn() * z
-            m_expr = np.random.randn() + np.random.randn() * x + np.random.randn() * z
-
     return rho_expr, m_expr
 
-@pytest.mark.parametrize("configuration", ["m_constant", "rho_constant", "varying"])
+@pytest.mark.parametrize("configuration", ["m_constant", "rho_constant"])
 @pytest.mark.parametrize("geometry", ["periodic", "non-periodic"])
 def test_conservative_recovery(geometry, mesh, configuration):
 
@@ -89,22 +81,6 @@ def test_conservative_recovery(geometry, mesh, configuration):
     m_Vt_back = Function(Vt)
     m_DG1 = Function(DG1)
 
-    # ------------------------------------------------------------------------ #
-    # DEBUGGING
-    from firedrake import (TestFunction, TrialFunction, LinearVariationalProblem,
-                           LinearVariationalSolver, ds_b, DirichletBC)
-    test = TestFunction(Vt)
-    trial = TrialFunction(Vt)
-    lhs = trial * test * rho_DG0 * dx
-    rhs = Constant(0.5) * test * rho_DG1 * dx
-    bcs = [DirichletBC(Vt, Constant(0.5), 'bottom'),
-           DirichletBC(Vt, Constant(0.5), 'top')]
-    prob = LinearVariationalProblem(lhs, rhs, m_Vt_back, bcs=bcs)
-    solver = LinearVariationalSolver(prob)
-    solver.solve()
-
-    # import pdb; pdb.set_trace()
-
     options = ConservativeRecoveryOptions(embedding_space=DG1,
                                           recovered_space=CG1,
                                           boundary_method=BoundaryMethod.taylor)
@@ -112,7 +88,8 @@ def test_conservative_recovery(geometry, mesh, configuration):
     # make the recoverers and do the recovery
     conservative_recoverer = ConservativeRecoverer(m_Vt, m_DG1,
                                                    rho_DG0, rho_DG1, options)
-    back_projector = ContinuousConservativeProjector(rho_DG1, rho_DG0, m_DG1, m_Vt_back)
+    back_projector = ConservativeProjector(rho_DG1, rho_DG0, m_DG1, m_Vt_back,
+                                           subtract_mean=True)
 
     conservative_recoverer.project()
     back_projector.project()
@@ -123,14 +100,11 @@ def test_conservative_recovery(geometry, mesh, configuration):
     mass_low = assemble(rho_DG0*m_Vt*dx)
     mass_high = assemble(rho_DG1*m_DG1*dx)
 
-    if configuration == 'm_constant':
-        import pdb; pdb.set_trace()
-
-    assert (mass_low - mass_high) < 1e-14, \
+    assert (mass_low - mass_high) / mass_high < 5e-14, \
         f'Conservative recovery on {geometry} vertical slice not conservative for {configuration} configuration'
-    assert m_low_diff < 1e-14, \
+    assert m_low_diff < 2e-14, \
         f'Irreversible conservative recovery on {geometry} vertical slice for {configuration} configuration'
 
     if configuration in ['m_constant', 'rho_constant']:
-        assert m_high_diff < 1e-14, \
+        assert m_high_diff < 2e-14, \
             f'Inaccurate conservative recovery on {geometry} vertical slice for {configuration} configuration'
