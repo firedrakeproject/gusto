@@ -8,7 +8,8 @@ from firedrake import (
 )
 from firedrake.fml import Term, keep, drop
 from gusto.core.configuration import IntegrateByParts, TransportEquationType
-from gusto.core.labels import prognostic, transport, transporting_velocity, ibp_label
+from gusto.core.labels import (prognostic, transport, transporting_velocity, ibp_label,
+                               mass_weighted)
 from gusto.core.logging import logger
 from gusto.spatial_methods.spatial_methods import SpatialMethod
 
@@ -34,7 +35,12 @@ class TransportMethod(SpatialMethod):
         # Inherited init method extracts original term to be replaced
         super().__init__(equation, variable, transport)
 
-        self.transport_equation_type = self.original_form.terms[0].get(transport)
+        # If this is term has a mass_weighted label, then we need to
+        # use the tracer_conservative version of the transport method.
+        if self.original_form.terms[0].has_label(mass_weighted):
+            self.transport_equation_type = TransportEquationType.tracer_conservative
+        else:
+            self.transport_equation_type = self.original_form.terms[0].get(transport)
 
         if self.transport_equation_type == TransportEquationType.tracer_conservative:
             # Extract associated density of the variable
@@ -76,6 +82,22 @@ class TransportMethod(SpatialMethod):
 
             # Create new term
             new_term = Term(self.form.form, original_term.labels)
+
+            # Check if this is a conservative transport
+            if original_term.has_label(mass_weighted):
+                # Extract the original and discretised mass_weighted terms
+                original_mass_weighted_term = original_term.get(mass_weighted).terms[0]
+                new_mass_weighted = self.form.terms[0].get(mass_weighted)
+
+                # Ensure the correct labels for the new mass weighted term
+                new_mass_weighted_term = Term(new_mass_weighted.form, original_mass_weighted_term.labels)
+                # Update the mass weighted transporting velocity
+                new_mass_weighted_transporting_velocity = new_mass_weighted.terms[0].get(transporting_velocity)
+                new_mass_weighted_term = transporting_velocity.update_value(new_mass_weighted_term, new_mass_weighted_transporting_velocity)
+
+                # Add the discretised mass weighted transport term as the
+                # new mass weighted label.
+                new_term = mass_weighted.update_value(new_term, new_mass_weighted_term)
 
             # Replace original term with new term
             equation.residual = equation.residual.label_map(
@@ -199,14 +221,20 @@ class DGUpwind(TransportMethod):
                                                     self.field, ibp=ibp)
 
             elif self.transport_equation_type == TransportEquationType.tracer_conservative:
-                form = upwind_tracer_conservative_form(self.domain, self.test,
+                mass_weighted_form = upwind_tracer_conservative_form(self.domain, self.test,
+                                                                     self.field,
+                                                                     self.conservative_density,
+                                                                     ibp=ibp)
+                advective_form = upwind_advection_form(self.domain, self.test,
                                                        self.field,
-                                                       self.conservative_density,
                                                        ibp=ibp)
+
+                # Store the conservative transport form in the mass_weighted label,
+                # but by default use an advective form.
+                form = mass_weighted(advective_form, mass_weighted_form)
             else:
                 raise NotImplementedError('Upwind transport scheme has not been '
                                           + 'implemented for this transport equation type')
-
         self.form = form
 
 
