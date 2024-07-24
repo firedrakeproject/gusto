@@ -9,6 +9,7 @@ from firedrake import (UnitSquareMesh, FunctionSpace, Constant,
 from gusto import ConservativeProjector
 import pytest
 
+
 @pytest.mark.parametrize("projection", ["discontinuous", "continuous"])
 def test_conservative_projection(projection):
 
@@ -61,4 +62,3 @@ def test_conservative_projection(projection):
         mass_DG0 = assemble(rho_DG0*m_DG0*dx)
 
         assert abs(mass_DG0 - mass_DG1) < tol, "discontinuous projection is not conservative"
-

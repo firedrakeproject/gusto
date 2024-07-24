@@ -9,6 +9,7 @@ from .recovery import Recoverer
 
 __all__ = ["ReversibleRecoverer", "ConservativeRecoverer"]
 
+
 class ReversibleRecoverer(object):
     """
     An object for performing a reconstruction of a low-order discontinuous

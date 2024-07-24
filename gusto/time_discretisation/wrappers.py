@@ -487,7 +487,7 @@ class MixedFSWrapper(object):
             else:
                 x_out_sub.assign(field)
 
-    def pre_update_rho(subwrapper):
+    def pre_update_rho(self, subwrapper):
         """
         Updates the stored density field for the pre-apply for the subwrapper.
 
@@ -500,7 +500,7 @@ class MixedFSWrapper(object):
         self.rho_in_orig_space.assign(rho_subwrapper.x_in_tmp)
         self.rho_in_embedded_space.assign(rho_subwrapper.x_in)
 
-    def post_update_rho(subwrapper):
+    def post_update_rho(self, subwrapper):
         """
         Updates the stored density field for the post-apply for the subwrapper.
 

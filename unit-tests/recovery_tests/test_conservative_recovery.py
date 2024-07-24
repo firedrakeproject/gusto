@@ -33,6 +33,7 @@ def mesh(geometry):
 
     return extruded_mesh
 
+
 def expr(geometry, mesh, configuration):
 
     x, z = SpatialCoordinate(mesh)
@@ -52,6 +53,7 @@ def expr(geometry, mesh, configuration):
             rho_expr = np.random.randn() + np.random.randn() * x + np.random.randn() * z
 
     return rho_expr, m_expr
+
 
 @pytest.mark.parametrize("configuration", ["m_constant", "rho_constant"])
 @pytest.mark.parametrize("geometry", ["periodic", "non-periodic"])
