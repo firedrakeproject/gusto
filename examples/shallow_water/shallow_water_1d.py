@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 
 from firedrake import *
 from gusto import *
@@ -9,6 +10,10 @@ n = 128
 delta = L/n
 mesh = PeriodicIntervalMesh(128, L)
 dt = 0.0001
+if '--running-tests' in sys.argv:
+    T = 0.05
+else:
+    T = 1
 
 domain = Domain(mesh, dt, 'CG', 1)
 
@@ -61,4 +66,4 @@ D.interpolate(C1*hexpr + C0)
 
 D += parameters.H
 
-stepper.run(0, 1)
+stepper.run(0, T)
