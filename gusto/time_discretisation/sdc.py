@@ -79,15 +79,15 @@ class SDC(object, metaclass=ABCMeta):
             M (int): Number of quadrature nodes to compute spectral integration over
             maxk (int): Max number of correction interations
             quad_type (str): Type of quadrature to be used. Options are
-            GAUSS, RADAU-LEFT, RADAU-RIGHT and LOBATTO
+                GAUSS, RADAU-LEFT, RADAU-RIGHT and LOBATTO
             node_type (str): Node type to be used. Options are
-            EQUID, LEGENDRE, CHEBY-1, CHEBY-2, CHEBY-3 and CHEBY-4
+                EQUID, LEGENDRE, CHEBY-1, CHEBY-2, CHEBY-3 and CHEBY-4
             qdelta_imp (str): Implicit Qdelta matrix to be used. Options are
-            BE, LU, TRAP, EXACT, PIC, OPT, WEIRD, MIN-SR-NS, MIN-SR-S
+                BE, LU, TRAP, EXACT, PIC, OPT, WEIRD, MIN-SR-NS, MIN-SR-S
             qdelta_exp (str): Explicit Qdelta matrix to be used. Options are
-            FE, EXACT, PIC
+                FE, EXACT, PIC
             formulation (str, optional): Whether to use node-to-node or zero-to-node
-            formulation. Options are N2N and Z2N. Defaults to N2N
+                formulation. Options are N2N and Z2N. Defaults to N2N
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             linear_solver_parameters (dict, optional): dictionary of parameters to
