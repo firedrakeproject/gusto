@@ -66,14 +66,11 @@ VCG1 = FunctionSpace(mesh, "CG", 1)
 Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
 Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
 
-u_opts = RecoveryOptions(embedding_space=Vu_DG1,
-                         recovered_space=Vu_CG1,
-                         boundary_method=BoundaryMethod.taylor)
-rho_opts = RecoveryOptions(embedding_space=VDG1,
-                           recovered_space=VCG1,
-                           boundary_method=BoundaryMethod.taylor)
-theta_opts = RecoveryOptions(embedding_space=VDG1,
-                             recovered_space=VCG1)
+recovery_spaces = RecoverySpaces(domain)
+
+u_opts = recovery_spaces.HDiv_options
+rho_opts = recovery_spaces.DG_options
+theta_opts = recovery_spaces.theta_options
 
 transported_fields = [SSPRK3(domain, "rho", options=rho_opts),
                       SSPRK3(domain, "theta", options=theta_opts),
