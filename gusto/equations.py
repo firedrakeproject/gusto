@@ -27,6 +27,7 @@ from gusto.common_forms import (
 )
 from gusto.active_tracers import ActiveTracer, Phases, TracerVariableType
 from gusto.configuration import TransportEquationType
+from gusto.saturation_function import compute_saturation
 import ufl
 
 
