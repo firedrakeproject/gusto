@@ -708,7 +708,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
             if 'q_t' not in space_names.keys():
                 space_names['q_t'] = 'L2'
             assert beta2 is not None, "If moist dynamics is used beta2 parameter must be specified"
+            self.beta2 = beta2
             assert q0 is not None, "If moist dynamics is used q0 parameter must be specified"
+            self.q0 = q0
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives, pressure gradient and
