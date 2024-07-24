@@ -61,21 +61,14 @@ output = OutputParameters(
 diagnostic_fields = [RelativeHumidity(eqns), Perturbation('theta'),
                      Perturbation('water_vapour'), Perturbation('rho'), Perturbation('RelativeHumidity')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-
 # Transport schemes -- specify options for using recovery wrapper
-VDG1 = domain.spaces("DG1_equispaced")
-VCG1 = FunctionSpace(mesh, "CG", 1)
-Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
-Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
-Vt = domain.spaces("theta")
+recovery_spaces = RecoverySpaces(domain)
 
-u_opts = RecoveryOptions(embedding_space=Vu_DG1,
-                         recovered_space=Vu_CG1,
-                         boundary_method=BoundaryMethod.taylor)
-rho_opts = RecoveryOptions(embedding_space=VDG1,
-                           recovered_space=VCG1,
-                           boundary_method=BoundaryMethod.taylor)
-theta_opts = RecoveryOptions(embedding_space=VDG1, recovered_space=VCG1)
+u_opts = recovery_spaces.HDiv_options
+rho_opts = recovery_spaces.DG_options
+theta_opts = recovery_spaces.theta_options
+
+VDG1 = domain.spaces("DG1_equispaced")
 limiter = VertexBasedLimiter(VDG1)
 
 transported_fields = [SSPRK3(domain, "u", options=u_opts),
