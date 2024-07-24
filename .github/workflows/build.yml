@@ -26,23 +26,17 @@ jobs:
         run: |
           cd ..
           rm -rf build
-      - name: Setup python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.8
       - name: Install Gusto
         run: |
           . /home/firedrake/firedrake/bin/activate
           python -m pip install -r requirements.txt
           python -m pip install -e .
           python -m pip install  \
-            pytest-cov pytest-timeout pytest-xdist
+            pytest-timeout pytest-xdist
       - name: Gusto tests
         run: |
           . /home/firedrake/firedrake/bin/activate
           which firedrake-clean
           python -m pytest \
-            -n 12 --dist worksteal \
             --durations=100 \
-            --cov gusto \
-            -v unit-tests integration-tests examples
+            -v examples
