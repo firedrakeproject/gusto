@@ -6,11 +6,12 @@ As the thermal rises, water vapour condenses into cloud and forms rain.
 Limiters are applied to the transport of the water species.
 """
 from gusto import *
+from gusto.equations import thermodynamics
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, pi, sqrt, exp,
                        TestFunction, dx, TrialFunction, Constant, Function,
                        LinearVariationalProblem, LinearVariationalSolver,
-                       FunctionSpace, VectorFunctionSpace, errornorm)
+                       errornorm)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import sys
 
@@ -85,6 +86,7 @@ linear_solver = CompressibleSolver(eqns)
 
 # Physics schemes
 # NB: can't yet use wrapper or limiter options with physics
+Vt = domain.spaces('theta')
 rainfall_method = DGUpwind(eqns, 'rain', outflow=True)
 zero_limiter = MixedFSLimiter(eqns, {'water_vapour': ZeroLimiter(Vt),
                                      'cloud_water': ZeroLimiter(Vt)})
