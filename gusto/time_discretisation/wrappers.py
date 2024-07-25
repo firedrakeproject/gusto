@@ -141,7 +141,7 @@ class EmbeddedDGWrapper(Wrapper):
                 self.x_in_orig, self.x_in)
             self.x_out_projector = ConservativeProjector(
                 self.rho_out_embedded, self.rho_out_orig,
-                self.increment, self.x_projected, subtract_mean=True)
+                self.increment, self.increment_orig, subtract_mean=True)
         else:
             raise NotImplementedError(
                 'EmbeddedDG Wrapper: project_back_method'
@@ -262,7 +262,7 @@ class RecoveryWrapper(Wrapper):
         elif self.options.project_low_method == 'conservative_project':
             self.x_out_projector = ConservativeProjector(
                 self.rho_out_embedded, self.rho_out_orig,
-                self.increment, self.x_projected, subtract_mean=True)
+                self.increment, self.increment_orig, subtract_mean=True)
         else:
             raise NotImplementedError(
                 'Recovery Wrapper: project_back_method'
@@ -501,6 +501,7 @@ class MixedFSWrapper(object):
 
         rho_subwrapper = self.subwrappers[subwrapper.rho_name]
 
+        print('updating rho')
         subwrapper.rho_in_orig.assign(rho_subwrapper.x_in_tmp)
         subwrapper.rho_in_embedded.assign(rho_subwrapper.x_in)
 
