@@ -3,6 +3,7 @@ from os.path import abspath, basename, dirname
 import subprocess
 import glob
 import sys
+import os
 
 
 examples_dir = abspath(dirname(__file__))
@@ -22,7 +23,7 @@ def test_example_runs(example_file, tmpdir, monkeypatch):
     subprocess.run(
         [sys.executable, example_file, "--running-tests"],
         check=True,
-        env={"PYOP2_CFLAGS='-O0'"}
+        env=os.environ | {"PYOP2_CFLAGS": "-O0"}
     )
 
 
@@ -33,5 +34,5 @@ def test_example_runs_parallel(example_file, tmpdir, monkeypatch):
     subprocess.run(
         ["mpiexec", "-n", "4", sys.executable, example_file, "--running-tests"],
         check=True,
-        env={"PYOP2_CFLAGS='-O0'"}
+        env=os.environ | {"PYOP2_CFLAGS": "-O0"}
     )
