@@ -129,6 +129,7 @@ class EmbeddedDGWrapper(Wrapper):
             self.x_out_projector = Recoverer(self.x_out, self.x_projected)
         elif self.options.project_back_method == 'conservative_project':
             self.is_conservative = True
+            self.rho_name=self.options.rho_name
             self.increment_orig = Function(original_space)
             self.increment = Function(self.function_space)
             self.rho_in_orig = Function(self.options.orig_rho_space)
@@ -235,6 +236,7 @@ class RecoveryWrapper(Wrapper):
         # Operator to recover to higher discontinuous space
         if self.options.project_low_method == 'conservative_project':
             self.is_conservative = True
+            self.rho_name=self.options.rho_name
             self.increment_orig = Function(original_space)
             self.increment = Function(self.function_space)
             self.rho_in_orig = Function(self.options.orig_rho_space)
@@ -460,8 +462,10 @@ class MixedFSWrapper(object):
 
             if field_name in self.subwrappers:
                 subwrapper = self.subwrappers[field_name]
+                print(field_name)
+                print(subwrapper.is_conservative)
                 if subwrapper.is_conservative:
-                    self.pre_update_rho(subwrapper, x_in)
+                    self.pre_update_rho(subwrapper)
                 subwrapper.pre_apply(field)
                 x_in_sub.assign(subwrapper.x_in)
             else:
@@ -482,7 +486,7 @@ class MixedFSWrapper(object):
                 subwrapper = self.subwrappers[field_name]
                 subwrapper.x_out.assign(field)
                 if subwrapper.is_conservative:
-                    self.post_update_rho(subwrapper, x_out)
+                    self.post_update_rho(subwrapper)
                 subwrapper.post_apply(x_out_sub)
             else:
                 x_out_sub.assign(field)
@@ -497,8 +501,8 @@ class MixedFSWrapper(object):
 
         rho_subwrapper = self.subwrappers[subwrapper.rho_name]
 
-        self.rho_in_orig_space.assign(rho_subwrapper.x_in_tmp)
-        self.rho_in_embedded_space.assign(rho_subwrapper.x_in)
+        subwrapper.rho_in_orig.assign(rho_subwrapper.x_in_tmp)
+        subwrapper.rho_in_embedded.assign(rho_subwrapper.x_in)
 
     def post_update_rho(self, subwrapper):
         """
@@ -510,5 +514,5 @@ class MixedFSWrapper(object):
 
         rho_subwrapper = self.subwrappers[subwrapper.rho_name]
 
-        self.rho_out_orig_space.assign(rho_subwrapper.x_projected)
-        self.rho_out_embedded_space.assign(rho_subwrapper.x_out)
+        subwrapper.rho_out_orig.assign(rho_subwrapper.x_projected)
+        subwrapper.rho_out_embedded.assign(rho_subwrapper.x_out)
