@@ -11,7 +11,7 @@ delta = L/n
 mesh = PeriodicIntervalMesh(128, L)
 dt = 0.0001
 if '--running-tests' in sys.argv:
-    T = 0.05
+    T = 0.0005
 else:
     T = 1
 
