@@ -360,7 +360,7 @@ class CompressibleSolver(TimesteppingSolver):
         attach_custom_monitor(python_context, logging_ksp_monitor_true_residual)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -530,7 +530,7 @@ class BoussinesqSolver(TimesteppingSolver):
         self.log_ksp_residuals(self.up_solver.snes.ksp)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -671,7 +671,7 @@ class ThermalSWSolver(TimesteppingSolver):
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -772,7 +772,7 @@ class LinearTimesteppingSolver(object):
                                               options_prefix='linear_solver')
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -868,7 +868,7 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -967,6 +967,7 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
         g = equation.parameters.g
         H = equation.parameters.H
         q0 = equation.q0
+        beta2 = equation.beta2
 
         # check for topography
         if hasattr(equation.field_names, "topography"):
@@ -975,25 +976,22 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
             B = None
 
         self.q_sat_func = Function(VD)
-        self.q_v_func = Function(VD)
+        self.q_v_bar = Function(VD)
 
         # set up interpolators that use the xn values for D and b_e
         self.q_sat_expr_interpolator = Interpolator(compute_saturation(q0, H, g, D_xn, b_e_xn, B), VD)
         self.q_v_interpolator = Interpolator(conditional(q_t_xn < self.q_sat_func, q_t_xn, self.q_sat_func), VD)
 
-        b = b_e - equation.beta2 * self.q_v_func  # should this be the residual?
-        bbar = b_ebar - equation.beta2 * self.q_v_func
-
+        q_v_bar = self.q_v_bar  # to make line length shorter
         eqn = (
             inner(w, (u - u_in)) * dx
-            - beta * (D - Dbar) * div(w*bbar) * dx
-            + beta * jump(w*bbar, n) * avg(D-Dbar) * dS
-            - beta * 0.5 * Dbar * bbar * div(w) * dx
-            - beta * 0.5 * Dbar * b * div(w) * dx
-            - beta * 0.5 * bbar * div(w*(D-Dbar)) * dx
-            + beta * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
+            - beta * (D-Dbar) * div(w * (b_ebar - beta2*q_v_bar)) * dx
+            + beta * jump(w*(b_ebar - beta2*q_v_bar), n) * avg((D-Dbar)) * dS
+            - beta * 0.5 * H * (b_ebar + b_e - beta2*q_v_bar) * div(w) * dx
+            - beta * 0.5 * (b_ebar - beta2*q_v_bar) * div(w*(D-Dbar)) * dx
+            + beta * 0.5 * jump((D-Dbar)*w, n) * avg(b_ebar - beta2*q_v_bar) * dS
             + inner(phi, (D - D_in)) * dx
-            + beta * phi * Dbar * div(u) * dx
+            + beta * phi * H * div(u) * dx
         )
 
         aeqn = lhs(eqn)
@@ -1059,10 +1057,8 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
             logger.info('Moist dynamics linear solver: mixed solve')
 
             self.q_sat_func.assign(self.q_sat_expr_interpolator.interpolate())
-            print("q_sat_func used to partition q_t before the velocity-depth solve:", self.q_sat_func.dat.data.min(), self.q_sat_func.dat.data.max())
 
-            self.q_v_func.assign(self.q_v_interpolator.interpolate())
-            print("q_v before the velocity depth solve:", self.q_v_func.dat.data.min(), self.q_v_func.dat.data.max())
+            self.q_v_bar.assign(self.q_v_interpolator.interpolate())
 
             self.uD_solver.solve()
 
