@@ -5,7 +5,7 @@ from firedrake.fml import Label, drop
 from pyop2.profiling import timed_stage
 from gusto.core.labels import time_derivative, physics_label, dynamics_label
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
-from gusto.timestepping.timestepper import Timestepper
+from gusto.timestepping.timestepper import BaseTimestepper, Timestepper
 
 __all__ = ["SplitTimestepper", "SplitTransportDiffusionTimestepper", "SplitPhysicsTimestepper", "SplitPhysicsDynamicsTimestepper", "SplitPrescribedTransport"]
 
