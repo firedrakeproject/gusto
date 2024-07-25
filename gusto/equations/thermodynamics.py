@@ -1,10 +1,10 @@
 """Some expressions representing common thermodynamic variables."""
 
-from firedrake import exp, ln
+from firedrake import exp
 
 __all__ = ["theta", "exner_pressure", "dexner_drho", "dexner_dtheta", "p", "T",
            "rho", "r_sat", "Lv", "theta_e", "internal_energy", "RH", "e_sat",
-           "r_v", "T_dew"]
+           "r_v"]
 
 
 def theta(parameters, T, p):
@@ -301,25 +301,3 @@ def r_v(parameters, H, T, p):
     rsat = r_sat(parameters, T, p)
 
     return H * rsat / (1 + (1 - H) * rsat / epsilon)
-
-
-# TODO: this seems incorrect!
-def T_dew(parameters, p, r_v):
-    """
-    Returns an expression for the dewpoint temperature in K.
-
-    It is calculated as a function of pressure and the water vapour mixing ratio.
-
-    Args:
-        parameters (:class:`CompressibleParameters`): parameters representing
-            the physical constants describing the fluid.
-        p (:class:`ufl.Expr`): the pressure in Pa.
-        r_v (:class:`ufl.Expr`): the water vapour mixing ratio.
-    """
-
-    R_d = parameters.R_d
-    R_v = parameters.R_v
-    T_0 = parameters.T_0
-    e = p * r_v / (r_v + R_d / R_v)
-
-    return 243.5 / ((17.67 / ln(e / 611.2)) - 1) + T_0
