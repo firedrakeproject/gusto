@@ -40,7 +40,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
-                 active_tracers=None):
+                 active_tracers=None, max_quad_deg=5):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -77,6 +77,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations.. Defaults to None.
+            max_quad_deg (int): maximum quadrature degree for any form. Defaults
+                to 5.
 
         Raises:
             NotImplementedError: only mixing ratio tracers are implemented.
@@ -100,7 +102,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
-                         active_tracers=active_tracers)
+                         active_tracers=active_tracers,
+                         max_quad_deg=max_quad_deg)
 
         self.parameters = parameters
         g = parameters.g
@@ -284,7 +287,8 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
-                 active_tracers=None):
+                 active_tracers=None,
+                 max_quad_deg=5):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -319,7 +323,9 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
                 None.
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
-                in the equations.. Defaults to None.
+                in the equations. Defaults to None.
+            max_quad_deg (int): maximum quadrature degree for any form. Defaults
+                to 5.
 
         Raises:
             NotImplementedError: only mixing ratio tracers are implemented.
@@ -331,7 +337,8 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
                          u_transport_option=u_transport_option,
                          diffusion_options=diffusion_options,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
-                         active_tracers=active_tracers)
+                         active_tracers=active_tracers,
+                         max_quad_deg=max_quad_deg)
 
         self.residual = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
