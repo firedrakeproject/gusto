@@ -129,7 +129,7 @@ class EmbeddedDGWrapper(Wrapper):
             self.x_out_projector = Recoverer(self.x_out, self.x_projected)
         elif self.options.project_back_method == 'conservative_project':
             self.is_conservative = True
-            self.rho_name=self.options.rho_name
+            self.rho_name = self.options.rho_name
             self.increment_orig = Function(original_space)
             self.increment = Function(self.function_space)
             self.rho_in_orig = Function(self.options.orig_rho_space)
@@ -236,7 +236,7 @@ class RecoveryWrapper(Wrapper):
         # Operator to recover to higher discontinuous space
         if self.options.project_low_method == 'conservative_project':
             self.is_conservative = True
-            self.rho_name=self.options.rho_name
+            self.rho_name = self.options.rho_name
             self.increment_orig = Function(original_space)
             self.increment = Function(self.function_space)
             self.rho_in_orig = Function(self.options.orig_rho_space)
@@ -501,7 +501,6 @@ class MixedFSWrapper(object):
 
         rho_subwrapper = self.subwrappers[subwrapper.rho_name]
 
-        print('updating rho')
         subwrapper.rho_in_orig.assign(rho_subwrapper.x_in_tmp)
         subwrapper.rho_in_embedded.assign(rho_subwrapper.x_in)
 
