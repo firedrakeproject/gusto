@@ -970,8 +970,8 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
         beta2 = equation.beta2
 
         # check for topography
-        if hasattr(equation.field_names, "topography"):
-            B = equation.fields("topography")  # I don't think this will work
+        if hasattr(equation.prescribed_fields, "topography"):
+            B = equation.prescribed_fields("topography")
         else:
             B = None
 
