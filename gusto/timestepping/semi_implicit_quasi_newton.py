@@ -262,12 +262,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         x_after_slow(self.field_name).assign(xn(self.field_name))
         if len(self.slow_physics_schemes) > 0:
             with timed_stage("Slow physics"):
-                logger.info('SIQN: Slow physics')
+                logger.info('Semi-implicit Quasi Newton: Slow physics')
                 for _, scheme in self.slow_physics_schemes:
                     scheme.apply(x_after_slow(scheme.field_name), x_after_slow(scheme.field_name))
 
         with timed_stage("Apply forcing terms"):
-            logger.info('SIQN: Explicit forcing')
+            logger.info('Semi-implicit Quasi Newton: Explicit forcing')
             # Put explicit forcing into xstar
             self.forcing.apply(x_after_slow, xn, xstar(self.field_name), "explicit")
 
@@ -281,14 +281,14 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'transporting velocity, outer iteration {outer}')
                 for name, scheme in self.active_transport:
-                    logger.info(f'SIQN: Transport {outer}: {name}')
+                    logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: {name}')
                     # transports a field from xstar and puts result in xp
                     scheme.apply(xp(name), xstar(name))
 
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:
                 with timed_stage("Fast physics"):
-                    logger.info(f'SIQN: Fast physics {outer}')
+                    logger.info(f'Semi-implicit Quasi Newton: Fast physics {outer}')
                     for _, scheme in self.fast_physics_schemes:
                         scheme.apply(x_after_fast(scheme.field_name), x_after_fast(scheme.field_name))
 
@@ -300,14 +300,14 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 # TODO: this is where to update the reference state
 
                 with timed_stage("Apply forcing terms"):
-                    logger.info(f'SIQN: Implicit forcing {(outer, inner)}')
+                    logger.info(f'Semi-implicit Quasi Newton: Implicit forcing {(outer, inner)}')
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
 
                 with timed_stage("Implicit solve"):
-                    logger.info(f'SIQN: Mixed solve {(outer, inner)}')
+                    logger.info(f'Semi-implicit Quasi Newton: Mixed solve {(outer, inner)}')
                     self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in dy
 
                 xnp1X = xnp1(self.field_name)
@@ -320,16 +320,20 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         for name, scheme in self.auxiliary_schemes:
             # transports a field from xn and puts result in xnp1
+            logger.debug(f"Semi-implicit Quasi-Newton auxiliary scheme for {name}")
             scheme.apply(xnp1(name), xn(name))
 
         with timed_stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:
+                logger.debug(f"Semi-implicit Quasi-Newton diffusing {name}")
                 scheme.apply(xnp1(name), xnp1(name))
 
         if len(self.final_physics_schemes) > 0:
             with timed_stage("Final Physics"):
                 for _, scheme in self.final_physics_schemes:
                     scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
+
+        logger.debug("Leaving Semi-implicit Quasi-Newton timestep method")
 
     def run(self, t, tmax, pick_up=False):
         """
