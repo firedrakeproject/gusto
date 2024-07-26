@@ -462,8 +462,6 @@ class MixedFSWrapper(object):
 
             if field_name in self.subwrappers:
                 subwrapper = self.subwrappers[field_name]
-                print(field_name)
-                print(subwrapper.is_conservative)
                 if subwrapper.is_conservative:
                     self.pre_update_rho(subwrapper)
                 subwrapper.pre_apply(field)
