@@ -6,10 +6,10 @@ from firedrake import (assemble, dot, dx, Function, sqrt, TestFunction,
                        LinearVariationalProblem, LinearVariationalSolver,
                        ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, pi,
                        TensorFunctionSpace, SpatialCoordinate, as_vector,
-                       Projector, Interpolator, FunctionSpace, FiniteElement,
+                       Projector, FunctionSpace, FiniteElement,
                        TensorProductElement)
 from firedrake.assign import Assigner
-from firedrake.__future__ import interpolate
+from firedrake.__future__ import Interpolator
 from ufl.domain import extract_unique_domain
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -192,7 +192,9 @@ class DiagnosticField(object, metaclass=ABCMeta):
                     f"The expression for diagnostic {self.name} has not been specified"
 
             # Solve method must be declared in diagnostic's own setup routine
-            if self.method == 'project':
+            if self.method == 'interpolate':
+                self.evaluator = Interpolator(self.expr, self.field)
+            elif self.method == 'project':
                 self.evaluator = Projector(self.expr, self.field)
             elif self.method == 'assign':
                 self.evaluator = Assigner(self.field, self.expr)
@@ -205,7 +207,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
         logger.debug(f'Computing diagnostic {self.name} with {self.method} method')
 
         if self.method == 'interpolate':
-            assemble(interpolate(self.expr, self.field))
+            self.evaluator.interpolate()
         elif self.method == 'assign':
             self.evaluator.assign()
         elif self.method == 'project':
