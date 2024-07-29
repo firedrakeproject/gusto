@@ -63,7 +63,10 @@ diagnostic_fields = [RelativeHumidity(eqns), Perturbation('theta'),
                      Perturbation('water_vapour'), Perturbation('rho'), Perturbation('RelativeHumidity')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 # Transport schemes -- specify options for using recovery wrapper
-recovery_spaces = RecoverySpaces(domain)
+boundary_methods = {'DG': BoundaryMethod.taylor,
+                    'HDiv': BoundaryMethod.taylor}
+
+recovery_spaces = RecoverySpaces(domain, boundary_methods=boundary_methods, use_vector_spaces=True)
 
 u_opts = recovery_spaces.HDiv_options
 rho_opts = recovery_spaces.DG_options

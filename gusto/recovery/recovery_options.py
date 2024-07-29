@@ -5,19 +5,6 @@ from gusto.core.function_spaces import DeRhamComplex
 from gusto.core.configuration import RecoveryOptions
 
 
-def get_first_valid_value(my_dict, keys_to_check):
-    """
-    Function to check a dictionary for valid keys and returns first one
-    """
-    if my_dict is None:
-        return None
-    for key in keys_to_check:
-        value = my_dict.get(key)
-        if value is not None:
-            return value
-    return None  # Return None if no valid value is found
-
-
 class RecoverySpaces(object):
     """
     Finds or builds necessary spaces to carry out recovery transport for lowest
@@ -30,9 +17,13 @@ class RecoverySpaces(object):
             domain (:class:`Domain`): the model's domain object, containing the
             mesh and the compatible function spaces.
 
-            boundary_method (:variable:'dict'): A dictionary containing the space
-            it applies to along with the chosen method. Acceptable keys are "DG",
-            "HDiv", "theta", "u", "rho"
+            boundary_method (:variable:'dict', optional: A dictionary containing the space
+            the boundary method is to be applied to along with specified method. Acceptable keys are "DG",
+            "HDiv" and theta, defaults to None
+
+            use_vector_spaces (boolean, optional) Determins if we need to use DG / CG
+            space for the embedded and recovery space for the HDiv field instead of the usual
+            HDiv, Hcurs spaces. Defaults to False
         """
         family = domain.family
         mesh = domain.mesh
@@ -41,10 +32,20 @@ class RecoverySpaces(object):
                                      horizontal_degree=1,
                                      vertical_degree=1,
                                      complex_name='recovery_de_Rham')
+        
+        valid_keys = ['DG', 'HDiv', 'theta']
+        if boundary_method is not None:
+                for key in boundary_method:
+                    if key not in valid_keys:
+                        raise KeyError(f'Recovery spaces: boundary method key {key} not valid. Valid keys are DG, HDiv, theta')
+
+        # ----------------------------------------------------------------------
+        # Building theta options if on an extruded mesh
+        # ----------------------------------------------------------------------
 
         # Check if extruded and if so builds theta spaces
         if hasattr(mesh, "_base_mesh"):
-            valid_theta_keys = ['theta', 'Theta']
+            valid_theta_keys = ['theta']
             theta_boundary_method = get_first_valid_value(boundary_method, valid_theta_keys)
             cell = mesh._base_mesh.ufl_cell().cellname()
             DG_hori_ele = FiniteElement('DG', cell, 1, variant='equispaced')
@@ -66,7 +67,7 @@ class RecoverySpaces(object):
         # ----------------------------------------------------------------------
         # Building the DG options
         # ----------------------------------------------------------------------
-        valid_DG_keys = ['DG', 'rho', 'D']
+        valid_DG_keys = ['DG']
         DG_boundary_method = get_first_valid_value(boundary_method, valid_DG_keys)
 
         DG_embedding_space = domain.spaces.DG1_equispaced
@@ -83,7 +84,7 @@ class RecoverySpaces(object):
         # ----------------------------------------------------------------------
         # Building HDiv options
         # ----------------------------------------------------------------------
-        valid_HDiv_keys = ['HDiv', 'u']
+        valid_HDiv_keys = ['HDiv']
         HDiv_boundary_method = get_first_valid_value(boundary_method, valid_HDiv_keys)
 
         if use_vector_spaces:
@@ -105,6 +106,3 @@ class RecoverySpaces(object):
                                             project_low_method='project',
                                             broken_method='project',
                                             boundary_method=HDiv_boundary_method)
-        # ----------------------------------------------------------------------
-        # Building theta options if on an extruded mesh
-        # ----------------------------------------------------------------------
