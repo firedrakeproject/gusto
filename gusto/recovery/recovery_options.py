@@ -32,12 +32,12 @@ class RecoverySpaces(object):
                                      horizontal_degree=1,
                                      vertical_degree=1,
                                      complex_name='recovery_de_Rham')
-        
+
         valid_keys = ['DG', 'HDiv', 'theta']
         if boundary_method is not None:
-                for key in boundary_method:
-                    if key not in valid_keys:
-                        raise KeyError(f'Recovery spaces: boundary method key {key} not valid. Valid keys are DG, HDiv, theta')
+            for key in boundary_method:
+                if key not in valid_keys:
+                    raise KeyError(f'Recovery spaces: boundary method key {key} not valid. Valid keys are DG, HDiv, theta')
 
         # ----------------------------------------------------------------------
         # Building theta options if on an extruded mesh
@@ -45,8 +45,7 @@ class RecoverySpaces(object):
 
         # Check if extruded and if so builds theta spaces
         if hasattr(mesh, "_base_mesh"):
-            valid_theta_keys = ['theta']
-            theta_boundary_method = get_first_valid_value(boundary_method, valid_theta_keys)
+            theta_boundary_method = boundary_method['theta']
             cell = mesh._base_mesh.ufl_cell().cellname()
             DG_hori_ele = FiniteElement('DG', cell, 1, variant='equispaced')
             DG_vert_ele = FiniteElement('DG', interval, (domain.vertical_degree + 1), variant='equispaced')
@@ -67,9 +66,7 @@ class RecoverySpaces(object):
         # ----------------------------------------------------------------------
         # Building the DG options
         # ----------------------------------------------------------------------
-        valid_DG_keys = ['DG']
-        DG_boundary_method = get_first_valid_value(boundary_method, valid_DG_keys)
-
+        DG_boundary_method = boundary_method['DG']
         DG_embedding_space = domain.spaces.DG1_equispaced
         # Recovered space needs builing manually to avoid uneccesary DoFs
         CG_hori_ele_DG = FiniteElement('CG', cell, 1)
@@ -84,9 +81,8 @@ class RecoverySpaces(object):
         # ----------------------------------------------------------------------
         # Building HDiv options
         # ----------------------------------------------------------------------
-        valid_HDiv_keys = ['HDiv']
-        HDiv_boundary_method = get_first_valid_value(boundary_method, valid_HDiv_keys)
 
+        HDiv_boundary_method = boundary_method['HDiv']
         if use_vector_spaces:
             Vu_DG1 = VectorFunctionSpace(mesh, DG_embedding_space.ufl_element())
             Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)

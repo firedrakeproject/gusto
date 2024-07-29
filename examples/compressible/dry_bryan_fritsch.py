@@ -9,10 +9,8 @@ from gusto import *
 from firedrake import (IntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, pi, sqrt,
                        TestFunction, dx, TrialFunction, Constant, Function,
-                       LinearVariationalProblem, LinearVariationalSolver,
-                       FunctionSpace, VectorFunctionSpace)
+                       LinearVariationalProblem, LinearVariationalSolver)
 import sys
-
 # ---------------------------------------------------------------------------- #
 # Test case parameters
 # ---------------------------------------------------------------------------- #
