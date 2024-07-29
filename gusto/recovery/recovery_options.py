@@ -1,67 +1,110 @@
 
-from firedrake import (interval, FiniteElement, TensorProductElement, FunctionSpace)
+from firedrake import (interval, FiniteElement, TensorProductElement, FunctionSpace,
+                       VectorFunctionSpace)
 from gusto.core.function_spaces import DeRhamComplex
 from gusto.core.configuration import RecoveryOptions
 
 
-class RecoverySpaces():
+def get_first_valid_value(my_dict, keys_to_check):
+    """
+    Function to check a dictionary for valid keys and returns first one
+    """
+    if my_dict is None:
+        return None
+    for key in keys_to_check:
+        value = my_dict.get(key)
+        if value is not None:
+            return value
+    return None  # Return None if no valid value is found
+
+
+class RecoverySpaces(object):
     """
     Finds or builds necessary spaces to carry out recovery transport for lowest
     and mixed order domains (0,0), (0,1) and  (1,0)
     """
 
-    def __init__(self, domain):
+    def __init__(self, domain, boundary_method=None, use_vector_spaces=False):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
 
+            boundary_method (:variable:'dict'): A dictionary containing the space
+            it applies to along with the chosen method. Acceptable keys are "DG",
+            "HDiv", "theta", "u", "rho"
+        """
         family = domain.family
-        self.domain = domain
-        self.mesh = domain.mesh
+        mesh = domain.mesh
         # Need spaces from current deRham and a higher order deRham
-        self.de_Rham = DeRhamComplex(self.mesh, family,
+        self.de_Rham = DeRhamComplex(mesh, family,
                                      horizontal_degree=1,
                                      vertical_degree=1,
                                      complex_name='recovery_de_Rham')
 
-        self.extruded_mesh = hasattr(self.mesh, "_base_mesh")
-        if self.extruded_mesh:
-            self.cell = self.mesh._base_mesh.ufl_cell().cellname()
-            self.build_theta_options()
+        # Check if extruded and if so builds theta spaces
+        if hasattr(mesh, "_base_mesh"):
+            valid_theta_keys = ['theta', 'Theta']
+            theta_boundary_method = get_first_valid_value(boundary_method, valid_theta_keys)
+            cell = mesh._base_mesh.ufl_cell().cellname()
+            DG_hori_ele = FiniteElement('DG', cell, 1, variant='equispaced')
+            DG_vert_ele = FiniteElement('DG', interval, (domain.vertical_degree + 1), variant='equispaced')
+            CG_hori_ele = FiniteElement('CG', cell, 1)
+            CG_vert_ele = FiniteElement('CG', interval, (domain.vertical_degree + 1))
+
+            VDG_ele = TensorProductElement(DG_hori_ele, DG_vert_ele)
+            VCG_ele = TensorProductElement(CG_hori_ele, CG_vert_ele)
+            VDG_theta = FunctionSpace(mesh, VDG_ele)
+            VCG_theta = FunctionSpace(mesh, VCG_ele)
+
+            self.theta_options = RecoveryOptions(embedding_space=VDG_theta,
+                                                 recovered_space=VCG_theta,
+                                                 boundary_method=theta_boundary_method)
         else:
-            self.cell = self.mesh.ufl_cell().cellname()
+            cell = self.mesh.ufl_cell().cellname()
 
-        self.build_DG_options()
-        self.build_HDiv_options()
+        # ----------------------------------------------------------------------
+        # Building the DG options
+        # ----------------------------------------------------------------------
+        valid_DG_keys = ['DG', 'rho', 'D']
+        DG_boundary_method = get_first_valid_value(boundary_method, valid_DG_keys)
 
-    def build_DG_options(self):
-        # Method to build the DG options for recovery
-        DG_embedding_space = self.domain.spaces.DG1_equispaced
-        DG_recovered_space = self.domain.spaces.H1
+        DG_embedding_space = domain.spaces.DG1_equispaced
+        # Recovered space needs builing manually to avoid uneccesary DoFs
+        CG_hori_ele_DG = FiniteElement('CG', cell, 1)
+        CG_vert_ele_DG = FiniteElement('CG', interval, 1)
+        VCG_ele_DG = TensorProductElement(CG_hori_ele_DG, CG_vert_ele_DG)
+        DG_recovered_space = FunctionSpace(mesh, VCG_ele_DG)
 
+        # DG_recovered_space = domain.spaces.H1
         self.DG_options = RecoveryOptions(embedding_space=DG_embedding_space,
-                                          recovered_space=DG_recovered_space)
+                                          recovered_space=DG_recovered_space,
+                                          boundary_method=DG_boundary_method)
+        # ----------------------------------------------------------------------
+        # Building HDiv options
+        # ----------------------------------------------------------------------
+        valid_HDiv_keys = ['HDiv', 'u']
+        HDiv_boundary_method = get_first_valid_value(boundary_method, valid_HDiv_keys)
 
-    def build_theta_options(self):
-        # Method to build the theta options for recovery
-        DG_hori_ele = FiniteElement('DG', self.cell, 1, variant='equispaced')
-        DG_vert_ele = FiniteElement('DG', interval, 2, variant='equispaced')
-        CG_hori_ele = FiniteElement('CG', self.cell, 1)
-        CG_vert_ele = FiniteElement('CG', interval, 2)
+        if use_vector_spaces:
+            Vu_DG1 = VectorFunctionSpace(mesh, DG_embedding_space.ufl_element())
+            Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
 
-        VDG_ele = TensorProductElement(DG_hori_ele, DG_vert_ele)
-        VCG_ele = TensorProductElement(CG_hori_ele, CG_vert_ele)
-        VDG_theta = FunctionSpace(self.mesh, VDG_ele)
-        VCG_theta = FunctionSpace(self.mesh, VCG_ele)
+            HDiv_embedding_Space = Vu_DG1
+            HDiv_recovered_Space = Vu_CG1
 
-        self.theta_options = RecoveryOptions(embedding_space=VDG_theta,
-                                             recovered_space=VCG_theta)
+        else:
 
-    def build_HDiv_options(self):
-        # Method to build the HDiv options for recovery
-        HDiv_embedding_Space = getattr(self.de_Rham, 'HDiv')
-        HDiv_recovered_Space = getattr(self.de_Rham, 'HCurl')
+            HDiv_embedding_Space = self.de_Rham.HDiv
+            HDiv_recovered_Space = self.de_Rham.HCurl
 
         self.HDiv_options = RecoveryOptions(embedding_space=HDiv_embedding_Space,
                                             recovered_space=HDiv_recovered_Space,
                                             injection_method='recover',
                                             project_high_method='project',
                                             project_low_method='project',
-                                            broken_method='project')
+                                            broken_method='project',
+                                            boundary_method=HDiv_boundary_method)
+        # ----------------------------------------------------------------------
+        # Building theta options if on an extruded mesh
+        # ----------------------------------------------------------------------
