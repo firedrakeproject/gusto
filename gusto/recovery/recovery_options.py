@@ -17,13 +17,16 @@ class RecoverySpaces(object):
             domain (:class:`Domain`): the model's domain object, containing the
             mesh and the compatible function spaces.
 
-            boundary_method (:variable:'dict', optional: A dictionary containing the space
+            boundary_method (:variable:'dict', optional): A dictionary containing the space
             the boundary method is to be applied to along with specified method. Acceptable keys are "DG",
-            "HDiv" and theta, defaults to None
+            "HDiv" and "theta". acceptable values are (BoundaryMetghod.taylor/hcurl/extruded),
+            passed as ('space', 'boundary method')
+            Defaults to None
 
-            use_vector_spaces (boolean, optional) Determins if we need to use DG / CG
+            use_vector_spaces (bool, optional):. Determines if we need to use DG / CG
             space for the embedded and recovery space for the HDiv field instead of the usual
-            HDiv, Hcurs spaces. Defaults to False
+            HDiv, HCurl spaces.
+            Defaults to False
         """
         family = domain.family
         mesh = domain.mesh
@@ -45,7 +48,11 @@ class RecoverySpaces(object):
 
         # Check if extruded and if so builds theta spaces
         if hasattr(mesh, "_base_mesh"):
-            theta_boundary_method = boundary_method['theta']
+            # check if boundary method is present
+            if hasattr(boundary_method, 'theta'):
+                theta_boundary_method = boundary_method['theta']
+            else:
+                theta_boundary_method = None
             cell = mesh._base_mesh.ufl_cell().cellname()
             DG_hori_ele = FiniteElement('DG', cell, 1, variant='equispaced')
             DG_vert_ele = FiniteElement('DG', interval, (domain.vertical_degree + 1), variant='equispaced')
@@ -66,7 +73,11 @@ class RecoverySpaces(object):
         # ----------------------------------------------------------------------
         # Building the DG options
         # ----------------------------------------------------------------------
-        DG_boundary_method = boundary_method['DG']
+        if hasattr(boundary_method, 'DG'):
+            DG_boundary_method = boundary_method['DG']
+        else:
+            DG_boundary_method = None
+
         DG_embedding_space = domain.spaces.DG1_equispaced
         # Recovered space needs builing manually to avoid uneccesary DoFs
         CG_hori_ele_DG = FiniteElement('CG', cell, 1)
@@ -82,7 +93,11 @@ class RecoverySpaces(object):
         # Building HDiv options
         # ----------------------------------------------------------------------
 
-        HDiv_boundary_method = boundary_method['HDiv']
+        if hasattr(boundary_method, 'HDiv'):
+            HDiv_boundary_method = boundary_method['HDiv']
+        else:
+            HDiv_boundary_method = None
+
         if use_vector_spaces:
             Vu_DG1 = VectorFunctionSpace(mesh, DG_embedding_space.ufl_element())
             Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
