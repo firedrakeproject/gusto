@@ -66,7 +66,7 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 boundary_methods = {'DG': BoundaryMethod.taylor,
                     'HDiv': BoundaryMethod.taylor}
 
-recovery_spaces = RecoverySpaces(domain, boundary_methods=boundary_methods, use_vector_spaces=True)
+recovery_spaces = RecoverySpaces(domain, boundary_method=boundary_methods, use_vector_spaces=True)
 
 u_opts = recovery_spaces.HDiv_options
 rho_opts = recovery_spaces.DG_options
