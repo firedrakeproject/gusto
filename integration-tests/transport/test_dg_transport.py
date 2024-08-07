@@ -55,7 +55,10 @@ def test_dg_transport_vector(tmpdir, geometry, equation_form, tracer_setup):
     transport_scheme = SSPRK3(domain)
     transport_method = DGUpwind(eqn, "f")
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
+    time_varying_velocity = False
+    timestepper = PrescribedTransport(
+        eqn, transport_scheme, setup.io, time_varying_velocity, transport_method
+    )
 
     # Initial conditions
     timestepper.fields("f").interpolate(f_init)

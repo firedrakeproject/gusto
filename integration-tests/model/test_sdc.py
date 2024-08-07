@@ -74,7 +74,10 @@ def test_sdc(tmpdir, scheme, tracer_setup):
 
     transport_method = DGUpwind(eqn, 'f')
 
-    timestepper = PrescribedTransport(eqn, scheme, setup.io, transport_method)
+    time_varying_velocity = False
+    timestepper = PrescribedTransport(
+        eqn, scheme, setup.io, time_varying_velocity, transport_method
+    )
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)
