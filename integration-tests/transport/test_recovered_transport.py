@@ -38,7 +38,10 @@ def test_recovered_space_setup(tmpdir, geometry, tracer_setup):
     transport_scheme = SSPRK3(domain, options=recovery_opts)
     transport_method = DGUpwind(eqn, "f")
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
+    time_varying_velocity = False
+    timestepper = PrescribedTransport(
+        eqn, transport_scheme, setup.io, time_varying_velocity, transport_method
+    )
 
     # Initialise fields
     timestepper.fields("f").interpolate(setup.f_init)

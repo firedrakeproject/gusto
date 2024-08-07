@@ -60,21 +60,24 @@ def run_terminator_toy(dirname):
     physics_schemes = [(TerminatorToy(eqn, k1=k1, k2=k2, species1_name='X',
                         species2_name='X2'), BackwardEuler(domain))]
 
+    transport_scheme = SSPRK3(domain)
+    transport_method = [DGUpwind(eqn, 'X'), DGUpwind(eqn, 'X2')]
+
+    time_varying_velocity = True
+    stepper = SplitPrescribedTransport(
+        eqn, transport_scheme, io, time_varying_velocity,
+        spatial_methods=transport_method, physics_schemes=physics_schemes
+    )
+
     # Set up a non-divergent, time-varying, velocity field
     def u_t(t):
         return as_vector([Constant(0)*lamda, Constant(0)*lamda, Constant(0)*lamda])
 
+    stepper.setup_prescribed_expr(u_t)
+
     X_T_0 = 4e-6
     X_0 = X_T_0 + 0*lamda
     X2_0 = 0*lamda
-
-    transport_scheme = SSPRK3(domain)
-    transport_method = [DGUpwind(eqn, 'X'), DGUpwind(eqn, 'X2')]
-
-    stepper = SplitPrescribedTransport(eqn, transport_scheme, io,
-                                       spatial_methods=transport_method,
-                                       physics_schemes=physics_schemes,
-                                       prescribed_transporting_velocity=u_t)
 
     stepper.fields("X").interpolate(X_0)
     stepper.fields("X2").interpolate(X2_0)

@@ -27,7 +27,10 @@ def test_subcyling(tmpdir, subcycling, tracer_setup):
         transport_scheme = SSPRK3(domain, subcycle_by_courant=0.25)
     transport_method = DGUpwind(eqn, "f")
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
+    time_varying_velocity = False
+    timestepper = PrescribedTransport(
+        eqn, transport_scheme, setup.io, time_varying_velocity, transport_method
+    )
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)

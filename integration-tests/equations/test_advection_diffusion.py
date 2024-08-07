@@ -36,7 +36,10 @@ def run_advection_diffusion(tmpdir):
     io = IO(domain, output)
 
     # Time stepper
-    stepper = PrescribedTransport(equation, SSPRK3(domain), io, spatial_methods)
+    time_varying_velocity = False
+    stepper = PrescribedTransport(
+        equation, SSPRK3(domain), io, time_varying_velocity, spatial_methods
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

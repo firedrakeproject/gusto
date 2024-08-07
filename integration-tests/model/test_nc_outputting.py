@@ -96,7 +96,10 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
         diagnostic_fields = [ZonalComponent('u'), MeridionalComponent('u'), RadialComponent('u')]
 
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-    stepper = PrescribedTransport(eqn, transport_scheme, io, transport_method)
+    time_varying_velocity = False
+    stepper = PrescribedTransport(
+        eqn, transport_scheme, io, time_varying_velocity, transport_method
+    )
 
     # ------------------------------------------------------------------------ #
     # Initialise fields

@@ -59,8 +59,11 @@ def run_source_sink(dirname, process, time_varying):
     physics_parametrisations = [SourceSink(eqn, 'ash', expression, time_varying)]
 
     # Time stepper
-    stepper = PrescribedTransport(eqn, SSPRK3(domain), io, transport_method,
-                                  physics_parametrisations=physics_parametrisations)
+    time_varying_velocity = False
+    stepper = PrescribedTransport(
+        eqn, SSPRK3(domain), io, time_varying_velocity,
+        transport_method, physics_parametrisations=physics_parametrisations
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
