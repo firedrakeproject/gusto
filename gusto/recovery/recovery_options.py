@@ -1,4 +1,4 @@
-"""Contains an obect to generate the set of spaces used for the recovery wrapper """
+"""Contains an object to generate the set of spaces used for the recovery wrapper """
 from firedrake import (interval, FiniteElement, TensorProductElement, FunctionSpace,
                        VectorFunctionSpace)
 from gusto.core.function_spaces import DeRhamComplex
@@ -15,16 +15,16 @@ class RecoverySpaces(object):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
-            mesh and the compatible function spaces.
+                mesh and the compatible function spaces.
 
             boundary_method (:variable:'dict', optional): A dictionary containing the space
-            the boundary method is to be applied to along with specified method. Acceptable keys are "DG",
-            "HDiv" and "theta". acceptable values are (BoundaryMethod.taylor/hcurl/extruded),
-            passed as ('space', 'boundary method'). Defaults to None
+                the boundary method is to be applied to along with specified method. Acceptable keys are "DG",
+                "HDiv" and "theta". acceptable values are (BoundaryMethod.taylor/hcurl/extruded),
+                passed as ('space', 'boundary method'). Defaults to None
 
             use_vector_spaces (bool, optional):. Determines if we need to use DG / CG
-            space for the embedded and recovery space for the HDiv field instead of the usual
-            HDiv, HCurl spaces. Defaults to False
+                space for the embedded and recovery space for the HDiv field instead of the usual
+                HDiv, HCurl spaces. Defaults to False
         """
         family = domain.family
         mesh = domain.mesh
