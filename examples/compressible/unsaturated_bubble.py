@@ -6,11 +6,12 @@ As the thermal rises, water vapour condenses into cloud and forms rain.
 Limiters are applied to the transport of the water species.
 """
 from gusto import *
+from gusto.equations import thermodynamics
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        SpatialCoordinate, conditional, cos, pi, sqrt, exp,
                        TestFunction, dx, TrialFunction, Constant, Function,
                        LinearVariationalProblem, LinearVariationalSolver,
-                       FunctionSpace, VectorFunctionSpace, errornorm)
+                       errornorm)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 import sys
 
@@ -61,21 +62,17 @@ output = OutputParameters(
 diagnostic_fields = [RelativeHumidity(eqns), Perturbation('theta'),
                      Perturbation('water_vapour'), Perturbation('rho'), Perturbation('RelativeHumidity')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-
 # Transport schemes -- specify options for using recovery wrapper
-VDG1 = domain.spaces("DG1_equispaced")
-VCG1 = FunctionSpace(mesh, "CG", 1)
-Vu_DG1 = VectorFunctionSpace(mesh, VDG1.ufl_element())
-Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
-Vt = domain.spaces("theta")
+boundary_methods = {'DG': BoundaryMethod.taylor,
+                    'HDiv': BoundaryMethod.taylor}
 
-u_opts = RecoveryOptions(embedding_space=Vu_DG1,
-                         recovered_space=Vu_CG1,
-                         boundary_method=BoundaryMethod.taylor)
-rho_opts = RecoveryOptions(embedding_space=VDG1,
-                           recovered_space=VCG1,
-                           boundary_method=BoundaryMethod.taylor)
-theta_opts = RecoveryOptions(embedding_space=VDG1, recovered_space=VCG1)
+recovery_spaces = RecoverySpaces(domain, boundary_method=boundary_methods, use_vector_spaces=True)
+
+u_opts = recovery_spaces.HDiv_options
+rho_opts = recovery_spaces.DG_options
+theta_opts = recovery_spaces.theta_options
+
+VDG1 = domain.spaces("DG1_equispaced")
 limiter = VertexBasedLimiter(VDG1)
 
 transported_fields = [SSPRK3(domain, "u", options=u_opts),
@@ -92,6 +89,7 @@ linear_solver = CompressibleSolver(eqns)
 
 # Physics schemes
 # NB: can't yet use wrapper or limiter options with physics
+Vt = domain.spaces('theta')
 rainfall_method = DGUpwind(eqns, 'rain', outflow=True)
 zero_limiter = MixedFSLimiter(eqns, {'water_vapour': ZeroLimiter(Vt),
                                      'cloud_water': ZeroLimiter(Vt)})
