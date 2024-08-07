@@ -122,14 +122,29 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.active_transport = []
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
-            assert scheme.field_name in equation_set.field_names
-            self.active_transport.append((scheme.field_name, scheme))
-            # Check that there is a corresponding transport method
-            method_found = False
-            for method in spatial_methods:
-                if scheme.field_name == method.variable and method.term_label == transport:
-                    method_found = True
-            assert method_found, f'No transport method found for variable {scheme.field_name}'
+            if isinstance(scheme.field_name, list):
+                # This means that multiple fields are being transported simultaneously
+                for subfield in scheme.field_name:
+                    assert subfield in equation_set.field_names
+
+                    # Check that there is a corresponding transport method for
+                    # each field in the list
+                    method_found = False
+                    for method in spatial_methods:
+                        if subfield == method.variable and method.term_label == transport:
+                            method_found = True
+                    assert method_found, f'No transport method found for variable {scheme.field_name}'
+                self.active_transport.append((scheme.field_name, scheme))
+            else:
+                assert scheme.field_name in equation_set.field_names
+
+                # Check that there is a corresponding transport method
+                method_found = False
+                for method in spatial_methods:
+                    if scheme.field_name == method.variable and method.term_label == transport:
+                        method_found = True
+                        self.active_transport.append((scheme.field_name, scheme))
+                assert method_found, f'No transport method found for variable {scheme.field_name}'
 
         self.diffusion_schemes = []
         if diffusion_schemes is not None:
@@ -283,7 +298,16 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 for name, scheme in self.active_transport:
                     logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: {name}')
                     # transports a field from xstar and puts result in xp
-                    scheme.apply(xp(name), xstar(name))
+
+                    if isinstance(name, list):
+                        # Evolve the entire mixed field. This will transport any
+                        # terms in the list, with the others remaining unchanged
+                        # from xstar into xp.
+                        logger.info(f'SIQN: Transport {outer}: Simultaneous transport of {name}')
+                        scheme.apply(xp(self.field_name), xstar(self.field_name))
+                    else:
+                        logger.info(f'SIQN: Transport {outer}: {name}')
+                        scheme.apply(xp(name), xstar(name))
 
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:
