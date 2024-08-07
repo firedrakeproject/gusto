@@ -104,7 +104,10 @@ def test_conservative_coupled_transport(tmpdir, m_X_space, tracer_setup):
 
     transport_method = [DGUpwind(eqn, 'f1'), DGUpwind(eqn, 'f2')]
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
+    time_varying_velocity = False
+    timestepper = PrescribedTransport(
+        eqn, transport_scheme, setup.io, time_varying_velocity, transport_method
+    )
 
     # Initial conditions
     timestepper.fields("f1").interpolate(setup.f_init)
