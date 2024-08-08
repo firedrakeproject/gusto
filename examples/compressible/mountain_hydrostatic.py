@@ -142,34 +142,70 @@ theta_b = Function(Vt).interpolate(thetab)
 exner = Function(Vr)
 rho_b = Function(Vr)
 
-exner_params = {'ksp_type': 'gmres',
-                'ksp_monitor_true_residual': None,
-                'pc_type': 'python',
-                'mat_type': 'matfree',
-                'pc_python_type': 'gusto.VerticalHybridizationPC',
-                # Vertical trace system is only coupled vertically in columns
-                # block ILU is a direct solver!
-                'vert_hybridization': {'ksp_type': 'preonly',
-                                       'pc_type': 'bjacobi',
-                                       'sub_pc_type': 'ilu'}}
+exner_surf = 1.0         # maximum value of Exner pressure at surface
+max_iterations = 10      # maximum number of hydrostatic balance iterations
+tolerance = 1e-7         # tolerance for hydrostatic balance iteration
 
-compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner,
-                                 top=True, exner_boundary=0.5,
-                                 params=exner_params)
+# Set up kernels to evaluate global minima and maxima of fields
+min_kernel = MinKernel()
+max_kernel = MaxKernel()
 
-# Use kernel as a parallel-safe method of computing minimum
-min_kernel = kernels.MinKernel()
+# First solve hydrostatic balance that gives Exner = 1 at bottom boundary
+# This gives us a guess for the top boundary condition
+bottom_boundary = Constant(exner_surf, domain=mesh)
+logger.info(f'Solving hydrostatic with bottom Exner of {exner_surf}')
+compressible_hydrostatic_balance(
+    eqns, theta_b, rho_b, exner, top=False, exner_boundary=bottom_boundary
+)
 
-p0 = min_kernel.apply(exner)
-compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner,
-                                 top=True, params=exner_params)
-p1 = min_kernel.apply(exner)
-alpha = 2.*(p1-p0)
-beta = p1-alpha
-exner_top = (1.-beta)/alpha
-compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner,
-                                 top=True, exner_boundary=exner_top, solve_for_rho=True,
-                                 params=exner_params)
+# Solve hydrostatic balance again, but now use minimum value from first
+# solve as the *top* boundary condition for Exner
+top_value = min_kernel.apply(exner)
+top_boundary = Constant(top_value, domain=mesh)
+logger.info(f'Solving hydrostatic with top Exner of {top_value}')
+compressible_hydrostatic_balance(
+    eqns, theta_b, rho_b, exner, top=True, exner_boundary=top_boundary
+)
+
+max_bottom_value = max_kernel.apply(exner)
+
+# Now we iterate, adjusting the top boundary condition, until this gives
+# a maximum value of 1.0 at the surface
+lower_top_guess = 0.9*top_value
+upper_top_guess = 1.2*top_value
+for i in range(max_iterations):
+    # If max bottom Exner value is equal to desired value, stop iteration
+    if abs(max_bottom_value - exner_surf) < tolerance:
+        break
+
+    # Make new guess by average of previous guesses
+    top_guess = 0.5*(lower_top_guess + upper_top_guess)
+    top_boundary.assign(top_guess)
+
+    logger.info(
+        f'Solving hydrostatic balance iteration {i}, with top Exner value '
+        + f'of {top_guess}'
+    )
+
+    compressible_hydrostatic_balance(
+        eqns, theta_b, rho_b, exner, top=True, exner_boundary=top_boundary
+    )
+
+    max_bottom_value = max_kernel.apply(exner)
+
+    # Adjust guesses based on new value
+    if max_bottom_value < exner_surf:
+        lower_top_guess = top_guess
+    else:
+        upper_top_guess = top_guess
+
+logger.info(f'Final max bottom Exner value of {max_bottom_value}')
+
+# Perform a final solve to obtain hydrostatically balanced rho
+compressible_hydrostatic_balance(
+    eqns, theta_b, rho_b, exner, top=True, exner_boundary=top_boundary,
+    solve_for_rho=True
+)
 
 theta0.assign(theta_b)
 rho0.assign(rho_b)
