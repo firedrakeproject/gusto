@@ -1,3 +1,10 @@
+"""
+A shallow water wave on a 1D periodic domain. The velocity includes a component
+normal to the domain, and diffusion terms are included in the equations.
+
+This example uses an explicit RK4 timestepper to solve the equations.
+"""
+
 import numpy as np
 import sys
 

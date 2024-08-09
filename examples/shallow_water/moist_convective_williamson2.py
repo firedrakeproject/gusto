@@ -1,9 +1,15 @@
 """
-A moist convective version of the Williamson 2 shallow water test (steady state
-geostrophically-balanced flow). The saturation function depends on height,
-with a constant background buoyancy/temperature field.
-Vapour is initialised very close to saturation and small overshoots will
-generate clouds.
+A moist convective form of Test Case 2 (solid-body rotation with flow in
+geostrophic balance) of Williamson 2 et al, 1992:
+``A standard test set for numerical approximations to the shallow water
+equations in spherical geometry'', JCP.
+
+Three moist variables (vapour, cloud liquid and rain) are used. The saturation
+function depends on height, with a temporally-constant background buoyancy/
+temperature field. Vapour is initialised very close to saturation and
+small overshoots in will generate clouds.
+
+This example uses the icosahedral sphere mesh and degree 1 spaces.
 """
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, sin, cos, exp)

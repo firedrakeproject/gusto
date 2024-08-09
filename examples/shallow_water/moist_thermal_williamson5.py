@@ -1,6 +1,18 @@
 """
-Moist flow over a mountain test case from Zerroukat and Allen (2015). Similar
-to the Williamson et al test 5 but with additional thermodynamic equations.
+The moist thermal form of Test Case 5 (flow over a mountain) of Williamson et
+al, 1992:
+``A standard test set for numerical approximations to the shallow water
+equations in spherical geometry'', JCP.
+
+The initial conditions are taken from Zerroukat & Allen, 2015:
+``A moist Boussinesq shallow water equations set for testing atmospheric
+models'', JCP.
+
+Three moist variables (vapour, cloud liquid and rain) are used. This set of
+equations involves an active buoyancy field.
+
+The example here uses the icosahedral sphere mesh and degree 1 spaces. An
+explicit RK4 timestepper is used.
 """
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,

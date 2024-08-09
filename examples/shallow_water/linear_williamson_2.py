@@ -1,8 +1,10 @@
 """
-The Williamson 2 shallow-water test case (solid-body rotation), solved with a
-discretisation of the linear shallow-water equations.
+A linearised form of Test Case 2 (solid-body rotation) of Williamson et al 1992:
+``A standard test set for numerical approximations to the shallow water
+equations in spherical geometry'', JCP.
 
-This uses an icosahedral mesh of the sphere.
+This uses an icosahedral mesh of the sphere, and the linear shallow water
+equations.
 """
 
 from gusto import *

@@ -1,8 +1,9 @@
 """
-The Williamson 5 shallow-water test case (flow over topography), solved with a
-discretisation of the non-linear shallow-water equations.
+Test Case 5 (flow over a mountain) of Williamson et al, 1992:
+``A standard test set for numerical approximations to the shallow water
+equations in spherical geometry'', JCP.
 
-This uses an icosahedral mesh of the sphere, and runs a series of resolutions.
+The example here uses the icosahedral sphere mesh and degree 1 spaces.
 """
 
 from gusto import *

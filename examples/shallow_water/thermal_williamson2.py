@@ -1,3 +1,16 @@
+"""
+The thermal form of Test Case 2 (solid-body rotation with geostrophically
+balanced flow) of Williamson et al, 1992:
+``A standard test set for numerical approximations to the shallow water
+equations in spherical geometry'', JCP.
+
+The initial conditions are taken from Zerroukat & Allen, 2015:
+``A moist Boussinesq shallow water equations set for testing atmospheric
+models'', JCP.
+
+The example here uses the icosahedral sphere mesh and degree 1 spaces.
+"""
+
 from gusto import *
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, sin, cos
 import sys
