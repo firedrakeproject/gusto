@@ -1082,7 +1082,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         if convective_feedback:
             factors.append(self.gamma_v*beta1)
         if thermal_feedback:
-            factors.append(parameters.g*self.gamma_v*beta2)
+            factors.append(self.gamma_v*beta2)
 
         # Add terms to equations and make interpolators
         self.source = [Function(Vc) for factor in factors]
