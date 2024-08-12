@@ -1772,15 +1772,16 @@ class TracerDensity(DiagnosticField):
 
 class SW_vapour(DiagnosticField):
     """Diagnostic for computing the vapour in the moist dynamics formulation."""
-    def __init__(self, parameters, q0, name='q_t', space=None,
+    def __init__(self, parameters, q0, nu, name='q_t', space=None,
                  method='interpolate'):
         """
         Args:
             parameters (:class:`ShallowWaterParameters`): the configuration
                 object containing the physical parameters for this equation.
+            q0 (float): Scaling factor for the saturation function.
+            nu (float): Scaling factor for the saturation function.
             name (str, optional): name of the total moisture field to use to
                 compute the vapour from.
-            q0 (float, optional): Scaling factor for the saturation function.
             space (:class:`FunctionSpace`, optional): the function space to
                 evaluate the diagnostic field in. Defaults to None, in which
                 case the default space is the domain's DG space.
@@ -1791,6 +1792,7 @@ class SW_vapour(DiagnosticField):
         self.fname = name
         self.parameters = parameters
         self.q0 = q0
+        self.nu = nu
         super().__init__(space=space, method=method, required_fields=(self.fname,))
 
     @property
@@ -1816,7 +1818,7 @@ class SW_vapour(DiagnosticField):
             B = state_fields("topography")
         else:
             B = None
-        q_sat_expr = compute_saturation(self.q0, H, g, D, b_e, B)
+        q_sat_expr = compute_saturation(self.q0, self.nu, H, g, D, b_e, B)
         self.expr = conditional(q_t < q_sat_expr, q_t, q_sat_expr)
 
         space = domain.spaces("DG")
@@ -1825,15 +1827,16 @@ class SW_vapour(DiagnosticField):
 
 class SW_cloud(DiagnosticField):
     """Diagnostic for computing the cloud in the moist dynamics formulation."""
-    def __init__(self, parameters, q0, name='q_t', space=None,
+    def __init__(self, parameters, q0, nu, name='q_t', space=None,
                  method='interpolate'):
         """
         Args:
             parameters (:class:`ShallowWaterParameters`): the configuration
                 object containing the physical parameters for this equation.
+            q0 (float): Scaling factor for the saturation function.
+            nu (float): Scaling factor for the saturation function.
             name (str, optional): name of the total moisture field to use to
                 compute the vapour from.
-            q0 (float, optional): Scaling factor for the saturation function.
             space (:class:`FunctionSpace`, optional): the function space to
                 evaluate the diagnostic field in. Defaults to None, in which
                 case the default space is the domain's DG space.
@@ -1844,6 +1847,7 @@ class SW_cloud(DiagnosticField):
         self.fname = name
         self.parameters = parameters
         self.q0 = q0
+        self.nu = nu
         super().__init__(space=space, method=method, required_fields=(self.fname,))
 
     @property
@@ -1869,7 +1873,7 @@ class SW_cloud(DiagnosticField):
             B = state_fields("topography")
         else:
             B = None
-        q_sat_expr = compute_saturation(self.q0, H, g, D, b_e, B)
+        q_sat_expr = compute_saturation(self.q0, self.nu, H, g, D, b_e, B)
         vapour = conditional(q_t < q_sat_expr, q_t, q_sat_expr)
         self.expr = q_t - vapour
 

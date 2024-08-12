@@ -968,6 +968,7 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
         H = equation.parameters.H
         q0 = equation.q0
         beta2 = equation.beta2
+        nu = equation.nu
 
         # check for topography
         if hasattr(equation.prescribed_fields, "topography"):
@@ -979,7 +980,7 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
         self.q_v_bar = Function(VD)
 
         # set up interpolators that use the xn values for D and b_e
-        self.q_sat_expr_interpolator = Interpolator(compute_saturation(q0, H, g, D_xn, b_e_xn, B), VD)
+        self.q_sat_expr_interpolator = Interpolator(compute_saturation(q0, nu, H, g, D_xn, b_e_xn, B), VD)
         self.q_v_interpolator = Interpolator(conditional(q_t_xn < self.q_sat_func, q_t_xn, self.q_sat_func), VD)
 
         q_v_bar = self.q_v_bar  # to make line length shorter

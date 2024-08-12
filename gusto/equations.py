@@ -635,7 +635,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
                  space_names=None, linearisation_map='default',
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None,
-                 thermal=False, moist_dynamics=False, beta2=None, q0=None):
+                 thermal=False, moist_dynamics=False, beta2=None, q0=None,
+                 nu=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -680,7 +681,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 moist_dynamics=True.
             q0 (float, optional): Scaling factor for the saturation function.
                 Defaults to None, but must be specified if moist_dynamics=True.
-
+            nu (float, optional): Scaling factor for the saturation function.
+                Defaults to None, but must be specified if moist_dynamics=True.
         Raises:
             NotImplementedError: active tracers are not yet implemented.
         """
@@ -711,6 +713,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
             self.beta2 = beta2
             assert q0 is not None, "If moist dynamics is used q0 parameter must be specified"
             self.q0 = q0
+            assert nu is not None, "If moist dynamics is used nu parameter must be specified"
+            self.nu = nu
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives, pressure gradient and
@@ -843,9 +847,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
             beta2 = Constant(beta2)
             if bexpr is not None:
                 topography = self.prescribed_fields('topography', domain.spaces('DG')).interpolate(bexpr)
-                q_sat_expr = compute_saturation(q0, H, g, D, b_e, topography)
+                q_sat_expr = compute_saturation(q0, nu, H, g, D, b_e, topography)
             else:
-                q_sat_expr = compute_saturation(q0, H, g, D, b_e)
+                q_sat_expr = compute_saturation(q0, nu, H, g, D, b_e)
             q_v = conditional(q_t < q_sat_expr, q_t, q_sat_expr)
             n = FacetNormal(domain.mesh)
             source_form = subject(prognostic(-D*div(b_e*w)*dx
