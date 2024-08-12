@@ -1,7 +1,10 @@
 """
-The falling cold density current test of Straka et al (1993).
+The falling cold density current test of Straka et al, 1993:
+``Numerical solutions of a non‐linear density current: A benchmark solution and
+comparisons'', MiF.
 
-This example runs at a series of resolutions with different time steps.
+Diffusion is included in the velocity and potential temperature equations. The
+degree 1 finite elements are used in this configuration.
 """
 
 from gusto import *

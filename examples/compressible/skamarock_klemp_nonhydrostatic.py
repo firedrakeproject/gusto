@@ -1,7 +1,11 @@
 """
-The non-linear gravity wave test case of Skamarock and Klemp (1994).
+This example uses the non-linear compressible Euler equations to solve the
+vertical slice gravity wave test case of Skamarock and Klemp, 1994:
+``Efficiency and Accuracy of the Klemp-Wilhelmson Time-Splitting Technique'',
+MWR.
 
-Potential temperature is transported using SUPG.
+Potential temperature is transported using SUPG, and the degree 1 elements are
+used.
 """
 
 from petsc4py import PETSc

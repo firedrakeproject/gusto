@@ -1,8 +1,10 @@
 """
 The non-orographic gravity wave test case (3-1) from the DCMIP test case
-document of Ullrich et al (2012).
+document of Ullrich et al, 2012:
+``Dynamical core model intercomparison project (DCMIP) test case document''.
 
-This uses a cubed-sphere mesh.
+This uses a cubed-sphere mesh, the degree 1 finite element spaces and tests
+substepping the transport schemes.
 """
 
 from gusto import *

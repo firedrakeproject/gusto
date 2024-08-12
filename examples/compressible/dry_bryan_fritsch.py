@@ -1,5 +1,6 @@
 """
-The dry rising bubble test from Bryan & Fritsch (2002).
+The dry rising bubble test from Bryan & Fritsch, 2002:
+``A Benchmark Simulation for Moist Nonhydrostatic Numerical Models'', GMD.
 
 This uses the lowest-order function spaces, with the recovered methods for
 transporting the fields. The test also uses a non-periodic base mesh.

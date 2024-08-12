@@ -1,6 +1,11 @@
 """
-The 1 metre high mountain test case. This is solved with the hydrostatic
-compressible Euler equations.
+The 1 metre high mountain test case from Melvin et al, 2010:
+``An inherently mass-conserving iterative semi-implicit semi-Lagrangian
+discretization of the non-hydrostatic vertical-slice equations.'', QJRMS.
+
+This test describes a wave over a mountain in a non-hydrostatic atmosphere.
+
+The setup used here uses the order 1 finite elements.
 """
 
 from gusto import *

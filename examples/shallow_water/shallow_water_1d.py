@@ -1,6 +1,10 @@
 """
-A shallow water wave on a 1D periodic domain. The velocity includes a component
-normal to the domain, and diffusion terms are included in the equations.
+A shallow water wave on a 1D periodic domain. The test is taken from
+Haut & Wingate, 2014:
+``An asymptotic parallel-in-time method for highly oscillatory PDEs'', SIAM JSC.
+
+The velocity includes a component normal to the domain, and diffusion terms are
+included in the equations.
 
 This example uses an explicit RK4 timestepper to solve the equations.
 """

@@ -1,9 +1,18 @@
 """
-A moist thermal in an unsaturated atmosphere. This test is based on that of
-Grabowski and Clark (1991), and is described in Bendall et al (2020).
+A moist thermal in an unsaturated atmosphere, including a rain species. This
+test is based on that of Grabowski and Clark, 1991:
+``Cloud–environment interface instability: Rising thermal calculations in two
+spatial dimensions'', JAS.
+
+and is described in Bendall et al, 2020:
+``A compatible finite‐element discretisation for the moist compressible Euler
+equations'', QJRMS.
 
 As the thermal rises, water vapour condenses into cloud and forms rain.
 Limiters are applied to the transport of the water species.
+
+This configuration uses the lowest-order finite elements, and the recovery
+wrapper to provide higher-order accuracy.
 """
 from gusto import *
 from gusto.equations import thermodynamics

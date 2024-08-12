@@ -1,8 +1,10 @@
 """
-The gravity wave test case of Skamarock and Klemp (1994), solved using the
-incompressible Boussinesq equations.
+This example uses the incompressible Boussinesq equations to solve the vertical
+slice gravity wave test case of Skamarock and Klemp, 1994:
+``Efficiency and Accuracy of the Klemp-Wilhelmson Time-Splitting Technique'',
+MWR.
 
-Buoyancy is transported using SUPG.
+Buoyancy is transported using SUPG, and the degree 1 elements are used.
 """
 
 from gusto import *
