@@ -6,12 +6,31 @@ comparisons'', MiF.
 Diffusion is included in the velocity and potential temperature equations. The
 degree 1 finite elements are used in this configuration.
 """
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
                        Constant, pi, cos, Function, sqrt,
                        conditional)
 import sys
+
+straka_bubble_defaults = {
+    'ncolumns': 100,
+    'nlayers': 100,
+    'dt': 1.0,
+    'tmax': 600.,
+    'dumpfreq': 200,
+    'dirname': 'straka_bubble'
+}
+
+def straka_bubble(
+        ncolumns=straka_bubble_defaults['ncolumns'],
+        nlayers=straka_bubble_defaults['nlayers'],
+        dt=straka_bubble_defaults['dt'],
+        tmax=straka_bubble_defaults['tmax'],
+        dumpfreq=straka_bubble_defaults['dumpfreq'],
+        dirname=straka_bubble_defaults['dirname']
+):
 
 # ---------------------------------------------------------------------------- #
 # Test case parameters
@@ -131,3 +150,54 @@ for delta, dt in res_dt.items():
     # ------------------------------------------------------------------------ #
 
     stepper.run(t=0, tmax=tmax)
+
+# ---------------------------------------------------------------------------- #
+# MAIN
+# ---------------------------------------------------------------------------- #
+
+
+if __name__ == "__main__":
+
+    parser = ArgumentParser(
+        description=__doc__,
+        formatter_class=ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        '--ncolumns',
+        help="The number of columns in the vertical slice mesh.",
+        type=int,
+        default=straka_bubble_defaults['ncolumns']
+    )
+    parser.add_argument(
+        '--nlayers',
+        help="The number of layers for the mesh.",
+        type=int,
+        default=straka_bubble_defaults['nlayers']
+    )
+    parser.add_argument(
+        '--dt',
+        help="The time step in seconds.",
+        type=float,
+        default=straka_bubble_defaults['dt']
+    )
+    parser.add_argument(
+        "--tmax",
+        help="The end time for the simulation in seconds.",
+        type=float,
+        default=straka_bubble_defaults['tmax']
+    )
+    parser.add_argument(
+        '--dumpfreq',
+        help="The frequency at which to dump field output.",
+        type=int,
+        default=straka_bubble_defaults['dumpfreq']
+    )
+    parser.add_argument(
+        '--dirname',
+        help="The name of the directory to write to.",
+        type=str,
+        default=straka_bubble_defaults['dirname']
+    )
+    args, unknown = parser.parse_known_args()
+
+    straka_bubble(**vars(args))

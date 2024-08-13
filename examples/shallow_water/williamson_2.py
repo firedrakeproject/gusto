@@ -6,35 +6,50 @@ equations in spherical geometry'', JCP.
 
 The example here uses the icosahedral sphere mesh and degree 1 spaces.
 """
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from gusto import *
 from firedrake import IcosahedralSphereMesh, SpatialCoordinate, sin, cos, pi
 import sys
 
-# ---------------------------------------------------------------------------- #
-# Test case parameters
-# ---------------------------------------------------------------------------- #
+williamson_2_defaults = {
+    'ncells_per_edge': 48,     # number of cells per icosahedron edge
+    'dt': 300.0,               # 5 minutes
+    'tmax': 6.*24.*60.*60.,    # 6 days
+    'dumpfreq': 288,           # once per day with default options
+    'dirname': 'williamson_2'
+}
 
-day = 24.*60.*60.
-if '--running-tests' in sys.argv:
-    ref_dt = {3: 3000.}
-    tmax = 3000.
-    ndumps = 1
-else:
-    # setup resolution and timestepping parameters for convergence test
-    ref_dt = {3: 4000., 4: 2000., 5: 1000., 6: 500.}
-    tmax = 5*day
-    ndumps = 5
+def williamson_2(
+        ncells_per_edge=williamson_2_defaults['ncells_per_edge'],
+        dt=williamson_2_defaults['dt'],
+        tmax=williamson_2_defaults['tmax'],
+        dumpfreq=williamson_2_defaults['dumpfreq'],
+        dirname=williamson_2_defaults['dirname']
+):
 
-# setup shallow water parameters
-R = 6371220.
-H = 5960.
-rotated_pole = (0.0, pi/3)
+    # ------------------------------------------------------------------------ #
+    # Test case parameters
+    # ------------------------------------------------------------------------ #
 
-# setup input that doesn't change with ref level or dt
-parameters = ShallowWaterParameters(H=H)
+    day = 24.*60.*60.
+    if '--running-tests' in sys.argv:
+        ref_dt = {3: 3000.}
+        tmax = 3000.
+        ndumps = 1
+    else:
+        # setup resolution and timestepping parameters for convergence test
+        ref_dt = {3: 4000., 4: 2000., 5: 1000., 6: 500.}
+        tmax = 5*day
+        ndumps = 5
 
-for ref_level, dt in ref_dt.items():
+    # setup shallow water parameters
+    R = 6371220.
+    H = 5960.
+    rotated_pole = (0.0, pi/3)
+
+    # setup input that doesn't change with ref level or dt
+    parameters = ShallowWaterParameters(H=H)
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -104,3 +119,48 @@ for ref_level, dt in ref_dt.items():
     # ------------------------------------------------------------------------ #
 
     stepper.run(t=0, tmax=tmax)
+
+# ---------------------------------------------------------------------------- #
+# MAIN
+# ---------------------------------------------------------------------------- #
+
+
+if __name__ == "__main__":
+
+    parser = ArgumentParser(
+        description=__doc__,
+        formatter_class=ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        '--ncells_per_edge',
+        help="The number of cells per edge of icosahedron",
+        type=int,
+        default=williamson_2_defaults['ncells_per_edge']
+    )
+    parser.add_argument(
+        '--dt',
+        help="The time step in seconds.",
+        type=float,
+        default=williamson_2_defaults['dt']
+    )
+    parser.add_argument(
+        "--tmax",
+        help="The end time for the simulation in seconds.",
+        type=float,
+        default=williamson_2_defaults['tmax']
+    )
+    parser.add_argument(
+        '--dumpfreq',
+        help="The frequency at which to dump field output.",
+        type=int,
+        default=williamson_2_defaults['dumpfreq']
+    )
+    parser.add_argument(
+        '--dirname',
+        help="The name of the directory to write to.",
+        type=str,
+        default=williamson_2_defaults['dirname']
+    )
+    args, unknown = parser.parse_known_args()
+
+    williamson_2(**vars(args))
