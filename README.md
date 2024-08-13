@@ -44,4 +44,4 @@ Gusto can produce output in two formats:
 
 ## Website
 
-For more information, please see our [website](), and please do get in touch via the Gusto thread on the Firedrake project [slack channel](https://firedrakeproject.slack.com/).
+For more information, please see our [website](), and please do get in touch via the Gusto channel on the Firedrake project [slack workspace](https://firedrakeproject.slack.com/).
