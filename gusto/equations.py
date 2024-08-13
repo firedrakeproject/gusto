@@ -856,10 +856,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
                                              - 0.5*b_e*div(D*w)*dx
                                              + jump(b_e*w, n)*avg(D)*dS
                                              + 0.5*jump(D*w, n)*avg(b_e)*dS
-                                             + beta2*D*div(q_v*w)*dx
-                                             + 0.5*beta2*q_v*div(D*w)*dx
-                                             - beta2*jump(q_v*w, n)*avg(D)*dS
-                                             - beta2*0.5*jump(D*w, n)*avg(q_v)*dS,
+                                             - beta2*D*div(q_v*w)*dx
+                                             - 0.5*beta2*q_v*div(D*w)*dx
+                                             + beta2*jump(q_v*w, n)*avg(D)*dS
+                                             + beta2*0.5*jump(D*w, n)*avg(q_v)*dS,
                                              'u'), self.X)
             residual += source_form
 
@@ -868,8 +868,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 topography_form = subject(prognostic
                                           (-topography*div(b_e*w)*dx
                                            + jump(b_e*w, n)*avg(topography)*dS
-                                           + beta2*topography*div(q_v*w)*dx
-                                           - beta2*jump(q_v*w, n)*avg(topography)*dS,
+                                           - beta2*topography*div(q_v*w)*dx
+                                           + beta2*jump(q_v*w, n)*avg(topography)*dS,
                                            'u'), self.X)
                 residual += topography_form
 
