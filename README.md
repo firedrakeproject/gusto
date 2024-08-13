@@ -34,7 +34,7 @@ make test
 The `examples` directory contains several test cases, which you can play with to get started with Gusto.
 You can also see the [gusto case studies repository](https://github.com/firedrakeproject/gusto_case_studies), which contains a larger collection of test cases that use Gusto.
 
-Gusto is documented [here](https://firedrakeproject.org/gusto/), which is generated from the doc-strings in the codebase.
+Gusto is documented [here](https://www.firedrakeproject.org/gusto-docs/), which is generated from the doc-strings in the codebase.
 
 ## Visualisation
 
@@ -44,4 +44,4 @@ Gusto can produce output in two formats:
 
 ## Website
 
-For more information, please see our [website](), and please do get in touch via the Gusto channel on the Firedrake project [slack workspace](https://firedrakeproject.slack.com/).
+For more information, please see our [website](https://www.firedrakeproject.org/gusto/), and please do get in touch via the Gusto channel on the Firedrake project [slack workspace](https://firedrakeproject.slack.com/).
