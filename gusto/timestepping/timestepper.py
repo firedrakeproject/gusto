@@ -367,6 +367,9 @@ class PrescribedTransport(Timestepper):
                 represents the model time, and returns a `ufl.Expr`.
         """
 
+        if self.is_velocity_setup:
+            raise RuntimeError('Prescribed velocity already set up!')
+
         self.velocity_projection = Projector(
             expr_func(self.t), self.fields('u')
         )
@@ -385,6 +388,8 @@ class PrescribedTransport(Timestepper):
                 transporting velocity.
         """
 
+        if self.is_velocity_setup:
+            raise RuntimeError('Prescribed velocity already set up!')
         self.velocity_apply = apply_method
         self.is_velocity_setup = True
 
