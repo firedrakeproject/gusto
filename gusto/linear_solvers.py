@@ -986,11 +986,11 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
         q_v_bar = self.q_v_bar  # to make line length shorter
         eqn = (
             inner(w, (u - u_in)) * dx
-            - beta * (D-Dbar) * div(w * (b_ebar - beta2*q_v_bar)) * dx
-            + beta * jump(w*(b_ebar - beta2*q_v_bar), n) * avg((D-Dbar)) * dS
-            - beta * 0.5 * H * (b_ebar + b_e - beta2*q_v_bar) * div(w) * dx
-            - beta * 0.5 * (b_ebar - beta2*q_v_bar) * div(w*(D-Dbar)) * dx
-            + beta * 0.5 * jump((D-Dbar)*w, n) * avg(b_ebar - beta2*q_v_bar) * dS
+            - beta * (D-Dbar) * div(w * (b_ebar + beta2*q_v_bar)) * dx
+            + beta * jump(w*(b_ebar + beta2*q_v_bar), n) * avg((D-Dbar)) * dS
+            - beta * 0.5 * H * (b_ebar + b_e + beta2*q_v_bar) * div(w) * dx
+            - beta * 0.5 * (b_ebar + beta2*q_v_bar) * div(w*(D-Dbar)) * dx
+            + beta * 0.5 * jump((D-Dbar)*w, n) * avg(b_ebar + beta2*q_v_bar) * dS
             + inner(phi, (D - D_in)) * dx
             + beta * phi * H * div(u) * dx
         )
