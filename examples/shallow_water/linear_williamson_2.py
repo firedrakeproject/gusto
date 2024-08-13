@@ -6,17 +6,20 @@ equations in spherical geometry'', JCP.
 This uses an icosahedral mesh of the sphere, and the linear shallow water
 equations.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi
-import sys
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import Function, SpatialCoordinate, as_vector, pi
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, DefaultTransport,
+    ForwardEuler, SteadyStateError, ShallowWaterParameters,
+    LinearShallowWaterEquations, GeneralIcosahedralSphereMesh
+)
 
 linear_williamson_2_defaults = {
-    'ncells_per_edge': 48,     # number of cells per icosahedron edge
-    'dt': 300.0,               # 5 minutes
-    'tmax': 6.*24.*60.*60.,    # 6 days
-    'dumpfreq': 288,           # once per day with default options
+    'ncells_per_edge': 16,     # number of cells per icosahedron edge
+    'dt': 1800.0,              # 30 minutes
+    'tmax': 5.*24.*60.*60.,    # 5 days
+    'dumpfreq': 48,            # once per day with default options
     'dirname': 'linear_williamson_2'
 }
 
@@ -51,8 +54,7 @@ def linear_williamson_2(
     # ------------------------------------------------------------------------ #
 
     # Domain
-    mesh = IcosahedralSphereMesh(radius=R,
-                                refinement_level=refinements, degree=3)
+    mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
     x = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, 'BDM', 1)
 
@@ -65,7 +67,7 @@ def linear_williamson_2(
 
     # I/O
     output = OutputParameters(
-        dirname='linear_williamson_2',
+        dirname=dirname,
         dumpfreq=dumpfreq,
     )
     diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D')]

@@ -11,19 +11,25 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from petsc4py import PETSc
 PETSc.Sys.popErrorHandler()
-from gusto import *
 import itertools
-from firedrake import (as_vector, SpatialCoordinate, PeriodicIntervalMesh,
-                       ExtrudedMesh, exp, sin, Function, pi, COMM_WORLD)
+from firedrake import (
+    as_vector, SpatialCoordinate, PeriodicIntervalMesh, ExtrudedMesh, exp, sin,
+    Function, pi, COMM_WORLD
+)
 import numpy as np
-import sys
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    TrapeziumRule, SUPGOptions, CourantNumber, Perturbation,
+    CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
+    compressible_hydrostatic_balance
+)
 
 skamarock_klemp_nonhydrostatic_defaults = {
-    'ncolumns': 100,
-    'nlayers': 100,
-    'dt': 1.0,
-    'tmax': 600.,
-    'dumpfreq': 200,
+    'ncolumns': 150,
+    'nlayers': 10,
+    'dt': 6.0,
+    'tmax': 3600.,
+    'dumpfreq': 300,
     'dirname': 'skamarock_klemp_nonhydrostatic'
 }
 

@@ -5,21 +5,26 @@ The dry rising bubble test from Bryan & Fritsch, 2002:
 This uses the lowest-order function spaces, with the recovered methods for
 transporting the fields. The test also uses a non-periodic base mesh.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from gusto import *
-from firedrake import (IntervalMesh, ExtrudedMesh,
-                       SpatialCoordinate, conditional, cos, pi, sqrt,
-                       TestFunction, dx, TrialFunction, Constant, Function,
-                       LinearVariationalProblem, LinearVariationalSolver)
-import sys
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import (
+    IntervalMesh, ExtrudedMesh, SpatialCoordinate, conditional, cos, pi, sqrt,
+    TestFunction, dx, TrialFunction, Constant, Function,
+    LinearVariationalProblem, LinearVariationalSolver
+)
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    RecoverySpaces, BoundaryMethod, Perturbation, CompressibleParameters,
+    CompressibleEulerEquations, CompressibleSolver,
+    compressible_hydrostatic_balance
+)
 
 dry_bryan_fritsch_defaults = {
     'ncolumns': 100,
     'nlayers': 100,
-    'dt': 1.0,
-    'tmax': 600.,
-    'dumpfreq': 200,
+    'dt': 2.0,
+    'tmax': 1000.,
+    'dumpfreq': 500,
     'dirname': 'dry_bryan_fritsch'
 }
 

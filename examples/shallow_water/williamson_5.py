@@ -5,18 +5,22 @@ equations in spherical geometry'', JCP.
 
 The example here uses the icosahedral sphere mesh and degree 1 spaces.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from gusto import *
-from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, pi, sqrt, min_value)
-import sys
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import (
+    SpatialCoordinate, as_vector, pi, sqrt, min_value, Function
+)
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
+    lonlatr_from_xyz, GeneralIcosahedralSphereMesh
+)
 
 williamson_5_defaults = {
-    'ncells_per_edge': 48,     # number of cells per icosahedron edge
-    'dt': 300.0,               # 5 minutes
-    'tmax': 6.*24.*60.*60.,    # 6 days
-    'dumpfreq': 288,           # once per day with default options
+    'ncells_per_edge': 16,     # number of cells per icosahedron edge
+    'dt': 600.0,               # 10 minutes
+    'tmax': 50.*24.*60.*60.,   # 50 days
+    'dumpfreq': 144,           # once per day with default options
     'dirname': 'williamson_5'
 }
 
@@ -55,8 +59,7 @@ def williamson_5(
     # ------------------------------------------------------------------------ #
 
     # Domain
-    mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=ref_level, degree=2)
+    mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
     x = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, 'BDM', 1)
 
@@ -76,8 +79,6 @@ def williamson_5(
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
 
     # I/O
-    dirname = "williamson_5_ref%s_dt%s" % (ref_level, dt)
-    dumpfreq = int(tmax / (ndumps*dt))
     output = OutputParameters(
         dirname=dirname,
         dumplist_latlon=['D'],

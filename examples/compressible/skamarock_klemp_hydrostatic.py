@@ -7,19 +7,25 @@ MWR.
 Potential temperature is transported using SUPG, and the degree 1 elements are
 used.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from gusto import *
-from firedrake import (as_vector, SpatialCoordinate, PeriodicRectangleMesh,
-                       ExtrudedMesh, exp, sin, Function, pi)
-import sys
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import (
+    as_vector, SpatialCoordinate, PeriodicRectangleMesh, ExtrudedMesh, exp, sin,
+    Function, pi
+)
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    TrapeziumRule, SUPGOptions, CourantNumber, Perturbation,
+    CompressibleParameters, HydrostaticCompressibleEulerEquations,
+    CompressibleSolver, compressible_hydrostatic_balance
+)
 
 skamarock_klemp_hydrostatic_defaults = {
-    'ncolumns': 100,
-    'nlayers': 100,
-    'dt': 1.0,
-    'tmax': 600.,
-    'dumpfreq': 200,
+    'ncolumns': 150,
+    'nlayers': 10,
+    'dt': 25.0,
+    'tmax': 60000.,
+    'dumpfreq': 1200,
     'dirname': 'skamarock_klemp_hydrostatic'
 }
 
@@ -64,7 +70,7 @@ def skamarock_klemp_hydrostatic(
     parameters = CompressibleParameters()
     Omega = as_vector((0., 0., 0.5e-4))
     balanced_pg = as_vector((0., -1.0e-4*20, 0.))
-    eqns = CompressibleEulerEquations(domain, parameters, Omega=Omega,
+    eqns = HydrostaticCompressibleEulerEquations(domain, parameters, Omega=Omega,
                                     extra_terms=[("u", balanced_pg)])
 
     # I/O

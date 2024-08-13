@@ -6,21 +6,28 @@ MWR.
 
 Buoyancy is transported using SUPG, and the degree 1 elements are used.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from gusto import *
-from firedrake import (as_vector, PeriodicIntervalMesh, ExtrudedMesh,
-                       sin, SpatialCoordinate, Function, pi)
-import sys
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import (
+    as_vector, PeriodicIntervalMesh, ExtrudedMesh, sin, SpatialCoordinate,
+    Function, pi
+)
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    TrapeziumRule, SUPGOptions, Divergence, Perturbation, CourantNumber,
+    BoussinesqParameters, BoussinesqEquations, BoussinesqSolver,
+    boussinesq_hydrostatic_balance
+)
 
 skamarock_klemp_compressible_bouss_defaults = {
-    'ncolumns': 100,
-    'nlayers': 100,
-    'dt': 1.0,
-    'tmax': 600.,
-    'dumpfreq': 200,
+    'ncolumns': 300,
+    'nlayers': 10,
+    'dt': 6.0,
+    'tmax': 3600.,
+    'dumpfreq': 300,
     'dirname': 'skamarock_klemp_compressible_bouss'
 }
+
 
 def skamarock_klemp_compressible_bouss(
         ncolumns=skamarock_klemp_compressible_bouss_defaults['ncolumns'],
@@ -66,7 +73,7 @@ def skamarock_klemp_compressible_bouss(
 
     # I/O
     output = OutputParameters(
-        dirname='skamarock_klemp_compressible',
+        dirname=dirname,
         dumpfreq=dumpfreq,
         dumplist=['u'],
     )

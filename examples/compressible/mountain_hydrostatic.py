@@ -3,24 +3,30 @@ The 1 metre high mountain test case from Melvin et al, 2010:
 ``An inherently mass-conserving iterative semi-implicit semi-Lagrangian
 discretization of the non-hydrostatic vertical-slice equations.'', QJRMS.
 
-This test describes a wave over a mountain in a non-hydrostatic atmosphere.
+This test describes a wave over a mountain in a hydrostatic atmosphere.
 
 The setup used here uses the order 1 finite elements.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from gusto import *
-from firedrake import (as_vector, VectorFunctionSpace,
-                       PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
-                       exp, pi, cos, Function, conditional, Mesh, sqrt)
-import sys
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import (
+    as_vector, VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh,
+    SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, sqrt
+)
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    TrapeziumRule, SUPGOptions, CourantNumber, ZComponent, Perturbation,
+    CompressibleParameters, HydrostaticCompressibleEulerEquations,
+    CompressibleSolver, compressible_hydrostatic_balance, HydrostaticImbalance,
+    SpongeLayerParameters, MinKernel, remove_initial_w
+)
 
 mountain_hydrostatic_defaults = {
-    'ncolumns': 100,
-    'nlayers': 100,
-    'dt': 1.0,
-    'tmax': 600.,
-    'dumpfreq': 200,
+    'ncolumns': 200,
+    'nlayers': 120,
+    'dt': 5.0,
+    'tmax': 15000.,
+    'dumpfreq': 1500,
     'dirname': 'mountain_hydrostatic'
 }
 
@@ -81,7 +87,7 @@ def mountain_hydrostatic(
     # Equation
     parameters = CompressibleParameters(g=9.80665, cp=1004.)
     sponge = SpongeLayerParameters(H=H, z_level=H-20000, mubar=0.3)
-    eqns = CompressibleEulerEquations(domain, parameters, sponge_options=sponge)
+    eqns = HydrostaticCompressibleEulerEquations(domain, parameters, sponge_options=sponge)
 
     # I/O
     dirname = 'hydrostatic_mountain'
@@ -182,7 +188,7 @@ def mountain_hydrostatic(
                                     params=exner_params)
 
     # Use kernel as a parallel-safe method of computing minimum
-    min_kernel = kernels.MinKernel()
+    min_kernel = MinKernel()
 
     p0 = min_kernel.apply(exner)
     compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner,

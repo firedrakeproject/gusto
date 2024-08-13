@@ -11,17 +11,24 @@ small overshoots in will generate clouds.
 
 This example uses the icosahedral sphere mesh and degree 1 spaces.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from gusto import *
-from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, sin, cos, exp)
-import sys
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import SpatialCoordinate, sin, cos, exp, Function
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
+    CourantNumber, RelativeVorticity, PotentialVorticity,
+    SteadyStateError, ShallowWaterKineticEnergy, ShallowWaterPotentialEnergy,
+    ShallowWaterPotentialEnstrophy, lonlatr_from_xyz, DG1Limiter, InstantRain,
+    MoistConvectiveSWSolver, ForwardEuler, SWSaturationAdjustment,
+    WaterVapour, CloudWater, Rain, GeneralIcosahedralSphereMesh
+)
 
 moist_convect_williamson_2_defaults = {
-    'ncells_per_edge': 48,     # number of cells per icosahedron edge
-    'dt': 300.0,               # 5 minutes
-    'tmax': 6.*24.*60.*60.,    # 6 days
-    'dumpfreq': 288,           # once per day with default options
+    'ncells_per_edge': 16,     # number of cells per icosahedron edge
+    'dt': 1800.0,              # 30 minutes
+    'tmax': 5.*24.*60.*60.,    # 5 days
+    'dumpfreq': 48,            # once per day with default options
     'dirname': 'moist_convect_williamson_2'
 }
 
@@ -68,7 +75,7 @@ def moist_convect_williamson_2(
     # ------------------------------------------------------------------------ #
 
     # Domain
-    mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=2)
+    mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
     degree = 1
     domain = Domain(mesh, dt, 'BDM', degree)
     x = SpatialCoordinate(mesh)

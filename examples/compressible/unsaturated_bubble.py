@@ -14,24 +14,28 @@ Limiters are applied to the transport of the water species.
 This configuration uses the lowest-order finite elements, and the recovery
 wrapper to provide higher-order accuracy.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from gusto import *
-from gusto.equations import thermodynamics
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
-                       SpatialCoordinate, conditional, cos, pi, sqrt, exp,
-                       TestFunction, dx, TrialFunction, Constant, Function,
-                       LinearVariationalProblem, LinearVariationalSolver,
-                       errornorm)
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import (
+    PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate, conditional, cos, pi,
+    sqrt, exp, TestFunction, dx, TrialFunction, Constant, Function, errornorm,
+    LinearVariationalProblem, LinearVariationalSolver
+)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
-import sys
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    Perturbation, RecoverySpaces, BoundaryMethod, Recoverer, Fallout,
+    Coalescence, SaturationAdjustment, EvaporationOfRain, thermodynamics,
+    CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
+    unsaturated_hydrostatic_balance, WaterVapour, CloudWater, Rain
+)
 
 unsaturated_bubble_defaults = {
-    'ncolumns': 100,
-    'nlayers': 100,
+    'ncolumns': 180,
+    'nlayers': 120,
     'dt': 1.0,
     'tmax': 600.,
-    'dumpfreq': 200,
+    'dumpfreq': 300,
     'dirname': 'unsaturated_bubble'
 }
 

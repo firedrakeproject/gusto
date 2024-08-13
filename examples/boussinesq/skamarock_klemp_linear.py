@@ -6,19 +6,23 @@ MWR.
 
 The degree 1 elements are used.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from gusto import *
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
-                       sin, SpatialCoordinate, Function, pi)
-import sys
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import (
+    PeriodicIntervalMesh, ExtrudedMesh, sin, SpatialCoordinate, Function, pi
+)
+from gusto import (
+    Domain, IO, OutputParameters, RK4, DGUpwind, SUPGOptions, Divergence,
+    Perturbation, CourantNumber, BoussinesqParameters,
+    LinearBoussinesqEquations, boussinesq_hydrostatic_balance
+)
 
 skamarock_klemp_linear_bouss_defaults = {
-    'ncolumns': 100,
-    'nlayers': 100,
+    'ncolumns': 300,
+    'nlayers': 10,
     'dt': 1.0,
-    'tmax': 600.,
-    'dumpfreq': 200,
+    'tmax': 3600.,
+    'dumpfreq': 300,
     'dirname': 'skamarock_klemp_linear_bouss'
 }
 
@@ -65,7 +69,7 @@ def skamarock_klemp_linear_bouss(
     eqns = LinearBoussinesqEquations(domain, parameters)
 
     # I/O
-    output = OutputParameters(dirname='skamarock_klemp_linear')
+    output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq)
     # list of diagnostic fields, each defined in a class in diagnostics.py
     diagnostic_fields = [CourantNumber(), Divergence(), Perturbation('b')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)

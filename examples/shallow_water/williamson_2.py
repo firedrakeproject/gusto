@@ -6,17 +6,23 @@ equations in spherical geometry'', JCP.
 
 The example here uses the icosahedral sphere mesh and degree 1 spaces.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, sin, cos, pi
-import sys
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import SpatialCoordinate, sin, cos, pi, Function
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
+    RelativeVorticity, PotentialVorticity, SteadyStateError,
+    ShallowWaterKineticEnergy, ShallowWaterPotentialEnergy,
+    ShallowWaterPotentialEnstrophy, rotated_lonlatr_coords,
+    rotated_lonlatr_vectors, GeneralIcosahedralSphereMesh
+)
 
 williamson_2_defaults = {
-    'ncells_per_edge': 48,     # number of cells per icosahedron edge
-    'dt': 300.0,               # 5 minutes
-    'tmax': 6.*24.*60.*60.,    # 6 days
-    'dumpfreq': 288,           # once per day with default options
+    'ncells_per_edge': 16,     # number of cells per icosahedron edge
+    'dt': 1800.0,              # 30 minutes
+    'tmax': 5.*24.*60.*60.,    # 5 days
+    'dumpfreq': 48,            # once per day with default options
     'dirname': 'williamson_2'
 }
 
@@ -56,8 +62,7 @@ def williamson_2(
     # ------------------------------------------------------------------------ #
 
     # Domain
-    mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=ref_level, degree=2)
+    mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
     x = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, 'BDM', 1, rotated_pole=rotated_pole)
 
@@ -69,8 +74,6 @@ def williamson_2(
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # I/O
-    dirname = "williamson_2_ref%s_dt%s" % (ref_level, dt)
-    dumpfreq = int(tmax / (ndumps*dt))
     output = OutputParameters(
         dirname=dirname,
         dumpfreq=dumpfreq,

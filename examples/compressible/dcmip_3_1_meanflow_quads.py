@@ -6,25 +6,30 @@ document of Ullrich et al, 2012:
 This uses a cubed-sphere mesh, the degree 1 finite element spaces and tests
 substepping the transport schemes.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from gusto import *
-from firedrake import (CubedSphereMesh, ExtrudedMesh, FunctionSpace,
-                       Function, SpatialCoordinate, as_vector)
-from firedrake import exp, acos, cos, sin, pi, sqrt, asin, atan2
-import sys
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import (
+    ExtrudedMesh, FunctionSpace, Function, SpatialCoordinate, as_vector, exp,
+    acos, cos, sin, pi, sqrt, asin, atan2
+)
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    TrapeziumRule, SUPGOptions, CompressibleKineticEnergy, PotentialEnergy,
+    CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
+    compressible_hydrostatic_balance, Perturbation, GeneralCubedSphereMesh
+)
 
 dcmip_3_1_meanflow_defaults = {
-    'ncell_per_edge': 16,
-    'nlayers': 15,
-    'dt': 900.0,               # 15 minutes
-    'tmax': 15.*24.*60.*60.,   # 15 days
-    'dumpfreq': 48,            # Corresponds to every 12 hours with default opts
+    'ncells_per_edge': 8,
+    'nlayers': 10,
+    'dt': 100.0,
+    'tmax': 3600.,
+    'dumpfreq': 9,
     'dirname': 'dcmip_3_1_meanflow'
 }
 
 def dcmip_3_1_meanflow(
-        ncell_per_edge=dcmip_3_1_meanflow_defaults['ncell_per_edge'],
+        ncells_per_edge=dcmip_3_1_meanflow_defaults['ncells_per_edge'],
         nlayers=dcmip_3_1_meanflow_defaults['nlayers'],
         dt=dcmip_3_1_meanflow_defaults['dt'],
         tmax=dcmip_3_1_meanflow_defaults['tmax'],
@@ -75,9 +80,7 @@ def dcmip_3_1_meanflow(
 
     # Domain
     # Cubed-sphere horizontal mesh
-    m = CubedSphereMesh(radius=a,
-                        refinement_level=refinements,
-                        degree=2)
+    m = GeneralCubedSphereMesh(radius, ncells_per_edge, degree=2)
     # Build volume mesh
     mesh = ExtrudedMesh(m, layers=nlayers,
                         layer_height=z_top/nlayers,
@@ -98,7 +101,6 @@ def dcmip_3_1_meanflow(
     eqns = CompressibleEulerEquations(domain, parameters)
 
     # I/O
-    dirname = 'dcmip_3_1_meanflow'
     output = OutputParameters(
         dirname=dirname,
         dumpfreq=dumpfreq,
@@ -198,10 +200,10 @@ if __name__ == "__main__":
         formatter_class=ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        '--ncell_per_edge',
+        '--ncells_per_edge',
         help="The number of cells per panel edge of the cubed-sphere.",
         type=int,
-        default=dcmip_3_1_meanflow_defaults['ncell_per_edge']
+        default=dcmip_3_1_meanflow_defaults['ncells_per_edge']
     )
     parser.add_argument(
         '--nlayers',

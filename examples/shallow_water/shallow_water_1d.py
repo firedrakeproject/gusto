@@ -8,20 +8,25 @@ included in the equations.
 
 This example uses an explicit RK4 timestepper to solve the equations.
 """
+
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-
 import numpy as np
-import sys
-
-from firedrake import *
-from gusto import *
 from pyop2.mpi import MPI
+from firedrake import (
+    PeriodicIntervalMesh, Function, assemble, SpatialCoordinate, COMM_WORLD,
+    Constant
+)
+from gusto import (
+    Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
+    ShallowWaterParameters, ShallowWaterEquations_1d, CGDiffusion,
+    InteriorPenaltyDiffusion, DiffusionParameters
+)
 
 shallow_water_1d_wave_defaults = {
-    'ncells': 48,
-    'dt': 300.0,               # 5 minutes
-    'tmax': 6.*24.*60.*60.,    # 6 days
-    'dumpfreq': 288,           # once per day with default options
+    'ncells': 128,
+    'dt': 0.0001,
+    'tmax': 1.0,
+    'dumpfreq': 1000,  # 10 outputs with default options
     'dirname': 'shallow_water_1d_wave'
 }
 
@@ -34,7 +39,6 @@ def shallow_water_1d_wave(
 ):
 
     L = 2*pi
-    n = 128
     delta = L/n
     mesh = PeriodicIntervalMesh(128, L)
     dt = 0.0001

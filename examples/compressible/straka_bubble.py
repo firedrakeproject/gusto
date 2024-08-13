@@ -6,20 +6,26 @@ comparisons'', MiF.
 Diffusion is included in the velocity and potential temperature equations. The
 degree 1 finite elements are used in this configuration.
 """
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from gusto import *
-from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
-                       Constant, pi, cos, Function, sqrt,
-                       conditional)
-import sys
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import (
+    PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate, Constant, pi, cos,
+    Function, sqrt, conditional
+)
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    TrapeziumRule, SUPGOptions, CourantNumber, Perturbation,
+    DiffusionParameters, InteriorPenaltyDiffusion, BackwardEuler,
+    CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
+    compressible_hydrostatic_balance
+)
 
 straka_bubble_defaults = {
-    'ncolumns': 100,
-    'nlayers': 100,
+    'ncolumns': 256,
+    'nlayers': 32,
     'dt': 1.0,
-    'tmax': 600.,
-    'dumpfreq': 200,
+    'tmax': 900.,
+    'dumpfreq': 225,
     'dirname': 'straka_bubble'
 }
 
