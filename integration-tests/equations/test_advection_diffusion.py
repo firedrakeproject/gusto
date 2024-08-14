@@ -2,8 +2,8 @@
 Tests discretisations of the advection-diffusion equation. This checks the
 errornorm for the resulting field to ensure that the result is reasonable.
 
-Additionally, the split_timestepper is tested in addition to prescribed 
-transport, to check that the splitting of advection and transport terms 
+Additionally, the split_timestepper is tested in addition to prescribed
+transport, to check that the splitting of advection and transport terms
 is performed correctly.
 """
 
@@ -11,6 +11,7 @@ from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp, as_vector,
                        norm, Constant, conditional, sqrt, VectorFunctionSpace)
 from gusto import *
 import pytest
+
 
 def run_advection_diffusion(tmpdir, timestepper):
 
@@ -44,14 +45,14 @@ def run_advection_diffusion(tmpdir, timestepper):
         stepper = PrescribedTransport(equation, SSPRK3(domain), io, spatial_methods)
     elif timestepper == 'split1':
         dynamics_schemes = {'transport': SSPRK3(domain),
-                           'diffusion': ForwardEuler(domain)}
-        term_splitting = [transport, diffusion]
-        stepper = SplitTimestepper(equation, term_splitting, io, spatial_methods, dynamics_schemes)
+                            'diffusion': ForwardEuler(domain)}
+        term_splitting = ['transport', 'diffusion']
+        stepper = SplitTimestepper(equation, term_splitting, io, spatial_methods=spatial_methods, dynamics_schemes=dynamics_schemes)
     else:
         dynamics_schemes = {'transport': SSPRK3(domain),
-                           'diffusion': ForwardEuler(domain)}
+                            'diffusion': ForwardEuler(domain)}
         term_splitting = ['diffusion', 'transport']
-        stepper = SplitTimestepper(equation, term_splitting, io, spatial_methods, dynamics_schemes)
+        stepper = SplitTimestepper(equation, term_splitting, io, spatial_methods=spatial_methods, dynamics_schemes=dynamics_schemes)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

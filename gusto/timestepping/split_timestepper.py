@@ -4,7 +4,7 @@ from firedrake import Projector
 from firedrake.fml import Label, drop
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
-from gusto.core.labels import time_derivative, physics_label, dynamics_label
+from gusto.core.labels import time_derivative, physics_label
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper, Timestepper
 
@@ -14,11 +14,11 @@ __all__ = ["SplitTimestepper", "SplitPhysicsTimestepper", "SplitPrescribedTransp
 class SplitTimestepper(BaseTimestepper):
     """
     Implements a timeloop by applying separate schemes to different terms, e.g
-    physics and dynamics. This splits these terms and allows a different 
+    physics and dynamics. This splits these terms and allows a different
     time discretisation to be applied to each. When using this timestepper,
     all types of term need a specified timestepping method.
     """
-    
+
     def __init__(self, equation, term_splitting, io, spatial_methods=None,
                  dynamics_schemes=None, physics_schemes=None):
         """
@@ -40,7 +40,7 @@ class SplitTimestepper(BaseTimestepper):
                 for each. Timestepping schemes for physics must be explicit.
                 Defaults to None.
         """
-        
+
         if spatial_methods is not None:
             self.spatial_methods = spatial_methods
         else:
@@ -64,55 +64,27 @@ class SplitTimestepper(BaseTimestepper):
 
         self.dynamics_schemes = dynamics_schemes
         for label, scheme in self.dynamics_schemes.items():
-            # Check that multilevel schemes are not used, as these 
+            # Check that multilevel schemes are not used, as these
             # are currently not supported.
             assert scheme.nlevels == 1, "multilevel schemes are not currently implemented in the split timestepper"
-            # Check that the label is valid:
-            print('yoy')
-            label = Label(label)
-            
+            # TODO: Check that the label is valid.
+
         # As we handle physics in separate parametrisations, these are not
         # passed to the super __init__
         super().__init__(equation, io)
-            
-            
-        # Extract all non-physics or time derivative terms.
-        other_terms = self.residual.label_map(lambda t: t.has_label(label), map_if_true=keep)
-            
-        term_count = len(other_terms)
-        counts = 0
-            
-        # Check that the labels in term_splitting are used in the equation
-        # I don't think we want to specify dynamics, but transport ...
-        terms = self.residual.label_map(lambda t: not any(t.has_label(time_derivative, physics_label), map_if_true=keep))
-        print(len(terms))
-        for term in term_splitting:
-            terms = terms.label_map(lambda t: t.has_label(term), map_if_true=drop)
-            print(term)
-            print(len(terms))
+
+        # Check that the labels in term_splitting cover all the terms that
+        # are not time derivatives or physics
+        self.term_splitting = term_splitting
+        terms = self.equation.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)), map_if_true=drop)
+        for term in self.term_splitting:
+            terms = terms.label_map(lambda t: t.has_label(Label(term)), map_if_true=drop)
         if len(terms) > 0:
             raise ValueError('The term_splitting list for the SplitTimestepper has not covered all terms in the equation.')
-        
-        
-        #for label in term_splitting:
-        #    if label == dynamics:
-        #        terms = other_terms.label_map(lambda t: t.has_label(dynamics_label), map_if_true=drop)
-        #    else:
-        #        terms = other_terms.label_map(lambda t: t.has_label(label), map_if_true=drop)
-        #    assert len(terms) > 0, \
-        #        f'The {label} term in the term_splitting list does not correspond to any components in the equation.'
-        #    counts += len(terms)
-            
-        #assert counts == term_count, 'The terms used in the SplitTimestepper do not correctly split the equation.'
-        
-        # Check that all terms in the term_splitting list have a timestepping method.
-        # If this is a physics term, then this is given by physics_schemes,
-        # else, this needs to be in dynamics_schemes.
-
 
     @property
     def transporting_velocity(self):
-        return "prognostic"
+        return self.fields('u')
 
     def setup_fields(self):
         self.x = TimeLevelFields(self.equation, 1)
@@ -125,7 +97,7 @@ class SplitTimestepper(BaseTimestepper):
         # tests with KGOs fail
         apply_bcs = True
         self.setup_equation(self.equation)
-        
+
         for label, scheme in self.dynamics_schemes.items():
             scheme.setup(self.equation, apply_bcs, Label(label))
             self.setup_transporting_velocity(scheme)
@@ -138,17 +110,15 @@ class SplitTimestepper(BaseTimestepper):
 
     def timestep(self):
         # Perform timestepping in the specified order
-        for term in term_splitting:
+        for term in self.term_splitting:
             if term == 'physics':
                 with timed_stage("Physics"):
                     for _, scheme in self.physics_schemes:
                         scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
             else:
                 # Extract associated timestepping method
-                scheme = self.dynamics_schemes[name]
-                print(name)
-                print(scheme)
-                scheme.apply(xnp1(name), xnp1(name))
+                scheme = self.dynamics_schemes[term]
+                scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
 
         super().timestep()
 
