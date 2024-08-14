@@ -485,14 +485,14 @@ class Forcing(object):
 
         x_out.assign(x_in(self.field_name))
         x_out += self.xF
-    
+
     def zero_forcing_terms(self, equation, x_in, x_out, transported_field_names):
         """
         Zero forcing term F(x) for non-wind transport.
 
         This takes x_in and x_out, where                                      \n
         x_out = x_in + scale*F(x_nl)                                          \n
-        for some field x_nl and sets x_out = x_in for all non-wind transport terms 
+        for some field x_nl and sets x_out = x_in for all non-wind transport terms
 
         Args:
             equation (:class:`PrognosticEquationSet`): the prognostic

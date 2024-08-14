@@ -57,10 +57,11 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
         self.equations = equations
         self.dt = equations.domain.dt
         self.alpha = alpha
+
         # Set relaxation parameters.
-        self.tau_u=tau_u
-        self.tau_t=tau_t
-        self.tau_r=tau_r
+        self.tau_u = tau_u
+        self.tau_t = tau_t
+        self.tau_r = tau_r
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -145,7 +146,7 @@ class CompressibleSolver(TimesteppingSolver):
                                                            'pc_type': 'bjacobi',
                                                            'sub_pc_type': 'ilu'}}}
 
-    def __init__(self, equations, alpha=0.5, tau_u = 0.5, tau_r = 0.5, tau_t = 0.5,
+    def __init__(self, equations, alpha=0.5, tau_u=0.5, tau_r=0.5, tau_t=0.5,
                  quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False):
         """
