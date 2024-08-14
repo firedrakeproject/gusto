@@ -1,6 +1,10 @@
 """
 Tests discretisations of the advection-diffusion equation. This checks the
 errornorm for the resulting field to ensure that the result is reasonable.
+
+Additionally, the split_timestepper is tested in addition to prescribed 
+transport, to check that the splitting of advection and transport terms 
+is performed correctly.
 """
 
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp, as_vector,
@@ -38,10 +42,16 @@ def run_advection_diffusion(tmpdir, timestepper):
     # Time stepper
     if timestepper == 'prescribed':
         stepper = PrescribedTransport(equation, SSPRK3(domain), io, spatial_methods)
+    elif timestepper == 'split1':
+        dynamics_schemes = {'transport': SSPRK3(domain),
+                           'diffusion': ForwardEuler(domain)}
+        term_splitting = [transport, diffusion]
+        stepper = SplitTimestepper(equation, term_splitting, io, spatial_methods, dynamics_schemes)
     else:
-        transport_scheme = SSPRK3(domain)
-        diffusion_scheme = SSPRK3(domain)
-        stepper = SplitTransportDiffusionTimestepper(equation, transport_scheme, diffusion_scheme, io, spatial_methods)
+        dynamics_schemes = {'transport': SSPRK3(domain),
+                           'diffusion': ForwardEuler(domain)}
+        term_splitting = ['diffusion', 'transport']
+        stepper = SplitTimestepper(equation, term_splitting, io, spatial_methods, dynamics_schemes)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -82,7 +92,7 @@ def run_advection_diffusion(tmpdir, timestepper):
     return error
 
 
-@pytest.mark.parametrize("timestepper", ['prescribed','split'])
+@pytest.mark.parametrize("timestepper", ["prescribed", "split1", "split2"])
 def test_advection_diffusion(tmpdir, timestepper):
 
     tol = 0.015
