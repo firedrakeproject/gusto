@@ -17,7 +17,10 @@ from firedrake.petsc import flatten_parameters
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.equations.active_tracers import TracerVariableType
-from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
+from gusto.core.logging import (
+    logger, DEBUG, logging_ksp_monitor_true_residual,
+    attach_custom_monitor
+)
 from gusto.core.labels import linearisation, time_derivative, hydrostatic
 from gusto.equations import thermodynamics
 from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
@@ -56,8 +59,8 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                 solver_parameters = p
             self.solver_parameters = solver_parameters
 
-        # ~ if logger.isEnabledFor(DEBUG):
-            # ~ self.solver_parameters["ksp_monitor_true_residual"] = None
+        if logger.isEnabledFor(DEBUG):
+            self.solver_parameters["ksp_monitor_true_residual"] = None
 
         # setup the solver
         self._setup_solver()
@@ -353,7 +356,6 @@ class CompressibleSolver(TimesteppingSolver):
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.hybridized_solver.snes.ksp)
         # Log residuals on the trace system too
-        from gusto.core.logging import attach_custom_monitor
         python_context = self.hybridized_solver.snes.ksp.pc.getPythonContext()
         attach_custom_monitor(python_context, logging_ksp_monitor_true_residual)
 

@@ -171,6 +171,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         # Set up dump, which may also include an initial dump
         with timed_stage("Dump output"):
+            logger.debug('Dumping output to disk')
             self.io.setup_dump(self.fields, t, pick_up)
 
         self.t.assign(t)
@@ -197,7 +198,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         if self.io.output.checkpoint and self.io.output.checkpoint_method == 'dumbcheckpoint':
             self.io.chkpt.close()
 
-        logger.info(f'TIMELOOP complete. t={float(self.t)}, tmax={tmax}')
+        logger.info(f'TIMELOOP complete. t={float(self.t):.5f}, {tmax=:.5f}')
 
     def set_reference_profiles(self, reference_profiles):
         """
