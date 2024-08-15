@@ -33,7 +33,7 @@ __all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver",
 class TimesteppingSolver(object, metaclass=ABCMeta):
     """Base class for timestepping linear solvers for Gusto."""
 
-    def __init__(self, equations, alpha=0.5, tau_u=0.5, tau_r=0.5, tau_t=0.5,
+    def __init__(self, equations, alpha=0.5, tau_u=None, tau_r=None, tau_t=None,
                  solver_parameters=None, overwrite_solver_parameters=False):
         """
         Args:
@@ -41,11 +41,11 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
             alpha (float, optional): the semi-implicit off-centring factor.
                 Defaults to 0.5. A value of 1 is fully-implicit.
             tau_u (float, optional): the semi-implicit relaxation parameter for
-                wind. Defaults to 0.5.
+                wind. Defaults to None.
             tau_r (float, optional): the semi-implicit relaxation parameter for
-                density-like variable. Defaults to 0.5.
+                density-like variable. Defaults to None.
             tau_t (float, optional): the semi-implicit relaxation parameter for
-                temperature-like variable. Defaults to 0.5.
+                temperature-like variable. Defaults to None.
             solver_parameters (dict, optional): contains the options to be
                 passed to the underlying :class:`LinearVariationalSolver`.
                 Defaults to None.
@@ -58,10 +58,22 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
         self.dt = equations.domain.dt
         self.alpha = alpha
 
-        # Set relaxation parameters.
-        self.tau_u = tau_u
-        self.tau_t = tau_t
-        self.tau_r = tau_r
+        # Set relaxation parameters. If an alternative has not been given, set
+        # to semi-implicit off-centering factor
+        if tau_u is not None:
+            self.tau_u = tau_u
+        else:
+            self.tau_u = alpha
+
+        if tau_t is not None:
+            self.tau_t = tau_t
+        else:
+            self.tau_t = alpha
+
+        if tau_r is not None:
+            self.tau_r = tau_r
+        else:
+            self.tau_r = alpha
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
