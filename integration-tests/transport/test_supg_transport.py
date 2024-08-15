@@ -42,7 +42,10 @@ def test_supg_transport_scalar(tmpdir, equation_form, scheme, space,
         transport_scheme = TrapeziumRule(domain, options=opts)
 
     transport_method = DGUpwind(eqn, "f", ibp=ibp)
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
+    time_varying_velocity = False
+    timestepper = PrescribedTransport(
+        eqn, transport_scheme, setup.io, time_varying_velocity, transport_method
+    )
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)
@@ -84,7 +87,10 @@ def test_supg_transport_vector(tmpdir, equation_form, scheme, space,
         transport_scheme = TrapeziumRule(domain, options=opts)
 
     transport_method = DGUpwind(eqn, "f", ibp=ibp)
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
+    time_varying_velocity = False
+    timestepper = PrescribedTransport(
+        eqn, transport_scheme, setup.io, time_varying_velocity, transport_method
+    )
 
     # Initial conditions
     f = timestepper.fields("f")
