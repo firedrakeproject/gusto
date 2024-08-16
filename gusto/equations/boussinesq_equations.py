@@ -40,7 +40,6 @@ class BoussinesqEquations(PrognosticEquationSet):
 
     def __init__(self, domain, parameters,
                  compressible=True,
-                 Omega=None,
                  space_names=None,
                  linearisation_map='default',
                  u_transport_option="vector_invariant_form",
