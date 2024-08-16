@@ -317,7 +317,7 @@ class CompressibleSolver(TimesteppingSolver):
             # condition
             + dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
             + dl*dot(u, n)*(ds_tbp + ds_vp)
-            )
+        )
 
         # TODO: can we get this term using FML?
         # contribution of the sponge term
@@ -662,7 +662,7 @@ class ThermalSWSolver(TimesteppingSolver):
             + beta_u * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
             + inner(phi, (D - D_in)) * dx
             + beta_d * phi * Dbar * div(u) * dx
-            )
+        )
 
         if 'coriolis' in self.prescribed_fields._field_names:
             f = self.prescribed_fields('coriolis')
