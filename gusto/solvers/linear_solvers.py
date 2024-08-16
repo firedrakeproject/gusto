@@ -316,14 +316,15 @@ class CompressibleSolver(TimesteppingSolver):
             # through the interior facets and weakly impose the no-slip
             # condition
             + dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
-            + dl*dot(u, n)*(ds_tbp + ds_vp))
+            + dl*dot(u, n)*(ds_tbp + ds_vp)
+            )
 
         # TODO: can we get this term using FML?
         # contribution of the sponge term
         if hasattr(self.equations, "mu"):
             eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
 
-        if equations.parameters.coriolis is not None:
+        if equations.parameters.Omega is not None:
             Omega = as_vector([0, 0, equations.parameters.Omega])
             eqn += inner(w, cross(2*Omega, u))*dx
 
@@ -660,9 +661,10 @@ class ThermalSWSolver(TimesteppingSolver):
             - beta_u * 0.5 * bbar * div(w*(D-Dbar)) * dx
             + beta_u * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
             + inner(phi, (D - D_in)) * dx
-            + beta_d * phi * Dbar * div(u) * dx)
+            + beta_d * phi * Dbar * div(u) * dx
+            )
 
-        if self.prescribed_fields('coriolis'):
+        if 'coriolis' in self.prescribed_fields._field_names:
             f = self.prescribed_fields('coriolis')
             eqn += beta_u_ * f * inner(w, equation.domain.perp(u)) * dx
 
@@ -878,7 +880,7 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
             + beta_d * phi * Dbar * div(u) * dx
         )
 
-        if self.prescribed_fields('coriolis'):
+        if 'coriolis' in self.prescribed_fields._field_names:
             f = self.prescribed_fields('coriolis')
             eqn += beta_u_ * f * inner(w, equation.domain.perp(u)) * dx
 
