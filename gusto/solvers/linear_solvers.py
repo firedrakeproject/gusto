@@ -60,20 +60,9 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
 
         # Set relaxation parameters. If an alternative has not been given, set
         # to semi-implicit off-centering factor
-        if tau_u is not None:
-            self.tau_u = tau_u
-        else:
-            self.tau_u = alpha
-
-        if tau_t is not None:
-            self.tau_t = tau_t
-        else:
-            self.tau_t = alpha
-
-        if tau_r is not None:
-            self.tau_r = tau_r
-        else:
-            self.tau_r = alpha
+        self.tau_u = tau_u if tau_u is not None else alpha
+        self.tau_t = tau_t if tau_t is not None else alpha
+        self.tau_r = tau_r if tau_r is not None else alpha
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:

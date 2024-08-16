@@ -503,6 +503,6 @@ class Forcing(object):
         """
         for field_name in transported_field_names:
             if field_name != 'u':
-                logger.info(f'SIQN: Zeroing Implicit forcing for {field_name}')
+                logger.info(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
                 field_index = equation.field_names.index(field_name)
                 x_out.subfunctions[field_index].assign(x_in(field_name))
