@@ -294,6 +294,14 @@ class CompressibleSolver(TimesteppingSolver):
         else:
             u_mass = inner(w, (u - u_in))*dx
 
+        if equations.X.coriolis:
+            # this becomes much easier once the PR for vorticity goes in due
+            # to the new way to define coriolis force
+            omega = Constant(7.292e-5)
+            Omega = as_vector([0, 0 , omega])
+            coriolis_factor = inner(w, cross(2*Omega, u))*dx
+        else:
+            coriolis_factor = None
         eqn = (
             # momentum equation
             u_mass
@@ -317,12 +325,19 @@ class CompressibleSolver(TimesteppingSolver):
             # condition
             + dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
             + dl*dot(u, n)*(ds_tbp + ds_vp)
-        )
+            )
 
         # TODO: can we get this term using FML?
         # contribution of the sponge term
         if hasattr(self.equations, "mu"):
             eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
+        
+        if equations.X.coriolis:
+            # this becomes much easier once the PR for vorticity goes in due
+            # to the new way to define coriolis force
+            omega = Constant(7.292e-5)
+            Omega = as_vector([0, 0 , omega])
+            eqn += inner(w, cross(2*Omega, u))*dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
@@ -654,7 +669,10 @@ class ThermalSWSolver(TimesteppingSolver):
             + inner(phi, (D - D_in)) * dx
             + beta_d * phi * Dbar * div(u) * dx
         )
-
+        
+        if equation.f: # think this is the same as asking if f exists 
+            f = equation.f   
+            eqn += beta_u_ * f * inner(w, domain.perp(u)) * dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
