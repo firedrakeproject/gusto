@@ -70,8 +70,9 @@ class SplitTimestepper(BaseTimestepper):
         # Check that each dynamics label in term_splitting has a corresponding
         # dynamics scheme
         for term in term_splitting:
-            assert term in self.dynamics_schemes, f"The {term} terms do not have a specified scheme in the split timestepper"
-            # TODO: Check that the label is valid, i.e. one from gusto.core.labels
+            if term != 'physics':
+                assert term in self.dynamics_schemes, f"The {term} terms do not have a specified scheme in the split timestepper"
+                # TODO: Check that the label is valid, i.e. one from gusto.core.labels
 
         # Check that multilevel schemes are not used for the dynamics terms,
         # as these are currently not supported.
@@ -85,11 +86,17 @@ class SplitTimestepper(BaseTimestepper):
         # Check that each dynamics term is covered by a label
         # in the term_splitting list, but also that it does not
         # have two labels that apply to it.
+        print(len(self.equation.residual))
         terms = self.equation.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)), map_if_true=drop)
+        print(len(terms))
         for term in terms:
+            print(term)
+            #print(term.labels)
             count = 0
             for label in self.term_splitting:
                 if term.has_label(Label(label)):
+                    print('label match')
+                    print(label)
                     count += 1
             if count != 1:
                 raise ValueError('The SplitTimestepper term_splitting list does not correctly cover the dynamics terms in the equations.')
