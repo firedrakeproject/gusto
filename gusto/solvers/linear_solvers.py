@@ -41,7 +41,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
             alpha (float, optional): the semi-implicit off-centring factor.
                 Defaults to 0.5. A value of 1 is fully-implicit.
             tau_values (dict, optional): contains the semi-implicit relaxation
-                parameters. Defaults to None.
+                parameters. Defaults to None, in which case the value of alpha is used.
             solver_parameters (dict, optional): contains the options to be
                 passed to the underlying :class:`LinearVariationalSolver`.
                 Defaults to None.
