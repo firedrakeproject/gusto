@@ -69,13 +69,13 @@ class Relaxation(PhysicsParametrisation):
         # timescale of temperature forcing
         tao_cond = (self.sigma - sigmab) / (1 - sigmab)
         newton_freq = 1 / taod + (1/taou - 1/taod) * conditional(ge(0, tao_cond), 0, tao_cond) * cos(lat)**4
-        forcing = -newton_freq * (self.theta - equilibrium_expr)
-
+        forcing_expr = -newton_freq * (self.theta - equilibrium_expr)
+	self.source_relaxation = Function(Vt).interpolate(forcing_expr)
         # Add relaxation term to residual
         test = equation.tests[theta_idx]
         dx_reduced = dx(degree=4)
-        forcing_expr = test * forcing * dx_reduced
-        equation.residual -= self.label(subject(prognostic(forcing_expr, 'theta'), X), self.evaluate)
+        forcing_form = test * forcing * dx_reduced
+        equation.residual -= self.label(subject(prognostic(forcing_form, 'theta'), X), self.evaluate)
         
     def evaluate(self, x_in, dt):
         """
@@ -88,7 +88,7 @@ class Relaxation(PhysicsParametrisation):
         """ 
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        self.exner_interpolator.interpolate
+        self.exner_interpolator.interpolate()
 
         # Determine sigma:= exner / exner_surf
         exner_columnwise, index_data = self.domain.coords.get_column_data(self.exner, self.domain)
