@@ -2,7 +2,7 @@
 
 from firedrake import (
     sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg, dS_v,
-    conditional, SpatialCoordinate, split, Constant
+    conditional, SpatialCoordinate, split, Constant, as_vector
 )
 from firedrake.fml import subject, replace_subject
 from gusto.core.labels import (
@@ -34,7 +34,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
     pressure.
     """
 
-    def __init__(self, domain, parameters, Omega=None, sponge_options=None,
+    def __init__(self, domain, parameters, sponge_options=None,
                  extra_terms=None, space_names=None,
                  linearisation_map='default',
                  u_transport_option="vector_invariant_form",
@@ -47,8 +47,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
-            Omega (:class:`ufl.Expr`, optional): an expression for the planet's
-                rotation vector. Defaults to None.
             sponge_options (:class:`SpongeLayerParameters`, optional): any
                 parameters for applying a sponge layer to the upper boundary.
                 Defaults to None.
@@ -216,10 +214,12 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Extra Terms (Coriolis, Sponge, Diffusion and others)
         # -------------------------------------------------------------------- #
-        if Omega is not None:
+        if parameters.Omega is not None:
             # TODO: add linearisation
-            residual += coriolis(subject(prognostic(
-                inner(w, cross(2*Omega, u))*dx, "u"), self.X))
+            Omega = as_vector((0, 0, parameters.Omega))
+            coriolis_form = coriolis(subject(prognostic(
+                inner(w, cross(2*Omega, u))*dx, 'u'), self.X))
+            residual += coriolis_form
 
         if sponge_options is not None:
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
@@ -279,7 +279,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
     equations.
     """
 
-    def __init__(self, domain, parameters, Omega=None, sponge=None,
+    def __init__(self, domain, parameters, sponge=None,
                  extra_terms=None, space_names=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
@@ -291,8 +291,6 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
-            Omega (:class:`ufl.Expr`, optional): an expression for the planet's
-                rotation vector. Defaults to None.
             sponge (:class:`ufl.Expr`, optional): an expression for a sponge
                 layer. Defaults to None.
             extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
@@ -325,7 +323,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
             NotImplementedError: only mixing ratio tracers are implemented.
         """
 
-        super().__init__(domain, parameters, Omega=Omega, sponge=sponge,
+        super().__init__(domain, parameters, sponge=sponge,
                          extra_terms=extra_terms, space_names=space_names,
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
