@@ -191,11 +191,12 @@ class BoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Extra Terms (Coriolis)
         # -------------------------------------------------------------------- #
-        if Omega is not None:
+        if self.parameters.Omega is not None:
             # TODO: add linearisation
-            residual += coriolis(subject(prognostic(
+            Omega = as_vector((0, 0, self.parameters.Omega))
+            coriolis_form = coriolis(subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, 'u'), self.X))
-
+            residual += coriolis_form
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
