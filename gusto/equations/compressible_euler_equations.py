@@ -47,8 +47,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
-            Omega (:class:`ufl.Expr`, optional): an expression for the planet's
-                rotation vector. Defaults to None.
             sponge_options (:class:`SpongeLayerParameters`, optional): any
                 parameters for applying a sponge layer to the upper boundary.
                 Defaults to None.
