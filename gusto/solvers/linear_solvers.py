@@ -179,9 +179,9 @@ class CompressibleSolver(TimesteppingSolver):
         dt = self.dt
         # Set relaxation parameters. If an alternative has not been given, set
         # to semi-implicit off-centering factor
-        beta_u_ = dt*self.tau_values.get("u") if self.tau_values.get("u") is not None else self.alpha
-        beta_t_ = dt*self.tau_values.get("theta") if self.tau_values.get("theta") is not None else self.alpha
-        beta_r_ = dt*self.tau_values.get("rho") if self.tau_values.get("rho") is not None else self.alpha
+        beta_u_ = dt*self.tau_values.get("u") if self.tau_values.get("u") is not None else dt*self.alpha
+        beta_t_ = dt*self.tau_values.get("theta") if self.tau_values.get("theta") is not None else dt*self.alpha
+        beta_r_ = dt*self.tau_values.get("rho") if self.tau_values.get("rho") is not None else dt*self.alpha
 
         cp = equations.parameters.cp
         Vu = equations.domain.spaces("HDiv")
@@ -460,9 +460,9 @@ class BoussinesqSolver(TimesteppingSolver):
         dt = self.dt
         # Set relaxation parameters. If an alternative has not been given, set
         # to semi-implicit off-centering factor
-        beta_u_ = dt*self.tau_values.get("u") if self.tau_values.get("u") is not None else self.alpha
-        beta_p_ = dt*self.tau_values.get("p") if self.tau_values.get("p") is not None else self.alpha
-        beta_b_ = dt*self.tau_values.get("b") if self.tau_values.get("b") is not None else self.alpha
+        beta_u_ = dt*self.tau_values.get("u") if self.tau_values.get("u") is not None else dt*self.alpha
+        beta_p_ = dt*self.tau_values.get("p") if self.tau_values.get("p") is not None else dt*self.alpha
+        beta_b_ = dt*self.tau_values.get("b") if self.tau_values.get("b") is not None else dt*self.alpha
         Vu = equation.domain.spaces("HDiv")
         Vb = equation.domain.spaces("theta")
         Vp = equation.domain.spaces("DG")
@@ -607,9 +607,9 @@ class ThermalSWSolver(TimesteppingSolver):
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
         dt = self.dt
-        beta_u_ = dt*self.tau_values.get("u") if self.tau_values.get("u") is not None else self.alpha
-        beta_d_ = dt*self.tau_values.get("D") if self.tau_values.get("D") is not None else self.alpha
-        beta_b_ = dt*self.tau_values.get("b") if self.tau_values.get("b") is not None else self.alpha
+        beta_u_ = dt*self.tau_values.get("u") if self.tau_values.get("u") is not None else dt*self.alpha
+        beta_d_ = dt*self.tau_values.get("D") if self.tau_values.get("D") is not None else dt*self.alpha
+        beta_b_ = dt*self.tau_values.get("b") if self.tau_values.get("b") is not None else dt*self.alpha
         Vu = equation.domain.spaces("HDiv")
         VD = equation.domain.spaces("DG")
         Vb = equation.domain.spaces("DG")
@@ -836,8 +836,8 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
         dt = self.dt
-        beta_u_ = dt*self.tau_values.get("u") if self.tau_values.get("u") is not None else self.alpha
-        beta_d_ = dt*self.tau_values.get("D") if self.tau_values.get("D") is not None else self.alpha
+        beta_u_ = dt*self.tau_values.get("u") if self.tau_values.get("u") is not None else dt*self.alpha
+        beta_d_ = dt*self.tau_values.get("D") if self.tau_values.get("D") is not None else dt*self.alpha
         Vu = equation.domain.spaces("HDiv")
         VD = equation.domain.spaces("DG")
 
