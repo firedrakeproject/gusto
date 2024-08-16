@@ -33,7 +33,7 @@ __all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver",
 class TimesteppingSolver(object, metaclass=ABCMeta):
     """Base class for timestepping linear solvers for Gusto."""
 
-    def __init__(self, equations, alpha=0.5, tau_values={},
+    def __init__(self, equations, alpha=0.5, tau_values=None,
                  solver_parameters=None, overwrite_solver_parameters=False):
         """
         Args:
@@ -41,7 +41,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
             alpha (float, optional): the semi-implicit off-centring factor.
                 Defaults to 0.5. A value of 1 is fully-implicit.
             tau_values (dict, optional): contains the semi-implicit relaxation
-                parameters. Defaults to an empty dictionary.
+                parameters. Defaults to None.
             solver_parameters (dict, optional): contains the options to be
                 passed to the underlying :class:`LinearVariationalSolver`.
                 Defaults to None.
@@ -53,7 +53,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
         self.equations = equations
         self.dt = equations.domain.dt
         self.alpha = alpha
-        self.tau_values = tau_values
+        self.tau_values = tau_values if tau_values is not None else {}
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -138,7 +138,7 @@ class CompressibleSolver(TimesteppingSolver):
                                                            'pc_type': 'bjacobi',
                                                            'sub_pc_type': 'ilu'}}}
 
-    def __init__(self, equations, alpha=0.5, tau_values={},
+    def __init__(self, equations, alpha=0.5, tau_values=None,
                  quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False):
         """
@@ -147,7 +147,7 @@ class CompressibleSolver(TimesteppingSolver):
             alpha (float, optional): the semi-implicit off-centring factor.
                 Defaults to 0.5. A value of 1 is fully-implicit.
             tau_values (dict, optional): contains the semi-implicit relaxation
-                parameters. Defaults to an empty dictionary.
+                parameters. Defaults to None.
             quadrature_degree (tuple, optional): a tuple (q_h, q_v) where q_h is
                 the required quadrature degree in the horizontal direction and
                 q_v is that in the vertical direction. Defaults to None.
@@ -179,9 +179,9 @@ class CompressibleSolver(TimesteppingSolver):
         dt = self.dt
         # Set relaxation parameters. If an alternative has not been given, set
         # to semi-implicit off-centering factor
-        beta_u_ = dt*self.tau_values.get("u") if self.tau_values.get("u") is not None else dt*self.alpha
-        beta_t_ = dt*self.tau_values.get("theta") if self.tau_values.get("theta") is not None else dt*self.alpha
-        beta_r_ = dt*self.tau_values.get("rho") if self.tau_values.get("rho") is not None else dt*self.alpha
+        beta_u_ = dt*self.tau_values.get("u", self.alpha)
+        beta_t_ = dt*self.tau_values.get("theta", self.alpha)
+        beta_r_ = dt*self.tau_values.get("rho", self.alpha)
 
         cp = equations.parameters.cp
         Vu = equations.domain.spaces("HDiv")
@@ -460,9 +460,9 @@ class BoussinesqSolver(TimesteppingSolver):
         dt = self.dt
         # Set relaxation parameters. If an alternative has not been given, set
         # to semi-implicit off-centering factor
-        beta_u_ = dt*self.tau_values.get("u") if self.tau_values.get("u") is not None else dt*self.alpha
-        beta_p_ = dt*self.tau_values.get("p") if self.tau_values.get("p") is not None else dt*self.alpha
-        beta_b_ = dt*self.tau_values.get("b") if self.tau_values.get("b") is not None else dt*self.alpha
+        beta_u_ = dt*self.tau_values.get("u", self.alpha)
+        beta_p_ = dt*self.tau_values.get("p", self.alpha)
+        beta_b_ = dt*self.tau_values.get("b", self.alpha)
         Vu = equation.domain.spaces("HDiv")
         Vb = equation.domain.spaces("theta")
         Vp = equation.domain.spaces("DG")
@@ -607,9 +607,9 @@ class ThermalSWSolver(TimesteppingSolver):
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
         dt = self.dt
-        beta_u_ = dt*self.tau_values.get("u") if self.tau_values.get("u") is not None else dt*self.alpha
-        beta_d_ = dt*self.tau_values.get("D") if self.tau_values.get("D") is not None else dt*self.alpha
-        beta_b_ = dt*self.tau_values.get("b") if self.tau_values.get("b") is not None else dt*self.alpha
+        beta_u_ = dt*self.tau_values.get("u", self.alpha)
+        beta_d_ = dt*self.tau_values.get("D", self.alpha)
+        beta_b_ = dt*self.tau_values.get("b", self.alpha)
         Vu = equation.domain.spaces("HDiv")
         VD = equation.domain.spaces("DG")
         Vb = equation.domain.spaces("DG")
@@ -836,8 +836,8 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
         dt = self.dt
-        beta_u_ = dt*self.tau_values.get("u") if self.tau_values.get("u") is not None else dt*self.alpha
-        beta_d_ = dt*self.tau_values.get("D") if self.tau_values.get("D") is not None else dt*self.alpha
+        beta_u_ = dt*self.tau_values.get("u", self.alpha)
+        beta_d_ = dt*self.tau_values.get("D", self.alpha)
         Vu = equation.domain.spaces("HDiv")
         VD = equation.domain.spaces("DG")
 
