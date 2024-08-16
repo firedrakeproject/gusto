@@ -165,13 +165,13 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         if fexpr is not None:
             V = FunctionSpace(domain.mesh, 'CG', 1)
-            f = self.prescribed_fields('coriolis', V).interpolate(fexpr)
+            self.f = self.prescribed_fields('coriolis', V).interpolate(fexpr)
             coriolis_form = coriolis(subject(
-                prognostic(f*inner(domain.perp(u), w)*dx, "u"), self.X))
+                prognostic(self.f*inner(domain.perp(u), w)*dx, "u"), self.X))
             # Add linearisation
             if self.linearisation_map(coriolis_form.terms[0]):
                 linear_coriolis = coriolis(
-                    subject(prognostic(f*inner(domain.perp(u_trial), w)*dx, 'u'), self.X))
+                    subject(prognostic(self.f*inner(domain.perp(u_trial), w)*dx, 'u'), self.X))
                 coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 

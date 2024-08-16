@@ -1,6 +1,6 @@
 """Defines the Boussinesq equations."""
 
-from firedrake import inner, dx, div, cross, split
+from firedrake import inner, dx, div, cross, split, as_vector
 from firedrake.fml import subject
 from gusto.core.labels import (
     time_derivative, transport, prognostic, linearisation,

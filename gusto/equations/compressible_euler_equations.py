@@ -2,7 +2,7 @@
 
 from firedrake import (
     sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg, dS_v,
-    conditional, SpatialCoordinate, split, Constant
+    conditional, SpatialCoordinate, split, Constant, as_vector
 )
 from firedrake.fml import subject, replace_subject
 from gusto.core.labels import (
