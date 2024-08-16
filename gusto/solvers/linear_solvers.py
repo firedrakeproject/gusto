@@ -33,19 +33,15 @@ __all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver",
 class TimesteppingSolver(object, metaclass=ABCMeta):
     """Base class for timestepping linear solvers for Gusto."""
 
-    def __init__(self, equations, alpha=0.5, tau_u=None, tau_r=None, tau_t=None,
+    def __init__(self, equations, alpha=0.5, tau_values=None,
                  solver_parameters=None, overwrite_solver_parameters=False):
         """
         Args:
             equations (:class:`PrognosticEquation`): the model's equation.
             alpha (float, optional): the semi-implicit off-centring factor.
                 Defaults to 0.5. A value of 1 is fully-implicit.
-            tau_u (float, optional): the semi-implicit relaxation parameter for
-                wind. Defaults to None.
-            tau_r (float, optional): the semi-implicit relaxation parameter for
-                density-like variable. Defaults to None.
-            tau_t (float, optional): the semi-implicit relaxation parameter for
-                temperature-like variable. Defaults to None.
+            tau_values (dict, optional): contains the semi-implicit relaxation
+                parameters. Defaults to None.
             solver_parameters (dict, optional): contains the options to be
                 passed to the underlying :class:`LinearVariationalSolver`.
                 Defaults to None.
@@ -57,12 +53,14 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
         self.equations = equations
         self.dt = equations.domain.dt
         self.alpha = alpha
+        self.tau_values = tau_values
 
-        # Set relaxation parameters. If an alternative has not been given, set
-        # to semi-implicit off-centering factor
-        self.tau_u = tau_u if tau_u is not None else alpha
-        self.tau_t = tau_t if tau_t is not None else alpha
-        self.tau_r = tau_r if tau_r is not None else alpha
+        # Check that we have a tau value for each field
+        if self.tau_values is not None:
+            for field in equations.field_names:
+                if field not in self.tau_values:
+                    raise KeyError(f"You must select tau values for all fields to be solved, "
+                                   f"missing value is {field}")
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -147,7 +145,7 @@ class CompressibleSolver(TimesteppingSolver):
                                                            'pc_type': 'bjacobi',
                                                            'sub_pc_type': 'ilu'}}}
 
-    def __init__(self, equations, alpha=0.5, tau_u=0.5, tau_r=0.5, tau_t=0.5,
+    def __init__(self, equations, alpha=0.5, tau_values=None,
                  quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False):
         """
@@ -155,12 +153,8 @@ class CompressibleSolver(TimesteppingSolver):
             equations (:class:`PrognosticEquation`): the model's equation.
             alpha (float, optional): the semi-implicit off-centring factor.
                 Defaults to 0.5. A value of 1 is fully-implicit.
-            tau_u (float, optional): the semi-implicit relaxation parameter for
-                wind. Defaults to 0.5.
-            tau_r (float, optional): the semi-implicit relaxation parameter for
-                density-like variable. Defaults to 0.5.
-            tau_t (float, optional): the semi-implicit relaxation parameter for
-                temperature-like variable. Defaults to 0.5.
+            tau_values (dict, optional): contains the semi-implicit relaxation
+                parameters. Defaults to None.
             quadrature_degree (tuple, optional): a tuple (q_h, q_v) where q_h is
                 the required quadrature degree in the horizontal direction and
                 q_v is that in the vertical direction. Defaults to None.
@@ -182,7 +176,7 @@ class CompressibleSolver(TimesteppingSolver):
                 logger.warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
-        super().__init__(equations, alpha, tau_u, tau_r, tau_t, solver_parameters,
+        super().__init__(equations, alpha, tau_values, solver_parameters,
                          overwrite_solver_parameters)
 
     @timed_function("Gusto:SolverSetup")
@@ -190,9 +184,12 @@ class CompressibleSolver(TimesteppingSolver):
 
         equations = self.equations
         dt = self.dt
-        beta_u_ = dt*self.tau_u
-        beta_t_ = dt*self.tau_t
-        beta_r_ = dt*self.tau_r
+        # Set relaxation parameters. If an alternative has not been given, set
+        # to semi-implicit off-centering factor
+        beta_u_ = dt*self.tau_values["u"] if self.tau_values is not None else self.alpha
+        beta_t_ = dt*self.tau_values["theta"] if self.tau_values is not None else self.alpha
+        beta_r_ = dt*self.tau_values["rho"] if self.tau_values is not None else self.alpha
+
         cp = equations.parameters.cp
         Vu = equations.domain.spaces("HDiv")
         Vu_broken = FunctionSpace(equations.domain.mesh, BrokenElement(Vu.ufl_element()))
@@ -468,9 +465,11 @@ class BoussinesqSolver(TimesteppingSolver):
         equation = self.equations      # just cutting down line length a bit
 
         dt = self.dt
-        beta_u_ = dt*self.tau_u
-        beta_p_ = dt*self.tau_r
-        beta_b_ = dt*self.tau_t
+        # Set relaxation parameters. If an alternative has not been given, set
+        # to semi-implicit off-centering factor
+        beta_u_ = dt*self.tau_values["u"] if self.tau_values is not None else self.alpha
+        beta_p_ = dt*self.tau_values["p"] if self.tau_values is not None else self.alpha
+        beta_b_ = dt*self.tau_values["b"] if self.tau_values is not None else self.alpha
         Vu = equation.domain.spaces("HDiv")
         Vb = equation.domain.spaces("theta")
         Vp = equation.domain.spaces("DG")
@@ -615,9 +614,9 @@ class ThermalSWSolver(TimesteppingSolver):
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
         dt = self.dt
-        beta_u_ = dt*self.tau_u
-        beta_d_ = dt*self.tau_r
-        beta_b_ = dt*self.tau_t
+        beta_u_ = dt*self.tau_values["u"] if self.tau_values is not None else self.alpha
+        beta_d_ = dt*self.tau_values["D"] if self.tau_values is not None else self.alpha
+        beta_b_ = dt*self.tau_values["b"] if self.tau_values is not None else self.alpha
         Vu = equation.domain.spaces("HDiv")
         VD = equation.domain.spaces("DG")
         Vb = equation.domain.spaces("DG")
@@ -844,8 +843,8 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
         dt = self.dt
-        beta_u_ = dt*self.tau_u
-        beta_d_ = dt*self.tau_r
+        beta_u_ = dt*self.tau_values["u"] if self.tau_values is not None else self.alpha
+        beta_d_ = dt*self.tau_values["D"] if self.tau_values is not None else self.alpha
         Vu = equation.domain.spaces("HDiv")
         VD = equation.domain.spaces("DG")
 
