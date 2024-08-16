@@ -9,8 +9,8 @@ from firedrake import (
     split, LinearVariationalProblem, Constant, LinearVariationalSolver,
     TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
     rhs, FacetNormal, div, dx, jump, avg, dS, dS_v, dS_h, ds_v, ds_t, ds_b,
-    ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis,
-    BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC
+    ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis, cross,
+    BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC, as_vector
 )
 from firedrake.fml import Term, drop
 from firedrake.petsc import flatten_parameters
@@ -294,14 +294,6 @@ class CompressibleSolver(TimesteppingSolver):
         else:
             u_mass = inner(w, (u - u_in))*dx
 
-        if equations.X.coriolis:
-            # this becomes much easier once the PR for vorticity goes in due
-            # to the new way to define coriolis force
-            omega = Constant(7.292e-5)
-            Omega = as_vector([0, 0 , omega])
-            coriolis_factor = inner(w, cross(2*Omega, u))*dx
-        else:
-            coriolis_factor = None
         eqn = (
             # momentum equation
             u_mass
@@ -324,19 +316,15 @@ class CompressibleSolver(TimesteppingSolver):
             # through the interior facets and weakly impose the no-slip
             # condition
             + dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
-            + dl*dot(u, n)*(ds_tbp + ds_vp)
-            )
+            + dl*dot(u, n)*(ds_tbp + ds_vp))
 
         # TODO: can we get this term using FML?
         # contribution of the sponge term
         if hasattr(self.equations, "mu"):
             eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
-        
-        if equations.X.coriolis:
-            # this becomes much easier once the PR for vorticity goes in due
-            # to the new way to define coriolis force
-            omega = Constant(7.292e-5)
-            Omega = as_vector([0, 0 , omega])
+
+        if equations.parameters.coriolis is not None:
+            Omega = as_vector([0, 0, equations.parameters.Omega])
             eqn += inner(w, cross(2*Omega, u))*dx
 
         aeqn = lhs(eqn)
@@ -521,6 +509,11 @@ class BoussinesqSolver(TimesteppingSolver):
 
         if hasattr(self.equations, "mu"):
             eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
+
+        if equation.parameters.Omega is not None:
+            Omega = as_vector((0, 0, equation.parameter.Omega))
+            eqn += inner(w, cross(2*Omega, u))*dx
+
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -667,12 +660,12 @@ class ThermalSWSolver(TimesteppingSolver):
             - beta_u * 0.5 * bbar * div(w*(D-Dbar)) * dx
             + beta_u * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
             + inner(phi, (D - D_in)) * dx
-            + beta_d * phi * Dbar * div(u) * dx
-        )
-        
-        if equation.f: # think this is the same as asking if f exists 
-            f = equation.f   
-            eqn += beta_u_ * f * inner(w, domain.perp(u)) * dx
+            + beta_d * phi * Dbar * div(u) * dx)
+
+        if self.prescribed_fields('coriolis'):
+            f = self.prescribed_fields('coriolis')
+            eqn += beta_u_ * f * inner(w, equation.domain.perp(u)) * dx
+
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -884,6 +877,10 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
             + inner(phi, (D - D_in)) * dx
             + beta_d * phi * Dbar * div(u) * dx
         )
+
+        if self.prescribed_fields('coriolis'):
+            f = self.prescribed_fields('coriolis')
+            eqn += beta_u_ * f * inner(w, equation.domain.perp(u)) * dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
