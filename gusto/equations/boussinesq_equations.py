@@ -225,7 +225,6 @@ class LinearBoussinesqEquations(BoussinesqEquations):
 
     def __init__(self, domain, parameters,
                  compressible=True,
-                 Omega=None,
                  space_names=None,
                  linearisation_map='default',
                  u_transport_option="vector_invariant_form",
@@ -239,8 +238,6 @@ class LinearBoussinesqEquations(BoussinesqEquations):
                 the model's physical parameters.
             compressible (bool, optional): flag to indicate whether the
                 equations are compressible. Defaults to True
-            Omega (:class:`ufl.Expr`, optional): an expression for the planet's
-                rotation vector. Defaults to None.
             space_names (dict, optional): a dictionary of strings for names of
                 the function spaces to use for the spatial discretisation. The
                 keys are the names of the prognostic variables. Defaults to None
@@ -276,7 +273,6 @@ class LinearBoussinesqEquations(BoussinesqEquations):
         super().__init__(domain=domain,
                          parameters=parameters,
                          compressible=compressible,
-                         Omega=Omega,
                          space_names=space_names,
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,

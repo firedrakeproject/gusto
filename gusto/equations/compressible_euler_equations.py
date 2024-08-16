@@ -279,7 +279,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
     equations.
     """
 
-    def __init__(self, domain, parameters, Omega=None, sponge=None,
+    def __init__(self, domain, parameters, sponge=None,
                  extra_terms=None, space_names=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
@@ -291,8 +291,6 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
-            Omega (:class:`ufl.Expr`, optional): an expression for the planet's
-                rotation vector. Defaults to None.
             sponge (:class:`ufl.Expr`, optional): an expression for a sponge
                 layer. Defaults to None.
             extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
@@ -325,7 +323,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
             NotImplementedError: only mixing ratio tracers are implemented.
         """
 
-        super().__init__(domain, parameters, Omega=Omega, sponge=sponge,
+        super().__init__(domain, parameters, sponge=sponge,
                          extra_terms=extra_terms, space_names=space_names,
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
