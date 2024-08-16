@@ -147,7 +147,7 @@ class CompressibleSolver(TimesteppingSolver):
             alpha (float, optional): the semi-implicit off-centring factor.
                 Defaults to 0.5. A value of 1 is fully-implicit.
             tau_values (dict, optional): contains the semi-implicit relaxation
-                parameters. Defaults to None.
+                parameters. Defaults to None, in which case the value of alpha is used.
             quadrature_degree (tuple, optional): a tuple (q_h, q_v) where q_h is
                 the required quadrature degree in the horizontal direction and
                 q_v is that in the vertical direction. Defaults to None.
