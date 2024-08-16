@@ -28,25 +28,32 @@ def test_prescribed_transport_setup(tmpdir, tracer_setup, timestep_method):
     # Make equation
     eqn = AdvectionEquation(domain, V, "f")
 
+    transport_scheme = SSPRK3(domain)
+    time_varying_velocity = True
+
+    if timestep_method == 'prescribed':
+        transport_method = DGUpwind(eqn, 'f')
+        timestepper = PrescribedTransport(
+            eqn, transport_scheme, setup.io, time_varying_velocity,
+            transport_method
+        )
+
+    elif timestep_method == 'split_prescribed':
+        transport_method = [DGUpwind(eqn, 'f')]
+        timestepper = SplitPrescribedTransport(
+            eqn, transport_scheme, setup.io, time_varying_velocity,
+            transport_method
+        )
+
+    else:
+        raise NotImplementedError
+
     # Initialise fields
     def u_evaluation(t):
         return as_vector([2.0*cos(2*pi*t/setup.tmax),
                           sin(2*pi*t/setup.tmax)*sin(pi*z)])
 
-    transport_scheme = SSPRK3(domain)
-
-    if timestep_method == 'prescribed':
-        transport_method = DGUpwind(eqn, 'f')
-        timestepper = PrescribedTransport(eqn, transport_scheme, setup.io,
-                                          transport_method,
-                                          prescribed_transporting_velocity=u_evaluation)
-    elif timestep_method == 'split_prescribed':
-        transport_method = [DGUpwind(eqn, 'f')]
-        timestepper = SplitPrescribedTransport(eqn, transport_scheme, setup.io,
-                                               transport_method,
-                                               prescribed_transporting_velocity=u_evaluation)
-    else:
-        raise NotImplementedError
+    timestepper.setup_prescribed_expr(u_evaluation)
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)
