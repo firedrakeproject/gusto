@@ -5,7 +5,7 @@ vertical slice gravity wave test case of Skamarock and Klemp, 1994:
 MWR.
 
 Potential temperature is transported using SUPG, and the degree 1 elements are
-used.
+used. This also uses a mesh which is one cell thick in the y-direction.
 """
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
@@ -29,6 +29,7 @@ skamarock_klemp_hydrostatic_defaults = {
     'dirname': 'skamarock_klemp_hydrostatic'
 }
 
+
 def skamarock_klemp_hydrostatic(
         ncolumns=skamarock_klemp_hydrostatic_defaults['ncolumns'],
         nlayers=skamarock_klemp_hydrostatic_defaults['nlayers'],
@@ -42,42 +43,45 @@ def skamarock_klemp_hydrostatic(
     # Test case parameters
     # ------------------------------------------------------------------------ #
 
-    dt = 25.
-    if '--running-tests' in sys.argv:
-        nlayers = 5  # horizontal layers
-        columns = 10  # number of columns
-        tmax = dt
-        dumpfreq = 1
-    else:
-        nlayers = 10  # horizontal layers
-        columns = 150  # number of columns
-        tmax = 60000.0
-        dumpfreq = int(tmax / (2*dt))
+    domain_width = 6.0e6               # Width of domain in x direction (m)
+    domain_length = 1.0e4              # Length of domain in y direction (m)
+    domain_height = 1.0e4              # Height of domain (m)
+    Tsurf = 300.                       # Temperature at surface (K)
+    wind_initial = 20.                 # Initial wind in x direction (m/s)
+    pert_width = 5.0e3                 # Width parameter of perturbation (m)
+    deltaTheta = 1.0e-2                # Magnitude of theta perturbation (K)
+    N = 0.01                           # Brunt-Vaisala frequency (1/s)
+    Omega = 0.5e-4                     # Planetary rotation rate (1/s)
+    pressure_gradient_y = -1.0e-4*20   # Prescribed force in y direction (m/s^2)
 
-    L = 6.0e6  # Length of domain
-    H = 1.0e4  # Height position of the model top
+    # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
+
+    element_order = 1
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain -- 3D volume mesh
-    m = PeriodicRectangleMesh(columns, 1, L, 1.e4, quadrilateral=True)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-    domain = Domain(mesh, dt, "RTCF", 1)
+    base_mesh = PeriodicRectangleMesh(
+        ncolumns, 1, domain_width, domain_length, quadrilateral=True
+    )
+    mesh = ExtrudedMesh(base_mesh, nlayers, layer_height=domain_height/nlayers)
+    domain = Domain(mesh, dt, "RTCF", element_order)
 
     # Equation
     parameters = CompressibleParameters()
-    Omega = as_vector((0., 0., 0.5e-4))
-    balanced_pg = as_vector((0., -1.0e-4*20, 0.))
-    eqns = HydrostaticCompressibleEulerEquations(domain, parameters, Omega=Omega,
-                                    extra_terms=[("u", balanced_pg)])
+    Omega_vec = as_vector((0., 0., Omega))
+    balanced_pg = as_vector((0., pressure_gradient_y, 0.))
+    eqns = HydrostaticCompressibleEulerEquations(
+        domain, parameters, Omega=Omega_vec, extra_terms=[("u", balanced_pg)]
+    )
 
     # I/O
-    dirname = 'skamarock_klemp_hydrostatic'
     output = OutputParameters(
-        dirname=dirname,
-        dumpfreq=dumpfreq,
+        dirname=dirname, dumpfreq=dumpfreq, dump_vtus=True, dump_nc=False,
         dumplist=['u'],
     )
     diagnostic_fields = [CourantNumber(), Perturbation('theta'), Perturbation('rho')]
@@ -85,21 +89,25 @@ def skamarock_klemp_hydrostatic(
 
     # Transport schemes
     theta_opts = SUPGOptions()
-    transported_fields = [TrapeziumRule(domain, "u"),
-                        SSPRK3(domain, "rho"),
-                        SSPRK3(domain, "theta", options=theta_opts)]
-
-    transport_methods = [DGUpwind(eqns, "u"),
-                        DGUpwind(eqns, "rho"),
-                        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)]
+    transported_fields = [
+        TrapeziumRule(domain, "u"),
+        SSPRK3(domain, "rho"),
+        SSPRK3(domain, "theta", options=theta_opts)
+    ]
+    transport_methods = [
+        DGUpwind(eqns, "u"),
+        DGUpwind(eqns, "rho"),
+        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
+    ]
 
     # Linear solver
     linear_solver = CompressibleSolver(eqns)
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                    transport_methods,
-                                    linear_solver=linear_solver)
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods,
+        linear_solver=linear_solver
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -110,38 +118,31 @@ def skamarock_klemp_hydrostatic(
     theta0 = stepper.fields("theta")
 
     # spaces
-    Vu = domain.spaces("HDiv")
     Vt = domain.spaces("theta")
     Vr = domain.spaces("DG")
 
     # Thermodynamic constants required for setting initial conditions
     # and reference profiles
     g = parameters.g
-    N = parameters.N
-    p_0 = parameters.p_0
-    c_p = parameters.cp
-    R_d = parameters.R_d
-    kappa = parameters.kappa
 
-    x, y, z = SpatialCoordinate(mesh)
+    x, _, z = SpatialCoordinate(mesh)
 
     # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
-    Tsurf = 300.
     thetab = Tsurf*exp(N**2*z/g)
 
     theta_b = Function(Vt).interpolate(thetab)
     rho_b = Function(Vr)
 
-    a = 1.0e5
-    deltaTheta = 1.0e-2
-    theta_pert = deltaTheta*sin(pi*z/H)/(1 + (x - L/2)**2/a**2)
+    theta_pert = (
+        deltaTheta * sin(pi*z/domain_height)
+        / (1 + (x - domain_width/2)**2 / pert_width**2)
+    )
     theta0.interpolate(theta_b + theta_pert)
 
-    compressible_hydrostatic_balance(eqns, theta_b, rho_b,
-                                    solve_for_rho=True)
+    compressible_hydrostatic_balance(eqns, theta_b, rho_b, solve_for_rho=True)
 
     rho0.assign(rho_b)
-    u0.project(as_vector([20.0, 0.0, 0.0]))
+    u0.project(as_vector([wind_initial, 0.0, 0.0]))
 
     stepper.set_reference_profiles([('rho', rho_b),
                                     ('theta', theta_b)])

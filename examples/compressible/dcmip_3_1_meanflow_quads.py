@@ -9,14 +9,15 @@ substepping the transport schemes.
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
-    ExtrudedMesh, FunctionSpace, Function, SpatialCoordinate, as_vector, exp,
-    acos, cos, sin, pi, sqrt, asin, atan2
+    ExtrudedMesh, Function, SpatialCoordinate, as_vector,
+    exp, acos, cos, sin, pi
 )
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, SUPGOptions, CompressibleKineticEnergy, PotentialEnergy,
     CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
-    compressible_hydrostatic_balance, Perturbation, GeneralCubedSphereMesh
+    compressible_hydrostatic_balance, Perturbation, GeneralCubedSphereMesh,
+    lonlatr_from_xyz
 )
 
 dcmip_3_1_meanflow_defaults = {
@@ -27,6 +28,7 @@ dcmip_3_1_meanflow_defaults = {
     'dumpfreq': 9,
     'dirname': 'dcmip_3_1_meanflow'
 }
+
 
 def dcmip_3_1_meanflow(
         ncells_per_edge=dcmip_3_1_meanflow_defaults['ncells_per_edge'],
@@ -41,25 +43,12 @@ def dcmip_3_1_meanflow(
     # Test case parameters
     # ------------------------------------------------------------------------ #
 
-    dt = 100.0             # Time-step size (s)
-
-    if '--running-tests' in sys.argv:
-        nlayers = 4           # Number of vertical layers
-        refinements = 2        # Number of horiz. refinements
-        tmax = dt
-        dumpfreq = 1
-    else:
-        nlayers = 10           # Number of vertical layers
-        refinements = 3        # Number of horiz. refinements
-        tmax = 3600.0
-        dumpfreq = int(tmax / (4*dt))
-
     parameters = CompressibleParameters()
     a_ref = 6.37122e6               # Radius of the Earth (m)
     X = 125.0                       # Reduced-size Earth reduction factor
     a = a_ref/X                     # Scaled radius of planet (m)
     g = parameters.g                # Acceleration due to gravity (m/s^2)
-    N = parameters.N                # Brunt-Vaisala frequency (1/s)
+    N = 0.01                        # Brunt-Vaisala frequency (1/s)
     p_0 = parameters.p_0            # Reference pressure (Pa, not hPa)
     c_p = parameters.cp             # SHC of dry air at constant pressure (J/kg/K)
     R_d = parameters.R_d            # Gas constant for dry air (J/kg/K)
@@ -75,53 +64,58 @@ def dcmip_3_1_meanflow(
     z_top = 1.0e4                   # Height position of the model top
 
     # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
+
+    element_order = 1
+    u_eqn_type = 'vector_invariant_form'
+
+    # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain
-    # Cubed-sphere horizontal mesh
-    m = GeneralCubedSphereMesh(radius, ncells_per_edge, degree=2)
-    # Build volume mesh
-    mesh = ExtrudedMesh(m, layers=nlayers,
-                        layer_height=z_top/nlayers,
-                        extrusion_type="radial")
-    domain = Domain(mesh, dt, "RTCF", 1)
-    x = SpatialCoordinate(mesh)
-
-    # Create polar coordinates:
-    # Since we use a CG1 field, this is constant on layers
-    W_Q1 = FunctionSpace(mesh, "CG", 1)
-    z_expr = sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a
-    z = Function(W_Q1).interpolate(z_expr)
-    lat_expr = asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))
-    lat = Function(W_Q1).interpolate(lat_expr)
-    lon = Function(W_Q1).interpolate(atan2(x[1], x[0]))
+    base_mesh = GeneralCubedSphereMesh(a, ncells_per_edge, degree=2)
+    mesh = ExtrudedMesh(
+        base_mesh, nlayers, layer_height=z_top/nlayers,
+        extrusion_type="radial"
+    )
+    domain = Domain(mesh, dt, "RTCF", element_order)
 
     # Equation
-    eqns = CompressibleEulerEquations(domain, parameters)
+    eqns = CompressibleEulerEquations(
+        domain, parameters, u_transport_form=u_eqn_type
+    )
 
     # I/O
     output = OutputParameters(
         dirname=dirname,
         dumpfreq=dumpfreq,
     )
-    diagnostic_fields = [Perturbation('theta'), Perturbation('rho'),
-                        CompressibleKineticEnergy(), PotentialEnergy(eqns)]
-
+    diagnostic_fields = [
+        Perturbation('theta'), Perturbation('rho'),
+        CompressibleKineticEnergy(), PotentialEnergy(eqns)
+    ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"),
-                        SSPRK3(domain, "rho", fixed_subcycles=2),
-                        SSPRK3(domain, "theta", options=SUPGOptions(), fixed_subcycles=2)]
-    transport_methods = [DGUpwind(eqns, field) for field in ["u", "rho", "theta"]]
+    transported_fields = [
+        TrapeziumRule(domain, "u"),
+        SSPRK3(domain, "rho", fixed_subcycles=2),
+        SSPRK3(domain, "theta", options=SUPGOptions(), fixed_subcycles=2)
+    ]
+    transport_methods = [
+        DGUpwind(eqns, field) for field in ["u", "rho", "theta"]
+    ]
 
     # Linear solver
     linear_solver = CompressibleSolver(eqns)
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods,
-                                    linear_solver=linear_solver)
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods,
+        linear_solver=linear_solver
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -132,51 +126,51 @@ def dcmip_3_1_meanflow(
     rho0 = stepper.fields('rho')
 
     # spaces
-    Vu = domain.spaces("HDiv")
-    Vt = domain.spaces("theta")
     Vr = domain.spaces("DG")
 
+    x, y, z = SpatialCoordinate(mesh)
+    lon, lat, r = lonlatr_from_xyz(x, y, z)
+    h = r - a
+
     # Initial conditions with u0
-    uexpr = as_vector([-u_max*x[1]/a, u_max*x[0]/a, 0.0])
-    u0.project(uexpr)
+    uexpr = as_vector([-u_max*y/a, u_max*x/a, 0.0])
 
     # Surface temperature
     G = g**2/(N**2*c_p)
-    Ts_expr = G + (T_eq-G)*exp(-(u_max*N**2/(4*g*g))*u_max*(cos(2.0*lat)-1.0))
-    Ts = Function(W_Q1).interpolate(Ts_expr)
+    Ts_expr = (
+        G + (T_eq - G) * exp(-(u_max*N**2/(4*g*g)) * u_max*(cos(2.0*lat)-1.0))
+    )
 
     # Surface pressure
-    ps_expr = p_eq*exp((u_max/(4.0*G*R_d))*u_max*(cos(2.0*lat)-1.0))*(Ts/T_eq)**(1.0/kappa)
-    ps = Function(W_Q1).interpolate(ps_expr)
+    ps_expr = (
+        p_eq * exp((u_max/(4.0*G*R_d)) * u_max*(cos(2.0*lat)-1.0))
+        * (Ts_expr / T_eq)**(1.0/kappa)
+    )
 
     # Background pressure
-    p_expr = ps*(1 + G/Ts*(exp(-N**2*z/g)-1))**(1.0/kappa)
-    p = Function(W_Q1).interpolate(p_expr)
+    p_expr = ps_expr*(1 + G/Ts_expr*(exp(-N**2*h/g)-1))**(1.0/kappa)
+    p = Function(Vr).interpolate(p_expr)
 
     # Background temperature
-    Tb_expr = G*(1 - exp(N**2*z/g)) + Ts*exp(N**2*z/g)
-    Tb = Function(W_Q1).interpolate(Tb_expr)
+    Tb_expr = G*(1 - exp(N**2*h/g)) + Ts_expr*exp(N**2*h/g)
 
     # Background potential temperature
-    thetab_expr = Tb*(p_0/p)**kappa
-    thetab = Function(W_Q1).interpolate(thetab_expr)
-    theta_b = Function(theta0.function_space()).interpolate(thetab)
+    thetab_expr = Tb_expr*(p_0/p)**kappa
+    theta_b = Function(theta0.function_space()).interpolate(thetab_expr)
     rho_b = Function(rho0.function_space())
     sin_tmp = sin(lat) * sin(phi_c)
     cos_tmp = cos(lat) * cos(phi_c)
-    r = a*acos(sin_tmp + cos_tmp*cos(lon-lamda_c))
-    s = (d**2)/(d**2 + r**2)
-    theta_pert = deltaTheta*s*sin(2*pi*z/L_z)
-    theta0.interpolate(theta_b)
+    l = a*acos(sin_tmp + cos_tmp*cos(lon-lamda_c))
+    s = (d**2)/(d**2 + l**2)
+    theta_pert = deltaTheta*s*sin(2*pi*h/L_z)
 
     # Compute the balanced density
-    compressible_hydrostatic_balance(eqns,
-                                    theta_b,
-                                    rho_b,
-                                    top=False,
-                                    exner_boundary=(p/p_0)**kappa)
-    theta0.interpolate(theta_pert)
-    theta0 += theta_b
+    compressible_hydrostatic_balance(
+        eqns, theta_b, rho_b, top=False, exner_boundary=(p/p_0)**kappa
+    )
+
+    u0.project(uexpr)
+    theta0.interpolate(theta_b + theta_pert)
     rho0.assign(rho_b)
 
     stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])

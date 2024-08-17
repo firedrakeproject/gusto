@@ -10,7 +10,7 @@ degree 1 finite elements are used in this configuration.
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
     PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate, Constant, pi, cos,
-    Function, sqrt, conditional
+    Function, sqrt, conditional, as_vector
 )
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
@@ -21,7 +21,6 @@ from gusto import (
 )
 
 straka_bubble_defaults = {
-    'ncolumns': 256,
     'nlayers': 32,
     'dt': 1.0,
     'tmax': 900.,
@@ -29,8 +28,8 @@ straka_bubble_defaults = {
     'dirname': 'straka_bubble'
 }
 
+
 def straka_bubble(
-        ncolumns=straka_bubble_defaults['ncolumns'],
         nlayers=straka_bubble_defaults['nlayers'],
         dt=straka_bubble_defaults['dt'],
         tmax=straka_bubble_defaults['tmax'],
@@ -38,80 +37,93 @@ def straka_bubble(
         dirname=straka_bubble_defaults['dirname']
 ):
 
-# ---------------------------------------------------------------------------- #
-# Test case parameters
-# ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
+    # Parameters for test case
+    # ------------------------------------------------------------------------ #
 
-if '--running-tests' in sys.argv:
-    res_dt = {800.: 4.}
-    tmax = 4.
-    ndumps = 1
-else:
-    res_dt = {800.: 4., 400.: 2., 200.: 1., 100.: 0.5, 50.: 0.25}
-    tmax = 15.*60.
-    ndumps = 4
+    domain_width = 51200.     # domain width (m)
+    domain_height = 6400.     # domain height (m)
+    zc = 3000.                # vertical centre of perturbation (m)
+    xr = 4000.                # horizontal radius of perturbation (m)
+    zr = 2000.                # vertical radius of perturbation (m)
+    T_pert = -7.5             # strength of temperature perturbation (K)
+    Tsurf = 300.0             # background theta value (K)
+    kappa = 75.               # diffusivity parameter (m^2/s)
+    mu0 = 10.                 # interior penalty parameter (1/m)
 
+    # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
 
-L = 51200.
-
-# build volume mesh
-H = 6400.  # Height position of the model top
-
-for delta, dt in res_dt.items():
+    delta = domain_height/nlayers
+    ncolumns = 8 * nlayers
+    element_order = 1
+    u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain
-    nlayers = int(H/delta)  # horizontal layers
-    columns = int(L/delta)  # number of columns
-    m = PeriodicIntervalMesh(columns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-    domain = Domain(mesh, dt, "CG", 1)
+    base_mesh = PeriodicIntervalMesh(ncolumns, domain_width)
+    mesh = ExtrudedMesh(base_mesh, nlayers, layer_height=delta)
+    domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
     parameters = CompressibleParameters()
-    u_diffusion_opts = DiffusionParameters(kappa=75., mu=10./delta)
-    theta_diffusion_opts = DiffusionParameters(kappa=75., mu=10./delta)
-    diffusion_options = [("u", u_diffusion_opts), ("theta", theta_diffusion_opts)]
-    eqns = CompressibleEulerEquations(domain, parameters,
-                                      diffusion_options=diffusion_options)
+    u_diffusion_opts = DiffusionParameters(kappa=kappa, mu=mu0/delta)
+    theta_diffusion_opts = DiffusionParameters(kappa=kappa, mu=mu0/delta)
+    diffusion_options = [
+        ("u", u_diffusion_opts),
+        ("theta", theta_diffusion_opts)
+    ]
+    eqns = CompressibleEulerEquations(
+        domain, parameters, u_transport_form=u_eqn_type,
+        diffusion_options=diffusion_options
+    )
 
     # I/O
-    dirname = "straka_dx%s_dt%s" % (delta, dt)
-    dumpfreq = int(tmax / (ndumps*dt))
     output = OutputParameters(
-        dirname=dirname,
-        dumpfreq=dumpfreq,
-        dumplist=['u'],
+        dirname=dirname, dumpfreq=dumpfreq, dump_vtus=True, dump_nc=False,
+        dumplist=['u']
     )
-    diagnostic_fields = [CourantNumber(), Perturbation('theta'), Perturbation('rho')]
+    diagnostic_fields = [
+        CourantNumber(), Perturbation('theta'), Perturbation('rho')
+    ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
     theta_opts = SUPGOptions()
-    transported_fields = [TrapeziumRule(domain, "u"),
-                          SSPRK3(domain, "rho"),
-                          SSPRK3(domain, "theta", options=theta_opts)]
-    transport_methods = [DGUpwind(eqns, "u"),
-                         DGUpwind(eqns, "rho"),
-                         DGUpwind(eqns, "theta", ibp=theta_opts.ibp)]
+    transported_fields = [
+        TrapeziumRule(domain, "u"),
+        SSPRK3(domain, "rho"),
+        SSPRK3(domain, "theta", options=theta_opts)
+    ]
+    transport_methods = [
+        DGUpwind(eqns, "u"),
+        DGUpwind(eqns, "rho"),
+        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
+    ]
 
     # Linear solver
     linear_solver = CompressibleSolver(eqns)
 
     # Diffusion schemes
-    diffusion_schemes = [BackwardEuler(domain, "u"),
-                         BackwardEuler(domain, "theta")]
-    diffusion_methods = [InteriorPenaltyDiffusion(eqns, "u", u_diffusion_opts),
-                         InteriorPenaltyDiffusion(eqns, "theta", theta_diffusion_opts)]
+    diffusion_schemes = [
+        BackwardEuler(domain, "u"),
+        BackwardEuler(domain, "theta")
+    ]
+    diffusion_methods = [
+        InteriorPenaltyDiffusion(eqns, "u", u_diffusion_opts),
+        InteriorPenaltyDiffusion(eqns, "theta", theta_diffusion_opts)
+    ]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                      spatial_methods=transport_methods+diffusion_methods,
-                                      linear_solver=linear_solver,
-                                      diffusion_schemes=diffusion_schemes)
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields,
+        spatial_methods=transport_methods+diffusion_methods,
+        linear_solver=linear_solver, diffusion_schemes=diffusion_schemes
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -122,34 +134,36 @@ for delta, dt in res_dt.items():
     theta0 = stepper.fields("theta")
 
     # spaces
-    Vu = domain.spaces("HDiv")
     Vt = domain.spaces("theta")
     Vr = domain.spaces("DG")
 
     # Isentropic background state
-    Tsurf = Constant(300.)
-
     theta_b = Function(Vt).interpolate(Tsurf)
     rho_b = Function(Vr)
     exner = Function(Vr)
 
     # Calculate hydrostatic exner
-    compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner0=exner,
-                                     solve_for_rho=True)
+    compressible_hydrostatic_balance(
+        eqns, theta_b, rho_b, exner0=exner, solve_for_rho=True
+    )
 
-    x = SpatialCoordinate(mesh)
-    a = 5.0e3
-    xc = 0.5*L
-    xr = 4000.
-    zc = 3000.
-    zr = 2000.
-    r = sqrt(((x[0]-xc)/xr)**2 + ((x[1]-zc)/zr)**2)
-    T_pert = conditional(r > 1., 0., -7.5*(1.+cos(pi*r)))
-    theta0.interpolate(theta_b + T_pert*exner)
+    x, z = SpatialCoordinate(mesh)
+    xc = 0.5*domain_width
+    r = sqrt(((x - xc)/xr)**2 + ((z - zc)/zr)**2)
+    T_pert_expr = conditional(
+        r > 1.,
+        0.,
+        0.5*T_pert*(1. + cos(pi*r))
+    )
+
+    # Set initial fields
+    zero = Constant(0.0, domain=mesh)
+    u0.project(as_vector([zero, zero]))
+    theta0.interpolate(theta_b + T_pert_expr*exner)
     rho0.assign(rho_b)
 
-    stepper.set_reference_profiles([('rho', rho_b),
-                                    ('theta', theta_b)])
+    # Reference profiles
+    stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
     # ------------------------------------------------------------------------ #
     # Run
@@ -167,12 +181,6 @@ if __name__ == "__main__":
     parser = ArgumentParser(
         description=__doc__,
         formatter_class=ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument(
-        '--ncolumns',
-        help="The number of columns in the vertical slice mesh.",
-        type=int,
-        default=straka_bubble_defaults['ncolumns']
     )
     parser.add_argument(
         '--nlayers',

@@ -29,7 +29,7 @@ moist_convect_williamson_2_defaults = {
     'dt': 1800.0,              # 30 minutes
     'tmax': 5.*24.*60.*60.,    # 5 days
     'dumpfreq': 48,            # once per day with default options
-    'dirname': 'moist_convect_williamson_2'
+    'dirname': 'moist_convective_williamson_2'
 }
 
 def moist_convect_williamson_2(

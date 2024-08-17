@@ -42,40 +42,36 @@ def skamarock_klemp_compressible_bouss(
     # Test case parameters
     # ------------------------------------------------------------------------ #
 
-    dt = 6.
-    L = 3.0e5  # Domain length
-    H = 1.0e4  # Height position of the model top
+    domain_width = 3.0e5      # Width of domain (m)
+    domain_height = 1.0e4     # Height of domain (m)
+    wind_initial = 20.        # Initial wind in x direction (m/s)
+    pert_width = 5.0e3        # Width parameter of perturbation (m)
+    deltab = 1.0e-2           # Magnitude of buoyancy perturbation (m/s^2)
+    N = 0.01                  # Brunt-Vaisala frequency (1/s)
+    cs = 300.                 # Speed of sound (m/s)
 
-    if '--running-tests' in sys.argv:
-        tmax = dt
-        dumpfreq = 1
-        columns = 30  # number of columns
-        nlayers = 5  # horizontal layers
+    # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
 
-    else:
-        tmax = 3600.
-        dumpfreq = int(tmax / (2*dt))
-        columns = 300  # number of columns
-        nlayers = 10  # horizontal layers
+    element_order = 1
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain
-    m = PeriodicIntervalMesh(columns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-    domain = Domain(mesh, dt, 'CG', 1)
+    base_mesh = PeriodicIntervalMesh(ncolumns, domain_width)
+    mesh = ExtrudedMesh(base_mesh, nlayers, layer_height=domain_height/nlayers)
+    domain = Domain(mesh, dt, 'CG', element_order)
 
     # Equation
-    parameters = BoussinesqParameters(cs=300)
+    parameters = BoussinesqParameters(cs=cs)
     eqns = BoussinesqEquations(domain, parameters)
 
     # I/O
     output = OutputParameters(
-        dirname=dirname,
-        dumpfreq=dumpfreq,
-        dumplist=['u'],
+        dirname=dirname, dumpfreq=dumpfreq, dump_vtus=True, dump_nc=False,
     )
     # list of diagnostic fields, each defined in a class in diagnostics.py
     diagnostic_fields = [CourantNumber(), Divergence(), Perturbation('b')]
@@ -83,20 +79,25 @@ def skamarock_klemp_compressible_bouss(
 
     # Transport schemes
     b_opts = SUPGOptions()
-    transported_fields = [TrapeziumRule(domain, "u"),
-                        SSPRK3(domain, "p"),
-                        SSPRK3(domain, "b", options=b_opts)]
-    transport_methods = [DGUpwind(eqns, "u"),
-                        DGUpwind(eqns, "p"),
-                        DGUpwind(eqns, "b", ibp=b_opts.ibp)]
+    transported_fields = [
+        TrapeziumRule(domain, "u"),
+        SSPRK3(domain, "p"),
+        SSPRK3(domain, "b", options=b_opts)
+    ]
+    transport_methods = [
+        DGUpwind(eqns, "u"),
+        DGUpwind(eqns, "p"),
+        DGUpwind(eqns, "b", ibp=b_opts.ibp)
+    ]
 
     # Linear solver
     linear_solver = BoussinesqSolver(eqns)
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                    transport_methods,
-                                    linear_solver=linear_solver)
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods,
+        linear_solver=linear_solver
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -114,15 +115,15 @@ def skamarock_klemp_compressible_bouss(
 
     # first setup the background buoyancy profile
     # z.grad(bref) = N**2
-    N = parameters.N
     bref = z*(N**2)
     # interpolate the expression to the function
     b_b = Function(Vb).interpolate(bref)
 
     # setup constants
-    a = 5.0e3
-    deltab = 1.0e-2
-    b_pert = deltab*sin(pi*z/H)/(1 + (x - L/2)**2/a**2)
+    b_pert = (
+        deltab * sin(pi*z/domain_height)
+        / (1 + (x - domain_width/2)**2 / pert_width**2)
+    )
     # interpolate the expression to the function
     b0.interpolate(b_b + b_pert)
 
@@ -130,7 +131,7 @@ def skamarock_klemp_compressible_bouss(
     boussinesq_hydrostatic_balance(eqns, b_b, p_b)
     p0.assign(p_b)
 
-    uinit = (as_vector([20.0, 0.0]))
+    uinit = (as_vector([wind_initial, 0.0]))
     u0.project(uinit)
 
     # set the background buoyancy

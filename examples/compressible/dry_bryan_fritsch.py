@@ -9,7 +9,7 @@ transporting the fields. The test also uses a non-periodic base mesh.
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
     IntervalMesh, ExtrudedMesh, SpatialCoordinate, conditional, cos, pi, sqrt,
-    TestFunction, dx, TrialFunction, Constant, Function,
+    TestFunction, dx, TrialFunction, Constant, Function, as_vector,
     LinearVariationalProblem, LinearVariationalSolver
 )
 from gusto import (
@@ -28,6 +28,7 @@ dry_bryan_fritsch_defaults = {
     'dirname': 'dry_bryan_fritsch'
 }
 
+
 def dry_bryan_fritsch(
         ncolumns=dry_bryan_fritsch_defaults['ncolumns'],
         nlayers=dry_bryan_fritsch_defaults['nlayers'],
@@ -38,48 +39,43 @@ def dry_bryan_fritsch(
 ):
 
     # ------------------------------------------------------------------------ #
-    # Test case parameters
+    # Parameters for test case
     # ------------------------------------------------------------------------ #
 
-    dt = 1.0
-    L = 10000.
-    H = 10000.
+    domain_width = 10000.     # domain width (m)
+    domain_height = 10000.    # domain height (m)
+    zc = 2000.                # vertical centre of bubble (m)
+    rc = 2000.                # radius of bubble (m)
+    Tdash = 2.0               # strength of temperature perturbation (K)
+    Tsurf = 300.0             # background theta value (K)
 
-    if '--running-tests' in sys.argv:
-        deltax = 1000.
-        tmax = 5.
-    else:
-        deltax = 100.
-        tmax = 1000.
+    # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
 
-    degree = 0
-    dirname = 'dry_bryan_fritsch'
+    element_order = 0
+    u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain
-    nlayers = int(H/deltax)
-    ncolumns = int(L/deltax)
-    m = IntervalMesh(ncolumns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-    domain = Domain(mesh, dt, "CG", degree)
+    base_mesh = IntervalMesh(ncolumns, domain_width)
+    mesh = ExtrudedMesh(base_mesh, nlayers, layer_height=domain_height/nlayers)
+    domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
     params = CompressibleParameters()
-    u_transport_option = "vector_advection_form"
-    eqns = CompressibleEulerEquations(domain, params,
-                                    u_transport_option=u_transport_option,
-                                    no_normal_flow_bc_ids=[1, 2])
+    eqns = CompressibleEulerEquations(
+        domain, params, u_transport_option=u_eqn_type,
+        no_normal_flow_bc_ids=[1, 2]
+    )
 
     # I/O
     output = OutputParameters(
-        dirname=dirname,
-        dumpfreq=int(tmax / (5*dt)),
-        dumplist=['rho'],
-        dump_vtus=False,
-        dump_nc=True,
+        dirname=dirname, dumpfreq=dumpfreq, dump_vtus=False, dump_nc=True,
+        dumplist=['rho']
     )
     diagnostic_fields = [Perturbation('theta')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
@@ -88,25 +84,32 @@ def dry_bryan_fritsch(
     boundary_methods = {'DG': BoundaryMethod.taylor,
                         'HDiv': BoundaryMethod.taylor}
 
-    recovery_spaces = RecoverySpaces(domain, boundary_methods, use_vector_spaces=True)
+    recovery_spaces = RecoverySpaces(
+        domain, boundary_methods, use_vector_spaces=True
+    )
 
     u_opts = recovery_spaces.HDiv_options
     rho_opts = recovery_spaces.DG_options
     theta_opts = recovery_spaces.theta_options
 
-    transported_fields = [SSPRK3(domain, "rho", options=rho_opts),
-                        SSPRK3(domain, "theta", options=theta_opts),
-                        SSPRK3(domain, "u", options=u_opts)]
+    transported_fields = [
+        SSPRK3(domain, "rho", options=rho_opts),
+        SSPRK3(domain, "theta", options=theta_opts),
+        SSPRK3(domain, "u", options=u_opts)
+    ]
 
-    transport_methods = [DGUpwind(eqns, field) for field in ["u", "rho", "theta"]]
+    transport_methods = [
+        DGUpwind(eqns, field) for field in ["u", "rho", "theta"]
+    ]
 
     # Linear solver
     linear_solver = CompressibleSolver(eqns)
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                    transport_methods,
-                                    linear_solver=linear_solver)
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods,
+        linear_solver=linear_solver
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -117,14 +120,16 @@ def dry_bryan_fritsch(
     theta0 = stepper.fields("theta")
 
     # spaces
-    Vu = domain.spaces("HDiv")
     Vt = domain.spaces("theta")
     Vr = domain.spaces("DG")
     x, z = SpatialCoordinate(mesh)
 
     # Define constant theta_e and water_t
-    Tsurf = 300.0
     theta_b = Function(Vt).interpolate(Constant(Tsurf))
+
+    # Set initial wind to be zero
+    zero = Constant(0.0, domain=mesh)
+    u0.project(as_vector([zero, zero]))
 
     # Calculate hydrostatic fields
     compressible_hydrostatic_balance(eqns, theta_b, rho0, solve_for_rho=True)
@@ -133,14 +138,15 @@ def dry_bryan_fritsch(
     rho_b = Function(Vr).assign(rho0)
 
     # define perturbation
-    xc = L / 2
-    zc = 2000.
-    rc = 2000.
-    Tdash = 2.0
+    xc = domain_width / 2
     r = sqrt((x - xc) ** 2 + (z - zc) ** 2)
-    theta_pert = Function(Vt).interpolate(conditional(r > rc,
-                                                    0.0,
-                                                    Tdash * (cos(pi * r / (2.0 * rc))) ** 2))
+    theta_pert = Function(Vt).interpolate(
+        conditional(
+            r > rc,
+            0.0,
+            Tdash * (cos(pi * r / (2.0 * rc))) ** 2
+        )
+    )
 
     # define initial theta
     theta0.interpolate(theta_b * (theta_pert / 300.0 + 1.0))
@@ -154,8 +160,7 @@ def dry_bryan_fritsch(
     rho_solver = LinearVariationalSolver(rho_problem)
     rho_solver.solve()
 
-    stepper.set_reference_profiles([('rho', rho_b),
-                                    ('theta', theta_b)])
+    stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
     # ------------------------------------------------------------------------ #
     # Run

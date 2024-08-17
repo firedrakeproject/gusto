@@ -19,9 +19,9 @@ from firedrake import (
 import numpy as np
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, SUPGOptions, CourantNumber, Perturbation,
+    TrapeziumRule, SUPGOptions, CourantNumber, Perturbation, Gradient,
     CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
-    compressible_hydrostatic_balance
+    compressible_hydrostatic_balance, logger, RichardsonNumber
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -32,6 +32,7 @@ skamarock_klemp_nonhydrostatic_defaults = {
     'dumpfreq': 300,
     'dirname': 'skamarock_klemp_nonhydrostatic'
 }
+
 
 def skamarock_klemp_nonhydrostatic(
         ncolumns=skamarock_klemp_nonhydrostatic_defaults['ncolumns'],
@@ -46,48 +47,43 @@ def skamarock_klemp_nonhydrostatic(
     # Test case parameters
     # ------------------------------------------------------------------------ #
 
-    dt = 6.
-    L = 3.0e5  # Domain length
-    H = 1.0e4  # Height position of the model top
+    domain_width = 3.0e5      # Width of domain (m)
+    domain_height = 1.0e4     # Height of domain (m)
+    Tsurf = 300.              # Temperature at surface (K)
+    wind_initial = 20.        # Initial wind in x direction (m/s)
+    pert_width = 5.0e3        # Width parameter of perturbation (m)
+    deltaTheta = 1.0e-2       # Magnitude of theta perturbation (K)
+    N = 0.01                  # Brunt-Vaisala frequency (1/s)
 
-    if '--running-tests' in sys.argv:
-        nlayers = 5
-        columns = 30
-        tmax = dt
-        dumpfreq = 1
-    else:
-        nlayers = 10
-        columns = 150
-        tmax = 3600
-        dumpfreq = int(tmax / (2*dt))
+    # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
+
+    element_order = 1
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain -- 3D volume mesh
-    m = PeriodicIntervalMesh(columns, L)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
-    domain = Domain(mesh, dt, "CG", 1)
+    base_mesh = PeriodicIntervalMesh(ncolumns, domain_width)
+    mesh = ExtrudedMesh(base_mesh, nlayers, layer_height=domain_height/nlayers)
+    domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
-    Tsurf = 300.
     parameters = CompressibleParameters()
     eqns = CompressibleEulerEquations(domain, parameters)
 
     # I/O
-    points_x = np.linspace(0., L, 100)
-    points_z = [H/2.]
+    points_x = np.linspace(0., domain_width, 100)
+    points_z = [domain_height/2.]
     points = np.array([p for p in itertools.product(points_x, points_z)])
-    dirname = 'skamarock_klemp_nonlinear'
 
     # Dumping point data using legacy PointDataOutput is not supported in parallel
     if COMM_WORLD.size == 1:
         output = OutputParameters(
-            dirname=dirname,
-            dumpfreq=dumpfreq,
-            pddumpfreq=dumpfreq,
-            dumplist=['u'],
+            dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
+            dump_vtus=True, dump_nc=False, dumplist=['u'],
             point_data=[('theta_perturbation', points)],
         )
     else:
@@ -96,33 +92,39 @@ def skamarock_klemp_nonhydrostatic(
             ' supported in parallel\nDisabling PointDataOutput'
         )
         output = OutputParameters(
-            dirname=dirname,
-            dumpfreq=dumpfreq,
-            pddumpfreq=dumpfreq,
+            dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
+            dump_vtus=True, dump_nc=False, dumplist=['u'],
             dumplist=['u'],
         )
 
-    diagnostic_fields = [CourantNumber(), Gradient('u'), Perturbation('theta'),
-                        Gradient('theta_perturbation'), Perturbation('rho'),
-                        RichardsonNumber('theta', parameters.g/Tsurf), Gradient('theta')]
+    diagnostic_fields = [
+        CourantNumber(), Gradient('u'), Perturbation('theta'),
+        Gradient('theta_perturbation'), Perturbation('rho'),
+        RichardsonNumber('theta', parameters.g/Tsurf), Gradient('theta')
+    ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
     theta_opts = SUPGOptions()
-    transported_fields = [TrapeziumRule(domain, "u"),
-                        SSPRK3(domain, "rho"),
-                        SSPRK3(domain, "theta", options=theta_opts)]
-    transport_methods = [DGUpwind(eqns, "u"),
-                        DGUpwind(eqns, "rho"),
-                        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)]
+    transported_fields = [
+        TrapeziumRule(domain, "u"),
+        SSPRK3(domain, "rho"),
+        SSPRK3(domain, "theta", options=theta_opts)
+    ]
+    transport_methods = [
+        DGUpwind(eqns, "u"),
+        DGUpwind(eqns, "rho"),
+        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
+    ]
 
     # Linear solver
     linear_solver = CompressibleSolver(eqns)
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                    transport_methods,
-                                    linear_solver=linear_solver)
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods,
+        linear_solver=linear_solver
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -133,14 +135,12 @@ def skamarock_klemp_nonhydrostatic(
     theta0 = stepper.fields("theta")
 
     # spaces
-    Vu = domain.spaces("HDiv")
     Vt = domain.spaces("theta")
     Vr = domain.spaces("DG")
 
     # Thermodynamic constants required for setting initial conditions
     # and reference profiles
     g = parameters.g
-    N = parameters.N
 
     x, z = SpatialCoordinate(mesh)
 
@@ -153,15 +153,15 @@ def skamarock_klemp_nonhydrostatic(
     # Calculate hydrostatic exner
     compressible_hydrostatic_balance(eqns, theta_b, rho_b)
 
-    a = 5.0e3
-    deltaTheta = 1.0e-2
-    theta_pert = deltaTheta*sin(pi*z/H)/(1 + (x - L/2)**2/a**2)
+    theta_pert = (
+        deltaTheta * sin(pi*z/domain_height)
+        / (1 + (x - domain_width/2)**2 / pert_width**2)
+    )
     theta0.interpolate(theta_b + theta_pert)
     rho0.assign(rho_b)
-    u0.project(as_vector([20.0, 0.0]))
+    u0.project(as_vector([wind_initial, 0.0]))
 
-    stepper.set_reference_profiles([('rho', rho_b),
-                                    ('theta', theta_b)])
+    stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
     # ------------------------------------------------------------------------ #
     # Run

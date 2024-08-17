@@ -26,20 +26,20 @@ from gusto import (
     CloudWater, Rain, GeneralIcosahedralSphereMesh
 )
 
-moist_thermal_williamson_2_defaults = {
+moist_thermal_williamson_5_defaults = {
     'ncells_per_edge': 16,     # number of cells per icosahedron edge
     'dt': 1800.0,              # 30 minutes
     'tmax': 5.*24.*60.*60.,    # 5 days
     'dumpfreq': 48,            # once per day with default options
-    'dirname': 'moist_thermal_williamson_2'
+    'dirname': 'moist_thermal_williamson_5'
 }
 
-def moist_thermal_williamson_2(
-        ncells_per_edge=moist_thermal_williamson_2_defaults['ncells_per_edge'],
-        dt=moist_thermal_williamson_2_defaults['dt'],
-        tmax=moist_thermal_williamson_2_defaults['tmax'],
-        dumpfreq=moist_thermal_williamson_2_defaults['dumpfreq'],
-        dirname=moist_thermal_williamson_2_defaults['dirname']
+def moist_thermal_williamson_5(
+        ncells_per_edge=moist_thermal_williamson_5_defaults['ncells_per_edge'],
+        dt=moist_thermal_williamson_5_defaults['dt'],
+        tmax=moist_thermal_williamson_5_defaults['tmax'],
+        dumpfreq=moist_thermal_williamson_5_defaults['dumpfreq'],
+        dirname=moist_thermal_williamson_5_defaults['dirname']
 ):
 
     # ------------------------------------------------------------------------ #
@@ -196,32 +196,32 @@ if __name__ == "__main__":
         '--ncells_per_edge',
         help="The number of cells per edge of icosahedron",
         type=int,
-        default=moist_thermal_williamson_2_defaults['ncells_per_edge']
+        default=moist_thermal_williamson_5_defaults['ncells_per_edge']
     )
     parser.add_argument(
         '--dt',
         help="The time step in seconds.",
         type=float,
-        default=moist_thermal_williamson_2_defaults['dt']
+        default=moist_thermal_williamson_5_defaults['dt']
     )
     parser.add_argument(
         "--tmax",
         help="The end time for the simulation in seconds.",
         type=float,
-        default=moist_thermal_williamson_2_defaults['tmax']
+        default=moist_thermal_williamson_5_defaults['tmax']
     )
     parser.add_argument(
         '--dumpfreq',
         help="The frequency at which to dump field output.",
         type=int,
-        default=moist_thermal_williamson_2_defaults['dumpfreq']
+        default=moist_thermal_williamson_5_defaults['dumpfreq']
     )
     parser.add_argument(
         '--dirname',
         help="The name of the directory to write to.",
         type=str,
-        default=moist_thermal_williamson_2_defaults['dirname']
+        default=moist_thermal_williamson_5_defaults['dirname']
     )
     args, unknown = parser.parse_known_args()
 
-    moist_thermal_williamson_2(**vars(args))
+    moist_thermal_williamson_5(**vars(args))
