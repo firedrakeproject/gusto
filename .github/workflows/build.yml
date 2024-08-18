@@ -39,7 +39,7 @@ jobs:
           firedrake-clean
           export GUSTO_PARALLEL_LOG=FILE
           export PYOP2_CFLAGS=-O0
-          mpiexec -n 4 python -m pytest
+          mpiexec -n 4 python -m pytest \
             --dist worksteal \
             --durations=100 \
             --timeout=3600 \
