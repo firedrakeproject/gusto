@@ -17,9 +17,8 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
     RelativeVorticity, PotentialVorticity, SteadyStateError,
-    ShallowWaterKineticEnergy, ShallowWaterPotentialEnergy,
-    ShallowWaterPotentialEnstrophy, lonlatr_from_xyz, ThermalSWSolver,
-    GeneralIcosahedralSphereMesh
+    ZonalComponent, MeridionalComponent, ThermalSWSolver,
+    xyz_vector_from_lonlatr, lonlatr_from_xyz, GeneralIcosahedralSphereMesh
 )
 
 thermal_williamson_2_defaults = {
@@ -30,6 +29,7 @@ thermal_williamson_2_defaults = {
     'dirname': 'thermal_williamson_2'
 }
 
+
 def thermal_williamson_2(
         ncells_per_edge=thermal_williamson_2_defaults['ncells_per_edge'],
         dt=thermal_williamson_2_defaults['dt'],
@@ -39,27 +39,23 @@ def thermal_williamson_2(
 ):
 
     # ------------------------------------------------------------------------ #
-    # Test case parameters
+    # Parameters for test case
     # ------------------------------------------------------------------------ #
 
-    dt = 4000
+    radius = 6371220.           # planetary radius (m)
+    u_max = 20.                 # max amplitude of the zonal wind (m/s)
+    phi_0 = 3.0e4               # reference geopotential height (m^2/s^2)
+    epsilon = 1/300             # linear air expansion coeff (1/K)
+    theta_0 = epsilon*phi_0**2  # ref depth-integrated temperature (no units)
+    g = 9.80616                 # acceleration due to gravity (m/s^2)
+    mean_depth = phi_0/g        # reference depth (m)
 
-    if '--running-tests' in sys.argv:
-        tmax = dt
-        dumpfreq = 1
-    else:
-        day = 24*60*60
-        tmax = 5*day
-        ndumps = 5
-        dumpfreq = int(tmax / (ndumps*dt))
+    # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
 
-    R = 6371220.
-    u_max = 20
-    phi_0 = 3e4
-    epsilon = 1/300
-    theta_0 = epsilon*phi_0**2
-    g = 9.80616
-    H = phi_0/g
+    element_order = 1
+    u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -67,47 +63,49 @@ def thermal_williamson_2(
 
     # Domain
     mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
-    degree = 1
-    domain = Domain(mesh, dt, 'BDM', degree)
-    x = SpatialCoordinate(mesh)
+    domain = Domain(mesh, dt, 'BDM', element_order)
+    x, y, z = SpatialCoordinate(mesh)
 
     # Equations
-    params = ShallowWaterParameters(H=H, g=g)
+    params = ShallowWaterParameters(H=mean_depth, g=g)
     Omega = params.Omega
-    fexpr = 2*Omega*x[2]/R
-    eqns = ShallowWaterEquations(domain, params, fexpr=fexpr, u_transport_option='vector_advection_form', thermal=True)
+    fexpr = 2*Omega*z/radius
+    eqns = ShallowWaterEquations(
+        domain, params, fexpr=fexpr, u_transport_option=u_eqn_type, thermal=True
+    )
 
     # IO
     output = OutputParameters(
-        dirname=dirname,
-        dumpfreq=dumpfreq,
-        dumplist_latlon=['D', 'D_error'],
+        dirname=dirname, dumpfreq=dumpfreq, dumplist_latlon=['D', 'D_error'],
     )
 
-    diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
-                        ShallowWaterKineticEnergy(),
-                        ShallowWaterPotentialEnergy(params),
-                        ShallowWaterPotentialEnstrophy(),
-                        SteadyStateError('u'), SteadyStateError('D'),
-                        SteadyStateError('b'), MeridionalComponent('u'),
-                        ZonalComponent('u')]
+    diagnostic_fields = [
+        RelativeVorticity(), PotentialVorticity(),
+        SteadyStateError('u'), SteadyStateError('D'), SteadyStateError('b'),
+        MeridionalComponent('u'), ZonalComponent('u')
+    ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"),
-                        SSPRK3(domain, "D", fixed_subcycles=2),
-                        SSPRK3(domain, "b", fixed_subcycles=2)]
-    transport_methods = [DGUpwind(eqns, "u"),
-                        DGUpwind(eqns, "D"),
-                        DGUpwind(eqns, "b")]
+    transported_fields = [
+        TrapeziumRule(domain, "u"),
+        SSPRK3(domain, "D", fixed_subcycles=2),
+        SSPRK3(domain, "b", fixed_subcycles=2)
+    ]
+    transport_methods = [
+        DGUpwind(eqns, "u"),
+        DGUpwind(eqns, "D"),
+        DGUpwind(eqns, "b")
+    ]
 
     # Linear solver
     linear_solver = ThermalSWSolver(eqns)
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                    transport_methods,
-                                    linear_solver=linear_solver)
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods,
+        linear_solver=linear_solver
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -117,21 +115,24 @@ def thermal_williamson_2(
     D0 = stepper.fields("D")
     b0 = stepper.fields("b")
 
-    lamda, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
+    _, phi, _ = lonlatr_from_xyz(x, y, z)
 
-    uexpr = xyz_vector_from_lonlatr(u_max*cos(phi), 0, 0, x)
-    g = params.g
-    w = Omega*R*u_max + (u_max**2)/2
+    uexpr = xyz_vector_from_lonlatr(u_max*cos(phi), 0, 0, (x, y, z))
+    w = Omega*radius*u_max + (u_max**2)/2
     sigma = w/10
 
-    Dexpr = H - (1/g)*(w + sigma)*((sin(phi))**2)
+    Dexpr = mean_depth - (1/g)*(w + sigma)*((sin(phi))**2)
 
-    numerator = theta_0 + sigma*((cos(phi))**2) * ((w + sigma)*(cos(phi))**2 + 2*(phi_0 - w - sigma))
-
-    denominator = phi_0**2 + (w + sigma)**2*(sin(phi))**4 - 2*phi_0*(w + sigma)*(sin(phi))**2
+    numerator = (
+        theta_0 + sigma*((cos(phi))**2)
+        * ((w + sigma)*(cos(phi))**2 + 2*(phi_0 - w - sigma))
+    )
+    denominator = (
+        phi_0**2 + (w + sigma)**2*(sin(phi))**4
+        - 2*phi_0*(w + sigma)*(sin(phi))**2
+    )
 
     theta = numerator/denominator
-
     bexpr = params.g * (1 - theta)
 
     u0.project(uexpr)
@@ -139,7 +140,7 @@ def thermal_williamson_2(
     b0.interpolate(bexpr)
 
     # Set reference profiles
-    Dbar = Function(D0.function_space()).assign(H)
+    Dbar = Function(D0.function_space()).assign(mean_depth)
     bbar = Function(b0.function_space()).interpolate(bexpr)
     stepper.set_reference_profiles([('D', Dbar), ('b', bbar)])
 

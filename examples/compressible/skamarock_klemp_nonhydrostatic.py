@@ -94,7 +94,6 @@ def skamarock_klemp_nonhydrostatic(
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
             dump_vtus=True, dump_nc=False, dumplist=['u'],
-            dumplist=['u'],
         )
 
     diagnostic_fields = [

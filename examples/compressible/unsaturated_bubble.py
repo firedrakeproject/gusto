@@ -87,13 +87,13 @@ def unsaturated_bubble(
     params = CompressibleParameters()
     tracers = [WaterVapour(), CloudWater(), Rain()]
     eqns = CompressibleEulerEquations(
-        domain, params, active_tracers=tracers, u_transport_form=u_eqn_type
+        domain, params, active_tracers=tracers, u_transport_option=u_eqn_type
     )
 
     # I/O
     output = OutputParameters(
         dirname=dirname, dumpfreq=dumpfreq, dump_vtus=False, dump_nc=True,
-        dump_list=['cloud_water', 'rain']
+        dumplist=['cloud_water', 'rain']
     )
     diagnostic_fields = [
         RelativeHumidity(eqns), Perturbation('theta'), Perturbation('rho'),

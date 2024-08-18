@@ -81,7 +81,6 @@ def skamarock_klemp_linear_bouss(
         DGUpwind(eqns, "b", ibp=b_opts.ibp)
     ]
 
-
     # Time stepper
     stepper = Timestepper(
         eqns, RK4(domain), io, spatial_methods=transport_methods

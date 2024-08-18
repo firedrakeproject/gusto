@@ -78,7 +78,7 @@ def straka_bubble(
         ("theta", theta_diffusion_opts)
     ]
     eqns = CompressibleEulerEquations(
-        domain, parameters, u_transport_form=u_eqn_type,
+        domain, parameters, u_transport_option=u_eqn_type,
         diffusion_options=diffusion_options
     )
 

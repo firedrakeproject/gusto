@@ -15,7 +15,8 @@ from gusto import (
     RelativeVorticity, PotentialVorticity, SteadyStateError,
     ShallowWaterKineticEnergy, ShallowWaterPotentialEnergy,
     ShallowWaterPotentialEnstrophy, rotated_lonlatr_coords,
-    rotated_lonlatr_vectors, GeneralIcosahedralSphereMesh
+    ZonalComponent, MeridionalComponent, rotated_lonlatr_vectors,
+    GeneralIcosahedralSphereMesh
 )
 
 williamson_2_defaults = {
@@ -26,6 +27,7 @@ williamson_2_defaults = {
     'dirname': 'williamson_2'
 }
 
+
 def williamson_2(
         ncells_per_edge=williamson_2_defaults['ncells_per_edge'],
         dt=williamson_2_defaults['dt'],
@@ -35,27 +37,20 @@ def williamson_2(
 ):
 
     # ------------------------------------------------------------------------ #
-    # Test case parameters
+    # Parameters for test case
     # ------------------------------------------------------------------------ #
 
-    day = 24.*60.*60.
-    if '--running-tests' in sys.argv:
-        ref_dt = {3: 3000.}
-        tmax = 3000.
-        ndumps = 1
-    else:
-        # setup resolution and timestepping parameters for convergence test
-        ref_dt = {3: 4000., 4: 2000., 5: 1000., 6: 500.}
-        tmax = 5*day
-        ndumps = 5
+    radius = 6371220.                  # planetary radius (m)
+    mean_depth = 5960.                 # reference depth (m)
+    rotate_pole_to = (0.0, pi/3)       # location of North pole of mesh
+    u_max = 2*pi*radius/(12*24*60*60)  # Max amplitude of the zonal wind (m/s)
 
-    # setup shallow water parameters
-    R = 6371220.
-    H = 5960.
-    rotated_pole = (0.0, pi/3)
+    # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
 
-    # setup input that doesn't change with ref level or dt
-    parameters = ShallowWaterParameters(H=H)
+    element_order = 1
+    u_eqn_type = 'vector_invariant_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -63,58 +58,64 @@ def williamson_2(
 
     # Domain
     mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
-    x = SpatialCoordinate(mesh)
-    domain = Domain(mesh, dt, 'BDM', 1, rotated_pole=rotated_pole)
+    domain = Domain(mesh, dt, 'BDM', element_order, rotated_pole=rotate_pole_to)
+    xyz = SpatialCoordinate(mesh)
 
     # Equation
+    parameters = ShallowWaterParameters(H=mean_depth)
     Omega = parameters.Omega
-    _, lat, _ = rotated_lonlatr_coords(x, rotated_pole)
-    e_lon, _, _ = rotated_lonlatr_vectors(x, rotated_pole)
+    _, lat, _ = rotated_lonlatr_coords(xyz, rotate_pole_to)
+    e_lon, _, _ = rotated_lonlatr_vectors(xyz, rotate_pole_to)
     fexpr = 2*Omega*sin(lat)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
+    eqns = ShallowWaterEquations(
+        domain, parameters, fexpr=fexpr, u_transport_option=u_eqn_type)
 
     # I/O
     output = OutputParameters(
-        dirname=dirname,
-        dumpfreq=dumpfreq,
+        dirname=dirname, dumpfreq=dumpfreq, dump_nc=True,
         dumplist_latlon=['D', 'D_error'],
-        dump_nc=True,
     )
-
-    diagnostic_fields = [RelativeVorticity(), SteadyStateError('RelativeVorticity'),
-                         PotentialVorticity(),
-                         ShallowWaterKineticEnergy(),
-                         ShallowWaterPotentialEnergy(parameters),
-                         ShallowWaterPotentialEnstrophy(),
-                         SteadyStateError('u'), SteadyStateError('D'),
-                         MeridionalComponent('u', rotated_pole),
-                         ZonalComponent('u', rotated_pole)]
+    diagnostic_fields = [
+        RelativeVorticity(), SteadyStateError('RelativeVorticity'),
+        PotentialVorticity(), ShallowWaterKineticEnergy(),
+        ShallowWaterPotentialEnergy(parameters),
+        ShallowWaterPotentialEnstrophy(),
+        SteadyStateError('u'), SteadyStateError('D'),
+        MeridionalComponent('u', rotate_pole_to),
+        ZonalComponent('u', rotate_pole_to)
+    ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"),
-                          SSPRK3(domain, "D", fixed_subcycles=2)]
-    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
+    transported_fields = [
+        TrapeziumRule(domain, "u"),
+        SSPRK3(domain, "D", fixed_subcycles=2)]
+    transport_methods = [
+        DGUpwind(eqns, "u"),
+        DGUpwind(eqns, "D")
+    ]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
+    g = parameters.g
+
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
-    x = SpatialCoordinate(mesh)
-    u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
+
     uexpr = u_max*cos(lat)*e_lon
-    g = parameters.g
-    Dexpr = H - (R * Omega * u_max + u_max*u_max/2.0)*(sin(lat))**2/g
+    Dexpr = mean_depth - (radius * Omega * u_max + 0.5*u_max**2)*(sin(lat))**2/g
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
 
-    Dbar = Function(D0.function_space()).assign(H)
+    Dbar = Function(D0.function_space()).assign(mean_depth)
     stepper.set_reference_profiles([('D', Dbar)])
 
     # ------------------------------------------------------------------------ #

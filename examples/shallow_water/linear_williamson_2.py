@@ -23,6 +23,7 @@ linear_williamson_2_defaults = {
     'dirname': 'linear_williamson_2'
 }
 
+
 def linear_williamson_2(
         ncells_per_edge=linear_williamson_2_defaults['ncells_per_edge'],
         dt=linear_williamson_2_defaults['dt'],
@@ -32,22 +33,18 @@ def linear_williamson_2(
 ):
 
     # ------------------------------------------------------------------------ #
-    # Test case parameters
+    # Parameters for test case
     # ------------------------------------------------------------------------ #
 
-    dt = 3600.
-    day = 24.*60.*60.
-    if '--running-tests' in sys.argv:
-        tmax = dt
-        dumpfreq = 1
-    else:
-        tmax = 5*day
-        dumpfreq = int(tmax / (5*dt))
+    radius = 6371220.                  # planetary radius (m)
+    mean_depth = 2000.                 # reference depth (m)
+    u_max = 2*pi*radius/(12*24*60*60)  # Max amplitude of the zonal wind (m/s)
 
-    refinements = 3  # number of horizontal cells = 20*(4^refinements)
+    # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
 
-    R = 6371220.
-    H = 2000.
+    element_order = 1
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -55,20 +52,18 @@ def linear_williamson_2(
 
     # Domain
     mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
-    x = SpatialCoordinate(mesh)
-    domain = Domain(mesh, dt, 'BDM', 1)
+    x, y, z = SpatialCoordinate(mesh)
+    domain = Domain(mesh, dt, 'BDM', element_order)
 
     # Equation
-    parameters = ShallowWaterParameters(H=H)
+    parameters = ShallowWaterParameters(H=mean_depth)
     Omega = parameters.Omega
-    x = SpatialCoordinate(mesh)
-    fexpr = 2*Omega*x[2]/R
+    fexpr = 2*Omega*z/radius
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # I/O
     output = OutputParameters(
-        dirname=dirname,
-        dumpfreq=dumpfreq,
+        dirname=dirname, dumpfreq=dumpfreq,
     )
     diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
@@ -78,22 +73,26 @@ def linear_williamson_2(
     transport_methods = [DefaultTransport(eqns, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes, transport_methods)
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transport_schemes, transport_methods
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
+    g = parameters.g
+
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
-    u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
-    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-    g = parameters.g
-    Dexpr = - ((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
+
+    uexpr = as_vector([-u_max*y/radius, u_max*x/radius, 0.0])
+    Dexpr = - ((radius*Omega*u_max) * (z/radius)**2) / g
+
     u0.project(uexpr)
     D0.interpolate(Dexpr)
 
-    Dbar = Function(D0.function_space()).assign(H)
+    Dbar = Function(D0.function_space()).assign(mean_depth)
     stepper.set_reference_profiles([('D', Dbar)])
 
     # ------------------------------------------------------------------------ #

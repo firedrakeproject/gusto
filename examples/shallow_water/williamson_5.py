@@ -12,7 +12,7 @@ from firedrake import (
 )
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
+    TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, GeneralIcosahedralSphereMesh
 )
 
@@ -24,6 +24,7 @@ williamson_5_defaults = {
     'dirname': 'williamson_5'
 }
 
+
 def williamson_5(
         ncells_per_edge=williamson_5_defaults['ncells_per_edge'],
         dt=williamson_5_defaults['dt'],
@@ -33,67 +34,59 @@ def williamson_5(
 ):
 
     # ------------------------------------------------------------------------ #
-    # Test case parameters
+    # Parameters for test case
     # ------------------------------------------------------------------------ #
 
-    day = 24.*60.*60.
-    if '--running-tests' in sys.argv:
-        ref_dt = {3: 3000.}
-        tmax = 3000.
-        ndumps = 1
-    else:
-        # setup resolution and timestepping parameters for convergence test
-        ref_dt = {3: 900., 4: 450., 5: 225., 6: 112.5}
-        tmax = 50*day
-        ndumps = 5
+    radius = 6371220.           # planetary radius (m)
+    mean_depth = 5960           # reference depth (m)
+    g = 9.80616                 # acceleration due to gravity (m/s^2)
+    u_max = 20.                 # max amplitude of the zonal wind (m/s)
+    mountain_height = 2000.     # height of mountain (m)
+    R0 = pi/9.                  # radius of mountain (rad)
+    lamda_c = -pi/2.            # longitudinal centre of mountain (rad)
+    phi_c = pi/6.               # latitudinal centre of mountain (rad)
 
-    # setup shallow water parameters
-    R = 6371220.
-    H = 5960.
+    # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
 
-    # setup input that doesn't change with ref level or dt
-    parameters = ShallowWaterParameters(H=H)
-
+    element_order = 1
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain
     mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
-    x = SpatialCoordinate(mesh)
-    domain = Domain(mesh, dt, 'BDM', 1)
+    domain = Domain(mesh, dt, 'BDM', element_order)
+    x, y, z = SpatialCoordinate(mesh)
+    lamda, phi, _ = lonlatr_from_xyz(x, y, z)
 
-    # Equation
+    # Equation: coriolis
+    parameters = ShallowWaterParameters(H=mean_depth, g=g)
     Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
-    lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
-    R0 = pi/9.
-    R0sq = R0**2
-    lamda_c = -pi/2.
-    lsq = (lamda - lamda_c)**2
-    theta_c = pi/6.
-    thsq = (theta - theta_c)**2
-    rsq = min_value(R0sq, lsq+thsq)
+    fexpr = 2*Omega*z/radius
+
+    # Equation: topography
+    rsq = min_value(R0**2, (lamda - lamda_c)**2 + (phi - phi_c)**2)
     r = sqrt(rsq)
-    bexpr = 2000 * (1 - r/R0)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
+    tpexpr = mountain_height * (1 - r/R0)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=tpexpr)
 
     # I/O
     output = OutputParameters(
-        dirname=dirname,
-        dumplist_latlon=['D'],
-        dumpfreq=dumpfreq,
+        dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq
     )
     diagnostic_fields = [Sum('D', 'topography')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"),
-                          SSPRK3(domain, "D")]
+    transported_fields = [TrapeziumRule(domain, "u"), SSPRK3(domain, "D")]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods)
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -101,16 +94,16 @@ def williamson_5(
 
     u0 = stepper.fields('u')
     D0 = stepper.fields('D')
-    u_max = 20.   # Maximum amplitude of the zonal wind (m/s)
-    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-    g = parameters.g
-    Rsq = R**2
-    Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
+    uexpr = as_vector([-u_max*y/radius, u_max*x/radius, 0.0])
+    Dexpr = (
+        mean_depth - tpexpr
+        - (radius*Omega*u_max + 0.5*u_max**2)*(z/radius)**2/g
+    )
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
 
-    Dbar = Function(D0.function_space()).assign(H)
+    Dbar = Function(D0.function_space()).assign(mean_depth)
     stepper.set_reference_profiles([('D', Dbar)])
 
     # ------------------------------------------------------------------------ #

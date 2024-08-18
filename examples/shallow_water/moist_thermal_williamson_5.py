@@ -21,7 +21,7 @@ from firedrake import (
 )
 from gusto import (
     Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
-    ShallowWaterParameters, ShallowWaterEquations, CourantNumber,
+    ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, InstantRain, SWSaturationAdjustment, WaterVapour,
     CloudWater, Rain, GeneralIcosahedralSphereMesh
 )
@@ -34,6 +34,7 @@ moist_thermal_williamson_5_defaults = {
     'dirname': 'moist_thermal_williamson_5'
 }
 
+
 def moist_thermal_williamson_5(
         ncells_per_edge=moist_thermal_williamson_5_defaults['ncells_per_edge'],
         dt=moist_thermal_williamson_5_defaults['dt'],
@@ -43,39 +44,35 @@ def moist_thermal_williamson_5(
 ):
 
     # ------------------------------------------------------------------------ #
-    # Test case parameters
+    # Parameters for test case
     # ------------------------------------------------------------------------ #
 
-    dt = 300
+    radius = 6371220.           # planetary radius (m)
+    mean_depth = 5960           # reference depth (m)
+    g = 9.80616                 # acceleration due to gravity (m/s^2)
+    u_max = 20.                 # max amplitude of the zonal wind (m/s)
+    epsilon = 1/300             # linear air expansion coeff (1/K)
+    theta_SP = -40*epsilon      # value of theta at south pole (no units)
+    theta_EQ = 30*epsilon       # value of theta at equator (no units)
+    theta_NP = -20*epsilon      # value of theta at north pole (no units)
+    mu1 = 0.05                  # scaling for theta with longitude (no units)
+    mu2 = 0.98                  # proportion of qsat to make init qv (no units)
+    q0 = 135                    # qsat scaling, gives init q_v of ~0.02, (kg/kg)
+    beta2 = 10*g                # buoyancy-vaporisation factor (m/s^2)
+    nu = 20.                    # qsat factor in exponent (no units)
+    qprecip = 1e-4              # cloud to rain conversion threshold (kg/kg)
+    gamma_r = 1e-3              # rain-coalescence implicit factor
+    mountain_height = 2000.     # height of mountain (m)
+    R0 = pi/9.                  # radius of mountain (rad)
+    lamda_c = -pi/2.            # longitudinal centre of mountain (rad)
+    phi_c = pi/6.               # latitudinal centre of mountain (rad)
 
-    if '--running-tests' in sys.argv:
-        tmax = dt
-        dumpfreq = 1
-    else:
-        day = 24*60*60
-        tmax = 50*day
-        ndumps = 50
-        dumpfreq = int(tmax / (ndumps*dt))
+    # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
 
-    R = 6371220.
-    H = 5960.
-    u_max = 20.
-    # moist shallow water parameters
-    epsilon = 1/300
-    SP = -40*epsilon
-    EQ = 30*epsilon
-    NP = -20*epsilon
-    mu1 = 0.05
-    mu2 = 0.98
-    q0 = 135  # chosen to give an initial max vapour of approx 0.02
-    beta2 = 10
-    qprecip = 1e-4
-    gamma_r = 1e-3
-    # topography parameters
-    R0 = pi/9.
-    R0sq = R0**2
-    lamda_c = -pi/2.
-    phi_c = pi/6.
+    element_order = 1
+    u_eqn_type = 'vector_invariant_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -83,65 +80,72 @@ def moist_thermal_williamson_5(
 
     # Domain
     mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
-    degree = 1
-    domain = Domain(mesh, dt, "BDM", degree)
-    x = SpatialCoordinate(mesh)
+    domain = Domain(mesh, dt, "BDM", element_order)
+    x, y, z = SpatialCoordinate(mesh)
+    lamda, phi, _ = lonlatr_from_xyz(x, y, z)
 
-    # Equation
-    parameters = ShallowWaterParameters(H=H)
+    # Equation: coriolis
+    parameters = ShallowWaterParameters(H=mean_depth, g=g)
     Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
+    fexpr = 2*Omega*z/radius
 
-    # Topography
-    lamda, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
-    lsq = (lamda - lamda_c)**2
-    thsq = (phi - phi_c)**2
-    rsq = min_value(R0sq, lsq+thsq)
+    # Equation: topography
+    rsq = min_value(R0**2, (lamda - lamda_c)**2 + (phi - phi_c)**2)
     r = sqrt(rsq)
-    tpexpr = 2000 * (1 - r/R0)
+    tpexpr = mountain_height * (1 - r/R0)
 
-    tracers = [WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')]
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=tpexpr,
-                                thermal=True,
-                                active_tracers=tracers)
+    # Equation: moisture
+    tracers = [
+        WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')
+    ]
+    eqns = ShallowWaterEquations(
+        domain, parameters, fexpr=fexpr, bexpr=tpexpr, thermal=True,
+        active_tracers=tracers, u_transport_option=u_eqn_type
+    )
 
     # I/O
-    dirname = "moist_thermal_williamson5"
     output = OutputParameters(
-        dirname=dirname,
-        dumplist_latlon=['D'],
-        dumpfreq=dumpfreq,
+        dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq
     )
-    diagnostic_fields = [Sum('D', 'topography'), CourantNumber()]
+    diagnostic_fields = [Sum('D', 'topography')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
+    # Physics ------------------------------------------------------------------
+    # Saturation function -- first define simple expression
+    def q_sat(b, D):
+        return (q0/(g*D + g*tpexpr)) * exp(nu*(1 - b/g))
 
-    # Saturation function
-    def sat_func(x_in):
-        h = x_in.split()[1]
+    # Function to pass to physics (takes mixed function as argument)
+    def phys_sat_func(x_in):
+        D = x_in.split()[1]
         b = x_in.split()[2]
-        return (q0/(g*h + g*tpexpr)) * exp(20*(1 - b/g))
+        return q_sat(b, D)
 
-
-    # Feedback proportionality is dependent on h and b
+    # Feedback proportionality is dependent on D and b
     def gamma_v(x_in):
-        h = x_in.split()[1]
+        D = x_in.split()[1]
         b = x_in.split()[2]
-        return (1 + beta2*(20*q0/(g*h + g*tpexpr) * exp(20*(1 - b/g))))**(-1)
+        return 1.0 / (1.0 + nu*beta2/g*q_sat(b, D))
 
+    SWSaturationAdjustment(
+        eqns, phys_sat_func, time_varying_saturation=True,
+        parameters=parameters, thermal_feedback=True,
+        beta2=beta2, gamma_v=gamma_v, time_varying_gamma_v=True
+    )
 
-    SWSaturationAdjustment(eqns, sat_func, time_varying_saturation=True,
-                        parameters=parameters, thermal_feedback=True,
-                        beta2=beta2, gamma_v=gamma_v,
-                        time_varying_gamma_v=True)
+    InstantRain(
+        eqns, qprecip, vapour_name="cloud_water", rain_name="rain",
+        gamma_r=gamma_r
+    )
 
-    InstantRain(eqns, qprecip, vapour_name="cloud_water", rain_name="rain",
-                gamma_r=gamma_r)
-
-    transport_methods = [DGUpwind(eqns, field_name) for field_name in eqns.field_names]
+    transport_methods = [
+        DGUpwind(eqns, field_name) for field_name in eqns.field_names
+    ]
 
     # Timestepper
-    stepper = Timestepper(eqns, RK4(domain), io, spatial_methods=transport_methods)
+    stepper = Timestepper(
+        eqns, RK4(domain), io, spatial_methods=transport_methods
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -154,26 +158,34 @@ def moist_thermal_williamson_5(
     c0 = stepper.fields("cloud_water")
     r0 = stepper.fields("rain")
 
-    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
+    uexpr = as_vector([-u_max*y/radius, u_max*x/radius, 0.0])
 
-    g = parameters.g
-    Rsq = R**2
-    Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - tpexpr
+    Dexpr = (
+        mean_depth - tpexpr
+        - (radius * Omega * u_max + 0.5*u_max**2)*(z/radius)**2/g
+    )
 
     # Expression for initial buoyancy - note the bracket around 1-mu
-    F = (2/(pi**2))*(phi*(phi-pi/2)*SP - 2*(phi+pi/2)*(phi-pi/2)*(1-mu1)*EQ + phi*(phi+pi/2)*NP)
-    theta_expr = F + mu1*EQ*cos(phi)*sin(lamda)
+    theta_expr = (
+        2/(pi**2) * (
+            phi*(phi - pi/2)*theta_SP
+            - 2*(phi + pi/2) * (phi - pi/2)*(1 - mu1)*theta_EQ
+            + phi*(phi + pi/2)*theta_NP
+        )
+        + mu1*theta_EQ*cos(phi)*sin(lamda)
+    )
     bexpr = g * (1 - theta_expr)
 
     # Expression for initial vapour depends on initial saturation
-    initial_msat = q0/(g*D0 + g*tpexpr) * exp(20*theta_expr)
-    vexpr = mu2 * initial_msat
+    vexpr = mu2 * q_sat(bexpr, Dexpr)
 
     # Initialise (cloud and rain initially zero)
     u0.project(uexpr)
     D0.interpolate(Dexpr)
     b0.interpolate(bexpr)
     v0.interpolate(vexpr)
+    c0.assign(0.0)
+    r0.assign(0.0)
 
     # ----------------------------------------------------------------- #
     # Run

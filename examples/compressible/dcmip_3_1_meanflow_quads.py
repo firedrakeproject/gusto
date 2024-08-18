@@ -84,7 +84,7 @@ def dcmip_3_1_meanflow(
 
     # Equation
     eqns = CompressibleEulerEquations(
-        domain, parameters, u_transport_form=u_eqn_type
+        domain, parameters, u_transport_option=u_eqn_type
     )
 
     # I/O

@@ -1,5 +1,5 @@
 """
-The 1 metre high mountain test case from Melvin et al, 2010:
+The hydrostatic 1 metre high mountain test case from Melvin et al, 2010:
 ``An inherently mass-conserving iterative semi-implicit semi-Lagrangian
 discretization of the non-hydrostatic vertical-slice equations.'', QJRMS.
 
@@ -11,14 +11,14 @@ The setup used here uses the order 1 finite elements.
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
     as_vector, VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh,
-    SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, sqrt
+    SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, Constant
 )
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, SUPGOptions, CourantNumber, ZComponent, Perturbation,
+    TrapeziumRule, SUPGOptions, ZComponent, Perturbation,
     CompressibleParameters, HydrostaticCompressibleEulerEquations,
     CompressibleSolver, compressible_hydrostatic_balance, HydrostaticImbalance,
-    SpongeLayerParameters, MinKernel, remove_initial_w
+    SpongeLayerParameters, MinKernel, MaxKernel, remove_initial_w, logger
 )
 
 mountain_hydrostatic_defaults = {
@@ -30,6 +30,7 @@ mountain_hydrostatic_defaults = {
     'dirname': 'mountain_hydrostatic'
 }
 
+
 def mountain_hydrostatic(
         ncolumns=mountain_hydrostatic_defaults['ncolumns'],
         nlayers=mountain_hydrostatic_defaults['nlayers'],
@@ -40,103 +41,119 @@ def mountain_hydrostatic(
 ):
 
     # ------------------------------------------------------------------------ #
-    # Test case parameters
+    # Parameters for test case
     # ------------------------------------------------------------------------ #
 
-    dt = 5.0
-    L = 240000.  # Domain length
-    H = 50000.   # Height position of the model top
+    domain_width = 240000.   # width of domain in x direction, in m
+    domain_height = 50000.   # height of model top, in m
+    a = 10000.               # scale width of mountain, in m
+    hm = 1.                  # height of mountain, in m
+    zh = 5000.               # height at which mesh is no longer distorted, in m
+    Tsurf = 250.             # temperature of surface, in K
+    initial_wind = 20.0      # initial horizontal wind, in m/s
+    sponge_depth = 20000.0   # depth of sponge layer, in m
+    g = 9.80665              # acceleration due to gravity, in m/s^2
+    cp = 1004.               # specific heat capacity at constant pressure
+    sponge_mu = 0.15         # parameter for strength of sponge layer, in J/kg/K
+    exner_surf = 1.0         # maximum value of Exner pressure at surface
+    max_iterations = 10      # maximum number of hydrostatic balance iterations
+    tolerance = 1e-7         # tolerance for hydrostatic balance iteration
 
-    if '--running-tests' in sys.argv:
-        tmax = dt
-        res = 1
-        dumpfreq = 1
-    else:
-        tmax = 15000.
-        res = 10
-        dumpfreq = int(tmax / (5*dt))
+    # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
 
+    element_order = 1
+    u_eqn_type = 'vector_invariant_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain
-    # Make an normal extruded mesh which will be distorted to describe the mountain
-    nlayers = res*20  # horizontal layers
-    columns = res*12  # number of columns
-    m = PeriodicIntervalMesh(columns, L)
-    ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+    # Make normal extruded mesh which will be distorted to describe the mountain
+    base_mesh = PeriodicIntervalMesh(ncolumns, domain_width)
+    ext_mesh = ExtrudedMesh(
+        base_mesh, layers=nlayers, layer_height=domain_height/nlayers
+    )
     Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
 
     # Describe the mountain
-    a = 10000.
-    xc = L/2.
+    xc = domain_width/2.
     x, z = SpatialCoordinate(ext_mesh)
-    hm = 1.
-    zs = hm*a**2/((x-xc)**2 + a**2)
-    zh = 5000.
-    xexpr = as_vector([x, conditional(z < zh, z + cos(0.5*pi*z/zh)**6*zs, z)])
+    zs = hm * a**2 / ((x - xc)**2 + a**2)
+    xexpr = as_vector(
+        [x, conditional(z < zh, z + cos(0.5 * pi * z / zh)**6 * zs, z)]
+    )
 
     # Make new mesh
     new_coords = Function(Vc).interpolate(xexpr)
     mesh = Mesh(new_coords)
-    mesh._base_mesh = m  # Force new mesh to inherit original base mesh
-    domain = Domain(mesh, dt, "CG", 1)
+    mesh._base_mesh = base_mesh  # Force new mesh to inherit original base mesh
+    domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
-    parameters = CompressibleParameters(g=9.80665, cp=1004.)
-    sponge = SpongeLayerParameters(H=H, z_level=H-20000, mubar=0.3)
-    eqns = HydrostaticCompressibleEulerEquations(domain, parameters, sponge_options=sponge)
+    parameters = CompressibleParameters(g=g, cp=cp)
+    sponge = SpongeLayerParameters(
+        H=domain_height, z_level=domain_height-sponge_depth, mubar=sponge_mu/dt
+    )
+    eqns = HydrostaticCompressibleEulerEquations(
+        domain, parameters, sponge_options=sponge, u_transport_option=u_eqn_type
+    )
 
     # I/O
-    dirname = 'hydrostatic_mountain'
     output = OutputParameters(
-        dirname=dirname,
-        dumpfreq=dumpfreq,
-        dumplist=['u'],
+        dirname=dirname, dumpfreq=dumpfreq, dump_vtus=True, dump_nc=False
     )
-    diagnostic_fields = [CourantNumber(), ZComponent('u'), HydrostaticImbalance(eqns),
-                        Perturbation('theta'), Perturbation('rho')]
+    diagnostic_fields = [
+        ZComponent('u'), HydrostaticImbalance(eqns),
+        Perturbation('theta'), Perturbation('rho')
+    ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
     theta_opts = SUPGOptions()
-    transported_fields = [TrapeziumRule(domain, "u"),
-                        SSPRK3(domain, "rho"),
-                        SSPRK3(domain, "theta", options=theta_opts)]
-    transport_methods = [DGUpwind(eqns, "u"),
-                        DGUpwind(eqns, "rho"),
-                        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)]
+    transported_fields = [
+        TrapeziumRule(domain, "u"),
+        SSPRK3(domain, "rho"),
+        SSPRK3(domain, "theta", options=theta_opts)
+    ]
+    transport_methods = [
+        DGUpwind(eqns, "u"),
+        DGUpwind(eqns, "rho"),
+        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
+    ]
 
     # Linear solver
     params = {'mat_type': 'matfree',
-            'ksp_type': 'preonly',
-            'pc_type': 'python',
-            'pc_python_type': 'firedrake.SCPC',
-            # Velocity mass operator is singular in the hydrostatic case.
-            # So for reconstruction, we eliminate rho into u
-            'pc_sc_eliminate_fields': '1, 0',
-            'condensed_field': {'ksp_type': 'fgmres',
-                                'ksp_rtol': 1.0e-8,
-                                'ksp_atol': 1.0e-8,
-                                'ksp_max_it': 100,
-                                'pc_type': 'gamg',
-                                'pc_gamg_sym_graph': True,
-                                'mg_levels': {'ksp_type': 'gmres',
+              'ksp_type': 'preonly',
+              'pc_type': 'python',
+              'pc_python_type': 'firedrake.SCPC',
+              # Velocity mass operator is singular in the hydrostatic case.
+              # So for reconstruction, we eliminate rho into u
+              'pc_sc_eliminate_fields': '1, 0',
+              'condensed_field': {'ksp_type': 'fgmres',
+                                  'ksp_rtol': 1.0e-8,
+                                  'ksp_atol': 1.0e-8,
+                                  'ksp_max_it': 100,
+                                  'pc_type': 'gamg',
+                                  'pc_gamg_sym_graph': True,
+                                  'mg_levels': {'ksp_type': 'gmres',
                                                 'ksp_max_it': 5,
                                                 'pc_type': 'bjacobi',
                                                 'sub_pc_type': 'ilu'}}}
 
     alpha = 0.51  # off-centering parameter
-    linear_solver = CompressibleSolver(eqns, alpha, solver_parameters=params,
-                                    overwrite_solver_parameters=True)
+    linear_solver = CompressibleSolver(
+        eqns, alpha, solver_parameters=params,
+        overwrite_solver_parameters=True
+    )
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                    transport_methods,
-                                    linear_solver=linear_solver,
-                                    alpha=alpha)
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods,
+        linear_solver=linear_solver, alpha=alpha
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -147,24 +164,15 @@ def mountain_hydrostatic(
     theta0 = stepper.fields("theta")
 
     # spaces
-    Vu = domain.spaces("HDiv")
     Vt = domain.spaces("theta")
     Vr = domain.spaces("DG")
 
     # Thermodynamic constants required for setting initial conditions
     # and reference profiles
-    g = parameters.g
-    p_0 = parameters.p_0
-    c_p = parameters.cp
-    R_d = parameters.R_d
-    kappa = parameters.kappa
-
-    # Hydrostatic case: Isothermal with T = 250
-    x, z = SpatialCoordinate(mesh)
-    Tsurf = 250.
-    N = g/sqrt(c_p*Tsurf)
+    N = parameters.N
 
     # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
+    x, z = SpatialCoordinate(mesh)
     thetab = Tsurf*exp(N**2*z/g)
     theta_b = Function(Vt).interpolate(thetab)
 
@@ -172,42 +180,73 @@ def mountain_hydrostatic(
     exner = Function(Vr)
     rho_b = Function(Vr)
 
-    exner_params = {'ksp_type': 'gmres',
-                    'ksp_monitor_true_residual': None,
-                    'pc_type': 'python',
-                    'mat_type': 'matfree',
-                    'pc_python_type': 'gusto.VerticalHybridizationPC',
-                    # Vertical trace system is only coupled vertically in columns
-                    # block ILU is a direct solver!
-                    'vert_hybridization': {'ksp_type': 'preonly',
-                                        'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'}}
-
-    compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner,
-                                    top=True, exner_boundary=0.5,
-                                    params=exner_params)
-
-    # Use kernel as a parallel-safe method of computing minimum
+    # Set up kernels to evaluate global minima and maxima of fields
     min_kernel = MinKernel()
+    max_kernel = MaxKernel()
 
-    p0 = min_kernel.apply(exner)
-    compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner,
-                                    top=True, params=exner_params)
-    p1 = min_kernel.apply(exner)
-    alpha = 2.*(p1-p0)
-    beta = p1-alpha
-    exner_top = (1.-beta)/alpha
-    compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner,
-                                    top=True, exner_boundary=exner_top, solve_for_rho=True,
-                                    params=exner_params)
+    # First solve hydrostatic balance that gives Exner = 1 at bottom boundary
+    # This gives us a guess for the top boundary condition
+    bottom_boundary = Constant(exner_surf, domain=mesh)
+    logger.info(f'Solving hydrostatic with bottom Exner of {exner_surf}')
+    compressible_hydrostatic_balance(
+        eqns, theta_b, rho_b, exner, top=False, exner_boundary=bottom_boundary
+    )
+
+    # Solve hydrostatic balance again, but now use minimum value from first
+    # solve as the *top* boundary condition for Exner
+    top_value = min_kernel.apply(exner)
+    top_boundary = Constant(top_value, domain=mesh)
+    logger.info(f'Solving hydrostatic with top Exner of {top_value}')
+    compressible_hydrostatic_balance(
+        eqns, theta_b, rho_b, exner, top=True, exner_boundary=top_boundary
+    )
+
+    max_bottom_value = max_kernel.apply(exner)
+
+    # Now we iterate, adjusting the top boundary condition, until this gives
+    # a maximum value of 1.0 at the surface
+    lower_top_guess = 0.9*top_value
+    upper_top_guess = 1.2*top_value
+    for i in range(max_iterations):
+        # If max bottom Exner value is equal to desired value, stop iteration
+        if abs(max_bottom_value - exner_surf) < tolerance:
+            break
+
+        # Make new guess by average of previous guesses
+        top_guess = 0.5*(lower_top_guess + upper_top_guess)
+        top_boundary.assign(top_guess)
+
+        logger.info(
+            f'Solving hydrostatic balance iteration {i}, with top Exner value '
+            + f'of {top_guess}'
+        )
+
+        compressible_hydrostatic_balance(
+            eqns, theta_b, rho_b, exner, top=True, exner_boundary=top_boundary
+        )
+
+        max_bottom_value = max_kernel.apply(exner)
+
+        # Adjust guesses based on new value
+        if max_bottom_value < exner_surf:
+            lower_top_guess = top_guess
+        else:
+            upper_top_guess = top_guess
+
+    logger.info(f'Final max bottom Exner value of {max_bottom_value}')
+
+    # Perform a final solve to obtain hydrostatically balanced rho
+    compressible_hydrostatic_balance(
+        eqns, theta_b, rho_b, exner, top=True, exner_boundary=top_boundary,
+        solve_for_rho=True
+    )
 
     theta0.assign(theta_b)
     rho0.assign(rho_b)
-    u0.project(as_vector([20.0, 0.0]))
+    u0.project(as_vector([initial_wind, 0.0]))
     remove_initial_w(u0)
 
-    stepper.set_reference_profiles([('rho', rho_b),
-                                    ('theta', theta_b)])
+    stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
     # ------------------------------------------------------------------------ #
     # Run
