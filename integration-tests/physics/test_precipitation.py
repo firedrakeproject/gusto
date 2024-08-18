@@ -51,8 +51,11 @@ def setup_fallout(dirname):
 
     # build time stepper
     scheme = SSPRK3(domain)
-    stepper = SplitPrescribedTransport(eqn, scheme, io, transport_method,
-                                       physics_schemes=physics_parametrisations)
+    time_varying_velocity = False
+    stepper = SplitPrescribedTransport(
+        eqn, scheme, io, time_varying_velocity, transport_method,
+        physics_schemes=physics_parametrisations
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

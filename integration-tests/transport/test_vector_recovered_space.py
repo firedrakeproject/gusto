@@ -42,7 +42,10 @@ def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
     eqn = AdvectionEquation(domain, Vu, "f")
     transport_scheme = SSPRK3(domain, options=rec_opts)
     transport_method = DGUpwind(eqn, "f")
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
+    time_varying_velocity = False
+    timestepper = PrescribedTransport(
+        eqn, transport_scheme, setup.io, time_varying_velocity, transport_method
+    )
 
     # Initialise fields
     f_init = as_vector([setup.f_init]*gdim)

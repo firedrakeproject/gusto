@@ -73,10 +73,9 @@ def skamarock_klemp_hydrostatic(
 
     # Equation
     parameters = CompressibleParameters()
-    Omega_vec = as_vector((0., 0., Omega))
     balanced_pg = as_vector((0., pressure_gradient_y, 0.))
     eqns = HydrostaticCompressibleEulerEquations(
-        domain, parameters, Omega=Omega_vec, extra_terms=[("u", balanced_pg)]
+        domain, parameters, extra_terms=[("u", balanced_pg)]
     )
 
     # I/O
