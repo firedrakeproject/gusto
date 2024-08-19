@@ -3,7 +3,7 @@
 from firedrake import (dot, dx, Function, ln, TestFunction, TrialFunction,
                        Constant, grad, inner, LinearVariationalProblem,
                        LinearVariationalSolver, FacetNormal, ds_b, dS_v, div,
-                       avg, jump, SpatialCoordinate)
+                       avg, jump, SpatialCoordinate, curl, as_vector)
 
 from gusto.diagnostics.diagnostics import (
     DiagnosticField, Energy, IterativeDiagnosticField
@@ -18,7 +18,7 @@ __all__ = ["RichardsonNumber", "Entropy", "PhysicalEntropy", "DynamicEntropy",
            "PotentialEnergy", "ThermodynamicKineticEnergy",
            "Temperature", "Theta_d", "RelativeHumidity", "Pressure", "Exner_Vt",
            "HydrostaticImbalance", "Precipitation", "BruntVaisalaFrequencySquared",
-           "WetBulbTemperature", "DewpointTemperature"]
+           "WetBulbTemperature", "DewpointTemperature", "RelativeVorticity", "AbsoluteVorticity"]
 
 
 class RichardsonNumber(DiagnosticField):
@@ -852,7 +852,7 @@ class Vorticity(DiagnosticField):
                 gamma = TestFunction(space)
                 a = inner(vort, gamma) * dx
                 L = -(inner(domain.perp(grad(gamma)), u)) * dx
-                # TODO implement absolute version, unsure atm how to get corioilis in vertical slice smartly
+                # TODO implement absolute version, unsure how to get corioilis in vertical slice smartly
                 
             problem = LinearVariationalProblem(a, L, self.field)
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={'ksp_type': 'cg'})
