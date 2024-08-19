@@ -30,6 +30,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.dt = self.equation.domain.dt
         self.t = self.equation.domain.t
         self.reference_profiles_initialised = False
+        self.last_ref_update_time = None
 
         self.setup_fields()
         self.setup_scheme()
@@ -163,8 +164,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         if pick_up:
             # Pick up fields, and return other info to be picked up
-            t, reference_profiles, self.step, initial_timesteps = self.io.pick_up_from_checkpoint(self.fields)
-            self.set_reference_profiles(reference_profiles)
+            time_data, reference_profiles = self.io.pick_up_from_checkpoint(self.fields)
+            t, self.step, initial_timesteps, last_ref_update_time = time_data
+            self.set_reference_profiles(reference_profiles, last_ref_update_time)
             self.set_initial_timesteps(initial_timesteps)
         else:
             self.step = 1
@@ -193,14 +195,15 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.step += 1
 
             with timed_stage("Dump output"):
-                self.io.dump(self.fields, float(self.t), self.step, self.get_initial_timesteps())
+                time_data = (float(t), self.step, self.get_initial_timesteps(), self.last_ref_update_time)
+                self.io.dump(self.fields, time_data)
 
         if self.io.output.checkpoint and self.io.output.checkpoint_method == 'dumbcheckpoint':
             self.io.chkpt.close()
 
         logger.info(f'TIMELOOP complete. t={float(self.t):.5f}, {tmax=:.5f}')
 
-    def set_reference_profiles(self, reference_profiles):
+    def set_reference_profiles(self, reference_profiles, last_ref_update_time=None):
         """
         Initialise the model's reference profiles.
 
@@ -208,6 +211,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             where 'field_name' is the string giving the name of the reference
             profile field expr is the :class:`ufl.Expr` whose value is used to
             set the reference field.
+        last_ref_update_time (float, optional): the last time that the reference
+            profiles were updated. Defaults to None.
         """
         for field_name, profile in reference_profiles:
             if field_name+'_bar' in self.fields:
@@ -236,6 +241,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                     logger.warning(f'Setting reference profile for diagnostic {field_name}')
                     # Don't need to do anything else as value in field container has already been set
         self.reference_profiles_initialised = True
+
+        self.last_ref_update_time = last_ref_update_time
 
 
 class Timestepper(BaseTimestepper):

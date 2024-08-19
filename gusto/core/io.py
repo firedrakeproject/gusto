@@ -531,7 +531,11 @@ class IO(object):
 
         # dump initial fields
         if not pick_up:
-            self.dump(state_fields, t, step=1)
+            step = 1
+            last_ref_update_time = None
+            initial_steps = None
+            time_data = (t, step, initial_steps, last_ref_update_time)
+            self.dump(state_fields, time_data)
 
     def pick_up_from_checkpoint(self, state_fields):
         """
@@ -541,7 +545,12 @@ class IO(object):
             state_fields (:class:`StateFields`): the model's field container.
 
         Returns:
-            float: the checkpointed model time.
+            tuple of (`time_data`, `reference_profiles`): where `time_data`
+                itself is a tuple of numbers relating to the checkpointed time.
+                This tuple is: (model time, step index,
+                number of initial steps, last time reference profiles updated).
+                The `reference_profiles` are a list of (`field_name`, expr)
+                pairs describing the reference profile fields.
         """
 
         # -------------------------------------------------------------------- #
@@ -602,6 +611,13 @@ class IO(object):
                     except AttributeError:
                         initial_steps = None
 
+                    # Try to pick up number last_ref_update_time
+                    # Not compulsory so errors allowed
+                    try:
+                        last_ref_update_time = chk.read_attribute("/", "last_ref_update_time")
+                    except AttributeError:
+                        last_ref_update_time = None
+
                     # Finally pick up time and step number
                     t = chk.read_attribute("/", "time")
                     step = chk.read_attribute("/", "step")
@@ -632,6 +648,13 @@ class IO(object):
                     else:
                         initial_steps = None
 
+                    # Try to pick up last reference profile update time
+                    # Not compulsory so errors allowed
+                    if chk.has_attr("/", "last_ref_update_time"):
+                        last_ref_update_time = chk.get_attr("/", "last_ref_update_time")
+                    else:
+                        last_ref_update_time = None
+
                     # Finally pick up time
                     t = chk.get_attr("/", "time")
                     step = chk.get_attr("/", "step")
@@ -647,9 +670,10 @@ class IO(object):
             if hasattr(diagnostic_field, "init_field_set"):
                 diagnostic_field.init_field_set = True
 
-        return t, reference_profiles, step, initial_steps
+        time_data = (t, step, initial_steps, last_ref_update_time)
+        return time_data, reference_profiles
 
-    def dump(self, state_fields, t, step, initial_steps=None):
+    def dump(self, state_fields, time_data):
         """
         Dumps all of the required model output.
 
@@ -659,12 +683,17 @@ class IO(object):
 
         Args:
             state_fields (:class:`StateFields`): the model's field container.
-            t (float): the simulation's current time.
-            step (int): the number of time steps.
-            initial_steps (int, optional): the number of initial time steps
-                completed by a multi-level time scheme. Defaults to None.
+            time_data (tuple): contains information relating to the time in
+                the simulation. The tuple is structured as follows:
+                - t: current time in s
+                - step: the index of the time step
+                - initial_steps: number of initial time steps completed by a
+                  multi-level time scheme (could be None)
+                - last_ref_update_time: the last time in s that the reference
+                  profiles were updated (could be None)
         """
         output = self.output
+        t, step, initial_steps, last_ref_update_time = time_data
 
         # Diagnostics:
         # Compute diagnostic fields
@@ -688,6 +717,8 @@ class IO(object):
                 self.chkpt.write_attribute("/", "step", step)
                 if initial_steps is not None:
                     self.chkpt.write_attribute("/", "initial_steps", initial_steps)
+                if last_ref_update_time is not None:
+                    self.chkpt.write_attribute("/", "last_ref_update_time", last_ref_update_time)
             else:
                 with CheckpointFile(self.chkpt_path, 'w') as chk:
                     chk.save_mesh(self.domain.mesh)
@@ -697,6 +728,8 @@ class IO(object):
                     chk.set_attr("/", "step", step)
                     if initial_steps is not None:
                         chk.set_attr("/", "initial_steps", initial_steps)
+                    if last_ref_update_time is not None:
+                        chk.set_attr("/", "last_ref_update_time", last_ref_update_time)
 
         if (next(self.dumpcount) % output.dumpfreq) == 0:
             if output.dump_nc:
