@@ -59,18 +59,18 @@ class Relaxation(PhysicsParametrisation):
         taod = 40 * d
         taou = 4 * d
 
-        T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert * ln(self.exner) * cos(lat)**2 / self.kappa) * self.exner
-        Teq = conditional(T0stra, T_condition, T0stra, T_condition)
-        equilibrium_expr = Teq / self.exner
+        T_condition = (T0surf - T0horiz * sin(lat)**2 - T0vert  * (-self.kappa) * ln(self.exner) * cos(lat)**2 ) * self.exner
+        Teq = conditional(T0stra >= T_condition, T0stra, T_condition)
+        equilibrium_expr = Teq / self.exner # convert to potential temp
 
         # timescale of temperature forcing
         tao_cond = (self.sigma - sigmab) / (1 - sigmab)
         newton_freq = 1 / taod + (1/taou - 1/taod) * conditional(0 >= tao_cond, 0, tao_cond) * cos(lat)**4
-        forcing_expr = -newton_freq * (self.theta - equilibrium_expr)
+        forcing_expr = -newton_freq * (self.theta - equilibrium_expr) 
 
         # Create source for forcing
         self.source_relaxation = Function(Vt)
-        self.source_interpolator = Interpolator(forcing_expr)
+        self.source_interpolator = Interpolator(forcing_expr, self.source_relaxation)
 
         # Add relaxation term to residual
         test = equation.tests[theta_idx]
@@ -149,7 +149,7 @@ class RayleighFriction(PhysicsParametrisation):
         forcing_expr = u_hori * wind_timescale
 
         self.source_friction = Function(Vu)
-        self.source_interpolator = Interpolator(forcing_expr)
+        self.source_interpolator = Interpolator(forcing_expr, self.source_friction)
 
         tests = equation.tests
         test = tests[u_idx]
