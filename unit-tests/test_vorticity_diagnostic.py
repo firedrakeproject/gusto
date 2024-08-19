@@ -21,7 +21,7 @@ def sphere_test(): # try at a higher resolution
     R = 1 # radius of ball
     H = 5 # height of model top
     nlayers=5
-    c=8
+    c=16
     # Building model and state object
     m = GeneralCubedSphereMesh(R, num_cells_per_edge_of_panel=c, degree=2)
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers, extrusion_type='radial')
@@ -52,7 +52,7 @@ def sphere_test(): # try at a higher resolution
 
     # Analytic relative vorticity
     radial_vort = 2*cos(lat) / r**2
-    analytical_vort_expr = xyz_vector_from_lonlatr(0, 0, radial_vort, xyz)
+    #analytical_vort_expr = xyz_vector_from_lonlatr(0, 0, radial_vort, xyz)
     print('Projecting analytical vorticity')
     vorticity_analytic = Function(HCurl, name='exact_vorticity').project(e_rad*radial_vort)
 
@@ -88,7 +88,7 @@ def sphere_test(): # try at a higher resolution
     error = errornorm(vorticity_analytic, state.RelativeVorticity) / norm(vorticity_analytic)
     print(error)
 
-    outfile = File('spherical_vorticity.pvd')
+    outfile = File('spherical_vorticity_high.pvd')
     outfile.write(state.u, vorticity_analytic, state.RelativeVorticity, diff, state.u_zonal, state.u_meridional, state.u_radial, state.RelativeVorticity_radial)
     # We dont expect it to be zero as the discrete vorticity is not equal to analytic and dependent on resolution
     assert error < 1e-6, \
