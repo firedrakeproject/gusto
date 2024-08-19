@@ -168,6 +168,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             t, self.step, initial_timesteps, last_ref_update_time = time_data
             self.set_reference_profiles(reference_profiles, last_ref_update_time)
             self.set_initial_timesteps(initial_timesteps)
+
         else:
             self.step = 1
 
@@ -195,7 +196,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.step += 1
 
             with timed_stage("Dump output"):
-                time_data = (float(t), self.step, self.get_initial_timesteps(), self.last_ref_update_time)
+                time_data = (
+                    float(self.t), self.step,
+                    self.get_initial_timesteps(), self.last_ref_update_time
+                )
                 self.io.dump(self.fields, time_data)
 
         if self.io.output.checkpoint and self.io.output.checkpoint_method == 'dumbcheckpoint':

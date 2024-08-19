@@ -102,6 +102,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.alpha = alpha
         self.accelerator = accelerator
         self.reference_update_freq = reference_update_freq
+        self.to_update_ref_profile = False
 
         # default is to not offcentre transporting velocity but if it
         # is offcentred then use the same value as alpha
@@ -262,6 +263,24 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for name in self.tracers_to_copy:
             x_out(name).assign(x_in(name))
 
+    def update_reference_profiles(self):
+        """
+        Updates the reference profiles and if required also updates them in the
+        linear solver.
+        """
+
+        if self.reference_update_freq is not None:
+            if float(self.t) + self.reference_update_freq > self.last_ref_update_time:
+                self.equation.X_ref.assign(self.x.n(self.field_name))
+                self.last_ref_update_time = float(self.t)
+                if hasattr(self.linear_solver, 'update_reference_profiles'):
+                    self.linear_solver.update_reference_profiles()
+
+        elif self.to_update_ref_profile:
+            if hasattr(self.linear_solver, 'update_reference_profiles'):
+                self.linear_solver.update_reference_profiles()
+                self.to_update_ref_profile = False
+
     def timestep(self):
         """Defines the timestep"""
         xn = self.x.n
@@ -275,12 +294,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         dy = self.dy
 
         # Update reference profiles --------------------------------------------
-        if self.reference_update_freq is not None:
-            if float(self.t) + self.reference_update_freq > self.last_ref_update_time:
-                self.equation.X_ref.assign(self.x.n)
-                self.last_ref_update_time = float(self.t)
-                if hasattr(self.linear_solver, 'update_reference_profiles'):
-                    self.linear_solver.update_reference_profiles()
+        self.update_reference_profiles()
 
         # Slow physics ---------------------------------------------------------
         x_after_slow(self.field_name).assign(xn(self.field_name))
@@ -382,10 +396,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         if not pick_up and self.reference_update_freq is not None:
             # Force reference profiles to be updated on first time step
-            self.last_ref_update_time = t - float(self.dt)
-        elif not pick_up:
-            if hasattr(self.linear_solver, 'update_reference_profiles'):
-                self.linear_solver.update_reference_profiles()
+            self.last_ref_update_time = float(t) - float(self.dt)
+
+        elif not pick_up or (pick_up and self.reference_update_freq is None):
+            # Indicate that linear solver profile needs updating
+            self.to_update_ref_profile = True
 
         super().run(t, tmax, pick_up=pick_up)
 
