@@ -84,15 +84,13 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Saturation function
 def sat_func(x_in):
-    h = x_in.split()[1]
-    b = x_in.split()[2]
+    _, h, b = x_in.subfunctions
     return (q0/(g*h + g*tpexpr)) * exp(20*(1 - b/g))
 
 
 # Feedback proportionality is dependent on h and b
 def gamma_v(x_in):
-    h = x_in.split()[1]
-    b = x_in.split()[2]
+    _, h, b = x_in.subfunctions
     return (1 + beta2*(20*q0/(g*h + g*tpexpr) * exp(20*(1 - b/g))))**(-1)
 
 

@@ -82,7 +82,7 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # define saturation function
 def sat_func(x_in):
-    h = x_in.split()[1]
+    h = x_in.subfunctions[1]
     lamda, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
     numerator = theta_0 + sigma*((cos(phi))**2) * ((w + sigma)*(cos(phi))**2 + 2*(phi_0 - w - sigma))
     denominator = phi_0**2 + (w + sigma)**2*(sin(phi))**4 - 2*phi_0*(w + sigma)*(sin(phi))**2
