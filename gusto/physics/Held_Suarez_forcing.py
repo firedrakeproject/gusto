@@ -127,7 +127,7 @@ class RayleighFriction(PhysicsParametrisation):
         rho_idx = equation.field_names.index('rho')
         rho = split(X)[rho_idx]
         Vt = equation.domain.spaces('theta')
-        Vu = equation.domain.spaces('u')
+        Vu = equation.domain.spaces('HDiv')
         u_hori = u - k*dot(u, k)
 
         boundary_method = BoundaryMethod.extruded if self.domain == 0 else None
