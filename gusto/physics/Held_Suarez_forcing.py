@@ -144,7 +144,7 @@ class RayleighFriction(PhysicsParametrisation):
         self.kappa = self.parameters.kappa
         taofric = 24 * 60 * 60
 
-        tao_cond = (self.sigma_averaged - sigmab) / (1 - sigmab)
+        tao_cond = (self.sigma - sigmab) / (1 - sigmab)
         wind_timescale = conditional(ge(0, tao_cond), 0, tao_cond) / taofric
         forcing_expr = u_hori * wind_timescale
 
