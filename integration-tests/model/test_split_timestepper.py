@@ -9,13 +9,14 @@ physics and individual terms in the RSWEs
 is performed correctly.
 """
 
-from os import path
+from os.path import join, abspath, dirname
 from netCDF4 import Dataset
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp, as_vector,
                        norm, Constant, conditional, sqrt, VectorFunctionSpace,
                        pi, IcosahedralSphereMesh, acos, sin, cos, max_value, 
-                       min_value, errornorm)
+                       min_value, errornorm, ExtrudedMesh)
 from gusto import *
+import gusto.equations.thermodynamics as tde
 import pytest
 
 
@@ -103,7 +104,8 @@ def test_split_timestepper_adv_diff(tmpdir, timestepper):
     tol = 0.015
     error = run_split_timestepper_adv_diff(tmpdir, timestepper)
     assert error < tol, 'The error in the advection-diffusion ' + \
-        'equation is greater than the permitted tolerance'
+        'equation with a split timestepper is greater than ' + \
+        'the permitted tolerance'
 
 
 def run_split_timestepper_sw_evap(dirname, splitting):
@@ -156,15 +158,18 @@ def run_split_timestepper_sw_evap(dirname, splitting):
                         ForwardEuler(domain))]
 
     # Timestepper
-    if splitting == 'split2':
+    if splitting == 'split1':
         dynamics_schemes = {'transport': SSPRK3(domain),
                             'coriolis': SSPRK3(domain),
-                            'dynamics': SSPRK3(domain)}
-        term_splitting = ['transport', 'coriolis', 'dynamics', 'physics']
+                            'pressure_gradient': SSPRK3(domain)}
+        term_splitting = ['transport', 'coriolis', 'pressure_gradient', 'physics']
         stepper = SplitTimestepper(eqns, term_splitting, dynamics_schemes, io, physics_schemes=physics_schemes)
     else:
-        stepper = SplitPhysicsTimestepper(eqns, RK4(domain), io,
-                                          physics_schemes=physics_schemes)
+        dynamics_schemes = {'transport': ImplicitMidpoint(domain),
+                            'coriolis': SSPRK3(domain),
+                            'pressure_gradient': SSPRK3(domain)}
+        term_splitting = ['coriolis', 'pressure_gradient', 'physics', 'transport']
+        stepper = SplitTimestepper(eqns, term_splitting, dynamics_schemes, io, physics_schemes=physics_schemes)
 
     # Initial conditions
     b0 = stepper.fields("b")
@@ -211,18 +216,18 @@ def test_split_timestepper_evap(tmpdir, splitting):
 
     # Check that the water vapour is correct
     assert norm(vapour - v_true) / norm(v_true) < 0.001, \
-        f'Final vapour field is incorrect for {process}'
+        f'Final vapour field is incorrect with the split timestepper'
 
     # Check that cloud has been created/removed
     assert norm(cloud - norm(c_true)) / norm(c_init) < 0.001, \
-        f'Final cloud field is incorrect for {process}'
+        f'Final cloud field is incorrect with the split timestepper'
 
     # Check that the buoyancy perturbation has the correct sign and size
-    assert norm(buoyancy - b_true) / norm(b_true) < 0.01, \
-        f'Latent heating is incorrect for {process}'
+    assert norm(buoyancy - b_true) / norm(b_true) < 0.001, \
+        f'Latent heating is incorrect for with the split timestepper'
 
     # Check that total moisture conserved
-    filename = path.join(dirname, "split_timestep_sw_evap/diagnostics.nc")
+    filename = join(dirname, "split_timestep_sw_evap/diagnostics.nc")
     data = Dataset(filename, "r")
     water = data.groups["water_vapour_plus_cloud_water"]
     total = water.variables["total"]
@@ -230,103 +235,258 @@ def test_split_timestepper_evap(tmpdir, splitting):
     water_t_T = total[-1]
 
     assert abs(water_t_0 - water_t_T) / water_t_0 < 1e-12, \
-        f'Total amount of water should be conserved by {process}'
-        
-        
-        
-def run_forced_advection(tmpdir):
+        f'Total amount of water should be conserved by the split timestepper'
+    
+
+def run_boussinesq(tmpdir, compressible):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain
-    Lx = 100
-    delta_x = 2.0
-    nx = int(Lx/delta_x)
-    mesh = PeriodicIntervalMesh(nx, Lx)
-    x = SpatialCoordinate(mesh)[0]
-
-    dt = 0.2
+    dt = 6.0
+    tmax = 2*dt
+    nlayers = 10  # horizontal layers
+    ncols = 10  # number of columns
+    Lx = 1000.0
+    Lz = 1000.0
+    mesh_name = 'boussinesq_mesh'
+    m = PeriodicIntervalMesh(ncols, Lx)
+    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Lz/nlayers, name=mesh_name)
     domain = Domain(mesh, dt, "CG", 1)
 
-    VD = domain.spaces("DG")
-    Vu = VectorFunctionSpace(mesh, "CG", 1)
-
     # Equation
-    u_max = 1
-    C0 = 0.6
-    K0 = 0.3
-    Csat = 0.75
-    Ksat = 0.25
-    tmax = 85
-
-    # saturation profile
-    msat_expr = Csat + (Ksat * cos(2*pi*(x/Lx)))
-    msat = Function(VD)
-    msat.interpolate(msat_expr)
-
-    # Rain is a first tracer
-    rain = Rain(space='DG',
-                transport_eqn=TransportEquationType.no_transport)
-
-    # Also, have water_vapour as a tracer:
-    water_vapour = WaterVapour(space='DG')
-
-    meqn = CoupledTransportEquation(domain, active_tracers=[rain, water_vapour], Vu=Vu)
-
-    transport_method = DGUpwind(meqn, "water_vapour")
-    physics_parametrisations = [InstantRain(meqn, msat, rain_name="rain",
-                                            parameters=None)]
+    parameters = BoussinesqParameters()
+    eqn = BoussinesqEquations(domain, parameters, compressible=compressible)
 
     # I/O
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=1)
-    diagnostic_fields = [CourantNumber()]
-    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+    if compressible:
+        output_dirname = tmpdir+"/boussinesq_compressible"
+    else:
+        output_dirname = tmpdir+"/boussinesq_incompressible"
+    output = OutputParameters(dirname=output_dirname,
+                              dumpfreq=2, chkptfreq=2, checkpoint=True)
+    io = IO(domain, output)
 
-    # Time Stepper
-    time_varying_velocity = False
-    stepper = PrescribedTransport(
-        meqn, RK4(domain), io, transport_method,
-        physics_parametrisations=physics_parametrisations
-    )
+    # Transport Schemes
+    b_opts = SUPGOptions()
+    if compressible:
+        transported_fields = [TrapeziumRule(domain, "u"),
+                              SSPRK3(domain, "p"),
+                              SSPRK3(domain, "b", options=b_opts)]
+        transport_methods = [DGUpwind(eqn, "u"),
+                             DGUpwind(eqn, "p"),
+                             DGUpwind(eqn, "b", ibp=b_opts.ibp)]
+    else:
+        transported_fields = [TrapeziumRule(domain, "u"),
+                              SSPRK3(domain, "b", options=b_opts)]
+        transport_methods = [DGUpwind(eqn, "u"),
+                             DGUpwind(eqn, "b", ibp=b_opts.ibp)]
+
+    # Linear solver
+    linear_solver = BoussinesqSolver(eqn)
+
+    # Time stepper
+    if compressible:
+        dynamics_schemes = {'transport': ImplicitMidpoint(domain),
+                            'gravity': ImplicitMidpoint(domain),
+                            'pressure_gradient': ImplicitMidpoint(domain),
+                            'divergence': ImplicitMidpoint(domain)}
+        term_splitting = ['divergence', 'transport', 'gravity', 'pressure_gradient']
+        stepper = SplitTimestepper(eqn, term_splitting, dynamics_schemes, io)
+    else:
+        dynamics_schemes = {'transport': SSPRK3(domain),
+                            'gravity': SSPRK3(domain),
+                            'pressure_gradient': SSPRK3(domain),
+                            'incompressible': SSPRK3(domain)}
+        term_splitting = ['transport', 'gravity', 'pressure_gradient', 'incompressible']
+        stepper = SplitTimestepper(eqn, term_splitting, dynamics_schemes, io)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    # initial moisture profile
-    mexpr = C0 + K0*cos((2*pi*x)/Lx)
+    p0 = stepper.fields("p")
+    b0 = stepper.fields("b")
+    u0 = stepper.fields("u")
 
-    stepper.fields("u").project(as_vector([u_max]))
-    stepper.fields("water_vapour").project(mexpr)
+    # Add horizontal translation to ensure some transport happens
+    u0.project(as_vector([0.5, 0.0]))
 
-    # Start with no rain:
-    no_rain = 0*x
-    stepper.fields("rain").interpolate(no_rain)
+    # z.grad(bref) = N**2
+    x, z = SpatialCoordinate(mesh)
+    N = parameters.N
+    bref = z*(N**2)
 
-    # exact rainfall profile (analytically)
-    r_exact = stepper.fields("r_exact", space=VD)
-    lim1 = Lx/(2*pi) * acos((C0 + K0 - Csat)/Ksat)
-    lim2 = Lx/2
-    coord = (Ksat*cos(2*pi*x/Lx) + Csat - C0)/K0
-    exact_expr = 2*Ksat*sin(2*pi*x/Lx)*acos(coord)
-    r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
-    r_exact.interpolate(r_expr)
+    b_b = Function(b0.function_space()).interpolate(bref)
+    boussinesq_hydrostatic_balance(eqn, b_b, p0)
+    stepper.set_reference_profiles([('p', p0), ('b', b_b)])
+
+    # Add perturbation
+    r = sqrt((x-Lx/2)**2 + (z-Lz/2)**2)
+    b_pert = 0.1*exp(-(r/(Lx/5)**2))
+    b0.interpolate(b_b + b_pert)
 
     # ------------------------------------------------------------------------ #
     # Run
     # ------------------------------------------------------------------------ #
 
-    stepper.run(0, tmax=tmax)
+    stepper.run(t=0, tmax=tmax)
 
-    error = errornorm(r_exact, stepper.fields("rain"))
+    # State for checking checkpoints
+    if compressible:
+        checkpoint_name = 'compressible_boussinesq_chkpt.h5'
+    else:
+        checkpoint_name = 'incompressible_boussinesq_chkpt.h5'
+    new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
+    check_output = OutputParameters(dirname=output_dirname,
+                                    checkpoint_pickup_filename=new_path,
+                                    checkpoint=True)
+    check_mesh = pick_up_mesh(check_output, mesh_name)
+    check_domain = Domain(check_mesh, dt, "CG", 1)
+    check_eqn = BoussinesqEquations(check_domain, parameters, compressible)
+    check_io = IO(check_domain, check_output)
+    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
+    check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
 
-    return error
+    return stepper, check_stepper
 
 
-def test_forced_advection(tmpdir):
+@pytest.mark.parametrize("compressible", [True, False])
+def test_boussinesq(tmpdir, compressible):
 
-    tol = 0.1
-    error = run_forced_advection(tmpdir)
-    assert error < tol, 'The error in the forced advection equation is greater than the permitted tolerance'
+    dirname = str(tmpdir)
+    stepper, check_stepper = run_boussinesq(dirname, compressible)
+
+    for variable in ['u', 'b', 'p']:
+        new_variable = stepper.fields(variable)
+        check_variable = check_stepper.fields(variable)
+        diff_array = new_variable.dat.data - check_variable.dat.data
+        error = np.linalg.norm(diff_array) / np.linalg.norm(check_variable.dat.data)
+
+        if compressible:
+            compressible_test = 'compressible'
+        else:
+            compressible_test = 'incompressible'
+
+        # Slack values chosen to be robust to different platforms
+        assert error < 1e-10, f'Values for {variable} in ' + \
+            '{compressible_test} test do not match KGO values'
+            
+            
+def run_moist_compressible(tmpdir):
+
+    # ------------------------------------------------------------------------ #
+    # Set up model objects
+    # ------------------------------------------------------------------------ #
+
+    # Domain
+    dt = 6.0
+    tmax = 2*dt
+    nlayers = 10  # horizontal layers
+    ncols = 10  # number of columns
+    Lx = 1000.0
+    Lz = 1000.0
+    mesh_name = 'moist_compressible_mesh'
+    m = PeriodicIntervalMesh(ncols, Lx)
+    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Lz/nlayers, name=mesh_name)
+    domain = Domain(mesh, dt, "CG", 1)
+
+    # Equation
+    parameters = CompressibleParameters()
+    tracers = [WaterVapour(name='vapour_mixing_ratio'), CloudWater(name='cloud_liquid_mixing_ratio')]
+    eqn = CompressibleEulerEquations(domain, parameters, active_tracers=tracers)
+
+    # I/O
+    output = OutputParameters(dirname=tmpdir+"/moist_compressible",
+                              dumpfreq=2, checkpoint=True, chkptfreq=2)
+    io = IO(domain, output)
+
+    # Transport schemes
+    transport_methods = [DGUpwind(eqn, "u"),
+                         DGUpwind(eqn, "rho"),
+                         DGUpwind(eqn, "theta")]
+
+    # Linear solver
+    linear_solver = CompressibleSolver(eqn)
+
+    # Time stepper
+    dynamics_schemes = {'transport': SSPRK3(domain),
+                        'gravity': SSPRK3(domain),
+                        'coriolis': SSPRK3(domain),
+                        'pressure_gradient': SSPRK3(domain)}
+    term_splitting = ['transport', 'gravity', 'coriolis', 'pressure_gradient']
+    stepper = SplitTimestepper(eqn, term_splitting, dynamics_schemes, io)
+
+    # ------------------------------------------------------------------------ #
+    # Initial conditions
+    # ------------------------------------------------------------------------ #
+
+    R_d = parameters.R_d
+    R_v = parameters.R_v
+    g = parameters.g
+
+    rho0 = stepper.fields("rho")
+    theta0 = stepper.fields("theta")
+    m_v0 = stepper.fields("vapour_mixing_ratio")
+    u0 = stepper.fields("u")
+
+    # Add horizontal translation to ensure some transport happens
+    u0.project(as_vector([0.5, 0.0]))
+
+    # Approximate hydrostatic balance
+    x, z = SpatialCoordinate(mesh)
+    T = Constant(300.0)
+    m_v0.interpolate(Constant(0.01))
+    T_vd = T * (1 + R_v * m_v0 / R_d)
+    zH = R_d * T / g
+    p = Constant(100000.0) * exp(-z / zH)
+    theta0.interpolate(tde.theta(parameters, T_vd, p))
+    rho0.interpolate(p / (R_d * T))
+
+    stepper.set_reference_profiles([('rho', rho0), ('theta', theta0),
+                                    ('vapour_mixing_ratio', m_v0)])
+
+    # Add perturbation
+    r = sqrt((x-Lx/2)**2 + (z-Lz/2)**2)
+    theta_pert = 1.0*exp(-(r/(Lx/5))**2)
+    theta0.interpolate(theta0 + theta_pert)
+
+    # ------------------------------------------------------------------------ #
+    # Run
+    # ------------------------------------------------------------------------ #
+
+    stepper.run(t=0, tmax=tmax)
+
+    # State for checking checkpoints
+    checkpoint_name = 'moist_compressible_chkpt.h5'
+    new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
+    check_output = OutputParameters(dirname=tmpdir+"/moist_compressible",
+                                    checkpoint_pickup_filename=new_path,
+                                    checkpoint=True)
+    check_mesh = pick_up_mesh(check_output, mesh_name)
+    check_domain = Domain(check_mesh, dt, "CG", 1)
+    check_eqn = CompressibleEulerEquations(check_domain, parameters, active_tracers=tracers)
+    check_io = IO(check_domain, output=check_output)
+    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
+    check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
+
+    return stepper, check_stepper
+
+
+def test_moist_compressible(tmpdir):
+
+    dirname = str(tmpdir)
+    stepper, check_stepper = run_moist_compressible(dirname)
+
+    for variable in ['u', 'rho', 'theta', 'vapour_mixing_ratio']:
+        new_variable = stepper.fields(variable)
+        check_variable = check_stepper.fields(variable)
+        diff_array = new_variable.dat.data - check_variable.dat.data
+        error = np.linalg.norm(diff_array) / np.linalg.norm(check_variable.dat.data)
+
+        # Slack values chosen to be robust to different platforms
+        assert error < 1e-10, f'Values for {variable} in ' + \
+            'Moist Compressible test do not match KGO values'
+
