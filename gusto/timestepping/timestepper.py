@@ -346,22 +346,20 @@ class PrescribedTransport(Timestepper):
     """
     Implements a timeloop with a prescibed transporting velocity.
     """
-    def __init__(self, equation, scheme, io, transport_method,
-                 physics_parametrisations=None,
-                 prescribed_transporting_velocity=None):
+    def __init__(self, equation, scheme, io, prescribed_transporting_velocity,
+                 transport_method, physics_parametrisations=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
             scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
                 the prognostic equation.
+            io (:class:`IO`): the model's object for controlling input/output.
+            prescribed_transporting_velocity: (bool): Whether a time-varying
+                transporting velocity will be defined. If True, this will
+                require the transporting velocity to be setup by calling either
+                the `setup_prescribed_expr` or `setup_prescribed_apply` methods.
             transport_method (:class:`TransportMethod`): describes the method
                 used for discretising the transport term.
-            io (:class:`IO`): the model's object for controlling input/output.
-            physics_schemes: (list, optional): a list of :class:`Physics` and
-                :class:`TimeDiscretisation` options describing physical
-                parametrisations and timestepping schemes to use for each.
-                Timestepping schemes for physics must be explicit. Defaults to
-                None.
             physics_parametrisations: (iter, optional): an iterable of
                 :class:`PhysicsParametrisation` objects that describe physical
                 parametrisations to be included to add to the equation. They can
@@ -378,12 +376,10 @@ class PrescribedTransport(Timestepper):
         super().__init__(equation, scheme, io, spatial_methods=transport_methods,
                          physics_parametrisations=physics_parametrisations)
 
-        if prescribed_transporting_velocity is not None:
-            self.velocity_projection = Projector(
-                prescribed_transporting_velocity(self.t),
-                self.fields('u'))
-        else:
-            self.velocity_projection = None
+        self.prescribed_transport_velocity = prescribed_transporting_velocity
+        self.is_velocity_setup = not self.prescribed_transport_velocity
+        self.velocity_projection = None
+        self.velocity_apply = None
 
     @property
     def transporting_velocity(self):
@@ -394,6 +390,43 @@ class PrescribedTransport(Timestepper):
         self.fields = StateFields(self.x, self.equation.prescribed_fields,
                                   *self.io.output.dumplist)
 
+    def setup_prescribed_expr(self, expr_func):
+        """
+        Sets up the prescribed transporting velocity, through a python function
+        which has time as an argument, and returns a `ufl.Expr`. This allows the
+        velocity to be updated with time.
+
+        Args:
+            expr_func (func): a python function with a single argument that
+                represents the model time, and returns a `ufl.Expr`.
+        """
+
+        if self.is_velocity_setup:
+            raise RuntimeError('Prescribed velocity already set up!')
+
+        self.velocity_projection = Projector(
+            expr_func(self.t), self.fields('u')
+        )
+
+        self.is_velocity_setup = True
+
+    def setup_prescribed_apply(self, apply_method):
+        """
+        Sets up the prescribed transporting velocity, through a python function
+        which has time as an argument. This function will perform the evaluation
+        of the transporting velocity.
+
+        Args:
+            expr_func (func): a python function with a single argument that
+                represents the model time, and performs the evaluation of the
+                transporting velocity.
+        """
+
+        if self.is_velocity_setup:
+            raise RuntimeError('Prescribed velocity already set up!')
+        self.velocity_apply = apply_method
+        self.is_velocity_setup = True
+
     def run(self, t, tmax, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax
@@ -402,14 +435,31 @@ class PrescribedTransport(Timestepper):
             tmax (float): the end time of the run
             pick_up: (bool): specify whether to pick_up from a previous run
         """
+
+        # Throw an error if no transporting velocity has been set up
+        if self.prescribed_transport_velocity and not self.is_velocity_setup:
+            raise RuntimeError(
+                'A time-varying prescribed velocity is required. This must be '
+                + 'set up through calling either the setup_prescribed_expr or '
+                + 'setup_prescribed_apply routines.')
+
         # It's best to have evaluated the velocity before we start
         if self.velocity_projection is not None:
             self.velocity_projection.project()
+        if self.velocity_apply is not None:
+            self.velocity_apply(self.t)
 
         super().run(t, tmax, pick_up=pick_up)
 
     def timestep(self):
+        """
+        Implements the time step, which possibly involves evaluation of the
+        prescribed transporting velocity.
+        """
+
         if self.velocity_projection is not None:
             self.velocity_projection.project()
+        if self.velocity_apply is not None:
+            self.velocity_apply(self.t)
 
         super().timestep()
