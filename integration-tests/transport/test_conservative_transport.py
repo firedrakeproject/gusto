@@ -5,15 +5,15 @@ same and different spaces. This checks that there is a conservation of
 
 from gusto import *
 from firedrake import PeriodicIntervalMesh, ExtrudedMesh, exp, cos, sin, SpatialCoordinate, \
-    assemble, dx, FunctionSpace, pi, min_value, as_vector, BrokenElement
+    assemble, dx, FunctionSpace, pi, min_value, as_vector, BrokenElement, errornorm
 import pytest
 
 
 def setup_conservative_transport(dirname, space, property):
 
     # Domain
-    Lx = 200.
-    Hz = 200.
+    Lx = 2000.
+    Hz = 2000.
 
     # Time parameters
     dt = 2.
@@ -104,7 +104,6 @@ def setup_conservative_transport(dirname, space, property):
         g2 = f0*exp(-l2_dist(xc2, zc2)/(lc**2))
 
         m_X_0 = m0 + g1 + g2
-
     else:
         f0 = 0.5
         rho_b = 0.5
@@ -119,7 +118,7 @@ def setup_conservative_transport(dirname, space, property):
 
     if space == 'diff_order_0':
         VCG1 = FunctionSpace(mesh, 'CG', 1)
-        VDG1 = domain.spaces('DG1_equispaced')
+        VDG1 = FunctionSpace(mesh, 'DG', 1)#domain.spaces('DG1_equispaced')
 
         suboptions = {'rho_d': RecoveryOptions(embedding_space=VDG1,
                                                recovered_space=VCG1,
@@ -149,17 +148,24 @@ def setup_conservative_transport(dirname, space, property):
     transport_methods = [DGUpwind(eqn, "m_X"), DGUpwind(eqn, "rho_d")]
 
     # Timestepper
-    stepper = SplitPrescribedTransport(eqn, transport_scheme, io, transport_methods,
-                                       prescribed_transporting_velocity=u_t)
+    time_varying_velocity=True
+    stepper = PrescribedTransport(eqn, transport_scheme, io, time_varying_velocity, transport_methods)
+                                  
+    stepper.setup_prescribed_expr(u_t)
 
     # Initial Conditions
     stepper.fields("m_X").interpolate(m_X_0)
     stepper.fields("rho_d").interpolate(rho_d_0)
     u0 = stepper.fields("u")
     u0.project(u_t(0))
+    
+    m_X_init = Function(V_m_X)
+    rho_d_init = Function(V_rho)
+    
+    m_X_init.assign(stepper.fields("m_X"))
+    rho_d_init.assign(stepper.fields("rho_d"))
 
-    return stepper, m_X_0, rho_d_0
-
+    return stepper, m_X_init, rho_d_init
 
 @pytest.mark.parametrize("space", ["same", "diff_order_0", "diff_order_1"])
 @pytest.mark.parametrize("property", ["consistency", "conservation"])
@@ -177,9 +183,9 @@ def test_conservative_transport(tmpdir, space, property):
 
     # Perform the check
     if property == 'consistency':
-        m_diff = assemble((m_X-m_X_0)*dx)
-        assert abs(m_diff) < 1e-14, "conservative transport is not consistent"
+        assert errornorm(m_X_0, m_X) < 1e-14, "conservative transport is not consistent"
     else:
         rho_X_init = assemble(m_X_0*rho_d_0*dx)
         rho_X_final = assemble(m_X*rho_d*dx)
-        assert abs((rho_X_init - rho_X_final)/rho_X_init) < 1e-8, "conservative transport is not conservative"
+        assert abs((rho_X_init - rho_X_final)/rho_X_init) < 1e-14, "conservative transport is not conservative"
+

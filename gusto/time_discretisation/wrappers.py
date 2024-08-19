@@ -499,6 +499,7 @@ class MixedFSWrapper(object):
 
         rho_subwrapper = self.subwrappers[subwrapper.rho_name]
 
+        # This assumes that the rho subwrapper is using recovery ... .
         subwrapper.rho_in_orig.assign(rho_subwrapper.x_in_tmp)
         subwrapper.rho_in_embedded.assign(rho_subwrapper.x_in)
 
