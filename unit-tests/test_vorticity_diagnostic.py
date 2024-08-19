@@ -1,6 +1,6 @@
 
 from gusto.diagnostics import RelativeVorticity, ZonalComponent, MeridionalComponent, RadialComponent
-from gusto.fields import StateFields, PrescribedFields, TimeLevelFields
+from gusto.core.fields import StateFields, PrescribedFields, TimeLevelFields
 from gusto import (Domain, CompressibleParameters, CompressibleEulerEquations, 
                    GeneralCubedSphereMesh, lonlatr_from_xyz, xyz_vector_from_lonlatr)
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, Function, sin, cos, File,
@@ -17,7 +17,7 @@ def test_relative_vorticity(topology):
         sphere_test()
     
 
-def sphere_test():
+def sphere_test(): # try at a higher resolution 
     R = 1 # radius of ball
     H = 5 # height of model top
     nlayers=5
@@ -76,7 +76,6 @@ def sphere_test():
 
 
   #  zonal_diff = Function(HDiv, name='zonal_diff').project(state.u - state.u_zonal) 
-
     diff = Function(HCurl, name='difference').project(vorticity_analytic - state.RelativeVorticity)
 
 
