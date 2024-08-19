@@ -122,7 +122,7 @@ class CoupledTransportEquation(PrognosticEquationSet):
 
         # Add mass forms for the tracers, which will use
         # mass*density for any tracer_conservative terms
-        self.residual = self.generate_tracer_mass_terms(active_tracers)
+        self.residual = self.generate_mass_terms()
 
         # Add transport of tracers
         self.residual += self.generate_tracer_transport_terms(active_tracers)

@@ -5,7 +5,9 @@ from firedrake import (dot, dx, Function, ln, TestFunction, TrialFunction,
                        LinearVariationalSolver, FacetNormal, ds_b, dS_v, div,
                        avg, jump, SpatialCoordinate)
 
-from gusto.diagnostics.diagnostics import DiagnosticField, Energy
+from gusto.diagnostics.diagnostics import (
+    DiagnosticField, Energy, IterativeDiagnosticField
+)
 from gusto.equations import CompressibleEulerEquations
 import gusto.equations.thermodynamics as tde
 from gusto.recovery import Recoverer, BoundaryMethod
@@ -13,9 +15,10 @@ from gusto.equations import TracerVariableType, Phases
 
 __all__ = ["RichardsonNumber", "Entropy", "PhysicalEntropy", "DynamicEntropy",
            "CompressibleKineticEnergy", "Exner", "Theta_e", "InternalEnergy",
-           "PotentialEnergy", "ThermodynamicKineticEnergy", "Dewpoint",
+           "PotentialEnergy", "ThermodynamicKineticEnergy",
            "Temperature", "Theta_d", "RelativeHumidity", "Pressure", "Exner_Vt",
-           "HydrostaticImbalance", "Precipitation", "BruntVaisalaFrequencySquared"]
+           "HydrostaticImbalance", "Precipitation", "BruntVaisalaFrequencySquared",
+           "WetBulbTemperature", "DewpointTemperature"]
 
 
 class RichardsonNumber(DiagnosticField):
@@ -416,21 +419,168 @@ class ThermodynamicKineticEnergy(ThermodynamicDiagnostic):
         super().setup(domain, state_fields, space=domain.spaces("DG"))
 
 
-class Dewpoint(ThermodynamicDiagnostic):
-    """The dewpoint temperature diagnostic field."""
+class DewpointTemperature(IterativeDiagnosticField):
+    """
+    The dewpoint temperature diagnostic field. The temperature to which air
+    must be cooled in order to become saturated.
+
+    Note: this will not give sensible answers in the absence of water vapour.
+    """
     name = "Dewpoint"
 
-    def setup(self, domain, state_fields):
+    def __init__(self, equations, space=None, method='interpolate',
+                 num_iterations=3, gamma=1.0):
         """
-        Sets up the :class:`Function` for the diagnostic field.
+        Args:
+            equations (:class:`PrognosticEquationSet`): the equation set being
+                solved by the model.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+            num_iterations (integer, optional): number of times to iteratively
+                evaluate the expression. Defaults to 3.
+            gamma (float, optional): weight given to previous guess, which is
+                used to avoid numerical instabilities. Defaults to 1.0.
+        """
+
+        self.parameters = equations.parameters
+        super().__init__(space=space, method=method,
+                         num_iterations=num_iterations, gamma=gamma)
+
+    def implicit_expr(self, domain, state_fields):
+        """
+        The implicit UFL expression for the diagnostic, which should depend
+        on self.field
 
         Args:
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        self._setup_thermodynamics(domain, state_fields)
-        self.expr = tde.T_dew(self.parameters, self.p, self.r_v)
-        super().setup(domain, state_fields, space=self.Vtheta)
+
+        theta = state_fields('theta')
+        rho = state_fields('rho')
+        if 'water_vapour' in state_fields._field_names:
+            r_v = state_fields('water_vapour')
+        else:
+            raise RuntimeError('Dewpoint temperature diagnostic should only'
+                               + 'be used with water vapour')
+
+        exner = tde.exner_pressure(self.parameters, rho, theta)
+        pressure = tde.p(self.parameters, exner)
+        temperature = tde.T(self.parameters, theta, exner, r_v=r_v)
+        r_sat = tde.r_sat(self.parameters, self.field, pressure)
+
+        return self.field - temperature*(r_sat - r_v)
+
+    def set_first_guess(self, domain, state_fields):
+        """
+        The first guess of the diagnostic, set to be the dry temperature.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        theta = state_fields('theta')
+        rho = state_fields('rho')
+        if 'water_vapour' in state_fields._field_names:
+            r_v = state_fields('water_vapour')
+        else:
+            raise RuntimeError('Dewpoint temperature diagnostic should only'
+                               + 'be used with water vapour')
+
+        exner = tde.exner_pressure(self.parameters, rho, theta)
+        temperature = tde.T(self.parameters, theta, exner, r_v=r_v)
+
+        return temperature
+
+
+class WetBulbTemperature(IterativeDiagnosticField):
+    """
+    The wet-bulb temperature diagnostic field. The temperature of air cooled to
+    saturation by the evaporation of water.
+    """
+    name = "WetBulb"
+
+    def __init__(self, equations, space=None, method='interpolate',
+                 num_iterations=3, gamma=0.5):
+        """
+        Args:
+            equations (:class:`PrognosticEquationSet`): the equation set being
+                solved by the model.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+            num_iterations (integer, optional): number of times to iteratively
+                evaluate the expression. Defaults to 3.
+            gamma (float, optional): weight given to previous guess, which is
+                used to avoid numerical instabilities. Defaults to 0.8.
+        """
+
+        self.parameters = equations.parameters
+        super().__init__(space=space, method=method,
+                         num_iterations=num_iterations, gamma=gamma)
+
+    def implicit_expr(self, domain, state_fields):
+        """
+        The implicit UFL expression for the diagnostic, which should depend
+        on self.field
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+
+        theta = state_fields('theta')
+        rho = state_fields('rho')
+        if 'water_vapour' in state_fields._field_names:
+            r_v = state_fields('water_vapour')
+        else:
+            r_v = 0.0*theta  # zero expression
+
+        exner = tde.exner_pressure(self.parameters, rho, theta)
+        pressure = tde.p(self.parameters, exner)
+        temperature = tde.T(self.parameters, theta, exner, r_v=r_v)
+        r_sat = tde.r_sat(self.parameters, self.field, pressure)
+
+        # In the comments, preserve a simpler expression:
+        # L_v0 = self.parameters.L_v0
+        # R_v = self.parameters.R_v
+        # c_v = self.parameters.cv
+        # return L_v0 / R_v + (R_v*temperature - L_v0)/R_v * exp(R_v/c_v*(r_sat - r_v))
+
+        # Reduce verbosity by introducing intermediate variables
+        b = -self.parameters.L_v0 - (self.parameters.c_pl - self.parameters.c_pv)*self.parameters.T_0
+        a = self.parameters.R_v + self.parameters.c_pl - self.parameters.c_pv
+        A = self.parameters.c_vv
+        B = self.parameters.cv
+
+        return - b / a + (a*temperature + b) / a * ((A*r_sat + B) / (A*r_v + B))**(a/A)
+
+    def set_first_guess(self, domain, state_fields):
+        """
+        The first guess of the diagnostic, set to be the dry temperature.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        theta = state_fields('theta')
+        rho = state_fields('rho')
+        if 'water_vapour' in state_fields._field_names:
+            r_v = state_fields('water_vapour')
+        else:
+            r_v = 0.0*theta  # zero expression
+
+        exner = tde.exner_pressure(self.parameters, rho, theta)
+        temperature = tde.T(self.parameters, theta, exner, r_v=r_v)
+
+        return temperature
 
 
 class Temperature(ThermodynamicDiagnostic):

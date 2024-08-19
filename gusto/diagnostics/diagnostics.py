@@ -21,7 +21,7 @@ __all__ = ["Diagnostics", "DiagnosticField", "CourantNumber", "Gradient",
            "XComponent", "YComponent", "ZComponent", "MeridionalComponent",
            "ZonalComponent", "RadialComponent", "Energy", "KineticEnergy",
            "Sum", "Difference", "SteadyStateError", "Perturbation",
-           "Divergence", "TracerDensity"]
+           "Divergence", "TracerDensity", "IterativeDiagnosticField"]
 
 
 class Diagnostics(object):
@@ -220,6 +220,123 @@ class DiagnosticField(object, metaclass=ABCMeta):
         return self.field
 
 
+class IterativeDiagnosticField(DiagnosticField):
+    """
+    Iterative evaluation of a diagnostic expression for diagnostics with
+    no explicit definition but an implicit definition. This uses a form of
+    damped Picard iteration.
+    """
+    def __init__(self, space=None, method='interpolate', required_fields=(),
+                 num_iterations=3, gamma=0.8):
+        """
+        Args:
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+            required_fields (tuple, optional): tuple of names of the fields that
+                are required for the computation of this diagnostic field.
+                Defaults to ().
+            num_iterations (integer, optional): number of times to iteratively
+                evaluate the expression. Defaults to 3.
+            gamma (float, optional): weight given to previous guess, which is
+                used to avoid numerical instabilities.
+        """
+
+        super().__init__(space=space, method=method, required_fields=required_fields)
+        self.num_iterations = num_iterations
+        self.gamma = gamma
+
+    def setup(self, domain, state_fields, space=None):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+            space (:class:`FunctionSpace`, optional): the function space for the
+                diagnostic field to be computed in. Defaults to None, in which
+                case the space will be DG0.
+        """
+
+        # NB: child classes of this need to set up:
+        # (a) self.implicit_expr: the implicit UFL expression for the diagnostic
+        #                         which must depend on self.field
+        # (b) self.first_guess: the UFL expression for the first guess
+
+        if not self._initialised:
+            if self.space is None:
+                if space is None:
+                    if not hasattr(domain.spaces, "DG0"):
+                        space = domain.spaces.create_space("DG0", "DG", 0)
+                    else:
+                        space = domain.spaces("DG0")
+                self.space = space
+            else:
+                space = self.space
+
+            # Add space to domain
+            assert space.name is not None, \
+                f'Diagnostics {self.name} is using a function space which does not have a name'
+            if not hasattr(domain.spaces, space.name):
+                domain.spaces.add_space(space.name, space)
+
+            self.field = state_fields(self.name, space=space, dump=self.to_dump, pick_up=False)
+            self.expr = (1.0 - self.gamma)*self.field + self.gamma*self.implicit_expr(domain, state_fields)
+            self.first_guess = self.set_first_guess(domain, state_fields)
+
+            if self.method != 'solve':
+                assert self.expr is not None, \
+                    f"The expression for diagnostic {self.name} has not been specified"
+
+            # Solve method must be declared in diagnostic's own setup routine
+            if self.method == 'interpolate':
+                self.evaluator = Interpolator(self.expr, self.field)
+            elif self.method == 'project':
+                self.evaluator = Projector(self.expr, self.field)
+            elif self.method == 'assign':
+                self.evaluator = Assigner(self.field, self.expr)
+
+            self._initialised = True
+
+    @property
+    @abstractmethod
+    def implicit_expr(self, domain, state_fields):
+        """
+        The implicit UFL expression for the diagnostic, which should depend
+        on self.field
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def set_first_guess(self, domain, state_fields):
+        """
+        The first guess of the diagnostic
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        pass
+
+    def compute(self):
+        """Compute the diagnostic field from the current state."""
+
+        # Set first guess
+        self.field.interpolate(self.first_guess)
+
+        # Iterate
+        for _ in range(self.num_iterations):
+            super().compute()
+
+
 class CourantNumber(DiagnosticField):
     """Dimensionless Courant number diagnostic field."""
     name = "CourantNumber"
@@ -322,7 +439,12 @@ class CourantNumber(DiagnosticField):
 
         # Set up form for DG flux
         n = FacetNormal(domain.mesh)
-        un = 0.5*(inner(-u_expr, n) + abs(inner(-u_expr, n)))
+
+        # Check if the velocity is a vector or scalar field
+        if u.ufl_shape == ():
+            un = 0.5*(-u_expr * n[0] + abs(-u_expr * n[0]))
+        else:
+            un = 0.5*(inner(-u_expr, n) + abs(inner(-u_expr, n)))
         self.cell_flux_form = 2*avg(un*test)*dS_calc + un*test*ds_calc
 
         # Final Courant number expression

@@ -64,8 +64,11 @@ def run_forced_advection(tmpdir):
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Time Stepper
-    stepper = PrescribedTransport(meqn, RK4(domain), io, transport_method,
-                                  physics_parametrisations=physics_parametrisations)
+    time_varying_velocity = False
+    stepper = PrescribedTransport(
+        meqn, RK4(domain), io, time_varying_velocity, transport_method,
+        physics_parametrisations=physics_parametrisations
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
