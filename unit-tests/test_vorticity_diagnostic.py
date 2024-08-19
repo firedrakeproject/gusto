@@ -20,7 +20,7 @@ def test_relative_vorticity(topology):
 def sphere_test(): # try at a higher resolution 
     R = 1 # radius of ball
     H = 5 # height of model top
-    nlayers=5
+    nlayers=8
     c=16
     # Building model and state object
     m = GeneralCubedSphereMesh(R, num_cells_per_edge_of_panel=c, degree=2)
