@@ -224,7 +224,7 @@ class RecoveryWrapper(Wrapper):
         # Internal variables to be used
         # -------------------------------------------------------------------- #
 
-        self.x_in_tmp = Function(self.original_space)
+        self.x_in_orig = Function(self.original_space)
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
 
@@ -243,12 +243,12 @@ class RecoveryWrapper(Wrapper):
             self.rho_out_orig = Function(self.options.orig_rho_space)
             self.rho_in_embedded = Function(self.function_space)
             self.rho_out_embedded = Function(self.function_space)
-            self.x_recoverer = ConservativeRecoverer(self.x_in_tmp, self.x_in,
+            self.x_recoverer = ConservativeRecoverer(self.x_in_orig, self.x_in,
                                                      self.rho_in_orig,
                                                      self.rho_in_embedded,
                                                      self.options)
         else:
-            self.x_recoverer = ReversibleRecoverer(self.x_in_tmp, self.x_in, self.options)
+            self.x_recoverer = ReversibleRecoverer(self.x_in_orig, self.x_in, self.options)
 
         # Operators for projecting back
         self.interp_back = (self.options.project_low_method == 'interpolate')
@@ -277,7 +277,7 @@ class RecoveryWrapper(Wrapper):
             x_in (:class:`Function`): the original input field.
         """
 
-        self.x_in_tmp.assign(x_in)
+        self.x_in_orig.assign(x_in)
         self.x_recoverer.project()
 
     def post_apply(self, x_out):
@@ -292,7 +292,7 @@ class RecoveryWrapper(Wrapper):
         if self.is_conservative:
             # x_out_projector solves for increment
             self.x_out_projector.project()
-            x_out.assign(self.x_in_tmp + self.increment_orig)
+            x_out.assign(self.x_in_orig + self.increment_orig)
         elif self.interp_back:
             self.x_out_projector.interpolate()
             x_out.assign(self.x_projected)
@@ -499,8 +499,7 @@ class MixedFSWrapper(object):
 
         rho_subwrapper = self.subwrappers[subwrapper.rho_name]
 
-        # This assumes that the rho subwrapper is using recovery ... .
-        subwrapper.rho_in_orig.assign(rho_subwrapper.x_in_tmp)
+        subwrapper.rho_in_orig.assign(rho_subwrapper.x_in_orig)
         subwrapper.rho_in_embedded.assign(rho_subwrapper.x_in)
 
     def post_update_rho(self, subwrapper):

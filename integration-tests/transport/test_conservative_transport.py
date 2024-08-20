@@ -118,7 +118,7 @@ def setup_conservative_transport(dirname, space, property):
 
     if space == 'diff_order_0':
         VCG1 = FunctionSpace(mesh, 'CG', 1)
-        VDG1 = FunctionSpace(mesh, 'DG', 1)#domain.spaces('DG1_equispaced')
+        VDG1 = domain.spaces('DG1_equispaced')
 
         suboptions = {'rho_d': RecoveryOptions(embedding_space=VDG1,
                                                recovered_space=VCG1,
@@ -133,12 +133,9 @@ def setup_conservative_transport(dirname, space, property):
     elif space == 'diff_order_1':
         Vt_brok = FunctionSpace(mesh, BrokenElement(V_m_X.ufl_element()))
 
-        suboptions = {'rho_d': RecoveryOptions(embedding_space=Vt_brok,
-                                               recovered_space=V_m_X,
-                                               project_low_method='recover'),
+        suboptions = {'rho_d': EmbeddedDGOptions(embedding_space=Vt_brok),
                       'm_X': ConservativeEmbeddedDGOptions(rho_name='rho_d',
                                                            orig_rho_space=V_rho)}
-
     else:
         suboptions = {}
 
@@ -148,9 +145,9 @@ def setup_conservative_transport(dirname, space, property):
     transport_methods = [DGUpwind(eqn, "m_X"), DGUpwind(eqn, "rho_d")]
 
     # Timestepper
-    time_varying_velocity=True
+    time_varying_velocity = True
     stepper = PrescribedTransport(eqn, transport_scheme, io, time_varying_velocity, transport_methods)
-                                  
+
     stepper.setup_prescribed_expr(u_t)
 
     # Initial Conditions
@@ -158,14 +155,15 @@ def setup_conservative_transport(dirname, space, property):
     stepper.fields("rho_d").interpolate(rho_d_0)
     u0 = stepper.fields("u")
     u0.project(u_t(0))
-    
+
     m_X_init = Function(V_m_X)
     rho_d_init = Function(V_rho)
-    
+
     m_X_init.assign(stepper.fields("m_X"))
     rho_d_init.assign(stepper.fields("rho_d"))
 
     return stepper, m_X_init, rho_d_init
+
 
 @pytest.mark.parametrize("space", ["same", "diff_order_0", "diff_order_1"])
 @pytest.mark.parametrize("property", ["consistency", "conservation"])
@@ -188,4 +186,3 @@ def test_conservative_transport(tmpdir, space, property):
         rho_X_init = assemble(m_X_0*rho_d_0*dx)
         rho_X_final = assemble(m_X*rho_d*dx)
         assert abs((rho_X_init - rho_X_final)/rho_X_init) < 1e-14, "conservative transport is not conservative"
-
