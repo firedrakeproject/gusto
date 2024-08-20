@@ -129,7 +129,7 @@ class EmbeddedDGWrapper(Wrapper):
             self.x_out_projector = Recoverer(self.x_out, self.x_projected)
         elif self.options.project_back_method == 'conservative_project':
             self.is_conservative = True
-            self.rho_name=self.options.rho_name
+            self.rho_name = self.options.rho_name
             self.increment_orig = Function(original_space)
             self.increment = Function(self.function_space)
             self.rho_in_orig = Function(self.options.orig_rho_space)
@@ -141,7 +141,7 @@ class EmbeddedDGWrapper(Wrapper):
                 self.x_in_orig, self.x_in)
             self.x_out_projector = ConservativeProjector(
                 self.rho_out_embedded, self.rho_out_orig,
-                self.increment, self.x_projected, subtract_mean=True)
+                self.increment, self.increment_orig, subtract_mean=True)
         else:
             raise NotImplementedError(
                 'EmbeddedDG Wrapper: project_back_method'
@@ -224,7 +224,7 @@ class RecoveryWrapper(Wrapper):
         # Internal variables to be used
         # -------------------------------------------------------------------- #
 
-        self.x_in_tmp = Function(self.original_space)
+        self.x_in_orig = Function(self.original_space)
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
 
@@ -236,19 +236,19 @@ class RecoveryWrapper(Wrapper):
         # Operator to recover to higher discontinuous space
         if self.options.project_low_method == 'conservative_project':
             self.is_conservative = True
-            self.rho_name=self.options.rho_name
+            self.rho_name = self.options.rho_name
             self.increment_orig = Function(original_space)
             self.increment = Function(self.function_space)
             self.rho_in_orig = Function(self.options.orig_rho_space)
             self.rho_out_orig = Function(self.options.orig_rho_space)
             self.rho_in_embedded = Function(self.function_space)
             self.rho_out_embedded = Function(self.function_space)
-            self.x_recoverer = ConservativeRecoverer(self.x_in_tmp, self.x_in,
+            self.x_recoverer = ConservativeRecoverer(self.x_in_orig, self.x_in,
                                                      self.rho_in_orig,
                                                      self.rho_in_embedded,
                                                      self.options)
         else:
-            self.x_recoverer = ReversibleRecoverer(self.x_in_tmp, self.x_in, self.options)
+            self.x_recoverer = ReversibleRecoverer(self.x_in_orig, self.x_in, self.options)
 
         # Operators for projecting back
         self.interp_back = (self.options.project_low_method == 'interpolate')
@@ -262,7 +262,7 @@ class RecoveryWrapper(Wrapper):
         elif self.options.project_low_method == 'conservative_project':
             self.x_out_projector = ConservativeProjector(
                 self.rho_out_embedded, self.rho_out_orig,
-                self.increment, self.x_projected, subtract_mean=True)
+                self.increment, self.increment_orig, subtract_mean=True)
         else:
             raise NotImplementedError(
                 'Recovery Wrapper: project_back_method'
@@ -277,7 +277,7 @@ class RecoveryWrapper(Wrapper):
             x_in (:class:`Function`): the original input field.
         """
 
-        self.x_in_tmp.assign(x_in)
+        self.x_in_orig.assign(x_in)
         self.x_recoverer.project()
 
     def post_apply(self, x_out):
@@ -292,7 +292,7 @@ class RecoveryWrapper(Wrapper):
         if self.is_conservative:
             # x_out_projector solves for increment
             self.x_out_projector.project()
-            x_out.assign(self.x_in_tmp + self.increment_orig)
+            x_out.assign(self.x_in_orig + self.increment_orig)
         elif self.interp_back:
             self.x_out_projector.interpolate()
             x_out.assign(self.x_projected)
@@ -462,8 +462,6 @@ class MixedFSWrapper(object):
 
             if field_name in self.subwrappers:
                 subwrapper = self.subwrappers[field_name]
-                print(field_name)
-                print(subwrapper.is_conservative)
                 if subwrapper.is_conservative:
                     self.pre_update_rho(subwrapper)
                 subwrapper.pre_apply(field)
@@ -501,7 +499,7 @@ class MixedFSWrapper(object):
 
         rho_subwrapper = self.subwrappers[subwrapper.rho_name]
 
-        subwrapper.rho_in_orig.assign(rho_subwrapper.x_in_tmp)
+        subwrapper.rho_in_orig.assign(rho_subwrapper.x_in_orig)
         subwrapper.rho_in_embedded.assign(rho_subwrapper.x_in)
 
     def post_update_rho(self, subwrapper):
