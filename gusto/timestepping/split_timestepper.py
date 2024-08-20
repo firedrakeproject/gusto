@@ -20,7 +20,7 @@ class SplitTimestepper(BaseTimestepper):
     """
 
     def __init__(self, equation, term_splitting, dynamics_schemes, io,
-                 spatial_methods=None, physics_schemes=None):
+                 weights=None, spatial_methods=None, physics_schemes=None):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
@@ -31,6 +31,8 @@ class SplitTimestepper(BaseTimestepper):
             provided for each non-physics label that is given in the 
             term_splitting list.
             io (:class:`IO`): the model's object for controlling input/output.
+            weights (array, optional): An array of weights for if we want to 
+            perform splitting of a term, so that it is ... 
             spatial_methods (iter,optional): a list of objects describing the
                 methods to use for discretising transport or diffusion terms
                 for each transported/diffused variable. Defaults to None,
@@ -66,6 +68,7 @@ class SplitTimestepper(BaseTimestepper):
 
         self.term_splitting = term_splitting
         self.dynamics_schemes = dynamics_schemes
+        self.weights = weights
         
         # Check that each dynamics label in term_splitting has a corresponding
         # dynamics scheme
@@ -83,7 +86,7 @@ class SplitTimestepper(BaseTimestepper):
 
         # Check that each dynamics term is specified by a label
         # in the term_splitting list, but also that there are not
-        # multiple labels, i.e. there is a single speficied time discretisation.
+        # multiple labels, i.e. there is a single specified time discretisation.
         print(len(self.equation.residual))
         terms = self.equation.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)), map_if_true=drop)
         print(len(terms))
@@ -97,6 +100,7 @@ class SplitTimestepper(BaseTimestepper):
                     print(label)
                     count += 1
             if count != 1:
+                print(count)
                 raise ValueError('The SplitTimestepper term_splitting list does not correctly cover the dynamics terms in the equations.')
 
     @property
@@ -127,17 +131,30 @@ class SplitTimestepper(BaseTimestepper):
 
     def timestep(self):
         # Perform timestepping in the specified order
-        for term in self.term_splitting:
-            if term == 'physics':
-                with timed_stage("Physics"):
-                    for _, scheme in self.physics_schemes:
-                        scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
-            else:
-                # Extract associated timestepping method
-                scheme = self.dynamics_schemes[term]
-                scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+        
+        # TO-DO, sort out weights ... .
+        if self.weights is not None:
+            for term in self.term_splitting:
+                if term == 'physics':
+                    with timed_stage("Physics"):
+                        for _, scheme in self.physics_schemes:
+                            scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+                else:
+                    # Extract associated timestepping method
+                    scheme = self.dynamics_schemes[term]
+                    scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+        else:
+            for term in self.term_splitting:
+                if term == 'physics':
+                    with timed_stage("Physics"):
+                        for _, scheme in self.physics_schemes:
+                            scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+                else:
+                    # Extract associated timestepping method
+                    scheme = self.dynamics_schemes[term]
+                    scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
 
-        super().timestep()
+        #super().timestep()
 
 
 class SplitPhysicsTimestepper(Timestepper):
