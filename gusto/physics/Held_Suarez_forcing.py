@@ -64,9 +64,9 @@ class Relaxation(PhysicsParametrisation):
         Theta_eq = conditional(T0stra/self.exner >= theta_condition, T0stra/self.exner, theta_condition)
 
         # timescale of temperature forcing
-        tao_cond = (self.sigma - sigmab) / (1 - sigmab)
+        tao_cond = (self.sigma**-self.kappa - sigmab) / (1 - sigmab)
         newton_freq = 1 / taod + (1/taou - 1/taod) * conditional(0 >= tao_cond, 0, tao_cond) * cos(lat)**4
-        forcing_expr = -newton_freq * (self.theta - Theta_eq) 
+        forcing_expr = newton_freq * (self.theta - Theta_eq) 
 
         # Create source for forcing
         self.source_relaxation = Function(Vt)
@@ -76,7 +76,7 @@ class Relaxation(PhysicsParametrisation):
         test = equation.tests[theta_idx]
         dx_reduced = dx(degree=4)
         forcing_form = test * self.source_relaxation * dx_reduced
-        equation.residual -= self.label(subject(prognostic(forcing_form, 'theta'), X), self.evaluate)
+        equation.residual += self.label(subject(prognostic(forcing_form, 'theta'), X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
