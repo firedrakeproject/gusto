@@ -1,6 +1,6 @@
 import numpy as np
 from firedrake import (Interpolator, Function, dx, pi, SpatialCoordinate,
-                       split, conditional, ge, sin, dot, ln, cos, inner)
+                       split, conditional, ge, sin, dot, ln, cos, inner, Projector)
 from firedrake.fml import subject
 from gusto.core.coord_transforms import lonlatr_from_xyz
 from gusto.recovery import Recoverer, BoundaryMethod
@@ -34,6 +34,7 @@ class Relaxation(PhysicsParametrisation):
 
         self.X = Function(equation.X.function_space())
         X = self.X
+        self.domain = equation.domain
         theta_idx = equation.field_names.index('theta')
         self.theta = X.subfunctions[theta_idx]
         Vt = equation.domain.spaces('theta')
@@ -148,7 +149,7 @@ class RayleighFriction(PhysicsParametrisation):
         forcing_expr = u_hori * wind_timescale
 
         self.source_friction = Function(Vu)
-        self.source_interpolator = Interpolator(forcing_expr, self.source_friction)
+        self.source_projector = Projector(forcing_expr, self.source_friction)
 
         tests = equation.tests
         test = tests[u_idx]
@@ -176,4 +177,4 @@ class RayleighFriction(PhysicsParametrisation):
             sigma_columnwise[col, :] = exner_columnwise[col, :] / exner_columnwise[col, 0]
         self.domain.coords.set_field_from_column_data(self.sigma, sigma_columnwise, index_data)
 
-        self.source_interpolator.interpolate()
+        self.source_projector.project()
