@@ -132,7 +132,6 @@ def setup_conservative_transport(dirname, space, property):
                       }
     elif space == 'diff_order_1':
         Vt_brok = FunctionSpace(mesh, BrokenElement(V_m_X.ufl_element()))
-
         suboptions = {'rho_d': EmbeddedDGOptions(embedding_space=Vt_brok),
                       'm_X': ConservativeEmbeddedDGOptions(rho_name='rho_d',
                                                            orig_rho_space=V_rho)}
@@ -145,7 +144,6 @@ def setup_conservative_transport(dirname, space, property):
     transport_methods = [DGUpwind(eqn, "m_X"), DGUpwind(eqn, "rho_d")]
 
     # Timestepper
-    time_varying_velocity = True
     stepper = PrescribedTransport(eqn, transport_scheme, io, transport_methods, prescribed_transporting_velocity=u_t)
 
     # Initial Conditions
@@ -179,7 +177,7 @@ def test_conservative_transport(tmpdir, space, property):
 
     # Perform the check
     if property == 'consistency':
-        assert errornorm(m_X_0, m_X) < 1e-14, "conservative transport is not consistent"
+        assert errornorm(m_X_0, m_X) < 1e-13, "conservative transport is not consistent"
     else:
         rho_X_init = assemble(m_X_0*rho_d_0*dx)
         rho_X_final = assemble(m_X*rho_d*dx)

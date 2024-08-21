@@ -130,8 +130,6 @@ class EmbeddedDGWrapper(Wrapper):
         elif self.options.project_back_method == 'conservative_project':
             self.is_conservative = True
             self.rho_name = self.options.rho_name
-            self.increment_orig = Function(original_space)
-            self.increment = Function(self.function_space)
             self.rho_in_orig = Function(self.options.orig_rho_space)
             self.rho_out_orig = Function(self.options.orig_rho_space)
             self.rho_in_embedded = Function(self.function_space)
@@ -141,7 +139,7 @@ class EmbeddedDGWrapper(Wrapper):
                 self.x_in_orig, self.x_in)
             self.x_out_projector = ConservativeProjector(
                 self.rho_out_embedded, self.rho_out_orig,
-                self.increment, self.increment_orig, subtract_mean=True)
+                self.x_out, self.x_projected, subtract_mean=True)
         else:
             raise NotImplementedError(
                 'EmbeddedDG Wrapper: project_back_method'
@@ -163,7 +161,7 @@ class EmbeddedDGWrapper(Wrapper):
         self.x_in_orig.assign(x_in)
 
         if self.is_conservative:
-            self.x_in = self.x_in_projector.project()
+            self.x_in_projector.project()
         else:
             try:
                 self.x_in.interpolate(x_in)
@@ -180,12 +178,7 @@ class EmbeddedDGWrapper(Wrapper):
         """
 
         self.x_out_projector.project()
-
-        if self.is_conservative:
-            # x_out_projector solved for increment
-            x_out.assign(self.x_in_orig + self.increment_orig)
-        else:
-            x_out.assign(self.x_projected)
+        x_out.assign(self.x_projected)
 
 
 class RecoveryWrapper(Wrapper):
@@ -237,8 +230,6 @@ class RecoveryWrapper(Wrapper):
         if self.options.project_low_method == 'conservative_project':
             self.is_conservative = True
             self.rho_name = self.options.rho_name
-            self.increment_orig = Function(original_space)
-            self.increment = Function(self.function_space)
             self.rho_in_orig = Function(self.options.orig_rho_space)
             self.rho_out_orig = Function(self.options.orig_rho_space)
             self.rho_in_embedded = Function(self.function_space)
@@ -262,7 +253,7 @@ class RecoveryWrapper(Wrapper):
         elif self.options.project_low_method == 'conservative_project':
             self.x_out_projector = ConservativeProjector(
                 self.rho_out_embedded, self.rho_out_orig,
-                self.increment, self.increment_orig, subtract_mean=True)
+                self.x_out, self.x_projected, subtract_mean=True)
         else:
             raise NotImplementedError(
                 'Recovery Wrapper: project_back_method'
@@ -289,16 +280,11 @@ class RecoveryWrapper(Wrapper):
             x_out (:class:`Function`): the output field in the original space.
         """
 
-        if self.is_conservative:
-            # x_out_projector solves for increment
-            self.x_out_projector.project()
-            x_out.assign(self.x_in_orig + self.increment_orig)
-        elif self.interp_back:
+        if self.interp_back:
             self.x_out_projector.interpolate()
-            x_out.assign(self.x_projected)
         else:
             self.x_out_projector.project()
-            x_out.assign(self.x_projected)
+        x_out.assign(self.x_projected)
 
 
 def is_cg(V):
