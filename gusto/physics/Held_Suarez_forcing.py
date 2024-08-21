@@ -60,7 +60,7 @@ class Relaxation(PhysicsParametrisation):
         taod = 40 * d
         taou = 4 * d
 
-        theta_condition = (T0surf - T0horiz * sin(lat)**2 - (T0vert * ln(self.exner) * cos(lat)**2 ) / self.exner)
+        theta_condition = (T0surf - T0horiz * sin(lat)**2 - (T0vert * ln(self.exner) * cos(lat)**2)/self.kappa) 
         Theta_eq = conditional(T0stra/self.exner >= theta_condition, T0stra/self.exner, theta_condition)
 
         # timescale of temperature forcing
