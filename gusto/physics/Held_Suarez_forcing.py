@@ -64,7 +64,7 @@ class Relaxation(PhysicsParametrisation):
         Theta_eq = conditional(T0stra/self.exner >= theta_condition, T0stra/self.exner, theta_condition)
 
         # timescale of temperature forcing
-        tao_cond = (self.sigma**-self.kappa - sigmab) / (1 - sigmab)
+        tao_cond = (self.sigma**(1/self.kappa) - sigmab) / (1 - sigmab)
         newton_freq = 1 / taod + (1/taou - 1/taod) * conditional(0 >= tao_cond, 0, tao_cond) * cos(lat)**4
         forcing_expr = newton_freq * (self.theta - Theta_eq) 
 
@@ -144,7 +144,7 @@ class RayleighFriction(PhysicsParametrisation):
         self.kappa = self.parameters.kappa
         taofric = 24 * 60 * 60
 
-        tao_cond = (self.sigma - sigmab) / (1 - sigmab)
+        tao_cond = (self.sigma**(1/self.kappa) - sigmab) / (1 - sigmab)
         wind_timescale = conditional(ge(0, tao_cond), 0, tao_cond) / taofric
         forcing_expr = u_hori * wind_timescale
 
