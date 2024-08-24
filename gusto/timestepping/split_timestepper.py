@@ -7,6 +7,7 @@ from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import time_derivative, physics_label
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper, Timestepper
+from numpy import ones
 
 __all__ = ["SplitTimestepper", "SplitPhysicsTimestepper", "SplitPrescribedTransport"]
 
@@ -68,7 +69,11 @@ class SplitTimestepper(BaseTimestepper):
 
         self.term_splitting = term_splitting
         self.dynamics_schemes = dynamics_schemes
-        self.weights = weights
+        
+        if weights is not None:
+            self.weights = weights
+        else:
+            self.weights = ones(len(term_splitting))
         
         # Check that each dynamics label in term_splitting has a corresponding
         # dynamics scheme
@@ -79,6 +84,15 @@ class SplitTimestepper(BaseTimestepper):
         # Multilevel schemes are currently not supported for the dynamics terms.
         for label, scheme in self.dynamics_schemes.items():
             assert scheme.nlevels == 1, "Multilevel schemes are not currently implemented in the split timestepper"
+            
+            
+        self.split_schemes = []        
+        for idx, term in enumerate(term_splitting):
+            if term == 'physics':
+                scheme = self.physics_schemes
+            else:
+                scheme = self.dynamics_schemes[term]
+            self.split_schemes.append(scheme)
 
         # As we handle physics in separate parametrisations, these are not
         # passed to the super __init__
@@ -90,18 +104,38 @@ class SplitTimestepper(BaseTimestepper):
         print(len(self.equation.residual))
         terms = self.equation.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)), map_if_true=drop)
         print(len(terms))
+        #if self.weights is not None:
+            # Check that the weights for labels pertaining to each
+            # term sum to 1.
+        #    print('we have some weights')
         for term in terms:
-            print(term)
-            #print(term.labels)
+            print('term')
             count = 0
-            for label in self.term_splitting:
+            for idx, label in enumerate(self.term_splitting):
+                print(idx)
                 if term.has_label(Label(label)):
                     print('label match')
                     print(label)
-                    count += 1
+                    count += self.weights[idx]
             if count != 1:
                 print(count)
                 raise ValueError('The SplitTimestepper term_splitting list does not correctly cover the dynamics terms in the equations.')
+        
+        #else:
+        #    for term in terms:
+        #        print(term)
+                #print(term.labels)
+        #        count = 0
+        #        for label in self.term_splitting:
+        #            if term.has_label(Label(label)):
+        #                print('label match')
+        #                print(label)
+        #                count += 1
+        #        if count != 1:
+        #            print(count)
+        #            raise ValueError('The SplitTimestepper term_splitting list does not correctly cover the dynamics terms in the equations.')
+            
+            
 
     @property
     def transporting_velocity(self):
@@ -119,15 +153,40 @@ class SplitTimestepper(BaseTimestepper):
         apply_bcs = True
         self.setup_equation(self.equation)
 
-        for label, scheme in self.dynamics_schemes.items():
-            scheme.setup(self.equation, apply_bcs, Label(label))
-            self.setup_transporting_velocity(scheme)
-            if self.io.output.log_courant and label == 'transport':
-                scheme.courant_max = self.io.courant_max
+        for idx, scheme in self.split_schemes:
+            label = self.term_splitting[idx]
+            if label == 'physics':
+                for parametrisation, scheme in self.physics_schemes:
+                    apply_bcs = True
+                    scheme.setup(self.equation, apply_bcs, parametrisation.label)
+                    scheme.dt = self.weights[idx]*scheme.dt
+            else:
+                scheme.setup(self.equation, apply_bcs, Label(label))
+                scheme.dt = self.weights[idx]*scheme.dt
+                
+                self.setup_transporting_velocity(scheme)
+                if self.io.output.log_courant and label == 'transport':
+                    scheme.courant_max = self.io.courant_max
 
-        for parametrisation, scheme in self.physics_schemes:
-            apply_bcs = True
-            scheme.setup(self.equation, apply_bcs, parametrisation.label)
+        #for label, scheme in self.dynamics_schemes.items():
+        #    scheme.setup(self.equation, apply_bcs, Label(label))
+            
+            
+        #    if self.weights is not None:
+        #        print('replacing dt by scaled version by weight', self.weights[0])
+        #        scheme.dt = self.weights[0]*scheme.dt
+            
+        #    self.setup_transporting_velocity(scheme)
+        #    if self.io.output.log_courant and label == 'transport':
+        #        scheme.courant_max = self.io.courant_max
+
+        #for parametrisation, scheme in self.physics_schemes:
+        #    apply_bcs = True
+        #    scheme.setup(self.equation, apply_bcs, parametrisation.label)
+            
+        #    if self.weights is not None:
+        #        print('replacing dt by scaled version by weight of ', self.weights[0])
+        #        scheme.dt = self.weights[0]*scheme.dt
 
     def timestep(self):
         # Perform timestepping in the specified order

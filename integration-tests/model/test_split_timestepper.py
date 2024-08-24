@@ -159,6 +159,7 @@ def run_split_timestepper_adv_diff_physics(tmpdir, timestepper):
                             'diffusion': SSPRK3(domain)}
         term_splitting = ['physics', 'transport', 'diffusion', 'transport']
         weights = [1,0.5,1,0.5]
+        #weights = [1, 1./3., 1, 2./3.]
         stepper = SplitTimestepper(equation, term_splitting, dynamics_schemes, io, weights=weights, spatial_methods=spatial_methods, physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #
