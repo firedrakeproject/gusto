@@ -7,7 +7,9 @@ from firedrake import (Function, NonlinearVariationalProblem,
 from firedrake.fml import replace_subject, all_terms, drop
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.core.labels import time_derivative
-from gusto.time_discretisation.time_discretisation import TimeDiscretisation
+from gusto.time_discretisation.time_discretisation import (
+    TimeDiscretisation, wrapper_apply
+)
 
 
 __all__ = ["BDF2", "Leapfrog", "AdamsMoulton", "AdamsBashforth"]

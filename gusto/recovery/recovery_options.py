@@ -16,15 +16,15 @@ class RecoverySpaces(object):
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-
-            boundary_method (:variable:'dict', optional): A dictionary containing the space
-                the boundary method is to be applied to along with specified method. Acceptable keys are "DG",
-                "HDiv" and "theta". acceptable values are (BoundaryMethod.taylor/hcurl/extruded),
-                passed as ('space', 'boundary method'). Defaults to None
-
-            use_vector_spaces (bool, optional):. Determines if we need to use DG / CG
-                space for the embedded and recovery space for the HDiv field instead of the usual
-                HDiv, HCurl spaces. Defaults to False
+            boundary_method (:variable:'dict', optional): A dictionary
+                containing the space the boundary method is to be applied to
+                along with specified method. Acceptable keys are "DG", "HDiv"
+                and "theta". Acceptable values are
+                (BoundaryMethod.taylor/hcurl/extruded). Defaults to None.
+            use_vector_spaces (bool, optional):. Determines if we need to use
+                the vector DG1 / CG1 space for the embedded and recovery space
+                for the HDiv field instead of the usual HDiv, HCurl spaces.
+                Defaults to False.
         """
         family = domain.family
         mesh = domain.mesh
@@ -36,7 +36,7 @@ class RecoverySpaces(object):
 
         valid_keys = ['DG', 'HDiv', 'theta']
         if boundary_method is not None:
-            for key in boundary_method:
+            for key in boundary_method.keys():
                 if key not in valid_keys:
                     raise KeyError(f'Recovery spaces: boundary method key {key} not valid. Valid keys are DG, HDiv, theta')
 
@@ -47,7 +47,7 @@ class RecoverySpaces(object):
         # Check if extruded and if so builds theta spaces
         if hasattr(mesh, "_base_mesh"):
             # check if boundary method is present
-            if hasattr(boundary_method, 'theta'):
+            if 'theta' in boundary_method.keys():
                 theta_boundary_method = boundary_method['theta']
             else:
                 theta_boundary_method = None
@@ -71,7 +71,7 @@ class RecoverySpaces(object):
         # ----------------------------------------------------------------------
         # Building the DG options
         # ----------------------------------------------------------------------
-        if hasattr(boundary_method, 'DG'):
+        if 'DG' in boundary_method.keys():
             DG_boundary_method = boundary_method['DG']
         else:
             DG_boundary_method = None
@@ -91,7 +91,7 @@ class RecoverySpaces(object):
         # Building HDiv options
         # ----------------------------------------------------------------------
 
-        if hasattr(boundary_method, 'HDiv'):
+        if 'HDiv' in boundary_method.keys():
             HDiv_boundary_method = boundary_method['HDiv']
         else:
             HDiv_boundary_method = None
@@ -102,16 +102,17 @@ class RecoverySpaces(object):
 
             HDiv_embedding_Space = Vu_DG1
             HDiv_recovered_Space = Vu_CG1
+            project_high_method = 'interpolate'
 
         else:
-
             HDiv_embedding_Space = self.de_Rham.HDiv
             HDiv_recovered_Space = self.de_Rham.HCurl
+            project_high_method = 'project'
 
         self.HDiv_options = RecoveryOptions(embedding_space=HDiv_embedding_Space,
                                             recovered_space=HDiv_recovered_Space,
                                             injection_method='recover',
-                                            project_high_method='project',
+                                            project_high_method=project_high_method,
                                             project_low_method='project',
                                             broken_method='project',
                                             boundary_method=HDiv_boundary_method)

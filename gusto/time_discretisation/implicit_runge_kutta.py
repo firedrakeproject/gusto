@@ -8,7 +8,9 @@ from firedrake.fml import replace_subject, all_terms, drop
 from firedrake.utils import cached_property
 
 from gusto.core.labels import time_derivative
-from gusto.time_discretisation.time_discretisation import TimeDiscretisation
+from gusto.time_discretisation.time_discretisation import (
+    TimeDiscretisation, wrapper_apply
+)
 
 
 __all__ = ["ImplicitRungeKutta", "ImplicitMidpoint", "QinZhang"]
