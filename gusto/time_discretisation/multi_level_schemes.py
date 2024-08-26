@@ -128,6 +128,7 @@ class BDF2(MultilevelTimeDiscretisation):
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
 
+    @wrapper_apply
     def apply(self, x_out, *x_in):
         """
         Apply the time discretisation to advance one whole time step.
@@ -205,6 +206,7 @@ class Leapfrog(MultilevelTimeDiscretisation):
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
 
+    @wrapper_apply
     def apply(self, x_out, *x_in):
         """
         Apply the time discretisation to advance one whole time step.
@@ -336,6 +338,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
 
+    @wrapper_apply
     def apply(self, x_out, *x_in):
         """
         Apply the time discretisation to advance one whole time step.
@@ -491,6 +494,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
 
+    @wrapper_apply
     def apply(self, x_out, *x_in):
         """
         Apply the time discretisation to advance one whole time step.

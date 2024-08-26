@@ -209,6 +209,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
         self.x1.assign(x_in)
         solver_list = self.solvers

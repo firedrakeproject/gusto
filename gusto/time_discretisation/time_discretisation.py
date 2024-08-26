@@ -480,6 +480,7 @@ class BackwardEuler(TimeDiscretisation):
 
         return r.form
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
@@ -570,6 +571,7 @@ class ThetaMethod(TimeDiscretisation):
 
         return r.form
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
@@ -731,6 +733,7 @@ class TR_BDF2(TimeDiscretisation):
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.

@@ -142,6 +142,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
 
         self.k[stage].assign(self.x_out)
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
 
         for i in range(self.nStages):
