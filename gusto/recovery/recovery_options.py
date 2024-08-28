@@ -47,7 +47,7 @@ class RecoverySpaces(object):
         # Check if extruded and if so builds theta spaces
         if hasattr(mesh, "_base_mesh"):
             # check if boundary method is present
-            if 'theta' in boundary_method.keys():
+            if boundary_method is not None and 'theta' in boundary_method.keys():
                 theta_boundary_method = boundary_method['theta']
             else:
                 theta_boundary_method = None
@@ -71,7 +71,7 @@ class RecoverySpaces(object):
         # ----------------------------------------------------------------------
         # Building the DG options
         # ----------------------------------------------------------------------
-        if 'DG' in boundary_method.keys():
+        if boundary_method is not None and 'DG' in boundary_method.keys():
             DG_boundary_method = boundary_method['DG']
         else:
             DG_boundary_method = None
@@ -91,7 +91,7 @@ class RecoverySpaces(object):
         # Building HDiv options
         # ----------------------------------------------------------------------
 
-        if 'HDiv' in boundary_method.keys():
+        if boundary_method is not None and 'HDiv' in boundary_method.keys():
             HDiv_boundary_method = boundary_method['HDiv']
         else:
             HDiv_boundary_method = None
