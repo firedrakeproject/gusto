@@ -46,8 +46,8 @@ class Wrapper(object, metaclass=ABCMeta):
 
         Args:
             original_space (:class:`FunctionSpace`): the space that the
-        prognostic variable is defined on. This is a subset space of
-        a mixed function space when using a MixedFSWrapper.
+                prognostic variable is defined on. This is a subset space of
+                a mixed function space when using a MixedFSWrapper.
         """
         self.original_space = original_space
 
@@ -85,8 +85,17 @@ class EmbeddedDGWrapper(Wrapper):
     the original space.
     """
 
-    def setup(self, original_space):
-        """Sets up function spaces and fields needed for this wrapper."""
+    def setup(self, original_space, post_apply_bcs):
+        """
+        Sets up function spaces and fields needed for this wrapper.
+
+        Args:
+            original_space (:class:`FunctionSpace`): the space that the
+                prognostic variable is defined on.
+            post_apply_bcs (list of :class:`DirichletBC`): list of Dirichlet
+                boundary condition objects to be passed to the projector used
+                in the post-apply step.
+        """
 
         assert isinstance(self.options, EmbeddedDGOptions), \
             'Embedded DG wrapper can only be used with Embedded DG Options'
@@ -121,7 +130,8 @@ class EmbeddedDGWrapper(Wrapper):
             self.x_projected = Function(equation.spaces[self.time_discretisation.idx])
 
         if self.options.project_back_method == 'project':
-            self.x_out_projector = Projector(self.x_out, self.x_projected)
+            self.x_out_projector = Projector(self.x_out, self.x_projected,
+                                             bcs=post_apply_bcs)
         elif self.options.project_back_method == 'recover':
             self.x_out_projector = Recoverer(self.x_out, self.x_projected)
         else:
@@ -169,8 +179,17 @@ class RecoveryWrapper(Wrapper):
     field is then returned to the original space.
     """
 
-    def setup(self, original_space):
-        """Sets up function spaces and fields needed for this wrapper."""
+    def setup(self, original_space, post_apply_bcs):
+        """
+        Sets up function spaces and fields needed for this wrapper.
+
+        Args:
+            original_space (:class:`FunctionSpace`): the space that the
+                prognostic variable is defined on.
+            post_apply_bcs (list of :class:`DirichletBC`): list of Dirichlet
+                boundary condition objects to be passed to the projector used
+                in the post-apply step.
+        """
 
         assert isinstance(self.options, RecoveryOptions), \
             'Recovery wrapper can only be used with Recovery Options'
@@ -213,7 +232,8 @@ class RecoveryWrapper(Wrapper):
         if self.options.project_low_method == 'interpolate':
             self.x_out_projector = Interpolator(self.x_out, self.x_projected)
         elif self.options.project_low_method == 'project':
-            self.x_out_projector = Projector(self.x_out, self.x_projected)
+            self.x_out_projector = Projector(self.x_out, self.x_projected,
+                                             bcs=post_apply_bcs)
         elif self.options.project_low_method == 'recover':
             self.x_out_projector = Recoverer(self.x_out, self.x_projected,
                                              method=self.options.broken_method)
