@@ -8,8 +8,8 @@ __all__ = [
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
     "BoussinesqParameters", "CompressibleParameters",
     "ShallowWaterParameters",
-    "EmbeddedDGOptions", "RecoveryOptions", "ConservativeRecoveryOptions",
-    "SUPGOptions", "MixedFSOptions",
+    "EmbeddedDGOptions", "ConservativeEmbeddedDGOptions", "RecoveryOptions",
+    "ConservativeRecoveryOptions", "SUPGOptions", "MixedFSOptions",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
 ]
 
