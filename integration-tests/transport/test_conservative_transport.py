@@ -68,18 +68,41 @@ def setup_conservative_transport(dirname, pair_of_spaces, property):
 
     io = IO(domain, output)
 
-    # Set up the divergent, time-varying, velocity field
-    U = Lx/tmax
-    W = U/10.
+    if pair_of_spaces == 'diff_order_0':
+        VCG1 = FunctionSpace(mesh, 'CG', 1)
+        VDG1 = domain.spaces('DG1_equispaced')
 
-    def u_t(t):
-        xd = x - U*t
-        u = U - (W*pi*Lx/Hz)*cos(pi*t/tmax)*cos(2*pi*xd/Lx)*cos(pi*z/Hz)
-        w = 2*pi*W*cos(pi*t/tmax)*sin(2*pi*xd/Lx)*sin(pi*z/Hz)
+        suboptions = {'rho_d': RecoveryOptions(embedding_space=VDG1,
+                                               recovered_space=VCG1,
+                                               project_low_method='recover',
+                                               boundary_method=BoundaryMethod.taylor),
+                      'm_X': ConservativeRecoveryOptions(embedding_space=VDG1,
+                                                         recovered_space=VCG1,
+                                                         boundary_method=BoundaryMethod.taylor,
+                                                         rho_name='rho_d',
+                                                         orig_rho_space=V_rho)
+                      }
+    elif pair_of_spaces == 'diff_order_1':
+        Vt_brok = FunctionSpace(mesh, BrokenElement(V_m_X.ufl_element()))
+        suboptions = {'rho_d': EmbeddedDGOptions(embedding_space=Vt_brok),
+                      'm_X': ConservativeEmbeddedDGOptions(rho_name='rho_d',
+                                                           orig_rho_space=V_rho)}
+    else:
+        suboptions = {}
 
-        u_expr = as_vector((u, w))
+    opts = MixedFSOptions(suboptions=suboptions)
 
-        return u_expr
+    transport_scheme = SSPRK3(domain, options=opts, increment_form=False)
+    transport_methods = [DGUpwind(eqn, "m_X"), DGUpwind(eqn, "rho_d")]
+
+    # Timestepper
+    time_varying = True
+    stepper = PrescribedTransport(eqn, transport_scheme, io, time_varying, transport_methods)
+
+    # Initial Conditions
+    stepper.fields("m_X").interpolate(m_X_0)
+    stepper.fields("rho_d").interpolate(rho_d_0)
+    u0 = stepper.fields("u")
 
     # Specify locations of the two Gaussians
     xc1 = 5.*Lx/8.
@@ -119,47 +142,27 @@ def setup_conservative_transport(dirname, pair_of_spaces, property):
         # Constant mass field
         m_X_0 = m0 + 0*x
 
-    if pair_of_spaces == 'diff_order_0':
-        VCG1 = FunctionSpace(mesh, 'CG', 1)
-        VDG1 = domain.spaces('DG1_equispaced')
-
-        suboptions = {'rho_d': RecoveryOptions(embedding_space=VDG1,
-                                               recovered_space=VCG1,
-                                               project_low_method='recover',
-                                               boundary_method=BoundaryMethod.taylor),
-                      'm_X': ConservativeRecoveryOptions(embedding_space=VDG1,
-                                                         recovered_space=VCG1,
-                                                         boundary_method=BoundaryMethod.taylor,
-                                                         rho_name='rho_d',
-                                                         orig_rho_space=V_rho)
-                      }
-    elif pair_of_spaces == 'diff_order_1':
-        Vt_brok = FunctionSpace(mesh, BrokenElement(V_m_X.ufl_element()))
-        suboptions = {'rho_d': EmbeddedDGOptions(embedding_space=Vt_brok),
-                      'm_X': ConservativeEmbeddedDGOptions(rho_name='rho_d',
-                                                           orig_rho_space=V_rho)}
-    else:
-        suboptions = {}
-
-    opts = MixedFSOptions(suboptions=suboptions)
-
-    transport_scheme = SSPRK3(domain, options=opts, increment_form=False)
-    transport_methods = [DGUpwind(eqn, "m_X"), DGUpwind(eqn, "rho_d")]
-
-    # Timestepper
-    stepper = PrescribedTransport(eqn, transport_scheme, io, transport_methods, prescribed_transporting_velocity=u_t)
-
-    # Initial Conditions
-    stepper.fields("m_X").interpolate(m_X_0)
-    stepper.fields("rho_d").interpolate(rho_d_0)
-    u0 = stepper.fields("u")
-    u0.project(u_t(0))
-
     m_X_init = Function(V_m_X)
     rho_d_init = Function(V_rho)
 
     m_X_init.assign(stepper.fields("m_X"))
     rho_d_init.assign(stepper.fields("rho_d"))
+
+    # Set up the divergent, time-varying, velocity field
+    U = Lx/tmax
+    W = U/10.
+
+    def u_t(t):
+        xd = x - U*t
+        u = U - (W*pi*Lx/Hz)*cos(pi*t/tmax)*cos(2*pi*xd/Lx)*cos(pi*z/Hz)
+        w = 2*pi*W*cos(pi*t/tmax)*sin(2*pi*xd/Lx)*sin(pi*z/Hz)
+
+        u_expr = as_vector((u, w))
+
+        return u_expr
+
+    stepper.setup_prescribed_expr(u_t)
+    u0.project(u_t(0))
 
     return stepper, m_X_init, rho_d_init
 
