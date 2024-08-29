@@ -1,6 +1,9 @@
 """
-Tests the conservative transport method, for a mixing ratio and density in the
-same and different spaces. This checks that there is a conservation of
+Tests the conservative transport of a mixing ratio and dry density, both when
+they are defined on the same and different function spaces. This checks
+that there is conservation of the total species mass (dry density times the
+mixing ratio) and that there is consistency (a constant field will remain
+constant).
 """
 
 from gusto import *
@@ -9,7 +12,7 @@ from firedrake import PeriodicIntervalMesh, ExtrudedMesh, exp, cos, sin, Spatial
 import pytest
 
 
-def setup_conservative_transport(dirname, space, property):
+def setup_conservative_transport(dirname, pair_of_spaces, property):
 
     # Domain
     Lx = 2000.
@@ -22,16 +25,16 @@ def setup_conservative_transport(dirname, space, property):
     nlayers = 10.  # horizontal layers
     columns = 10.  # number of columns
 
-    # Define the spaces and order
-    if space == 'same':
+    # Define the spaces for the tracers
+    if pair_of_spaces == 'same_order_1':
         rho_d_space = 'DG'
         m_X_space = 'DG'
         space_order = 1
-    elif space == 'diff_order_0':
+    elif pair_of_spaces == 'diff_order_0':
         rho_d_space = 'DG'
         m_X_space = 'theta'
         space_order = 0
-    elif space == 'diff_order_1':
+    elif pair_of_spaces == 'diff_order_1':
         rho_d_space = 'DG'
         m_X_space = 'theta'
         space_order = 1
@@ -53,9 +56,9 @@ def setup_conservative_transport(dirname, space, property):
                          variable_type=TracerVariableType.density,
                          transport_eqn=TransportEquationType.conservative)
 
-    # Define m_X first to test that it will automatically
-    # re-order the tracers to have the density field
-    # indexed before the mixing ratio.
+    # Define m_X first to test that the tracers will be
+    # automatically re-ordered such that the density field
+    # is indexed before the mixing ratio.
     tracers = [m_X, rho_d]
 
     # Equation
@@ -116,7 +119,7 @@ def setup_conservative_transport(dirname, space, property):
         # Constant mass field
         m_X_0 = m0 + 0*x
 
-    if space == 'diff_order_0':
+    if pair_of_spaces == 'diff_order_0':
         VCG1 = FunctionSpace(mesh, 'CG', 1)
         VDG1 = domain.spaces('DG1_equispaced')
 
@@ -130,7 +133,7 @@ def setup_conservative_transport(dirname, space, property):
                                                          rho_name='rho_d',
                                                          orig_rho_space=V_rho)
                       }
-    elif space == 'diff_order_1':
+    elif pair_of_spaces == 'diff_order_1':
         Vt_brok = FunctionSpace(mesh, BrokenElement(V_m_X.ufl_element()))
         suboptions = {'rho_d': EmbeddedDGOptions(embedding_space=Vt_brok),
                       'm_X': ConservativeEmbeddedDGOptions(rho_name='rho_d',
@@ -161,14 +164,14 @@ def setup_conservative_transport(dirname, space, property):
     return stepper, m_X_init, rho_d_init
 
 
-@pytest.mark.parametrize("space", ["same", "diff_order_0", "diff_order_1"])
+@pytest.mark.parametrize("pair_of_spaces", ["same_order_1", "diff_order_0", "diff_order_1"])
 @pytest.mark.parametrize("property", ["consistency", "conservation"])
-def test_conservative_transport(tmpdir, space, property):
+def test_conservative_transport(tmpdir, pair_of_spaces, property):
 
     # Setup and run
     dirname = str(tmpdir)
 
-    stepper, m_X_0, rho_d_0 = setup_conservative_transport(dirname, space, property)
+    stepper, m_X_0, rho_d_0 = setup_conservative_transport(dirname, pair_of_spaces, property)
 
     # Run for five timesteps
     stepper.run(t=0, tmax=10)
