@@ -9,15 +9,18 @@ from firedrake import (
     split, LinearVariationalProblem, Constant, LinearVariationalSolver,
     TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
     rhs, FacetNormal, div, dx, jump, avg, dS, dS_v, dS_h, ds_v, ds_t, ds_b,
-    ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis,
-    BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC
+    ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis, cross,
+    BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC, as_vector
 )
 from firedrake.fml import Term, drop
 from firedrake.petsc import flatten_parameters
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.equations.active_tracers import TracerVariableType
-from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
+from gusto.core.logging import (
+    logger, DEBUG, logging_ksp_monitor_true_residual,
+    attach_custom_monitor
+)
 from gusto.core.labels import linearisation, time_derivative, hydrostatic
 from gusto.equations import thermodynamics
 from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
@@ -30,13 +33,15 @@ __all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver",
 class TimesteppingSolver(object, metaclass=ABCMeta):
     """Base class for timestepping linear solvers for Gusto."""
 
-    def __init__(self, equations, alpha=0.5, solver_parameters=None,
-                 overwrite_solver_parameters=False):
+    def __init__(self, equations, alpha=0.5, tau_values=None,
+                 solver_parameters=None, overwrite_solver_parameters=False):
         """
         Args:
             equations (:class:`PrognosticEquation`): the model's equation.
             alpha (float, optional): the semi-implicit off-centring factor.
                 Defaults to 0.5. A value of 1 is fully-implicit.
+            tau_values (dict, optional): contains the semi-implicit relaxation
+                parameters. Defaults to None, in which case the value of alpha is used.
             solver_parameters (dict, optional): contains the options to be
                 passed to the underlying :class:`LinearVariationalSolver`.
                 Defaults to None.
@@ -48,6 +53,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
         self.equations = equations
         self.dt = equations.domain.dt
         self.alpha = alpha
+        self.tau_values = tau_values if tau_values is not None else {}
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -56,8 +62,8 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
                 solver_parameters = p
             self.solver_parameters = solver_parameters
 
-        # ~ if logger.isEnabledFor(DEBUG):
-            # ~ self.solver_parameters["ksp_monitor_true_residual"] = None
+        if logger.isEnabledFor(DEBUG):
+            self.solver_parameters["ksp_monitor_true_residual"] = None
 
         # setup the solver
         self._setup_solver()
@@ -132,7 +138,7 @@ class CompressibleSolver(TimesteppingSolver):
                                                            'pc_type': 'bjacobi',
                                                            'sub_pc_type': 'ilu'}}}
 
-    def __init__(self, equations, alpha=0.5,
+    def __init__(self, equations, alpha=0.5, tau_values=None,
                  quadrature_degree=None, solver_parameters=None,
                  overwrite_solver_parameters=False):
         """
@@ -140,6 +146,8 @@ class CompressibleSolver(TimesteppingSolver):
             equations (:class:`PrognosticEquation`): the model's equation.
             alpha (float, optional): the semi-implicit off-centring factor.
                 Defaults to 0.5. A value of 1 is fully-implicit.
+            tau_values (dict, optional): contains the semi-implicit relaxation
+                parameters. Defaults to None, in which case the value of alpha is used.
             quadrature_degree (tuple, optional): a tuple (q_h, q_v) where q_h is
                 the required quadrature degree in the horizontal direction and
                 q_v is that in the vertical direction. Defaults to None.
@@ -161,7 +169,7 @@ class CompressibleSolver(TimesteppingSolver):
                 logger.warning("default quadrature degree most likely not sufficient for this degree element")
             self.quadrature_degree = (5, 5)
 
-        super().__init__(equations, alpha, solver_parameters,
+        super().__init__(equations, alpha, tau_values, solver_parameters,
                          overwrite_solver_parameters)
 
     @timed_function("Gusto:SolverSetup")
@@ -169,7 +177,12 @@ class CompressibleSolver(TimesteppingSolver):
 
         equations = self.equations
         dt = self.dt
-        beta_ = dt*self.alpha
+        # Set relaxation parameters. If an alternative has not been given, set
+        # to semi-implicit off-centering factor
+        beta_u_ = dt*self.tau_values.get("u", self.alpha)
+        beta_t_ = dt*self.tau_values.get("theta", self.alpha)
+        beta_r_ = dt*self.tau_values.get("rho", self.alpha)
+
         cp = equations.parameters.cp
         Vu = equations.domain.spaces("HDiv")
         Vu_broken = FunctionSpace(equations.domain.mesh, BrokenElement(Vu.ufl_element()))
@@ -177,8 +190,10 @@ class CompressibleSolver(TimesteppingSolver):
         Vrho = equations.domain.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
-        beta = Constant(beta_)
-        beta_cp = Constant(beta_ * cp)
+        beta_u = Constant(beta_u_)
+        beta_t = Constant(beta_t_)
+        beta_r = Constant(beta_r_)
+        beta_u_cp = Constant(beta_u * cp)
 
         h_deg = Vrho.ufl_element().degree()[0]
         v_deg = Vrho.ufl_element().degree()[1]
@@ -203,7 +218,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Analytical (approximate) elimination of theta
         k = equations.domain.k             # Upward pointing unit vector
-        theta = -dot(k, u)*dot(k, grad(thetabar))*beta + theta_in
+        theta = -dot(k, u)*dot(k, grad(thetabar))*beta_t + theta_in
 
         # Only include theta' (rather than exner') in the vertical
         # component of the gradient
@@ -282,32 +297,35 @@ class CompressibleSolver(TimesteppingSolver):
         eqn = (
             # momentum equation
             u_mass
-            - beta_cp*div(theta_w*V(w))*exnerbar*dxp
+            - beta_u_cp*div(theta_w*V(w))*exnerbar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
             # + beta_cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_vp
-            + beta_cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_hp
-            + beta_cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tbp
-            - beta_cp*div(thetabar_w*w)*exner*dxp
+            + beta_u_cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_hp
+            + beta_u_cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tbp
+            - beta_u_cp*div(thetabar_w*w)*exner*dxp
             # trace terms appearing after integrating momentum equation
-            + beta_cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
-            + beta_cp*dot(thetabar_w*w, n)*l0*(ds_tbp + ds_vp)
+            + beta_u_cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
+            + beta_u_cp*dot(thetabar_w*w, n)*l0*(ds_tbp + ds_vp)
             # mass continuity equation
-            + (phi*(rho - rho_in) - beta*inner(grad(phi), u)*rhobar)*dx
-            + beta*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
+            + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
+            + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
             # term added because u.n=0 is enforced weakly via the traces
-            + beta*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v)
+            + beta_r*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v)
             # constraint equation to enforce continuity of the velocity
             # through the interior facets and weakly impose the no-slip
             # condition
             + dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
             + dl*dot(u, n)*(ds_tbp + ds_vp)
         )
-
         # TODO: can we get this term using FML?
         # contribution of the sponge term
         if hasattr(self.equations, "mu"):
             eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
+
+        if equations.parameters.Omega is not None:
+            Omega = as_vector([0, 0, equations.parameters.Omega])
+            eqn += inner(w, cross(2*Omega, u))*dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
@@ -339,7 +357,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         self.theta = Function(Vtheta)
         theta_eqn = gamma*(theta - theta_in
-                           + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta)*dx
+                           + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta_t)*dx
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta)
         self.theta_solver = LinearVariationalSolver(theta_problem,
@@ -353,7 +371,6 @@ class CompressibleSolver(TimesteppingSolver):
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.hybridized_solver.snes.ksp)
         # Log residuals on the trace system too
-        from gusto.core.logging import attach_custom_monitor
         python_context = self.hybridized_solver.snes.ksp.pc.getPythonContext()
         attach_custom_monitor(python_context, logging_ksp_monitor_true_residual)
 
@@ -444,13 +461,19 @@ class BoussinesqSolver(TimesteppingSolver):
         equation = self.equations      # just cutting down line length a bit
 
         dt = self.dt
-        beta_ = dt*self.alpha
+        # Set relaxation parameters. If an alternative has not been given, set
+        # to semi-implicit off-centering factor
+        beta_u_ = dt*self.tau_values.get("u", self.alpha)
+        beta_p_ = dt*self.tau_values.get("p", self.alpha)
+        beta_b_ = dt*self.tau_values.get("b", self.alpha)
         Vu = equation.domain.spaces("HDiv")
         Vb = equation.domain.spaces("theta")
         Vp = equation.domain.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
-        beta = Constant(beta_)
+        beta_u = Constant(beta_u_)
+        beta_p = Constant(beta_p_)
+        beta_b = Constant(beta_b_)
 
         # Split up the rhs vector (symbolically)
         self.xrhs = Function(self.equations.function_space)
@@ -466,7 +489,7 @@ class BoussinesqSolver(TimesteppingSolver):
 
         # Analytical (approximate) elimination of theta
         k = equation.domain.k             # Upward pointing unit vector
-        b = -dot(k, u)*dot(k, grad(bbar))*beta + b_in
+        b = -dot(k, u)*dot(k, grad(bbar))*beta_b + b_in
 
         # vertical projection
         def V(u):
@@ -474,18 +497,23 @@ class BoussinesqSolver(TimesteppingSolver):
 
         eqn = (
             inner(w, (u - u_in))*dx
-            - beta*div(w)*p*dx
-            - beta*inner(w, k)*b*dx
+            - beta_u*div(w)*p*dx
+            - beta_u*inner(w, k)*b*dx
         )
 
         if equation.compressible:
             cs = equation.parameters.cs
-            eqn += phi * (p - p_in) * dx + beta * phi * cs**2 * div(u) * dx
+            eqn += phi * (p - p_in) * dx + beta_p * phi * cs**2 * div(u) * dx
         else:
             eqn += phi * div(u) * dx
 
         if hasattr(self.equations, "mu"):
             eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
+
+        if equation.parameters.Omega is not None:
+            Omega = as_vector((0, 0, equation.parameter.Omega))
+            eqn += inner(w, cross(2*Omega, u))*dx
+
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -517,7 +545,7 @@ class BoussinesqSolver(TimesteppingSolver):
         self.b = Function(Vb)
 
         b_eqn = gamma*(b - b_in
-                       + dot(k, u)*dot(k, grad(bbar))*beta)*dx
+                       + dot(k, u)*dot(k, grad(bbar))*beta_b)*dx
 
         b_problem = LinearVariationalProblem(lhs(b_eqn),
                                              rhs(b_eqn),
@@ -587,7 +615,9 @@ class ThermalSWSolver(TimesteppingSolver):
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
         dt = self.dt
-        beta_ = dt*self.alpha
+        beta_u_ = dt*self.tau_values.get("u", self.alpha)
+        beta_d_ = dt*self.tau_values.get("D", self.alpha)
+        beta_b_ = dt*self.tau_values.get("b", self.alpha)
         Vu = equation.domain.spaces("HDiv")
         VD = equation.domain.spaces("DG")
         Vb = equation.domain.spaces("DG")
@@ -597,7 +627,9 @@ class ThermalSWSolver(TimesteppingSolver):
             raise NotImplementedError("Field 'b' must exist to use the thermal linear solver in the SIQN scheme")
 
         # Store time-stepping coefficients as UFL Constants
-        beta = Constant(beta_)
+        beta_u = Constant(beta_u_)
+        beta_d = Constant(beta_d_)
+        beta_b = Constant(beta_b_)
 
         # Split up the rhs vector
         self.xrhs = Function(self.equations.function_space)
@@ -615,21 +647,25 @@ class ThermalSWSolver(TimesteppingSolver):
         bbar = split(equation.X_ref)[2]
 
         # Approximate elimination of b
-        b = -dot(u, grad(bbar))*beta + b_in
+        b = -dot(u, grad(bbar))*beta_b + b_in
 
         n = FacetNormal(equation.domain.mesh)
 
         eqn = (
             inner(w, (u - u_in)) * dx
-            - beta * (D - Dbar) * div(w*bbar) * dx
-            + beta * jump(w*bbar, n) * avg(D-Dbar) * dS
-            - beta * 0.5 * Dbar * bbar * div(w) * dx
-            - beta * 0.5 * Dbar * b * div(w) * dx
-            - beta * 0.5 * bbar * div(w*(D-Dbar)) * dx
-            + beta * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
+            - beta_u * (D - Dbar) * div(w*bbar) * dx
+            + beta_u * jump(w*bbar, n) * avg(D-Dbar) * dS
+            - beta_u * 0.5 * Dbar * bbar * div(w) * dx
+            - beta_u * 0.5 * Dbar * b * div(w) * dx
+            - beta_u * 0.5 * bbar * div(w*(D-Dbar)) * dx
+            + beta_u * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
             + inner(phi, (D - D_in)) * dx
-            + beta * phi * Dbar * div(u) * dx
+            + beta_d * phi * Dbar * div(u) * dx
         )
+
+        if 'coriolis' in equation.prescribed_fields._field_names:
+            f = equation.prescribed_fields('coriolis')
+            eqn += beta_u_ * f * inner(w, equation.domain.perp(u)) * dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
@@ -658,7 +694,7 @@ class ThermalSWSolver(TimesteppingSolver):
         u, D = self.uD.subfunctions
         self.b = Function(Vb)
 
-        b_eqn = gamma*(b - b_in + inner(u, grad(bbar))*beta) * dx
+        b_eqn = gamma*(b - b_in + inner(u, grad(bbar))*beta_b) * dx
 
         b_problem = LinearVariationalProblem(lhs(b_eqn),
                                              rhs(b_eqn),
@@ -812,12 +848,14 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
         dt = self.dt
-        beta_ = dt*self.alpha
+        beta_u_ = dt*self.tau_values.get("u", self.alpha)
+        beta_d_ = dt*self.tau_values.get("D", self.alpha)
         Vu = equation.domain.spaces("HDiv")
         VD = equation.domain.spaces("DG")
 
         # Store time-stepping coefficients as UFL Constants
-        beta = Constant(beta_)
+        beta_u = Constant(beta_u_)
+        beta_d = Constant(beta_d_)
 
         # Split up the rhs vector
         self.xrhs = Function(self.equations.function_space)
@@ -836,10 +874,14 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
 
         eqn = (
             inner(w, (u - u_in)) * dx
-            - beta * (D - Dbar) * div(w*g) * dx
+            - beta_u * (D - Dbar) * div(w*g) * dx
             + inner(phi, (D - D_in)) * dx
-            + beta * phi * Dbar * div(u) * dx
+            + beta_d * phi * Dbar * div(u) * dx
         )
+
+        if 'coriolis' in equation.prescribed_fields._field_names:
+            f = equation.prescribed_fields('coriolis')
+            eqn += beta_u_ * f * inner(w, equation.domain.perp(u)) * dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)

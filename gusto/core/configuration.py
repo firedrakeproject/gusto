@@ -115,6 +115,7 @@ class BoussinesqParameters(Configuration):
     g = 9.810616
     N = 0.01  # Brunt-Vaisala frequency (1/s)
     cs = 340  # sound speed (for compressible case) (m/s)
+    Omega = None
 
 
 class CompressibleParameters(Configuration):
@@ -137,6 +138,7 @@ class CompressibleParameters(Configuration):
     w_sat2 = -17.27  # second const. in Teten's formula (no units)
     w_sat3 = 35.86  # third const. in Teten's formula (K)
     w_sat4 = 610.9  # fourth const. in Teten's formula (Pa)
+    Omega = None    # Rotation rate
 
 
 class ShallowWaterParameters(Configuration):
