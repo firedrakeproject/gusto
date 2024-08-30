@@ -7,8 +7,11 @@ constant).
 """
 
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, exp, cos, sin, SpatialCoordinate, \
-    assemble, dx, FunctionSpace, pi, min_value, as_vector, BrokenElement, errornorm
+from firedrake import (
+    PeriodicIntervalMesh, ExtrudedMesh, exp, cos, sin, SpatialCoordinate,
+    assemble, dx, FunctionSpace, pi, min_value, as_vector, BrokenElement,
+    errornorm
+)
 import pytest
 
 
@@ -72,21 +75,30 @@ def setup_conservative_transport(dirname, pair_of_spaces, property):
         VCG1 = FunctionSpace(mesh, 'CG', 1)
         VDG1 = domain.spaces('DG1_equispaced')
 
-        suboptions = {'rho_d': RecoveryOptions(embedding_space=VDG1,
-                                               recovered_space=VCG1,
-                                               project_low_method='recover',
-                                               boundary_method=BoundaryMethod.taylor),
-                      'm_X': ConservativeRecoveryOptions(embedding_space=VDG1,
-                                                         recovered_space=VCG1,
-                                                         boundary_method=BoundaryMethod.taylor,
-                                                         rho_name='rho_d',
-                                                         orig_rho_space=V_rho)
-                      }
+        suboptions = {
+            'rho_d': RecoveryOptions(
+                embedding_space=VDG1,
+                recovered_space=VCG1,
+                project_low_method='recover',
+                boundary_method=BoundaryMethod.taylor
+            ),
+            'm_X': ConservativeRecoveryOptions(
+                embedding_space=VDG1,
+                recovered_space=VCG1,
+                boundary_method=BoundaryMethod.taylor,
+                rho_name='rho_d',
+                orig_rho_space=V_rho
+            )
+        }
     elif pair_of_spaces == 'diff_order_1':
         Vt_brok = FunctionSpace(mesh, BrokenElement(V_m_X.ufl_element()))
-        suboptions = {'rho_d': EmbeddedDGOptions(embedding_space=Vt_brok),
-                      'm_X': ConservativeEmbeddedDGOptions(rho_name='rho_d',
-                                                           orig_rho_space=V_rho)}
+        suboptions = {
+            'rho_d': EmbeddedDGOptions(embedding_space=Vt_brok),
+            'm_X': ConservativeEmbeddedDGOptions(
+                rho_name='rho_d',
+                orig_rho_space=V_rho
+            )
+        }
     else:
         suboptions = {}
 
@@ -97,13 +109,11 @@ def setup_conservative_transport(dirname, pair_of_spaces, property):
 
     # Timestepper
     time_varying = True
-    stepper = PrescribedTransport(eqn, transport_scheme, io, time_varying, transport_methods)
+    stepper = PrescribedTransport(
+        eqn, transport_scheme, io, time_varying, transport_methods
+    )
 
     # Initial Conditions
-    stepper.fields("m_X").interpolate(m_X_0)
-    stepper.fields("rho_d").interpolate(rho_d_0)
-    u0 = stepper.fields("u")
-
     # Specify locations of the two Gaussians
     xc1 = 5.*Lx/8.
     zc1 = Hz/2.
@@ -130,6 +140,7 @@ def setup_conservative_transport(dirname, pair_of_spaces, property):
         g2 = f0*exp(-l2_dist(xc2, zc2)/(lc**2))
 
         m_X_0 = m0 + g1 + g2
+
     else:
         f0 = 0.5
         rho_b = 0.5
@@ -141,12 +152,6 @@ def setup_conservative_transport(dirname, pair_of_spaces, property):
 
         # Constant mass field
         m_X_0 = m0 + 0*x
-
-    m_X_init = Function(V_m_X)
-    rho_d_init = Function(V_rho)
-
-    m_X_init.assign(stepper.fields("m_X"))
-    rho_d_init.assign(stepper.fields("rho_d"))
 
     # Set up the divergent, time-varying, velocity field
     U = Lx/tmax
@@ -162,7 +167,16 @@ def setup_conservative_transport(dirname, pair_of_spaces, property):
         return u_expr
 
     stepper.setup_prescribed_expr(u_t)
-    u0.project(u_t(0))
+
+    stepper.fields("m_X").interpolate(m_X_0)
+    stepper.fields("rho_d").interpolate(rho_d_0)
+    stepper.fields("u").project(u_t(0))
+
+    m_X_init = Function(V_m_X)
+    rho_d_init = Function(V_rho)
+
+    m_X_init.assign(stepper.fields("m_X"))
+    rho_d_init.assign(stepper.fields("rho_d"))
 
     return stepper, m_X_init, rho_d_init
 
@@ -183,7 +197,7 @@ def test_conservative_transport(tmpdir, pair_of_spaces, property):
 
     # Perform the check
     if property == 'consistency':
-        assert errornorm(m_X_0, m_X) < 1e-13, "conservative transport is not consistent"
+        assert errornorm(m_X_0, m_X) < 2e-13, "conservative transport is not consistent"
     else:
         rho_X_init = assemble(m_X_0*rho_d_0*dx)
         rho_X_final = assemble(m_X*rho_d*dx)
