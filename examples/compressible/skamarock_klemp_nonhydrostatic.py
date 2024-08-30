@@ -80,7 +80,7 @@ def skamarock_klemp_nonhydrostatic(
     points = np.array([p for p in itertools.product(points_x, points_z)])
 
     # Dumping point data using legacy PointDataOutput is not supported in parallel
-    if COMM_WORLD.size == 1:
+    if False:
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
             dump_vtus=True, dump_nc=False, dumplist=['u'],
@@ -93,7 +93,7 @@ def skamarock_klemp_nonhydrostatic(
         )
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=True, dump_nc=False, dumplist=['u'],
+            dump_vtus=False, dump_nc=True, dumplist=['u'],
         )
 
     diagnostic_fields = [

@@ -20,9 +20,9 @@ from gusto import (
 skamarock_klemp_linear_bouss_defaults = {
     'ncolumns': 300,
     'nlayers': 10,
-    'dt': 1.0,
+    'dt': 0.25,
     'tmax': 3600.,
-    'dumpfreq': 300,
+    'dumpfreq': 1200,
     'dirname': 'skamarock_klemp_linear_bouss'
 }
 
@@ -68,7 +68,7 @@ def skamarock_klemp_linear_bouss(
 
     # I/O
     output = OutputParameters(
-        dirname=dirname, dumpfreq=dumpfreq, dump_vtus=True, dump_nc=False,
+        dirname=dirname, dumpfreq=dumpfreq, dump_vtus=False, dump_nc=True,
     )
     # list of diagnostic fields, each defined in a class in diagnostics.py
     diagnostic_fields = [CourantNumber(), Divergence(), Perturbation('b')]

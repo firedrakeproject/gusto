@@ -18,9 +18,9 @@ from gusto import (
 
 williamson_5_defaults = {
     'ncells_per_edge': 16,     # number of cells per icosahedron edge
-    'dt': 600.0,               # 10 minutes
+    'dt': 900.0,               # 15 minutes
     'tmax': 50.*24.*60.*60.,   # 50 days
-    'dumpfreq': 144,           # once per day with default options
+    'dumpfreq': 960,           # once per 10 days with default options
     'dirname': 'williamson_5'
 }
 
@@ -74,7 +74,8 @@ def williamson_5(
 
     # I/O
     output = OutputParameters(
-        dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq
+        dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq,
+        dump_vtus=False, dump_nc=True
     )
     diagnostic_fields = [Sum('D', 'topography')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
