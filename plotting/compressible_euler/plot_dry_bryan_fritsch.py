@@ -1,8 +1,8 @@
 """
-Plots the Straka bubble test case.
+Plots the dry Bryan and Fritsch rising bubble test case.
 
 This plots:
-(a) theta perturbation @ t = 0 s, (b) theta perturbation @ t = 900 s
+(a) theta perturbation @ t = 0 s, (b) theta perturbation @ t = 1000 s
 """
 from os.path import abspath, dirname
 import matplotlib.pyplot as plt
@@ -14,7 +14,7 @@ from tomplot import (
     extract_gusto_field
 )
 
-test = 'straka_bubble'
+test = 'dry_bryan_fritsch'
 
 # ---------------------------------------------------------------------------- #
 # Directory for results and plots
@@ -34,12 +34,12 @@ cbars = [False, True]
 # ---------------------------------------------------------------------------- #
 # General options
 # ---------------------------------------------------------------------------- #
-contours = np.linspace(-7.5, 0.5, 17)
-colour_scheme = 'Blues_r'
+contours = np.linspace(-0.5, 2.5, 13)
+colour_scheme = 'OrRd'
 field_label = r'$\Delta \theta$ (K)'
 contour_method = 'tricontour'
-xlims = [25.6, 38.4]
-ylims = [0., 5.0]
+xlims = [0, 10]
+ylims = [0, 10]
 
 # Things that are likely the same for all plots --------------------------------
 set_tomplot_style()
@@ -48,7 +48,7 @@ data_file = Dataset(results_file_name, 'r')
 # ---------------------------------------------------------------------------- #
 # PLOTTING
 # ---------------------------------------------------------------------------- #
-fig, axarray = plt.subplots(1, 2, figsize=(18, 6), sharex='all', sharey='all')
+fig, axarray = plt.subplots(1, 2, figsize=(16, 6), sharex='all', sharey='all')
 
 for i, (ax, time_idx, field_name, cbar) in \
         enumerate(zip(axarray.flatten(), time_idxs, field_names, cbars)):
@@ -62,7 +62,7 @@ for i, (ax, time_idx, field_name, cbar) in \
     cmap, lines = tomplot_cmap(contours, colour_scheme, remove_contour=0.0)
     cf, lines = plot_contoured_field(
         ax, coords_X, coords_Y, field_data, contour_method, contours,
-        cmap=cmap, line_contours=lines, negative_linestyles='solid'
+        cmap=cmap, line_contours=lines
     )
 
     if cbar:
