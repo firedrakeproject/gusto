@@ -23,9 +23,9 @@ from gusto import (
 
 thermal_williamson_2_defaults = {
     'ncells_per_edge': 16,     # number of cells per icosahedron edge
-    'dt': 1800.0,              # 30 minutes
+    'dt': 900.0,               # 15 minutes
     'tmax': 5.*24.*60.*60.,    # 5 days
-    'dumpfreq': 48,            # once per day with default options
+    'dumpfreq': 96,            # once per day with default options
     'dirname': 'thermal_williamson_2'
 }
 

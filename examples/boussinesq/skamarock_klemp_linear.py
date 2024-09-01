@@ -68,7 +68,7 @@ def skamarock_klemp_linear_bouss(
 
     # I/O
     output = OutputParameters(
-        dirname=dirname, dumpfreq=dumpfreq, dump_vtus=False, dump_nc=True,
+        dirname=dirname, dumpfreq=dumpfreq, dump_vtus=True, dump_nc=True,
     )
     # list of diagnostic fields, each defined in a class in diagnostics.py
     diagnostic_fields = [CourantNumber(), Divergence(), Perturbation('b')]

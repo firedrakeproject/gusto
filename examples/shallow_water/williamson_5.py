@@ -75,7 +75,7 @@ def williamson_5(
     # I/O
     output = OutputParameters(
         dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq,
-        dump_vtus=False, dump_nc=True
+        dump_vtus=True, dump_nc=False
     )
     diagnostic_fields = [Sum('D', 'topography')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
