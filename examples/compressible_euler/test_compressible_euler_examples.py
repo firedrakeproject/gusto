@@ -23,7 +23,7 @@ def test_dcmip_3_1_meanflow():
     )
 
 
-@pytest.mark.parallel(nprocs=4)
+@pytest.mark.parallel(nprocs=2)
 def test_dcmip_3_1_meanflow_parallel():
     test_dcmip_3_1_meanflow()
 
