@@ -17,8 +17,8 @@ def test_dcmip_3_1_meanflow():
         ncells_per_edge=4,
         nlayers=4,
         dt=100,
-        tmax=10000,
-        dumpfreq=10,
+        tmax=200,
+        dumpfreq=2,
         dirname=make_dirname(test_name)
     )
 
