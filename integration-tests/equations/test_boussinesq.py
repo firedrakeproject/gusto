@@ -131,5 +131,5 @@ def test_boussinesq(tmpdir, compressible):
         test_type = 'compressible' if compressible else 'incompressible'
 
         # Slack values chosen to be robust to different platforms
-        assert error < -1e-10, f'Values for {variable} in ' + \
+        assert error < 1e-10, f'Values for {variable} in ' + \
             f'{test_type} test do not match KGO values'
