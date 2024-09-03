@@ -1,9 +1,8 @@
 """
-This script tests the split_timestepper, using an
-advection-diffusion equation with a physics
-parametrisation. Three different splittings are
-tested, including splitting the dynamics and
-physics into two substeps with different timesteps.
+This script tests the split_timestepper using an advection-diffusion
+equation with a physics parametrisation. Three different splittings are
+tested, including splitting the dynamics and physics into two substeps
+with different timestep sizes.
 """
 
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp, as_vector,
@@ -54,21 +53,27 @@ def run_split_timestepper_adv_diff_physics(tmpdir, timestepper):
         dynamics_schemes = {'transport': ImplicitMidpoint(domain),
                             'diffusion': ForwardEuler(domain)}
         term_splitting = ['transport', 'diffusion', 'physics']
-        stepper = SplitTimestepper(equation, term_splitting, dynamics_schemes, io, spatial_methods=spatial_methods, physics_schemes=physics_schemes)
+        stepper = SplitTimestepper(equation, term_splitting, dynamics_schemes,
+                                   io, spatial_methods=spatial_methods,
+                                   physics_schemes=physics_schemes)
     elif timestepper == 'split2':
         # Transport split into two substeps
         dynamics_schemes = {'transport': SSPRK3(domain),
                             'diffusion': ForwardEuler(domain)}
         term_splitting = ['diffusion', 'transport', 'physics', 'transport']
         weights = [1., 0.6, 1., 0.4]
-        stepper = SplitTimestepper(equation, term_splitting, dynamics_schemes, io, weights=weights, spatial_methods=spatial_methods, physics_schemes=physics_schemes)
+        stepper = SplitTimestepper(equation, term_splitting, dynamics_schemes,
+                                   io, weights=weights, spatial_methods=spatial_methods,
+                                   physics_schemes=physics_schemes)
     else:
         # Physics split into two substeps
         dynamics_schemes = {'transport': SSPRK3(domain),
                             'diffusion': SSPRK3(domain)}
         term_splitting = ['physics', 'transport', 'diffusion', 'physics']
-        weights = [1./3., 1, 1, 2./3.]
-        stepper = SplitTimestepper(equation, term_splitting, dynamics_schemes, io, weights=weights, spatial_methods=spatial_methods, physics_schemes=physics_schemes)
+        weights = [1./3., 1., 1., 2./3.]
+        stepper = SplitTimestepper(equation, term_splitting, dynamics_schemes,
+                                   io, weights=weights, spatial_methods=spatial_methods,
+                                   physics_schemes=physics_schemes)
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
