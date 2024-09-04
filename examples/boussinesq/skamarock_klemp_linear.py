@@ -20,9 +20,9 @@ from gusto import (
 skamarock_klemp_linear_bouss_defaults = {
     'ncolumns': 300,
     'nlayers': 10,
-    'dt': 0.25,
+    'dt': 0.5,
     'tmax': 3600.,
-    'dumpfreq': 1200,
+    'dumpfreq': 3600,
     'dirname': 'skamarock_klemp_linear_bouss'
 }
 

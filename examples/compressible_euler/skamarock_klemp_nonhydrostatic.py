@@ -83,7 +83,7 @@ def skamarock_klemp_nonhydrostatic(
     if COMM_WORLD.size == 1:
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=True, dump_nc=False, dumplist=['u'],
+            dump_vtus=True, dump_nc=False,
             point_data=[('theta_perturbation', points)],
         )
     else:
@@ -93,7 +93,7 @@ def skamarock_klemp_nonhydrostatic(
         )
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=True, dump_nc=True, dumplist=['u'],
+            dump_vtus=True, dump_nc=True,
         )
 
     diagnostic_fields = [
