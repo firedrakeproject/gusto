@@ -193,7 +193,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
             if not hasattr(domain.spaces, space.name):
                 domain.spaces.add_space(space.name, space)
 
-            self.field = state_fields(self.name, space=space, dump=self.to_dump, pick_up=False)
+            self.field = state_fields(self.name, space=space, dump=self.to_dump, pick_up=True)
 
             if self.method != 'solve':
                 assert self.expr is not None, \
