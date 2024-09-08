@@ -14,29 +14,28 @@ from firedrake import (
 )
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, SUPGOptions, CompressibleKineticEnergy, PotentialEnergy,
-    CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
+    TrapeziumRule, SUPGOptions, lonlatr_from_xyz, CompressibleParameters,
+    CompressibleEulerEquations, CompressibleSolver, ZonalComponent,
     compressible_hydrostatic_balance, Perturbation, GeneralCubedSphereMesh,
-    lonlatr_from_xyz
 )
 
-dcmip_3_1_meanflow_defaults = {
+dcmip_3_1_gravity_wave_defaults = {
     'ncells_per_edge': 8,
     'nlayers': 10,
-    'dt': 100.0,
+    'dt': 50.0,
     'tmax': 3600.,
     'dumpfreq': 9,
-    'dirname': 'dcmip_3_1_meanflow'
+    'dirname': 'dcmip_3_1_gravity_wave'
 }
 
 
-def dcmip_3_1_meanflow(
-        ncells_per_edge=dcmip_3_1_meanflow_defaults['ncells_per_edge'],
-        nlayers=dcmip_3_1_meanflow_defaults['nlayers'],
-        dt=dcmip_3_1_meanflow_defaults['dt'],
-        tmax=dcmip_3_1_meanflow_defaults['tmax'],
-        dumpfreq=dcmip_3_1_meanflow_defaults['dumpfreq'],
-        dirname=dcmip_3_1_meanflow_defaults['dirname']
+def dcmip_3_1_gravity_wave(
+        ncells_per_edge=dcmip_3_1_gravity_wave_defaults['ncells_per_edge'],
+        nlayers=dcmip_3_1_gravity_wave_defaults['nlayers'],
+        dt=dcmip_3_1_gravity_wave_defaults['dt'],
+        tmax=dcmip_3_1_gravity_wave_defaults['tmax'],
+        dumpfreq=dcmip_3_1_gravity_wave_defaults['dumpfreq'],
+        dirname=dcmip_3_1_gravity_wave_defaults['dirname']
 ):
 
     # ------------------------------------------------------------------------ #
@@ -89,12 +88,10 @@ def dcmip_3_1_meanflow(
 
     # I/O
     output = OutputParameters(
-        dirname=dirname,
-        dumpfreq=dumpfreq,
+        dirname=dirname, dumpfreq=dumpfreq, dump_vtus=False, dump_nc=True
     )
     diagnostic_fields = [
-        Perturbation('theta'), Perturbation('rho'),
-        CompressibleKineticEnergy(), PotentialEnergy(eqns)
+        Perturbation('theta'), Perturbation('rho'), ZonalComponent('u'),
     ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
@@ -197,38 +194,38 @@ if __name__ == "__main__":
         '--ncells_per_edge',
         help="The number of cells per panel edge of the cubed-sphere.",
         type=int,
-        default=dcmip_3_1_meanflow_defaults['ncells_per_edge']
+        default=dcmip_3_1_gravity_wave_defaults['ncells_per_edge']
     )
     parser.add_argument(
         '--nlayers',
         help="The number of layers for the mesh.",
         type=int,
-        default=dcmip_3_1_meanflow_defaults['nlayers']
+        default=dcmip_3_1_gravity_wave_defaults['nlayers']
     )
     parser.add_argument(
         '--dt',
         help="The time step in seconds.",
         type=float,
-        default=dcmip_3_1_meanflow_defaults['dt']
+        default=dcmip_3_1_gravity_wave_defaults['dt']
     )
     parser.add_argument(
         "--tmax",
         help="The end time for the simulation in seconds.",
         type=float,
-        default=dcmip_3_1_meanflow_defaults['tmax']
+        default=dcmip_3_1_gravity_wave_defaults['tmax']
     )
     parser.add_argument(
         '--dumpfreq',
         help="The frequency at which to dump field output.",
         type=int,
-        default=dcmip_3_1_meanflow_defaults['dumpfreq']
+        default=dcmip_3_1_gravity_wave_defaults['dumpfreq']
     )
     parser.add_argument(
         '--dirname',
         help="The name of the directory to write to.",
         type=str,
-        default=dcmip_3_1_meanflow_defaults['dirname']
+        default=dcmip_3_1_gravity_wave_defaults['dirname']
     )
     args, unknown = parser.parse_known_args()
 
-    dcmip_3_1_meanflow(**vars(args))
+    dcmip_3_1_gravity_wave(**vars(args))

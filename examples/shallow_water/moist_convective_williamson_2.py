@@ -17,12 +17,10 @@ from firedrake import SpatialCoordinate, sin, cos, exp, Function
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
-    CourantNumber, RelativeVorticity, PotentialVorticity,
-    SteadyStateError, ShallowWaterKineticEnergy, ShallowWaterPotentialEnergy,
-    ShallowWaterPotentialEnstrophy, lonlatr_from_xyz, DG1Limiter, InstantRain,
-    MoistConvectiveSWSolver, ForwardEuler, SWSaturationAdjustment,
-    WaterVapour, CloudWater, Rain, GeneralIcosahedralSphereMesh,
-    xyz_vector_from_lonlatr
+    ZonalComponent, MeridionalComponent, SteadyStateError, lonlatr_from_xyz,
+    DG1Limiter, InstantRain, MoistConvectiveSWSolver, ForwardEuler,
+    RelativeVorticity, SWSaturationAdjustment, WaterVapour, CloudWater, Rain,
+    GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr
 )
 
 moist_convect_williamson_2_defaults = {
@@ -93,15 +91,13 @@ def moist_convect_williamson_2(
 
     # IO
     output = OutputParameters(
-        dirname=dirname, dumpfreq=dumpfreq, dump_nc=True, dump_vtus=True,
+        dirname=dirname, dumpfreq=dumpfreq, dump_nc=False, dump_vtus=True,
         dumplist_latlon=['D', 'D_error']
     )
     diagnostic_fields = [
-        CourantNumber(), RelativeVorticity(), PotentialVorticity(),
-        ShallowWaterKineticEnergy(), ShallowWaterPotentialEnergy(parameters),
-        ShallowWaterPotentialEnstrophy(), SteadyStateError('u'),
-        SteadyStateError('D'), SteadyStateError('water_vapour'),
-        SteadyStateError('cloud_water')
+        SteadyStateError('u'), SteadyStateError('D'),
+        SteadyStateError('water_vapour'), ZonalComponent('u'),
+        MeridionalComponent('u'), RelativeVorticity()
     ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 

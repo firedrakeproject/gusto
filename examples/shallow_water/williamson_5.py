@@ -13,7 +13,8 @@ from firedrake import (
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations, Sum,
-    lonlatr_from_xyz, GeneralIcosahedralSphereMesh
+    lonlatr_from_xyz, GeneralIcosahedralSphereMesh, ZonalComponent,
+    MeridionalComponent, RelativeVorticity
 )
 
 williamson_5_defaults = {
@@ -75,9 +76,10 @@ def williamson_5(
     # I/O
     output = OutputParameters(
         dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq,
-        dump_vtus=True, dump_nc=False
+        dump_vtus=True, dump_nc=False, dumplist=['D', 'topography']
     )
-    diagnostic_fields = [Sum('D', 'topography')]
+    diagnostic_fields = [Sum('D', 'topography'), RelativeVorticity(),
+                         MeridionalComponent('u'), ZonalComponent('u')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes

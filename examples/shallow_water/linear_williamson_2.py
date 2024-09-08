@@ -12,7 +12,8 @@ from firedrake import Function, SpatialCoordinate, as_vector, pi
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, DefaultTransport,
     ForwardEuler, SteadyStateError, ShallowWaterParameters,
-    LinearShallowWaterEquations, GeneralIcosahedralSphereMesh
+    LinearShallowWaterEquations, GeneralIcosahedralSphereMesh,
+    ZonalComponent, MeridionalComponent, RelativeVorticity
 )
 
 linear_williamson_2_defaults = {
@@ -63,9 +64,11 @@ def linear_williamson_2(
 
     # I/O
     output = OutputParameters(
-        dirname=dirname, dumpfreq=dumpfreq,
+        dirname=dirname, dumpfreq=dumpfreq, dump_nc=False, dump_vtus=True
     )
-    diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D')]
+    diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D'),
+                         ZonalComponent('u'), MeridionalComponent('u'),
+                         RelativeVorticity()]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes

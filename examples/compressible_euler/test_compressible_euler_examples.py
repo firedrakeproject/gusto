@@ -10,10 +10,10 @@ def make_dirname(test_name):
         return f'pytest_{test_name}'
 
 
-def test_dcmip_3_1_meanflow():
-    from dcmip_3_1_meanflow_quads import dcmip_3_1_meanflow
-    test_name = 'dcmip_3_1_meanflow'
-    dcmip_3_1_meanflow(
+def test_dcmip_3_1_gravity_wave():
+    from dcmip_3_1_gravity_wave import dcmip_3_1_gravity_wave
+    test_name = 'dcmip_3_1_gravity_wave'
+    dcmip_3_1_gravity_wave(
         ncells_per_edge=4,
         nlayers=4,
         dt=100,
@@ -24,8 +24,8 @@ def test_dcmip_3_1_meanflow():
 
 
 @pytest.mark.parallel(nprocs=2)
-def test_dcmip_3_1_meanflow_parallel():
-    test_dcmip_3_1_meanflow()
+def test_dcmip_3_1_gravity_wave_parallel():
+    test_dcmip_3_1_gravity_wave()
 
 
 def test_dry_bryan_fritsch():

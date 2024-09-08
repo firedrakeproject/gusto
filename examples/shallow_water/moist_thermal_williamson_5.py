@@ -23,7 +23,8 @@ from gusto import (
     Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
     ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, InstantRain, SWSaturationAdjustment, WaterVapour,
-    CloudWater, Rain, GeneralIcosahedralSphereMesh
+    CloudWater, Rain, GeneralIcosahedralSphereMesh, RelativeVorticity,
+    ZonalComponent, MeridionalComponent
 )
 
 moist_thermal_williamson_5_defaults = {
@@ -106,9 +107,11 @@ def moist_thermal_williamson_5(
     # I/O
     output = OutputParameters(
         dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq,
-        dump_vtus=False, dump_nc=True
+        dump_vtus=True, dump_nc=False,
+        dumplist=['D', 'b', 'water_vapour', 'cloud_water']
     )
-    diagnostic_fields = [Sum('D', 'topography')]
+    diagnostic_fields = [Sum('D', 'topography'), RelativeVorticity(),
+                         ZonalComponent('u'), MeridionalComponent('u')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Physics ------------------------------------------------------------------

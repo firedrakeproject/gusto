@@ -77,6 +77,7 @@ def thermal_williamson_2(
     # IO
     output = OutputParameters(
         dirname=dirname, dumpfreq=dumpfreq, dumplist_latlon=['D', 'D_error'],
+        dump_vtus=False, dump_nc=True
     )
 
     diagnostic_fields = [
