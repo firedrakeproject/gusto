@@ -38,6 +38,7 @@ jobs:
           . /home/firedrake/firedrake/bin/activate
           firedrake-clean
           export GUSTO_PARALLEL_LOG=FILE
+          export PYOP2_CFLAGS=-O0
           python -m pytest \
             -n 12 --dist worksteal \
             --durations=100 \
