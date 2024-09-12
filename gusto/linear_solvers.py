@@ -1003,6 +1003,10 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
             + beta * phi * H * div(u) * dx
         )
 
+        if 'coriolis' in equation.prescribed_fields._field_names:
+            f = equation.prescribed_fields('coriolis')
+            eqn += beta * f * inner(w, equation.domain.perp(u)) * dx
+
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
