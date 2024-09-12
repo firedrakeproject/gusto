@@ -32,4 +32,8 @@ integration_test:
 
 example:
 	@echo "    Running all examples"
-	@python3 -m pytest examples $(PYTEST_ARGS)
+	@python3 -m pytest examples -v -m "not parallel" $(PYTEST_ARGS)
+
+parallel_example:
+	@echo "    Running all parallel examples"
+	@python3 -m pytest examples -v -m "parallel" $(PYTEST_ARGS)

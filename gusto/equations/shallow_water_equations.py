@@ -189,14 +189,15 @@ class ShallowWaterEquations(PrognosticEquationSet):
                                           self.X)
             residual += topography_form
 
-        # thermal source terms not involving topography
+        # thermal source terms not involving topography.
+        # label these as the equivalent pressure gradient term
         if self.thermal:
             n = FacetNormal(domain.mesh)
-            source_form = subject(prognostic(-D*div(b*w)*dx
-                                             - 0.5*b*div(D*w)*dx
-                                             + jump(b*w, n)*avg(D)*dS
-                                             + 0.5*jump(D*w, n)*avg(b)*dS,
-                                             'u'), self.X)
+            source_form = pressure_gradient(subject(prognostic(-D*div(b*w)*dx
+                                                    - 0.5*b*div(D*w)*dx
+                                                    + jump(b*w, n)*avg(D)*dS
+                                                    + 0.5*jump(D*w, n)*avg(b)*dS,
+                                                    'u'), self.X))
             residual += source_form
 
         # -------------------------------------------------------------------- #

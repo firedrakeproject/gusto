@@ -5,7 +5,9 @@ from firedrake import (Function, Constant, NonlinearVariationalProblem,
 from firedrake.fml import replace_subject, all_terms, drop
 from firedrake.utils import cached_property
 from gusto.core.labels import time_derivative, implicit, explicit
-from gusto.time_discretisation.time_discretisation import TimeDiscretisation
+from gusto.time_discretisation.time_discretisation import (
+    TimeDiscretisation, wrapper_apply
+)
 import numpy as np
 
 
@@ -209,6 +211,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
         self.x1.assign(x_in)
         solver_list = self.solvers
