@@ -14,7 +14,7 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, GeneralIcosahedralSphereMesh, ZonalComponent,
-    MeridionalComponent, RelativeVorticity
+    MeridionalComponent, RelativeVorticity, MoistConvectiveSWSolver
 )
 
 williamson_5_defaults = {
@@ -76,19 +76,25 @@ def williamson_5(
     # I/O
     output = OutputParameters(
         dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq,
-        dump_vtus=True, dump_nc=False, dumplist=['D', 'topography']
+        dump_vtus=False, dump_nc=True, dumplist=['D', 'topography']
     )
     diagnostic_fields = [Sum('D', 'topography'), RelativeVorticity(),
                          MeridionalComponent('u'), ZonalComponent('u')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"), SSPRK3(domain, "D")]
+    transported_fields = [
+        SSPRK3(domain, "u", subcycle_by_courant=0.25),
+        SSPRK3(domain, "D", subcycle_by_courant=0.25)
+    ]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
+
+    linear_solver = MoistConvectiveSWSolver(eqns, tau_values={'D': 1.0})
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods
+        eqns, io, transported_fields, transport_methods,
+        linear_solver=linear_solver, num_outer=4, num_inner=1
     )
 
     # ------------------------------------------------------------------------ #

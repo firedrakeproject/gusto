@@ -83,7 +83,7 @@ def skamarock_klemp_nonhydrostatic(
     if COMM_WORLD.size == 1:
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=True, dump_nc=False,
+            dump_vtus=False, dump_nc=True,
             point_data=[('theta_perturbation', points)],
         )
     else:
@@ -106,9 +106,9 @@ def skamarock_klemp_nonhydrostatic(
     # Transport schemes
     theta_opts = SUPGOptions()
     transported_fields = [
-        TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "rho"),
-        SSPRK3(domain, "theta", options=theta_opts)
+        SSPRK3(domain, "u", subcycle_by_courant=0.2),
+        SSPRK3(domain, "rho", subcycle_by_courant=0.2),
+        SSPRK3(domain, "theta", subcycle_by_courant=0.2, options=theta_opts)
     ]
     transport_methods = [
         DGUpwind(eqns, "u"),
@@ -117,12 +117,13 @@ def skamarock_klemp_nonhydrostatic(
     ]
 
     # Linear solver
-    linear_solver = CompressibleSolver(eqns)
+    linear_solver = CompressibleSolver(eqns, tau_values={'theta': 1.0, 'rho': 1.0})
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
+        linear_solver=linear_solver, alpha=0.5, reference_update_freq=0.0,
+        num_outer=4, num_inner=1, accelerator=True
     )
 
     # ------------------------------------------------------------------------ #
