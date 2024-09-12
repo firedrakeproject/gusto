@@ -31,12 +31,17 @@ bexpr = 2000 * (1 - r/R0)
 eqn = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
 
 # I/O
-output = OutputParameters(dirname="adjoint_sw")
+output = OutputParameters(dirname="adjoint_sw", log_courant=False)
 io = IO(domain, output)
 
-scheme = BackwardEuler(domain)
+# Transport schemes
+transported_fields = [TrapeziumRule(domain, "u"), SSPRK3(domain, "D")]
 transport_methods = [DGUpwind(eqn, "u"), DGUpwind(eqn, "D")]
-stepper = Timestepper(eqn, scheme, io, spatial_methods=transport_methods)
+
+# Time stepper
+stepper = SemiImplicitQuasiNewton(
+    eqn, io, transported_fields, transport_methods
+)
 
 u0 = stepper.fields('u')
 D0 = stepper.fields('D')
@@ -49,16 +54,18 @@ Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
 u0.project(uexpr)
 D0.interpolate(Dexpr)
 
-stepper.run(0., dt)
+Dbar = Function(D0.function_space()).assign(H)
+stepper.set_reference_profiles([('D', Dbar)])
 
-u = stepper.fields("u")
-J = assemble(inner(u, u)*dx)
+stepper.run(0., 10*dt)
+
+J = assemble(0.5*inner(u0, u0)*dx + 0.5*g*D0**2*dx)
 
 my_control = Control(D0)
 h = Function(D0.function_space()).interpolate(Dexpr)  # the direction of the perturbation
 
 # dJdnu = compute_gradient(J, my_control)
 
-Jhat = ReducedFunctional(J, my_control)  # the functional as a pure function of nu
+Jhat = ReducedFunctional(J, my_control)
 
 conv_rate = taylor_test(Jhat, D0, h)
