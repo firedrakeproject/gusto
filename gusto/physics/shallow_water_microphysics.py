@@ -3,7 +3,7 @@ Defines microphysics routines to be used with the moist shallow water equations.
 """
 
 from firedrake import (
-    Interpolator, conditional, Function, dx, min_value, max_value, Constant
+    Interpolator, conditional, Function, dx, min_value, max_value, FunctionSpace
 )
 from firedrake.fml import subject
 from gusto.core.logging import logger
@@ -92,13 +92,14 @@ class InstantRain(PhysicsParametrisation):
         self.water_v = Function(Vv)
         self.source = Function(Vv)
 
+        R = FunctionSpace(equation.domain.mesh, "R", 0)
         # tau is the timescale for conversion (may or may not be the timestep)
         if tau is not None:
             self.set_tau_to_dt = False
-            self.tau = tau
+            self.tau = Function(R).assign(tau)
         else:
             self.set_tau_to_dt = True
-            self.tau = Constant(0)
+            self.tau = Function(R)
             logger.info("Timescale for rain conversion has been set to dt. If this is not the intention then provide a tau parameter as an argument to InstantRain.")
 
         if self.time_varying_saturation:
@@ -269,12 +270,13 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             V_idxs.append(self.Vb_idx)
 
         # tau is the timescale for condensation/evaporation (may or may not be the timestep)
+        R = FunctionSpace(equation.domain.mesh, "R", 0)
         if tau is not None:
             self.set_tau_to_dt = False
-            self.tau = tau
+            self.tau = Function(R).assign(tau)
         else:
             self.set_tau_to_dt = True
-            self.tau = Constant(0)
+            self.tau = Function(R)
             logger.info("Timescale for moisture conversion between vapour and cloud has been set to dt. If this is not the intention then provide a tau parameter as an argument to SWSaturationAdjustment.")
 
         if self.time_varying_saturation:
