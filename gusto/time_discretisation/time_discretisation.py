@@ -9,7 +9,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 import math
 
 from firedrake import (Function, TestFunction, TestFunctions, DirichletBC,
-                       Constant, NonlinearVariationalProblem,
+                       NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import (replace_subject, replace_test_function, Term,
                            all_terms, drop)
@@ -71,10 +71,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.field_name = field_name
         self.equation = None
 
-        self.dt = Constant(0.0)
-        self.dt.assign(domain.dt)
-        self.original_dt = Constant(0.0)
-        self.original_dt.assign(self.dt)
+        self.dt = Function(domain.dt.function_space(), val=domain.dt)
+        self.original_dt = Function(domain.dt.function_space(), val=self.dt)
         self.options = options
         self.limiter = limiter
         self.courant_max = None
