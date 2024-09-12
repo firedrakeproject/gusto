@@ -77,7 +77,11 @@ class Configuration(object):
         # Almost all parameters should be Constants -- but there are some
         # specific exceptions which should be kept as integers
         if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq']:
-            object.__setattr__(self, name, Constant(value))
+            object.__setattr__(self, name, value)
+            # DO NOT MERGE
+            # Adjoint is a bit twitchy with Constants so let's not make them
+            # for now
+            #object.__setattr__(self, name, Constant(value))
         else:
             object.__setattr__(self, name, value)
 

@@ -8,7 +8,7 @@ from gusto.core.coordinates import Coordinates
 from gusto.core.function_spaces import Spaces, check_degree_args
 from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
                        inner, grad, VectorFunctionSpace, Function, FunctionSpace,
-                       perp)
+                       perp, CoordinatelessFunction)
 import numpy as np
 
 
@@ -58,15 +58,16 @@ class Domain(object):
         # -------------------------------------------------------------------- #
 
         # Store central dt for use in the rest of the model
+        R = FunctionSpace(mesh, "R", 0)
         if type(dt) is Constant:
-            self.dt = dt
+            self.dt = Function(R, val=float(dt))
         elif type(dt) in (float, int):
-            self.dt = Constant(dt)
+            self.dt = Function(R, val=dt)
         else:
             raise TypeError(f'dt must be a Constant, float or int, not {type(dt)}')
 
         # Make a placeholder for the time
-        self.t = Constant(0.0)
+        self.t = Function(R, val=0.0)
 
         # -------------------------------------------------------------------- #
         # Build compatible function spaces
