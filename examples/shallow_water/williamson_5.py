@@ -71,7 +71,8 @@ def williamson_5(
     rsq = min_value(R0**2, (lamda - lamda_c)**2 + (phi - phi_c)**2)
     r = sqrt(rsq)
     tpexpr = mountain_height * (1 - r/R0)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=tpexpr)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=tpexpr,
+                                 u_transport_option='vector_advection_form')
 
     # I/O
     output = OutputParameters(
@@ -94,7 +95,8 @@ def williamson_5(
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, num_outer=4, num_inner=1
+        linear_solver=linear_solver, num_outer=2, num_inner=2,
+        predictor='D', alpha=0.55, accelerator=True
     )
 
     # ------------------------------------------------------------------------ #

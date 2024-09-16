@@ -415,7 +415,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         # If doing adaptive subcycles, update dt and ncycles here
         if self.subcycle_by_courant is not None:
-            self.ncycles = math.ceil(float(self.courant_max)/self.subcycle_by_courant)
+            self.ncycles = min(math.ceil(float(self.courant_max)/self.subcycle_by_courant), 20)
             self.dt.assign(self.original_dt/self.ncycles)
 
         self.x0.assign(x_in)
