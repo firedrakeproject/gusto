@@ -14,7 +14,7 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, GeneralIcosahedralSphereMesh, ZonalComponent,
-    MeridionalComponent, RelativeVorticity
+    MeridionalComponent, RelativeVorticity, MoistConvectiveSWSolver
 )
 
 williamson_5_defaults = {
@@ -71,24 +71,32 @@ def williamson_5(
     rsq = min_value(R0**2, (lamda - lamda_c)**2 + (phi - phi_c)**2)
     r = sqrt(rsq)
     tpexpr = mountain_height * (1 - r/R0)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=tpexpr)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=tpexpr,
+                                 u_transport_option='vector_advection_form')
 
     # I/O
     output = OutputParameters(
         dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq,
-        dump_vtus=True, dump_nc=False, dumplist=['D', 'topography']
+        dump_vtus=False, dump_nc=True, dumplist=['D', 'topography']
     )
     diagnostic_fields = [Sum('D', 'topography'), RelativeVorticity(),
                          MeridionalComponent('u'), ZonalComponent('u')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"), SSPRK3(domain, "D")]
+    transported_fields = [
+        SSPRK3(domain, "u", subcycle_by_courant=0.25),
+        SSPRK3(domain, "D", subcycle_by_courant=0.25)
+    ]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
+
+    linear_solver = MoistConvectiveSWSolver(eqns, tau_values={'D': 1.0})
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods
+        eqns, io, transported_fields, transport_methods,
+        linear_solver=linear_solver, num_outer=2, num_inner=2,
+        predictor='D', alpha=0.55, accelerator=True
     )
 
     # ------------------------------------------------------------------------ #
