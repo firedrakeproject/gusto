@@ -482,8 +482,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  auxiliary_equations_and_schemes=None, linear_solver=None,
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
-                 alpha=Constant(0.5), off_centred_u=False,
-                 num_outer=2, num_inner=2):
+                 ultra_fast_physics_schemes=None, alpha=Constant(0.5),
+                 off_centred_u=False, num_outer=2, num_inner=2):
 
         """
         Args:
@@ -517,6 +517,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`).
                 These schemes are evaluated within the outer loop. Defaults to
                 None.
+            ultra_fast_physics_schemes: (list, optional): a list of tuples of
+                the form (:class:`PhysicsParametrisation`,
+                :class:`TimeDiscretisation`). These schemes are evaluated
+                within the inner loop. Defaults to None.
             alpha (`ufl.Constant`, optional): the semi-implicit off-centering
                 parameter. A value of 1 corresponds to fully implicit, while 0
                 corresponds to fully explicit. Defaults to Constant(0.5).
@@ -556,8 +560,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.fast_physics_schemes = fast_physics_schemes
         else:
             self.fast_physics_schemes = []
+        if ultra_fast_physics_schemes is not None:
+            self.ultra_fast_physics_schemes = ultra_fast_physics_schemes
+        else:
+            self.ultra_fast_physics_schemes = []
         self.all_physics_schemes = (self.slow_physics_schemes
                                     + self.fast_physics_schemes
+                                    + self.ultra_fast_physics_schemes
                                     + self.final_physics_schemes)
 
         for parametrisation, scheme in self.all_physics_schemes:
@@ -653,7 +662,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     def setup_fields(self):
         """Sets up time levels n, star, p and np1"""
         self.x = TimeLevelFields(self.equation, 1)
-        self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast"))
+        self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast", "after_ultra_fast"))
         for aux_eqn, _ in self.auxiliary_equations_and_schemes:
             self.x.add_fields(aux_eqn)
         # Prescribed fields for auxiliary eqns should come from prognostics of
@@ -703,6 +712,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xp = self.x.p
         x_after_slow = self.x.after_slow
         x_after_fast = self.x.after_fast
+        x_after_ultra_fast = self.x.after_ultra_fast
         xrhs = self.xrhs
         xrhs_phys = self.xrhs_phys
         dy = self.dy
@@ -750,6 +760,19 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'SIQN: Implicit forcing {(outer, inner)}')
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
+
+                # # # # # # # # # #
+                # is this the correct place for ultra-fast physics?
+                x_after_ultra_fast(self.field_name).assign(xrhs)
+                if len(self.ultra_fast_physics_schemes) > 0:
+                    with timed_stage("Ultra-fast physics"):
+                        logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
+                        for _, scheme in self.ultra_fast_physics_schemes:
+                            scheme.apply(x_after_ultra_fast(scheme.field_name), x_after_ultra_fast(scheme.field_name))
+
+                xrhs_phys.assign(x_after_ultra_fast(self.field_name) - xrhs)
+
+                # # # # # # # # #
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
