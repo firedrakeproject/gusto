@@ -1,7 +1,7 @@
 """Classes for controlling the timestepping loop."""
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import Function, Projector, split, Constant
+from firedrake import Function, Projector, split, Constant, Interpolator, div
 from firedrake.fml import drop, Label, Term
 from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
@@ -483,7 +483,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
                  ultra_fast_physics_schemes=None, alpha=Constant(0.5),
-                 off_centred_u=False, num_outer=2, num_inner=2):
+                 off_centred_u=False, num_outer=2, num_inner=2,
+                 predictor=None):
 
         """
         Args:
@@ -541,6 +542,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.num_outer = num_outer
         self.num_inner = num_inner
         self.alpha = alpha
+        self.predictor = predictor
 
         # default is to not offcentre transporting velocity but if it
         # is offcentred then use the same value as alpha
@@ -642,6 +644,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.forcing = Forcing(equation_set, self.alpha)
         self.bcs = equation_set.bcs
 
+        if self.predictor is not None:
+            V_DG = equation_set.domain.spaces('DG')
+            div_factor = Constant(1.0) - (Constant(1.0) - self.alpha)*self.dt*div(self.x.star('u'))
+            self.predictor_interpolator = Interpolator(
+                self.x.star(predictor)*div_factor, V_DG
+            )
+
     def _apply_bcs(self):
         """
         Set the zero boundary conditions in the velocity.
@@ -741,7 +750,15 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 for name, scheme in self.active_transport:
                     logger.info(f'SIQN: Transport {outer}: {name}')
                     # transports a field from xstar and puts result in xp
-                    scheme.apply(xp(name), xstar(name))
+                    if name == self.predictor:
+                        V = xstar(name).function_space()
+                        field_in = Function(V)
+                        field_out = Function(V)
+                        self.predictor_interpolator.interpolate()
+                        scheme.apply(field_out, field_in)
+                        xp(name).assign(xstar(name) + field_out - field_in)
+                    else:
+                        scheme.apply(xp(name), xstar(name))
 
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:
