@@ -851,7 +851,7 @@ class Vorticity(DiagnosticField):
                 vort = TrialFunction(space)
                 gamma = TestFunction(space)
                 a = inner(vort, gamma) * dx
-                L = -(inner(domain.perp(grad(gamma)), u)) * dx
+                L = (inner(domain.perp(grad(gamma)), u)) * dx
                 # TODO implement absolute version, unsure how to get corioilis in vertical slice smartly
                 
             problem = LinearVariationalProblem(a, L, self.field)
