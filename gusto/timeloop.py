@@ -484,7 +484,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  slow_physics_schemes=None, fast_physics_schemes=None,
                  ultra_fast_physics_schemes=None, alpha=Constant(0.5),
                  off_centred_u=False, num_outer=2, num_inner=2,
-                 predictor=None):
+                 accelerator=False, predictor=None):
 
         """
         Args:
@@ -537,12 +537,16 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 implicit forcing (pressure gradient and Coriolis) terms, and the
                 linear solve. Defaults to 2. Note that default used by the Met
                 Office's ENDGame and GungHo models is 2.
+            accelerator (bool, optional): whether to zero non-wind implicit
+                forcings for transport terms in order to speed up solver
+                convergence or not.
         """
 
         self.num_outer = num_outer
         self.num_inner = num_inner
         self.alpha = alpha
         self.predictor = predictor
+        self.accelerator = accelerator
 
         # default is to not offcentre transporting velocity but if it
         # is offcentred then use the same value as alpha
@@ -579,10 +583,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                      + f"physics scheme {parametrisation.label.label}")
 
         self.active_transport = []
+        self.transported_fields = []
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             assert scheme.field_name in equation_set.field_names
             self.active_transport.append((scheme.field_name, scheme))
+            self.transported_fields.append(scheme.field_name)
             # Check that there is a corresponding transport method
             method_found = False
             for method in spatial_methods:
@@ -643,6 +649,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.linear_solver = linear_solver
         self.forcing = Forcing(equation_set, self.alpha)
         self.bcs = equation_set.bcs
+        self.acclerator = accelerator
 
         if self.predictor is not None:
             V_DG = equation_set.domain.spaces('DG')
@@ -777,6 +784,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'SIQN: Implicit forcing {(outer, inner)}')
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
+                    if (inner > 0 and self.accelerator):
+                         # Zero implicit forcing to accelerate solver convergence
+                        self.zero_forcing_terms(self.equation, xp, xrhs, self.transported_fields)
 
                 # # # # # # # # # #
                 # is this the correct place for ultra-fast physics?
@@ -834,6 +844,28 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 'Reference profiles for must be initialised to use Semi-Implicit Timestepper'
 
         super().run(t, tmax, pick_up=pick_up)
+
+
+    def zero_forcing_terms(self, equation, x_in, x_out,
+                           transported_field_names):
+        """
+        Zero forcing term F(x) for non-wind transport.
+        This takes x_in and x_out, where x_out = x_in + scale*F(x_nl) for
+        some field x_nl and sets x_out = x_in for all non-wind transport terms.
+
+        Args:
+           equation (:class:`PrognosticEquationSet`): the prognostic
+               equation set to be solved
+           x_in (:class:`FieldCreator`): the field to be incremented.
+           x_out (:class:`FieldCreator`): the output field to be updated.
+           transported_field_names (str): list of fields names for transported
+                fields
+         """
+        for field_name in transported_field_names:
+             if field_name != 'u':
+                 logger.info(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
+                 field_index = equation.field_names.index(field_name)
+                 x_out.subfunctions[field_index].assign(x_in(field_name))
 
 
 class PrescribedTransport(Timestepper):
