@@ -633,7 +633,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.field_name = equation_set.field_name
         W = equation_set.function_space
         self.xrhs = Function(W)
-        self.xfi = Function(W)
         self.xrhs_phys = Function(W)
         self.xrhs_inner_phys = Function(W)
         self.dy = Function(W)
@@ -718,7 +717,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xrhs = self.xrhs
         xrhs_phys = self.xrhs_phys
         xrhs_inner_phys = self.xrhs_inner_phys
-        xfi = self.xfi
         dy = self.dy
 
         x_after_slow(self.field_name).assign(xn(self.field_name))
@@ -763,7 +761,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'SIQN: Implicit forcing {(outer, inner)}')
-                    self.forcing.apply(xp, xnp1, xfi, "implicit")
+                    self.forcing.apply(xp, xnp1, xrhs, "implicit")
 
                 # # # # # # # # # #
                 # is this the correct place for ultra-fast physics?
@@ -776,12 +774,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                 xrhs_inner_phys.assign(x_after_ultra_fast(self.field_name) - xnp1(self.field_name))
 
-                xrhs += xfi
                 xrhs += xrhs_inner_phys
 
                 # # # # # # # # #
 
-                # xrhs -= xnp1(self.field_name)
+                xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
 
                 with timed_stage("Implicit solve"):
