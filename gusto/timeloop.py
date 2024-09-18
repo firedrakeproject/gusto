@@ -633,7 +633,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.field_name = equation_set.field_name
         W = equation_set.function_space
         self.xrhs = Function(W)
+        self.xfi = Function(W)
         self.xrhs_phys = Function(W)
+        self.xrhs_inner_phys = Function(W)
         self.dy = Function(W)
         if linear_solver is None:
             self.linear_solver = LinearTimesteppingSolver(equation_set, self.alpha)
@@ -715,6 +717,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         x_after_ultra_fast = self.x.after_ultra_fast
         xrhs = self.xrhs
         xrhs_phys = self.xrhs_phys
+        xrhs_inner_phys = self.xrhs_inner_phys
+        xfi = self.xfi
         dy = self.dy
 
         x_after_slow(self.field_name).assign(xn(self.field_name))
@@ -759,22 +763,25 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'SIQN: Implicit forcing {(outer, inner)}')
-                    self.forcing.apply(xp, xnp1, xrhs, "implicit")
+                    self.forcing.apply(xp, xnp1, xfi, "implicit")
 
                 # # # # # # # # # #
                 # is this the correct place for ultra-fast physics?
-                x_after_ultra_fast(self.field_name).assign(xrhs)
+                x_after_ultra_fast(self.field_name).assign(xnp1(self.field_name))
                 if len(self.ultra_fast_physics_schemes) > 0:
                     with timed_stage("Ultra-fast physics"):
                         logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
                         for _, scheme in self.ultra_fast_physics_schemes:
                             scheme.apply(x_after_ultra_fast(scheme.field_name), x_after_ultra_fast(scheme.field_name))
 
-                xrhs_phys.assign(x_after_ultra_fast(self.field_name) - xrhs)
+                xrhs_inner_phys.assign(x_after_ultra_fast(self.field_name) - xnp1(self.field_name))
+
+                xrhs += xfi
+                xrhs += xrhs_inner_phys
 
                 # # # # # # # # #
 
-                xrhs -= xnp1(self.field_name)
+                # xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
 
                 with timed_stage("Implicit solve"):
