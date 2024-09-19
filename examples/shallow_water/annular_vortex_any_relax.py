@@ -19,21 +19,29 @@ day = 88774.
 # set inner and outer latitude limits of annulus   
 phis = 60
 phin = 70
+phimp = phis
+
+monopolar = True
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
 tau_r_ratio = 2
 tau_c_ratio = 0.01
-alpha = 0.9
+alpha = 1
 
 # relaxation schemes can be rad, co2, both, none
 rel_sch = 'both'
 include_co2 = 'yes'
 
-extra_name = '_working'
+extra_name = ''
+if include_co2 == 'no':
+    extra_name = f'{extra_name}_no-co2'
+if phimp != phis:
+    extra_name = f'{extra_name}_phimp--{phimp}'
 
 ### max runtime currently 1 day
-tmax = 50 * day
+rundays = 100
+tmax = rundays * day
 ### timestep
 dt = 450.
 
@@ -66,7 +74,7 @@ parameters = ShallowWaterParameters(g=g, H=H, Omega=Omega)
 # Set up model objects
 # ------------------------------------------------------------------------ #
 
-def initial_profiles(omega, radius, annulus):
+def initial_profiles(omega, radius, phiss, phinn, annulus):
 
     # set numerical method parameters
     ny = 1000000
@@ -88,8 +96,8 @@ def initial_profiles(omega, radius, annulus):
 
     #setup different initial PV profiles
     smoothing = True
-    rlat1 = np.radians(phis)
-    rlat2 = np.radians(phin)
+    rlat1 = np.radians(phiss)
+    rlat2 = np.radians(phinn)
     qp = 2 * omega / hbart
     qt0 = 2 * omega * sinlat / hbart
     qt = qt0
@@ -169,7 +177,7 @@ def initial_profiles(omega, radius, annulus):
         qn = (f + zn)/hn - coff
 
         # compare PV profiles and compare to tolerance threshold
-        error = np.sum(np.sqrt((qn - qt)**2))
+        error = np.sqrt(np.sum((qn - qt)**2))
         count += 1
         # print(count, error)
 
@@ -203,10 +211,13 @@ def initial_profiles(omega, radius, annulus):
 
     return rlat, uini, thini
 
-rlat, uini, hini = initial_profiles(Omega, R, annulus=True)
-rlat_mp, uini_mp, hini_mp = initial_profiles(Omega, R, annulus=False)
+rlat, uini, hini = initial_profiles(Omega, R, phis, phin, annulus=True)
+rlat_mp, uini_mp, hini_mp = initial_profiles(Omega, R, phimp, phin, annulus=False)
+h_th = min(hini)+alpha*H
 
-
+if monopolar:
+    rlat, uini, hini = rlat_mp, uini_mp, hini_mp
+    phin = 90
 
 
 # Domain
@@ -222,10 +233,10 @@ eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
 H_rel = Function(domain.spaces('L2'))
 
 # I/O (input/output)
-dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}{extra_name}'
+dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{rundays}-sols{extra_name}'
 print(f'directory name is {dirname}')
 output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=10)
-diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', min(hini)+alpha*H)]
+diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th)]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
@@ -236,7 +247,7 @@ transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 H_rel = Function(domain.spaces('L2'))
 height_relax = SWHeightRelax(eqns, H_rel, tau_r=tau_r)
 
-co2_cond = SWCO2cond(eqns, h_th=min(hini)+alpha*H, tau_c=tau_c)
+co2_cond = SWCO2cond(eqns, h_th=h_th, tau_c=tau_c)
 
 if rel_sch == 'both':
     physics_schemes = [(height_relax, ForwardEuler(domain)),
@@ -341,5 +352,31 @@ stepper.set_reference_profiles([('D', Dbar)])
 # ------------------------------------------------------------------------ #
 
 stepper.run(t=0, tmax=tmax)
+
+
+results_file_name = f'{dirname}/field_output.nc'
+output_file_name = f'{dirname}/regrid_output.nc'
+data_file = Dataset(results_file_name, 'r')
+for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity']:
+    field_data = extract_gusto_field(data_file, field_name)
+    coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
+    times = np.arange(np.shape(field_data)[1])
+    lats = np.arange(-90, 91, 3)
+    lons = np.arange(-180, 181, 3)
+    X, Y = np.meshgrid(lons, lats)
+    new_data = regrid_horizontal_slice(X, Y,
+                                        coords_X, coords_Y, field_data)
+    da = xr.DataArray(data=new_data.astype('float32'),
+                    dims=['lat', 'lon', 'time'],
+                    coords=dict(lat=lats.astype('float32'), lon=lons.astype('float32'), time=times.astype('float32')),
+                    name=field_name)
+    ds1 = da.to_dataset()
+    if field_name == 'D':
+        ds = ds1
+    else:
+        ds = xr.merge([ds, ds1])
+
+ds.to_netcdf(output_file_name)
+
 
 print(f'directory name is {dirname}')
