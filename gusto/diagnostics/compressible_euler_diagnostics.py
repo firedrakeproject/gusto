@@ -1,9 +1,9 @@
 """Common diagnostic fields for the compressible Euler equations."""
 
-from firedrake import (dot, dx, Function, ln, TestFunction, TrialFunction,
-                       Constant, grad, inner, LinearVariationalProblem,
+from firedrake import (dot, dx, Function, ln, TestFunction, TrialFunction, 
+                       Constant, grad, inner, LinearVariationalProblem, dS,
                        LinearVariationalSolver, FacetNormal, ds_b, dS_v, div,
-                       avg, jump, SpatialCoordinate, curl, as_vector)
+                       avg, jump, SpatialCoordinate, curl, as_vector, cross)
 
 from gusto.diagnostics.diagnostics import (
     DiagnosticField, Energy, IterativeDiagnosticField
@@ -842,16 +842,19 @@ class Vorticity(DiagnosticField):
             if domain.mesh.topological_dimension() == 3:
                 vort = TrialFunction(space)
                 gamma = TestFunction(space)
+                f = Coefficient(space)
+                breakpoint()
+                n = FacetNormal(domain.mesh)
                 a = inner(vort, gamma) * dx
-                L = -inner(curl(gamma), u) * dx 
+                L = inner(curl(gamma), u) * dx 
                 if vorticity_type == 'absolute':
                     Omega = as_vector((0, 0, self.parameters.Omega))
-                    L += inner(2*Omega, gamma) * dx
+                    L += inner(2*Omega, gamma) * dx - jump(inner(cross(u, n), gamma), n)*dS
             else:
                 vort = TrialFunction(space)
                 gamma = TestFunction(space)
                 a = inner(vort, gamma) * dx
-                L = (inner(domain.perp(grad(gamma)), u)) * dx
+                L = (inner(domain.perp(grad(gamma)), u)) * dx - jump(inner(cross(u, n), gamma, n))*dS
                 # TODO implement absolute version, unsure how to get corioilis in vertical slice smartly
                 
             problem = LinearVariationalProblem(a, L, self.field)
