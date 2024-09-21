@@ -6,6 +6,7 @@ from firedrake.fml import drop, Term
 from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
 from gusto.core import TimeLevelFields, StateFields
+from gusto.core.io import TimeData
 from gusto.core.labels import transport, diffusion, prognostic, transporting_velocity
 from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
@@ -165,7 +166,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         if pick_up:
             # Pick up fields, and return other info to be picked up
             time_data, reference_profiles = self.io.pick_up_from_checkpoint(self.fields)
-            t, self.step, initial_timesteps, last_ref_update_time = time_data
+            t = time_data.t
+            self.step = time_data.step
+            initial_timesteps = time_data.initial_steps
+            last_ref_update_time = time_data.last_ref_update_time
             self.set_reference_profiles(reference_profiles, last_ref_update_time)
             self.set_initial_timesteps(initial_timesteps)
 
@@ -196,9 +200,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.step += 1
 
             with timed_stage("Dump output"):
-                time_data = (
-                    float(self.t), self.step,
-                    self.get_initial_timesteps(), self.last_ref_update_time
+                time_data = TimeData(
+                    t=float(self.t), step=self.step,
+                    initial_steps=self.get_initial_timesteps(),
+                    last_ref_update_time=self.last_ref_update_time
                 )
                 self.io.dump(self.fields, time_data)
 

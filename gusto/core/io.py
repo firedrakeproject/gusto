@@ -13,12 +13,20 @@ from firedrake.output import VTKFile
 from pyop2.mpi import MPI
 import numpy as np
 from gusto.core.logging import logger, update_logfile_location
+from collections import namedtuple
 
-__all__ = ["pick_up_mesh", "IO"]
+__all__ = ["pick_up_mesh", "IO", "TimeData"]
 
 
 class GustoIOError(IOError):
     pass
+
+
+# A named tuple object encapsulating data about timing
+TimeData = namedtuple(
+    'TimeData',
+    ['t', 'step', 'initial_steps', 'last_ref_update_time']
+)
 
 
 def pick_up_mesh(output, mesh_name):
@@ -534,7 +542,10 @@ class IO(object):
             step = 1
             last_ref_update_time = None
             initial_steps = None
-            time_data = (t, step, initial_steps, last_ref_update_time)
+            time_data = TimeData(
+                t=t, step=step, initial_steps=initial_steps,
+                last_ref_update_time=last_ref_update_time
+            )
             self.dump(state_fields, time_data)
 
     def pick_up_from_checkpoint(self, state_fields):
@@ -546,9 +557,7 @@ class IO(object):
 
         Returns:
             tuple of (`time_data`, `reference_profiles`): where `time_data`
-                itself is a tuple of numbers relating to the checkpointed time.
-                This tuple is: (model time, step index,
-                number of initial steps, last time reference profiles updated).
+                itself is a named tuple containing the timing data.
                 The `reference_profiles` are a list of (`field_name`, expr)
                 pairs describing the reference profile fields.
         """
@@ -670,7 +679,11 @@ class IO(object):
             if hasattr(diagnostic_field, "init_field_set"):
                 diagnostic_field.init_field_set = True
 
-        time_data = (t, step, initial_steps, last_ref_update_time)
+        time_data = TimeData(
+            t=t, step=step, initial_steps=initial_steps,
+            last_ref_update_time=last_ref_update_time
+        )
+
         return time_data, reference_profiles
 
     def dump(self, state_fields, time_data):
@@ -683,7 +696,7 @@ class IO(object):
 
         Args:
             state_fields (:class:`StateFields`): the model's field container.
-            time_data (tuple): contains information relating to the time in
+            time_data (namedtuple): contains information relating to the time in
                 the simulation. The tuple is structured as follows:
                 - t: current time in s
                 - step: the index of the time step
@@ -693,7 +706,10 @@ class IO(object):
                   profiles were updated (could be None)
         """
         output = self.output
-        t, step, initial_steps, last_ref_update_time = time_data
+        t = time_data.t
+        step = time_data.step
+        initial_steps = time_data.initial_steps
+        last_ref_update_time = time_data.last_ref_update_time
 
         # Diagnostics:
         # Compute diagnostic fields
