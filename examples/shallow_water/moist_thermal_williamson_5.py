@@ -17,21 +17,21 @@ explicit RK4 timestepper is used.
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
-    SpatialCoordinate, as_vector, pi, sqrt, min_value, exp, cos, sin
+    SpatialCoordinate, as_vector, pi, sqrt, min_value, exp, cos, sin, Function
 )
 from gusto import (
-    Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
+    Domain, IO, OutputParameters, SSPRK3, ThermalSWSolver, DGUpwind,
     ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, InstantRain, SWSaturationAdjustment, WaterVapour,
     CloudWater, Rain, GeneralIcosahedralSphereMesh, RelativeVorticity,
-    ZonalComponent, MeridionalComponent
+    ZonalComponent, MeridionalComponent, SemiImplicitQuasiNewton
 )
 
 moist_thermal_williamson_5_defaults = {
     'ncells_per_edge': 16,     # number of cells per icosahedron edge
-    'dt': 300.0,               # 5 minutes
+    'dt': 900.0,               # 5 minutes
     'tmax': 50.*24.*60.*60.,   # 50 days
-    'dumpfreq': 2880,          # once per 10 days with default options
+    'dumpfreq': 960,          # once per 10 days with default options
     'dirname': 'moist_thermal_williamson_5'
 }
 
@@ -73,7 +73,7 @@ def moist_thermal_williamson_5(
     # ------------------------------------------------------------------------ #
 
     element_order = 1
-    u_eqn_type = 'vector_invariant_form'
+    u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -142,13 +142,25 @@ def moist_thermal_williamson_5(
         gamma_r=gamma_r
     )
 
-    transport_methods = [
-        DGUpwind(eqns, field_name) for field_name in eqns.field_names
+    transported_fields = [
+        SSPRK3(domain, "u", subcycle_by_courant=0.25),
+        SSPRK3(domain, "D", subcycle_by_courant=0.25),
+        SSPRK3(domain, "b", subcycle_by_courant=0.25),
+        SSPRK3(domain, "water_vapour", subcycle_by_courant=0.25),
+        SSPRK3(domain, "cloud_water", subcycle_by_courant=0.25),
     ]
 
-    # Timestepper
-    stepper = Timestepper(
-        eqns, RK4(domain), io, spatial_methods=transport_methods
+    transport_methods = [
+        DGUpwind(eqns, field_name) for field_name in ['u', 'D', 'b', 'water_vapour', 'cloud_water']
+    ]
+
+    linear_solver = ThermalSWSolver(eqns, tau_values={'D': 1.0})
+
+    # Time stepper
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods,
+        linear_solver=linear_solver, num_outer=2, num_inner=2,
+        predictor='D', alpha=0.55, accelerator=True
     )
 
     # ------------------------------------------------------------------------ #
@@ -190,6 +202,11 @@ def moist_thermal_williamson_5(
     v0.interpolate(vexpr)
     c0.assign(0.0)
     r0.assign(0.0)
+
+    # Set reference profiles
+    Dbar = Function(D0.function_space()).assign(mean_depth)
+    bbar = Function(b0.function_space()).interpolate(bexpr)
+    stepper.set_reference_profiles([('D', Dbar), ('b', bbar)])
 
     # ----------------------------------------------------------------- #
     # Run
