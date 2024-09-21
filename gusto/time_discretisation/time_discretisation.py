@@ -94,7 +94,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                             'Time discretisation: suboption SUPG is currently not implemented within MixedOptions')
                     else:
                         raise RuntimeError(
-                            f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
+                            f'Time discretisation: suboption wrapper {self.wrapper_name} not implemented')
             elif self.wrapper_name == "embedded_dg":
                 self.wrapper = EmbeddedDGWrapper(self, options)
             elif self.wrapper_name == "recovered":

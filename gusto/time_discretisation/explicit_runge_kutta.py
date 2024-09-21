@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from enum import Enum
 from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import replace_subject, all_terms, drop, keep
@@ -12,7 +13,25 @@ from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 
 
-__all__ = ["ForwardEuler", "ExplicitRungeKutta", "SSPRK3", "RK4", "Heun"]
+__all__ = [
+    "ForwardEuler", "ExplicitRungeKutta", "SSPRK3", "RK4", "Heun",
+    "RungeKuttaFormulation"
+]
+
+
+class RungeKuttaFormulation(Enum):
+    """
+    Enumerator to describe the formulation of a Runge-Kutta scheme.
+
+    The following Runge-Kutta methods are encoded here:
+    - `increment`:
+    - `predictor`:
+    - `linear`:
+    """
+
+    increment = 1595712
+    predictor = 8234900
+    linear = 269207
 
 
 class ExplicitRungeKutta(ExplicitTimeDiscretisation):
@@ -59,14 +78,14 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
     def __init__(self, domain, butcher_matrix, field_name=None,
                  fixed_subcycles=None, subcycle_by_courant=None,
-                 increment_form=True, solver_parameters=None,
-                 limiter=None, options=None):
+                 rk_formulation=RungeKuttaFormulation.increment,
+                 solver_parameters=None, limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            butcher_matrix (numpy array): A matrix containing the coefficients of
-                a butcher tableau defining a given Runge Kutta time discretisation.
+            butcher_matrix (numpy array): A matrix containing the coefficients
+                of a butcher tableau defining a given Runge Kutta scheme.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             fixed_subcycles (int, optional): the fixed number of sub-steps to
@@ -76,11 +95,11 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 make the scheme perform adaptive sub-cycling based on the
                 Courant number. The specified argument is the maximum Courant
                 for one sub-cycle. Defaults to None, in which case adaptive
-                sub-cycling is not used. This option cannot be specified with the
-                `fixed_subcycles` argument.
-            increment_form (bool, optional): whether to write the RK scheme in
-                "increment form", solving for increments rather than updated
-                fields. Defaults to True.
+                sub-cycling is not used. This option cannot be specified with
+                the `fixed_subcycles` argument.
+            rk_formulation (:class:`RungeKuttaFormulation`, optional):
+                an enumerator object, describing the formulation of the Runge-
+                Kutta scheme. Defaults to the increment form.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -97,7 +116,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                          limiter=limiter, options=options)
         self.butcher_matrix = butcher_matrix
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
-        self.increment_form = increment_form
+        self.rk_formulation = rk_formulation
 
     @property
     def nStages(self):
@@ -114,16 +133,21 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         """
         super().setup(equation, apply_bcs, *active_labels)
 
-        if not self.increment_form:
+        if self.rk_formulation == RungeKuttaFormulation.predictor:
             self.field_i = [Function(self.fs) for i in range(self.nStages+1)]
-        else:
+        elif self.rk_formulation == RungeKuttaFormulation.increment:
             self.k = [Function(self.fs) for i in range(self.nStages)]
+        else:
+            raise NotImplementedError(
+                'Runge-Kutta formulation is not implemented'
+            )
 
     @cached_property
     def solver(self):
-        if self.increment_form:
+        if self.rk_formulation == RungeKuttaFormulation.increment:
             return super().solver
-        else:
+
+        elif self.rk_formulation == RungeKuttaFormulation.predictor:
             # In this case, don't set snes_type to ksp only, as we do want the
             # outer Newton iteration
             solver_list = []
@@ -140,11 +164,16 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 solver_list.append(solver)
             return solver_list
 
+        else:
+            raise NotImplementedError(
+                'Runge-Kutta formulation is not implemented'
+            )
+
     @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
 
-        if self.increment_form:
+        if self.rk_formulation == RungeKuttaFormulation.increment:
             l = self.residual.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_true=replace_subject(self.x_out, self.idx),
@@ -152,7 +181,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             return l.form
 
-        else:
+        elif self.rk_formulation == RungeKuttaFormulation.predictor:
             lhs_list = []
             for stage in range(self.nStages):
                 l = self.residual.label_map(
@@ -163,11 +192,16 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             return lhs_list
 
+        else:
+            raise NotImplementedError(
+                'Runge-Kutta formulation is not implemented'
+            )
+
     @cached_property
     def rhs(self):
         """Set up the time discretisation's right hand side."""
 
-        if self.increment_form:
+        if self.rk_formulation == RungeKuttaFormulation.increment:
             r = self.residual.label_map(
                 all_terms,
                 map_if_true=replace_subject(self.x1, old_idx=self.idx))
@@ -179,7 +213,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             # If there are no active labels, we may have no terms at this point
             # So that we can still do xnp1 = xn, put in a zero term here
-            if self.increment_form and len(r.terms) == 0:
+            if len(r.terms) == 0:
                 logger.warning('No terms detected for RHS of explicit problem. '
                                + 'Adding a zero term to avoid failure.')
                 null_term = Constant(0.0)*self.residual.label_map(
@@ -191,7 +225,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             return r.form
 
-        else:
+        elif self.rk_formulation == RungeKuttaFormulation.predictor:
             rhs_list = []
 
             for stage in range(self.nStages):
@@ -217,9 +251,14 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             return rhs_list
 
+        else:
+            raise NotImplementedError(
+                'Runge-Kutta formulation is not implemented'
+            )
+
     def solve_stage(self, x0, stage):
 
-        if self.increment_form:
+        if self.rk_formulation == RungeKuttaFormulation.increment:
             self.x1.assign(x0)
 
             for i in range(stage):
@@ -241,7 +280,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 if self.limiter is not None:
                     self.limiter.apply(self.x1)
 
-        else:
+        elif self.rk_formulation == RungeKuttaFormulation.predictor:
             # Set initial field
             if stage == 0:
                 self.field_i[0].assign(x0)
@@ -266,6 +305,11 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 self.x1.assign(self.field_i[stage+1])
                 if self.limiter is not None:
                     self.limiter.apply(self.x1)
+
+        else:
+            raise NotImplementedError(
+                'Runge-Kutta formulation is not implemented'
+            )
 
     def apply_cycle(self, x_out, x_in):
         """
@@ -294,9 +338,12 @@ class ForwardEuler(ExplicitRungeKutta):
     k0 = F[y^n]                                                               \n
     y^(n+1) = y^n + dt*k0                                                     \n
     """
-    def __init__(self, domain, field_name=None, fixed_subcycles=None,
-                 subcycle_by_courant=None, increment_form=True,
-                 solver_parameters=None, limiter=None, options=None):
+    def __init__(
+            self, domain, field_name=None,
+            fixed_subcycles=None, subcycle_by_courant=None,
+            rk_formulation=RungeKuttaFormulation.increment,
+            solver_parameters=None, limiter=None, options=None
+    ):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -310,11 +357,11 @@ class ForwardEuler(ExplicitRungeKutta):
                 make the scheme perform adaptive sub-cycling based on the
                 Courant number. The specified argument is the maximum Courant
                 for one sub-cycle. Defaults to None, in which case adaptive
-                sub-cycling is not used. This option cannot be specified with the
-                `fixed_subcycles` argument.
-            increment_form (bool, optional): whether to write the RK scheme in
-                "increment form", solving for increments rather than updated
-                fields. Defaults to True.
+                sub-cycling is not used. This option cannot be specified with
+                the `fixed_subcycles` argument.
+            rk_formulation (:class:`RungeKuttaFormulation`, optional):
+                an enumerator object, describing the formulation of the Runge-
+                Kutta scheme. Defaults to the increment form.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -324,11 +371,13 @@ class ForwardEuler(ExplicitRungeKutta):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
+
         butcher_matrix = np.array([1.]).reshape(1, 1)
+
         super().__init__(domain, butcher_matrix, field_name=field_name,
                          fixed_subcycles=fixed_subcycles,
                          subcycle_by_courant=subcycle_by_courant,
-                         increment_form=increment_form,
+                         rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
@@ -343,9 +392,12 @@ class SSPRK3(ExplicitRungeKutta):
     k2 = F[y^n + (1/4)*dt*(k0+k1)]                                            \n
     y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + 4*k2)                                 \n
     """
-    def __init__(self, domain, field_name=None, fixed_subcycles=None,
-                 subcycle_by_courant=None, increment_form=True,
-                 solver_parameters=None, limiter=None, options=None):
+    def __init__(
+            self, domain, field_name=None,
+            fixed_subcycles=None, subcycle_by_courant=None,
+            rk_formulation=RungeKuttaFormulation.increment,
+            solver_parameters=None, limiter=None, options=None
+    ):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -359,11 +411,11 @@ class SSPRK3(ExplicitRungeKutta):
                 make the scheme perform adaptive sub-cycling based on the
                 Courant number. The specified argument is the maximum Courant
                 for one sub-cycle. Defaults to None, in which case adaptive
-                sub-cycling is not used. This option cannot be specified with the
-                `fixed_subcycles` argument.
-            increment_form (bool, optional): whether to write the RK scheme in
-                "increment form", solving for increments rather than updated
-                fields. Defaults to True.
+                sub-cycling is not used. This option cannot be specified with
+                the `fixed_subcycles` argument.
+            rk_formulation (:class:`RungeKuttaFormulation`, optional):
+                an enumerator object, describing the formulation of the Runge-
+                Kutta scheme. Defaults to the increment form.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -373,12 +425,16 @@ class SSPRK3(ExplicitRungeKutta):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
-        butcher_matrix = np.array([[1., 0., 0.], [1./4., 1./4., 0.], [1./6., 1./6., 2./3.]])
 
+        butcher_matrix = np.array([
+            [1., 0., 0.],
+            [1./4., 1./4., 0.],
+            [1./6., 1./6., 2./3.]
+        ])
         super().__init__(domain, butcher_matrix, field_name=field_name,
                          fixed_subcycles=fixed_subcycles,
                          subcycle_by_courant=subcycle_by_courant,
-                         increment_form=increment_form,
+                         rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
@@ -398,10 +454,12 @@ class RK4(ExplicitRungeKutta):
 
     where superscripts indicate the time-level.                               \n
     """
-    def __init__(self, domain, field_name=None, fixed_subcycles=None,
-                 subcycle_by_courant=None, increment_form=True,
-                 solver_parameters=None,
-                 limiter=None, options=None):
+    def __init__(
+            self, domain, field_name=None,
+            fixed_subcycles=None, subcycle_by_courant=None,
+            rk_formulation=RungeKuttaFormulation.increment,
+            solver_parameters=None, limiter=None, options=None
+    ):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -415,11 +473,11 @@ class RK4(ExplicitRungeKutta):
                 make the scheme perform adaptive sub-cycling based on the
                 Courant number. The specified argument is the maximum Courant
                 for one sub-cycle. Defaults to None, in which case adaptive
-                sub-cycling is not used. This option cannot be specified with the
-                `fixed_subcycles` argument.
-            increment_form (bool, optional): whether to write the RK scheme in
-                "increment form", solving for increments rather than updated
-                fields. Defaults to True.
+                sub-cycling is not used. This option cannot be specified with
+                the `fixed_subcycles` argument.
+            rk_formulation (:class:`RungeKuttaFormulation`, optional):
+                an enumerator object, describing the formulation of the Runge-
+                Kutta scheme. Defaults to the increment form.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -429,11 +487,16 @@ class RK4(ExplicitRungeKutta):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
-        butcher_matrix = np.array([[0.5, 0., 0., 0.], [0., 0.5, 0., 0.], [0., 0., 1., 0.], [1./6., 1./3., 1./3., 1./6.]])
+        butcher_matrix = np.array([
+            [0.5, 0., 0., 0.],
+            [0., 0.5, 0., 0.],
+            [0., 0., 1., 0.],
+            [1./6., 1./3., 1./3., 1./6.]
+        ])
         super().__init__(domain, butcher_matrix, field_name=field_name,
                          fixed_subcycles=fixed_subcycles,
                          subcycle_by_courant=subcycle_by_courant,
-                         increment_form=increment_form,
+                         rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
 
@@ -451,9 +514,12 @@ class Heun(ExplicitRungeKutta):
     where superscripts indicate the time-level and subscripts indicate the stage
     number.
     """
-    def __init__(self, domain, field_name=None, fixed_subcycles=None,
-                 subcycle_by_courant=None, increment_form=True,
-                 solver_parameters=None, limiter=None, options=None):
+    def __init__(
+            self, domain, field_name=None,
+            fixed_subcycles=None, subcycle_by_courant=None,
+            rk_formulation=RungeKuttaFormulation.increment,
+            solver_parameters=None, limiter=None, options=None
+    ):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -469,9 +535,9 @@ class Heun(ExplicitRungeKutta):
                 for one sub-cycle. Defaults to None, in which case adaptive
                 sub-cycling is not used. This option cannot be specified with the
                 `fixed_subcycles` argument.
-            increment_form (bool, optional): whether to write the RK scheme in
-                "increment form", solving for increments rather than updated
-                fields. Defaults to True.
+            rk_formulation (:class:`RungeKuttaFormulation`, optional):
+                an enumerator object, describing the formulation of the Runge-
+                Kutta scheme. Defaults to the increment form.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -481,10 +547,14 @@ class Heun(ExplicitRungeKutta):
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
-        butcher_matrix = np.array([[1., 0.], [0.5, 0.5]])
+
+        butcher_matrix = np.array([
+            [1., 0.],
+            [0.5, 0.5]
+        ])
         super().__init__(domain, butcher_matrix, field_name=field_name,
                          fixed_subcycles=fixed_subcycles,
                          subcycle_by_courant=subcycle_by_courant,
-                         increment_form=increment_form,
+                         rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)

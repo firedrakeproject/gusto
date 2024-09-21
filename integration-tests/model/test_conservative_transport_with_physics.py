@@ -60,8 +60,10 @@ def run_conservative_transport_with_physics(dirname):
     # Time stepper
     time_varying_velocity = False
     stepper = SplitPrescribedTransport(
-        eqn, SSPRK3(domain, increment_form=False), io, time_varying_velocity,
-        transport_method, physics_schemes=physics_schemes)
+        eqn, SSPRK3(domain, rk_formulation=RungeKuttaFormulation.predictor),
+        io, time_varying_velocity, transport_method,
+        physics_schemes=physics_schemes
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
