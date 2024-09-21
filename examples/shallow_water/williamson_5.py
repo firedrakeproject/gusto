@@ -14,7 +14,7 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, GeneralIcosahedralSphereMesh, ZonalComponent,
-    MeridionalComponent, RelativeVorticity,
+    MeridionalComponent, RelativeVorticity
 )
 
 williamson_5_defaults = {
@@ -72,13 +72,12 @@ def williamson_5(
     rsq = min_value(R0**2, (lamda - lamda_c)**2 + (phi - phi_c)**2)
     r = sqrt(rsq)
     tpexpr = mountain_height * (1 - r/R0)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=tpexpr,
-                                 u_transport_option='vector_advection_form')
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=tpexpr)
 
     # I/O
     output = OutputParameters(
         dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq,
-        dump_vtus=False, dump_nc=True, dumplist=['D', 'topography']
+        dump_vtus=True, dump_nc=False, dumplist=['D', 'topography']
     )
     diagnostic_fields = [Sum('D', 'topography'), RelativeVorticity(),
                          MeridionalComponent('u'), ZonalComponent('u')]
