@@ -181,7 +181,7 @@ class DGUpwind(TransportMethod):
         self.outflow = outflow
 
         if (advective_then_flux
-            and self.transport_equation_type != TransportEquationType.conservative):
+                and self.transport_equation_type != TransportEquationType.conservative):
             raise ValueError(
                 'DG Upwind: advective_then_flux form can only be used with '
                 + 'the conservative form of the transport equation'

@@ -27,7 +27,6 @@ def test_dg_transport_scalar(tmpdir, geometry, equation_form, tracer_setup):
     else:
         eqn = ContinuityEquation(domain, V, "f")
 
-
     if equation_form == "advective_then_flux":
         transport_method = DGUpwind(eqn, "f", advective_then_flux=True)
         transport_scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.linear)
