@@ -15,7 +15,7 @@ from firedrake import (
 import pytest
 
 
-def setup_conservative_transport(dirname, pair_of_spaces, property):
+def setup_conservative_transport(dirname, pair_of_spaces, desirable_property):
 
     # Domain
     Lx = 2000.
@@ -67,8 +67,9 @@ def setup_conservative_transport(dirname, pair_of_spaces, property):
     # Equation
     V = domain.spaces("HDiv")
     eqn = CoupledTransportEquation(domain, active_tracers=tracers, Vu=V)
-    output = OutputParameters(dirname=dirname)
 
+    # IO
+    output = OutputParameters(dirname=dirname)
     io = IO(domain, output)
 
     if pair_of_spaces == 'diff_order_0':
@@ -128,7 +129,7 @@ def setup_conservative_transport(dirname, pair_of_spaces, property):
     m0 = 0.02
 
     # Set the initial state from the configuration choice
-    if property == 'conservation':
+    if desirable_property == 'conservation':
         f0 = 0.05
 
         rho_t = 0.5
@@ -182,13 +183,14 @@ def setup_conservative_transport(dirname, pair_of_spaces, property):
 
 
 @pytest.mark.parametrize("pair_of_spaces", ["same_order_1", "diff_order_0", "diff_order_1"])
-@pytest.mark.parametrize("property", ["consistency", "conservation"])
-def test_conservative_transport(tmpdir, pair_of_spaces, property):
+@pytest.mark.parametrize("desirable_property", ["consistency", "conservation"])
+def test_conservative_transport(tmpdir, pair_of_spaces, desirable_property):
 
     # Setup and run
     dirname = str(tmpdir)
 
-    stepper, m_X_0, rho_d_0 = setup_conservative_transport(dirname, pair_of_spaces, property)
+    stepper, m_X_0, rho_d_0 = \
+        setup_conservative_transport(dirname, pair_of_spaces, desirable_property)
 
     # Run for five timesteps
     stepper.run(t=0, tmax=10)
@@ -196,7 +198,7 @@ def test_conservative_transport(tmpdir, pair_of_spaces, property):
     rho_d = stepper.fields("rho_d")
 
     # Perform the check
-    if property == 'consistency':
+    if desirable_property == 'consistency':
         assert errornorm(m_X_0, m_X) < 2e-13, "conservative transport is not consistent"
     else:
         rho_X_init = assemble(m_X_0*rho_d_0*dx)
