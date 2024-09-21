@@ -188,6 +188,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # -------------------------------------------------------------------- #
 
         if self.wrapper is not None:
+
+            wrapper_bcs = bcs if apply_bcs else None
+
             if self.wrapper_name == "mixed_options":
 
                 self.wrapper.wrapper_spaces = equation.spaces
@@ -199,7 +202,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         raise ValueError(f"The option defined for {field} is for a field that does not exist in the equation set")
 
                     field_idx = equation.field_names.index(field)
-                    subwrapper.setup(equation.spaces[field_idx])
+                    subwrapper.setup(equation.spaces[field_idx], wrapper_bcs)
 
                     # Update the function space to that needed by the wrapper
                     self.wrapper.wrapper_spaces[field_idx] = subwrapper.function_space
@@ -218,7 +221,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 if self.wrapper_name == "supg":
                     self.wrapper.setup()
                 else:
-                    self.wrapper.setup(self.fs)
+                    self.wrapper.setup(self.fs, wrapper_bcs)
                 self.fs = self.wrapper.function_space
                 if self.solver_parameters is None:
                     self.solver_parameters = self.wrapper.solver_parameters
@@ -480,6 +483,7 @@ class BackwardEuler(TimeDiscretisation):
 
         return r.form
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
@@ -570,6 +574,7 @@ class ThetaMethod(TimeDiscretisation):
 
         return r.form
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
@@ -731,6 +736,7 @@ class TR_BDF2(TimeDiscretisation):
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
