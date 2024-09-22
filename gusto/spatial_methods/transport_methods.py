@@ -8,8 +8,10 @@ from firedrake import (
 )
 from firedrake.fml import Term, keep, drop
 from gusto.core.configuration import IntegrateByParts, TransportEquationType
-from gusto.core.labels import (prognostic, transport, transporting_velocity, ibp_label,
-                               mass_weighted)
+from gusto.core.labels import (
+    prognostic, transport, transporting_velocity, ibp_label, mass_weighted,
+    all_but_last
+)
 from gusto.core.logging import logger
 from gusto.spatial_methods.spatial_methods import SpatialMethod
 
@@ -82,6 +84,10 @@ class TransportMethod(SpatialMethod):
 
             # Create new term
             new_term = Term(self.form.form, original_term.labels)
+
+            # Add all_but_last form
+            if hasattr(self, "all_but_last_form"):
+                new_term = all_but_last(new_term, self.all_but_last_form)
 
             # Check if this is a conservative transport
             if original_term.has_label(mass_weighted):
@@ -230,13 +236,13 @@ class DGUpwind(TransportMethod):
                     )
 
                 if advective_then_flux and vector_manifold_correction:
-                    self.form_for_early_stages = vector_manifold_advection_form(
+                    self.all_but_last_form = vector_manifold_advection_form(
                         self.domain, self.test, self.field, ibp=ibp,
                         outflow=outflow
                     )
 
                 elif advective_then_flux:
-                    self.form_for_early_stages = upwind_advection_form(
+                    self.all_but_last_form = upwind_advection_form(
                         self.domain, self.test, self.field, ibp=ibp,
                         outflow=outflow
                     )

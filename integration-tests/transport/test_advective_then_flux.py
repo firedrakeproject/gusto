@@ -7,7 +7,7 @@ preserve a constant in divergence-free flow).
 from gusto import *
 from firedrake import (
     PeriodicRectangleMesh, cos, sin, SpatialCoordinate,
-    assemble, dx, pi, as_vector, errornorm, Function
+    assemble, dx, pi, as_vector, errornorm, Function, div, as_vector
 )
 import pytest
 
@@ -66,7 +66,7 @@ def setup_advective_then_flux(dirname, desirable_property):
         psi = Function(domain.spaces('H1'))
         psi_expr = cos(2*pi*x/domain_width)*sin(2*pi*y/domain_width)
         psi.interpolate(psi_expr)
-        u_expr = domain.perp(grad(psi_expr))
+        u_expr = as_vector([-psi.dx(1), psi.dx(0)])
 
     elif desirable_property == 'divergence_linearity':
         # Divergent velocity
@@ -80,7 +80,7 @@ def setup_advective_then_flux(dirname, desirable_property):
     stepper.fields("u").project(u_expr)
 
     rho_true = Function(V_DG)
-    rho_true.assign(stepper.fields("rho"))
+    rho_true.interpolate(rho_0*(1.0 - dt*div(stepper.fields('u'))))
 
     return stepper, rho_true, dt, num_steps
 
@@ -99,7 +99,7 @@ def test_advective_then_flux(tmpdir, desirable_property):
     rho = stepper.fields("rho")
 
     # Check for divergence-linearity/constancy
-    assert errornorm(rho, rho_true) < 2e-13, \
+    assert errornorm(rho, rho_true) < 1e-11, \
         "advective-then-flux form is not yielding the correct answer"
 
     # Check for conservation

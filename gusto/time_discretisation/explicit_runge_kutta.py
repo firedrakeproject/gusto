@@ -5,10 +5,11 @@ import numpy as np
 from enum import Enum
 from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
-from firedrake.fml import replace_subject, all_terms, drop, keep
+from firedrake.fml import replace_subject, all_terms, drop, keep, Term
 from firedrake.utils import cached_property
+from firedrake.formmanipulation import split_form
 
-from gusto.core.labels import time_derivative
+from gusto.core.labels import time_derivative, all_but_last
 from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 
@@ -23,10 +24,19 @@ class RungeKuttaFormulation(Enum):
     """
     Enumerator to describe the formulation of a Runge-Kutta scheme.
 
-    The following Runge-Kutta methods are encoded here:
-    - `increment`:
+    The following Runge-Kutta methods for solving dy/dt = F(y) are encoded here:
+    - `increment`:                                                            \n
+        k_0 = F[y^n]                                                          \n
+        k_m = F[y^n - dt*\sum_{i=0}^{m-1} a_{m,i} * k_i], for m = 1 to M - 1  \n
+        y^{n+1} = y^n - dt*\sum_{i=0}^{M-1} b_i*k_i                           \n
     - `predictor`:
+        y^0 = y^n                                                             \n
+        y^m = q^0 - dt*\sum_{i=0}^{m-1} a_{m,i} * F[y^i], for m = 1 to M - 1  \n
+        y^{n+1} = y^0 - dt*\sum_{i=0}^{m-1} b_i * F[y^i]                      \n
     - `linear`:
+        y^0 = y^n                                                             \n
+        y^m = q^0 - dt*F[\sum_{i=0}^{m-1} a_{m,i} * y^i], for m = 1 to M - 1  \n
+        y^{n+1} = y^0 - dt*F[\sum_{i=0}^{m-1} b_i * y^i]                      \n
     """
 
     increment = 1595712
@@ -134,9 +144,11 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         super().setup(equation, apply_bcs, *active_labels)
 
         if self.rk_formulation == RungeKuttaFormulation.predictor:
-            self.field_i = [Function(self.fs) for i in range(self.nStages+1)]
+            self.field_i = [Function(self.fs) for _ in range(self.nStages+1)]
         elif self.rk_formulation == RungeKuttaFormulation.increment:
-            self.k = [Function(self.fs) for i in range(self.nStages)]
+            self.k = [Function(self.fs) for _ in range(self.nStages)]
+        elif self.rk_formulation == RungeKuttaFormulation.linear:
+            self.field_rhs = Function(self.fs)
         else:
             raise NotImplementedError(
                 'Runge-Kutta formulation is not implemented'
@@ -149,20 +161,48 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
         elif self.rk_formulation == RungeKuttaFormulation.predictor:
             # In this case, don't set snes_type to ksp only, as we do want the
-            # outer Newton iteration
+            # outer Newton iteration. This is achieved by not calling the
+            # "super" method, in which the default snes_type is set to ksp_only
             solver_list = []
 
             for stage in range(self.nStages):
                 # setup linear solver using lhs and rhs defined in derived class
                 problem = NonlinearVariationalProblem(
                     self.lhs[stage].form - self.rhs[stage].form,
-                    self.field_i[stage+1], bcs=self.bcs)
+                    self.field_i[stage+1], bcs=self.bcs
+                )
                 solver_name = self.field_name+self.__class__.__name__+str(stage)
                 solver = NonlinearVariationalSolver(
                     problem, solver_parameters=self.solver_parameters,
-                    options_prefix=solver_name)
+                    options_prefix=solver_name
+                )
                 solver_list.append(solver)
             return solver_list
+
+        elif self.rk_formulation == RungeKuttaFormulation.linear:
+            # In this case, don't set snes_type to ksp only, as we do want the
+            # outer Newton iteration. This is achieved by not calling the
+            # "super" method, in which the default snes_type is set to ksp_only
+            problem = NonlinearVariationalProblem(
+                self.lhs - self.rhs[0], self.x1, bcs=self.bcs
+            )
+            solver_name = self.field_name+self.__class__.__name__
+            solver = NonlinearVariationalSolver(
+                problem, solver_parameters=self.solver_parameters,
+                options_prefix=solver_name
+            )
+
+            # Set up problem for final step
+            problem_last = NonlinearVariationalProblem(
+                self.lhs - self.rhs[1], self.x1, bcs=self.bcs
+            )
+            solver_name = self.field_name+self.__class__.__name__+'_last'
+            solver_last = NonlinearVariationalSolver(
+                problem_last, solver_parameters=self.solver_parameters,
+                options_prefix=solver_name
+            )
+
+            return solver, solver_last
 
         else:
             raise NotImplementedError(
@@ -191,6 +231,14 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 lhs_list.append(l)
 
             return lhs_list
+
+        if self.rk_formulation == RungeKuttaFormulation.linear:
+            l = self.residual.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=replace_subject(self.x1, self.idx),
+                map_if_false=drop)
+
+            return l.form
 
         else:
             raise NotImplementedError(
@@ -251,6 +299,49 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             return rhs_list
 
+        elif self.rk_formulation == RungeKuttaFormulation.linear:
+
+            r = self.residual.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=replace_subject(self.x0, old_idx=self.idx),
+                map_if_false=replace_subject(self.field_rhs, old_idx=self.idx)
+            )
+            r = r.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=keep,
+                map_if_false=lambda t: -self.dt*t
+            )
+
+            # Set up all-but-last RHS
+            if self.idx is not None:
+                # If original function is in mixed function space, then ensure
+                # correct test function in the all-but-last form
+                r_all_but_last = self.residual.label_map(
+                    lambda t: t.has_label(all_but_last),
+                    map_if_true=lambda t:
+                        Term(split_form(t.get(all_but_last).form)[self.idx].form,
+                             t.labels),
+                    map_if_false=keep
+                )
+            else:
+                r_all_but_last = self.residual.label_map(
+                    lambda t: t.has_label(all_but_last),
+                    map_if_true=lambda t: Term(t.get(all_but_last).form, t.labels),
+                    map_if_false=keep
+                )
+            r_all_but_last = r_all_but_last.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=replace_subject(self.x0, old_idx=self.idx),
+                map_if_false=replace_subject(self.field_rhs, old_idx=self.idx)
+            )
+            r_all_but_last = r_all_but_last.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=keep,
+                map_if_false=lambda t: -self.dt*t
+            )
+
+            return r_all_but_last.form, r.form
+
         else:
             raise NotImplementedError(
                 'Runge-Kutta formulation is not implemented'
@@ -293,8 +384,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 # TODO: not implemented! Here we need to evaluate the m-th term
                 # in the i-th RHS with field_m
                 raise NotImplementedError(
-                    'Physics not implemented with RK schemes that do not use '
-                    + 'the increment form')
+                    'Physics not implemented with RK schemes that use the '
+                    + 'predictor form')
             if self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
 
@@ -303,6 +394,62 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             if (stage == self.nStages - 1):
                 self.x1.assign(self.field_i[stage+1])
+                if self.limiter is not None:
+                    self.limiter.apply(self.x1)
+
+        elif self.rk_formulation == RungeKuttaFormulation.linear:
+
+            # Set combined index of stage and subcycle
+            cycle_stage = self.nStages*self.subcycle_idx + stage
+
+            if stage == 0 and self.subcycle_idx == 0:
+                self.field_lhs = [Function(self.fs) for _ in range(self.nStages*self.ncycles)]
+                self.field_lhs[0].assign(self.x0)
+
+            # All-but-last form ------------------------------------------------
+            if (cycle_stage + 1 < self.ncycles*self.nStages):
+                # Build up RHS field to be evaluated
+                self.field_rhs.assign(0.0)
+                for i in range(stage+1):
+                    i_cycle_stage = self.nStages*self.subcycle_idx + i
+                    self.field_rhs.assign(
+                        self.field_rhs
+                        + self.butcher_matrix[stage, i]*self.field_lhs[i_cycle_stage]
+                    )
+
+                # Evaluate physics and apply limiter, if necessary
+                for evaluate in self.evaluate_source:
+                    evaluate(self.field_rhs, self.dt)
+                if self.limiter is not None:
+                    self.limiter.apply(self.field_rhs)
+
+                # Solve problem, placing solution in self.x1
+                self.solver[0].solve()
+
+                # Store LHS
+                self.field_lhs[cycle_stage+1].assign(self.x1)
+
+            # Last stage and last subcycle -------------------------------------
+            else:
+                # Build up RHS field to be evaluated
+                self.field_rhs.assign(0.0)
+                for i in range(self.ncycles*self.nStages):
+                    j = i % self.nStages
+                    self.field_rhs.assign(
+                        self.field_rhs
+                        + self.butcher_matrix[self.nStages-1, j]*self.field_lhs[i]
+                    )
+
+                # Evaluate physics and apply limiter, if necessary
+                for evaluate in self.evaluate_source:
+                    evaluate(self.field_rhs, self.original_dt)
+                if self.limiter is not None:
+                    self.limiter.apply(self.field_rhs)
+
+                # Solve problem, placing solution in self.x1
+                self.solver[1].solve()
+
+                # Final application of limiter
                 if self.limiter is not None:
                     self.limiter.apply(self.x1)
 
@@ -319,6 +466,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             x_in (:class:`Function`): the input field.
             x_out (:class:`Function`): the output field to be computed.
         """
+
+        # TODO: is this limiter application necessary?
         if self.limiter is not None:
             self.limiter.apply(x_in)
 
