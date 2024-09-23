@@ -206,7 +206,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         if self.predictor is not None:
             V_DG = equation_set.domain.spaces('DG')
-            div_factor = Constant(1.0) - (Constant(1.0) - self.alpha)*self.dt*div(self.x.star('u'))
+            div_factor = Constant(1.0) - (Constant(1.0) - self.alpha)*self.dt*div(self.x.n('u'))
             self.predictor_interpolator = Interpolator(
                 self.x.star(predictor)*div_factor, V_DG
             )
