@@ -26,7 +26,7 @@ class Domain(object):
     """
     def __init__(self, mesh, dt, family, degree=None,
                  horizontal_degree=None, vertical_degree=None,
-                 rotated_pole=None):
+                 rotated_pole=None, register_spaces=True):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
@@ -139,22 +139,23 @@ class Domain(object):
         # -------------------------------------------------------------------- #
         # Set up coordinates
         # -------------------------------------------------------------------- #
+        if register_spaces:
 
-        self.coords = Coordinates(mesh, on_sphere=self.on_sphere,
-                                  rotated_pole=rotated_pole, radius=radius)
-        # Set up DG1 equispaced space, used for making metadata
-        _ = self.spaces('DG1_equispaced')
-        self.coords.register_space(self, 'DG1_equispaced')
+            self.coords = Coordinates(mesh, on_sphere=self.on_sphere,
+                                      rotated_pole=rotated_pole, radius=radius)
+            # Set up DG1 equispaced space, used for making metadata
+            _ = self.spaces('DG1_equispaced')
+            self.coords.register_space(self, 'DG1_equispaced')
 
-        # Set height above surface (requires coordinates)
-        if hasattr(mesh, "_base_mesh"):
-            self.set_height_above_surface()
+            # Set height above surface (requires coordinates)
+            if hasattr(mesh, "_base_mesh"):
+                self.set_height_above_surface()
 
-        # -------------------------------------------------------------------- #
-        # Construct metadata about domain
-        # -------------------------------------------------------------------- #
+            # -------------------------------------------------------------------- #
+            # Construct metadata about domain
+            # -------------------------------------------------------------------- #
 
-        self.metadata = construct_domain_metadata(mesh, self.coords, self.on_sphere)
+            self.metadata = construct_domain_metadata(mesh, self.coords, self.on_sphere)
 
     def set_height_above_surface(self):
         """
