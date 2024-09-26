@@ -52,6 +52,7 @@ def williamson_5(
     # ------------------------------------------------------------------------ #
 
     element_order = 1
+
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
@@ -83,12 +84,15 @@ def williamson_5(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"), SSPRK3(domain, "D")]
+    transported_fields = [
+        TrapeziumRule(domain, "u"),
+        SSPRK3(domain, "D", subcycle_by_courant=0.3)
+    ]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods
+        eqns, io, transported_fields, transport_methods, predictor='D'
     )
 
     # ------------------------------------------------------------------------ #
