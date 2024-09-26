@@ -7,6 +7,7 @@ from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        as_vector, pi, sqrt, min_value, sin, cos,
                        interpolate, PCG64, RandomGenerator)
 import numpy as np
+from netCDF4 import Dataset
 #import matplotlib.pyplot as plt
 #import xarray as xr
 
@@ -21,13 +22,21 @@ phis = 60
 phin = 70
 phimp = phis
 
-monopolar = True
+# False means initial vortex is annular, True means it's monopolar
+monopolar = False
+
+# True means include topography
+topo = False
+A0scal = 0.125
+
+# True means include relaxation term to counter topography angular momentum effects
+toporel = False
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
 tau_r_ratio = 2
 tau_c_ratio = 0.01
-alpha = 1
+beta = 4
 
 # relaxation schemes can be rad, co2, both, none
 rel_sch = 'both'
@@ -40,17 +49,17 @@ if phimp != phis:
     extra_name = f'{extra_name}_phimp--{phimp}'
 
 ### max runtime currently 1 day
-rundays = 100
+rundays = 50
 tmax = rundays * day
 ### timestep
 dt = 450.
 
 
 if rel_sch == 'both':
-    rel_sch_name = f'tau_r--{tau_r_ratio}sol_tau_c--{tau_c_ratio}sol_alpha--{alpha}'
+    rel_sch_name = f'tau_r--{tau_r_ratio}sol_tau_c--{tau_c_ratio}sol_beta--{beta}'
     rel_sch_folder = 'Relax_to_pole_and_CO2'
 elif rel_sch == 'co2':
-    rel_sch_name = f'tau_c--{tau_c_ratio}sol_alpha--{alpha}'
+    rel_sch_name = f'tau_c--{tau_c_ratio}sol_alpha--{beta}'
     rel_sch_folder = 'CO2'
 elif rel_sch == 'rad':
     rel_sch_name = f'tau_r--{tau_r_ratio}sol'
@@ -213,7 +222,7 @@ def initial_profiles(omega, radius, phiss, phinn, annulus):
 
 rlat, uini, hini = initial_profiles(Omega, R, phis, phin, annulus=True)
 rlat_mp, uini_mp, hini_mp = initial_profiles(Omega, R, phimp, phin, annulus=False)
-h_th = min(hini)+alpha*H
+h_th = min(hini)*beta+H
 
 if monopolar:
     rlat, uini, hini = rlat_mp, uini_mp, hini_mp
@@ -228,12 +237,14 @@ domain = Domain(mesh, dt, 'BDM', degree=1)
 
 # Equation, including mountain given by bexpr
 fexpr = 2*Omega*x[2]/R
-eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
+lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
+bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
+eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
 
 H_rel = Function(domain.spaces('L2'))
 
 # I/O (input/output)
-dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{rundays}-sols{extra_name}'
+dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_len-{rundays}sols{extra_name}'
 print(f'directory name is {dirname}')
 output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=10)
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th)]
@@ -354,29 +365,29 @@ stepper.set_reference_profiles([('D', Dbar)])
 stepper.run(t=0, tmax=tmax)
 
 
-results_file_name = f'{dirname}/field_output.nc'
-output_file_name = f'{dirname}/regrid_output.nc'
-data_file = Dataset(results_file_name, 'r')
-for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity']:
-    field_data = extract_gusto_field(data_file, field_name)
-    coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
-    times = np.arange(np.shape(field_data)[1])
-    lats = np.arange(-90, 91, 3)
-    lons = np.arange(-180, 181, 3)
-    X, Y = np.meshgrid(lons, lats)
-    new_data = regrid_horizontal_slice(X, Y,
-                                        coords_X, coords_Y, field_data)
-    da = xr.DataArray(data=new_data.astype('float32'),
-                    dims=['lat', 'lon', 'time'],
-                    coords=dict(lat=lats.astype('float32'), lon=lons.astype('float32'), time=times.astype('float32')),
-                    name=field_name)
-    ds1 = da.to_dataset()
-    if field_name == 'D':
-        ds = ds1
-    else:
-        ds = xr.merge([ds, ds1])
+# results_file_name = f'{dirname}/field_output.nc'
+# output_file_name = f'{dirname}/regrid_output.nc'
+# data_file = Dataset(results_file_name, 'r')
+# for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity']:
+#     field_data = extract_gusto_field(data_file, field_name)
+#     coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
+#     times = np.arange(np.shape(field_data)[1])
+#     lats = np.arange(-90, 91, 3)
+#     lons = np.arange(-180, 181, 3)
+#     X, Y = np.meshgrid(lons, lats)
+#     new_data = regrid_horizontal_slice(X, Y,
+#                                         coords_X, coords_Y, field_data)
+#     da = xr.DataArray(data=new_data.astype('float32'),
+#                     dims=['lat', 'lon', 'time'],
+#                     coords=dict(lat=lats.astype('float32'), lon=lons.astype('float32'), time=times.astype('float32')),
+#                     name=field_name)
+#     ds1 = da.to_dataset()
+#     if field_name == 'D':
+#         ds = ds1
+#     else:
+#         ds = xr.merge([ds, ds1])
 
-ds.to_netcdf(output_file_name)
+# ds.to_netcdf(output_file_name)
 
 
 print(f'directory name is {dirname}')
