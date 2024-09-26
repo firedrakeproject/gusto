@@ -98,9 +98,14 @@ def test_conservative_coupled_transport(tmpdir, m_X_space, tracer_setup):
                       'f2': EmbeddedDGOptions()}
         opts = MixedFSOptions(suboptions=suboptions)
 
-        transport_scheme = SSPRK3(domain, options=opts, increment_form=False)
+        transport_scheme = SSPRK3(
+            domain, options=opts,
+            rk_formulation=RungeKuttaFormulation.predictor
+        )
     else:
-        transport_scheme = SSPRK3(domain, increment_form=False)
+        transport_scheme = SSPRK3(
+            domain, rk_formulation=RungeKuttaFormulation.predictor
+        )
 
     transport_method = [DGUpwind(eqn, 'f1'), DGUpwind(eqn, 'f2')]
 
