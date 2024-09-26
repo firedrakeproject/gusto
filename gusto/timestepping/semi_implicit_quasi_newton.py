@@ -206,9 +206,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         if self.predictor is not None:
             V_DG = equation_set.domain.spaces('DG')
+            self.predictor_field_in = Function(V_DG)
             div_factor = Constant(1.0) - (Constant(1.0) - self.alpha)*self.dt*div(self.x.n('u'))
             self.predictor_interpolator = Interpolator(
-                self.x.star(predictor)*div_factor, V_DG
+                self.x.star(predictor)*div_factor, self.predictor_field_in
             )
 
     def _apply_bcs(self):
@@ -290,13 +291,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         if name == self.predictor:
             # Pre-multiply this variable by (1 - dt*beta*div(u))
             V = xstar(name).function_space()
-            field_in = Function(V)
             field_out = Function(V)
             self.predictor_interpolator.interpolate()
-            scheme.apply(field_out, field_in)
+            scheme.apply(field_out, self.predictor_field_in)
 
             # xp is xstar plus the increment from the transported predictor
-            xp(name).assign(xstar(name) + field_out - field_in)
+            xp(name).assign(xstar(name) + field_out - self.predictor_field_in)
         else:
             # Standard transport
             scheme.apply(xp(name), xstar(name))
