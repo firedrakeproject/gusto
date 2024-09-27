@@ -7,7 +7,8 @@ called.
 from abc import ABCMeta, abstractmethod
 from firedrake import (
     FunctionSpace, Function, BrokenElement, Projector, Interpolator,
-    VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace
+    VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace,
+    split
 )
 from firedrake.fml import Term
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
@@ -307,47 +308,45 @@ class SUPGWrapper(Wrapper):
         self.function_space = self.time_discretisation.fs
         self.test_space = self.function_space
         self.x_out = Function(self.function_space)
-
+        self.tau = self.options.tau
+        #self.sigma = Constant(ufl.as_matrix([[self.options.sigma_diag if i == j else 0 for j in range(len(self.options.sigma_diag))] for i in range(len(self.options.sigma_diag))]))
+        self.sigma = tuple([
+                tuple(
+                    [self.options.sigma_diag [j] if i == j else 0. for i, v in enumerate(self.options.sigma_diag )]
+                ) for j in range(len(self.options.sigma_diag))])
+        self.sigma = Constant(self.sigma)
+        # self.sigma = Constant(tuple([
+        #         tuple(
+        #             [self.options.sigma_diag [j] if i == j else 0. for i, v in enumerate(self.options.sigma_diag )]
+        #         ) for j in range(len(self.options.sigma_diag))])
+        #     )
         # -------------------------------------------------------------------- #
         # Work out SUPG parameter
         # -------------------------------------------------------------------- #
 
-        # construct tau, if it is not specified
-        dim = domain.mesh.topological_dimension()
-        if self.options.tau is not None:
-            # if tau is provided, check that is has the right size
-            self.tau = self.options.tau
-            assert as_ufl(self.tau).ufl_shape == (dim, dim), "Provided tau has incorrect shape!"
-        else:
-            # create tuple of default values of size dim
-            default_vals = [self.options.default*self.time_discretisation.dt]*dim
-            # check for directions is which the space is discontinuous
-            # so that we don't apply supg in that direction
-            if is_cg(self.function_space):
-                vals = default_vals
-            else:
-                space = self.function_space.ufl_element().sobolev_space
-                if space.name in ["HDiv", "DirectionalH"]:
-                    vals = [default_vals[i] if space[i].name == "H1"
-                            else 0. for i in range(dim)]
-                else:
-                    raise ValueError("I don't know what to do with space %s" % space)
-            self.tau = Constant(tuple([
-                tuple(
-                    [vals[j] if i == j else 0. for i, v in enumerate(vals)]
-                ) for j in range(dim)])
-            )
-            self.solver_parameters = {'ksp_type': 'gmres',
-                                      'pc_type': 'bjacobi',
-                                      'sub_pc_type': 'ilu'}
 
+        direction = self.options.direction
+        u_idx = self.time_discretisation.equation.field_names.index('u')
+        uadv_eqn = split(self.time_discretisation.equation.X)[u_idx]
+        if direction == "all":
+            uadv = uadv_eqn
+        elif direction == "horizontal":
+            uadv = uadv_eqn - dot(domain.k, uadv_eqn)*domain.k
+        elif direction == "vertical":
+            uadv = dot(domain.k, uadv_eqn)*domain.k
+        else:
+            raise ValueError(f"Unknown direction {direction}")
         # -------------------------------------------------------------------- #
         # Set up test function
         # -------------------------------------------------------------------- #
 
         test = TestFunction(self.test_space)
-        uadv = Function(domain.spaces('HDiv'))
-        self.test = test + dot(dot(uadv, self.tau), grad(test))
+        #breakpoint()
+        x = dot(self.sigma, test)
+        y = grad(x)
+        breakpoint()
+        self.test = test + self.tau*dot( grad(dot(self.sigma,test)), uadv)
+        print(self.test)
         self.transporting_velocity = uadv
 
     def pre_apply(self, x_in):

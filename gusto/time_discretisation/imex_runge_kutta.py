@@ -214,10 +214,14 @@ class IMEXRungeKutta(TimeDiscretisation):
     @wrapper_apply
     def apply(self, x_out, x_in):
         self.x1.assign(x_in)
+        self.x_out.assign(x_in)
         solver_list = self.solvers
 
         for stage in range(self.nStages):
             self.solver = solver_list[stage]
+            # Set initial solver guess
+            if (stage > 0):
+                self.x_out.assign(self.xs[stage-1])
             self.solver.solve()
             self.xs[stage].assign(self.x_out)
 

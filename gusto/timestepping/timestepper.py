@@ -281,6 +281,8 @@ class Timestepper(BaseTimestepper):
 
         super().__init__(equation=equation, io=io)
 
+        self.bcs = equation.bcs
+
     @property
     def transporting_velocity(self):
         return "prognostic"
@@ -296,6 +298,15 @@ class Timestepper(BaseTimestepper):
         self.setup_transporting_velocity(self.scheme)
         if self.io.output.log_courant:
             self.scheme.courant_max = self.io.courant_max
+    
+    def _apply_bcs(self, xnp1):
+        """
+        Set the zero boundary conditions in the velocity.
+        """
+        unp1 = xnp1("u")
+
+        for bc in self.bcs['u']:
+            bc.apply(unp1)
 
     def timestep(self):
         """
@@ -306,6 +317,8 @@ class Timestepper(BaseTimestepper):
         x_in = [x(name) for x in self.x.previous[-self.scheme.nlevels:]]
 
         self.scheme.apply(xnp1(name), *x_in)
+
+        self._apply_bcs(xnp1)
 
 
 class PrescribedTransport(Timestepper):

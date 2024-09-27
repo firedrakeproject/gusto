@@ -228,6 +228,12 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 evaluate(self.x1, self.dt)
             if self.limiter is not None:
                 self.limiter.apply(self.x1)
+            
+            # Set initial guess for solver
+            if (stage == 0):
+                self.x_out.assign(x0)
+            else:
+                self.x_out.assign(self.k[stage-1])
             self.solver.solve()
 
             self.k[stage].assign(self.x_out)

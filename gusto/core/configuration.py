@@ -181,9 +181,10 @@ class SUPGOptions(WrapperOptions):
     """Specifies options for an SUPG scheme."""
 
     name = "supg"
-    tau = None
-    default = 1/sqrt(15)
+    direction = "all"
+    tau = 1/sqrt(15)
     ibp = IntegrateByParts.TWICE
+    sigma_diag= 1.0
 
 
 class MixedFSOptions(WrapperOptions):
