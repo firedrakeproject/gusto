@@ -25,8 +25,7 @@ phimp = phis
 # False means initial vortex is annular, True means it's monopolar
 monopolar = False
 
-# True means include topography
-topo = False
+# scaling for topography term. A0scal = 0 means no topography
 A0scal = 0.125
 
 # True means include relaxation term to counter topography angular momentum effects
@@ -39,7 +38,7 @@ tau_c_ratio = 0.01
 beta = 4
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'both'
+rel_sch = 'none'
 include_co2 = 'yes'
 
 extra_name = ''
@@ -48,8 +47,13 @@ if include_co2 == 'no':
 if phimp != phis:
     extra_name = f'{extra_name}_phimp--{phimp}'
 
+if toporel:
+    toponame = f'A0-{A0scal}-rel'
+else:
+    toponame = f'A0-{A0scal}-norel'
+
 ### max runtime currently 1 day
-rundays = 50
+rundays = 30
 tmax = rundays * day
 ### timestep
 dt = 450.
@@ -244,7 +248,7 @@ eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
 H_rel = Function(domain.spaces('L2'))
 
 # I/O (input/output)
-dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_len-{rundays}sols{extra_name}'
+dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
 print(f'directory name is {dirname}')
 output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=10)
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th)]
