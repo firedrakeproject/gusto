@@ -11,7 +11,7 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, pi,
 import pytest
 
 
-def set_up_model_objects(mesh, dt, output, stepper_type):
+def set_up_model_objects(mesh, dt, output, stepper_type, ref_update_freq):
 
     domain = Domain(mesh, dt, "CG", 1)
 
@@ -40,7 +40,8 @@ def set_up_model_objects(mesh, dt, output, stepper_type):
         # build time stepper
         stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                           transport_methods,
-                                          linear_solver=linear_solver)
+                                          linear_solver=linear_solver,
+                                          reference_update_freq=ref_update_freq)
 
     elif stepper_type == 'multi_level':
         scheme = AdamsBashforth(domain, order=2)
@@ -92,9 +93,10 @@ def initialise_fields(eqns, stepper):
     stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
 
-@pytest.mark.parametrize("stepper_type", ["multi_level", "semi_implicit"])
+@pytest.mark.parametrize("stepper_type, ref_update_freq", [
+    ("multi_level", None), ("semi_implicit", None), ("semi_implicit", 0.6)])
 @pytest.mark.parametrize("checkpoint_method", ["dumbcheckpoint", "checkpointfile"])
-def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
+def test_checkpointing(tmpdir, stepper_type, checkpoint_method, ref_update_freq):
 
     mesh_name = 'checkpointing_mesh'
 
@@ -128,8 +130,8 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
         chkptfreq=2,
     )
 
-    stepper_1, eqns_1 = set_up_model_objects(mesh, dt, output_1, stepper_type)
-    stepper_2, eqns_2 = set_up_model_objects(mesh, dt, output_2, stepper_type)
+    stepper_1, eqns_1 = set_up_model_objects(mesh, dt, output_1, stepper_type, ref_update_freq)
+    stepper_2, eqns_2 = set_up_model_objects(mesh, dt, output_2, stepper_type, ref_update_freq)
 
     initialise_fields(eqns_1, stepper_1)
     initialise_fields(eqns_2, stepper_2)
@@ -163,7 +165,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
 
     if checkpoint_method == 'checkpointfile':
         mesh = pick_up_mesh(output_3, mesh_name)
-    stepper_3, _ = set_up_model_objects(mesh, dt, output_3, stepper_type)
+    stepper_3, _ = set_up_model_objects(mesh, dt, output_3, stepper_type, ref_update_freq)
     stepper_3.io.pick_up_from_checkpoint(stepper_3.fields)
 
     # ------------------------------------------------------------------------ #
@@ -192,7 +194,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method):
     )
     if checkpoint_method == 'checkpointfile':
         mesh = pick_up_mesh(output_3, mesh_name)
-    stepper_3, _ = set_up_model_objects(mesh, dt, output_3, stepper_type)
+    stepper_3, _ = set_up_model_objects(mesh, dt, output_3, stepper_type, ref_update_freq)
     stepper_3.run(t=2*dt, tmax=4*dt, pick_up=True)
 
     # ------------------------------------------------------------------------ #
