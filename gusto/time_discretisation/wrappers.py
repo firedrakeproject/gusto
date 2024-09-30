@@ -13,7 +13,7 @@ from firedrake import (
 from firedrake.fml import Term
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
 from gusto.recovery import Recoverer, ReversibleRecoverer
-from gusto.core.labels import transporting_velocity
+from gusto.core.labels import transporting_velocity, prognostic
 import ufl
 
 __all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper", "MixedFSWrapper"]
@@ -306,10 +306,10 @@ class SUPGWrapper(Wrapper):
 
         domain = self.time_discretisation.domain
         self.idx = self.time_discretisation.equation.field_names.index(field_name)
-        self.function_space = self.time_discretisation.fs[self.idx]
-        self.test_space = self.function_space
+        self.function_space = self.time_discretisation.fs
+        self.test_space = self.time_discretisation.fs[self.idx]
         self.x_out = Function(self.function_space)
-        breakpoint()
+        self.field_name = field_name
 
         # -------------------------------------------------------------------- #
         # Work out SUPG parameter
@@ -326,10 +326,10 @@ class SUPGWrapper(Wrapper):
             default_vals = [self.options.default*self.time_discretisation.dt]*dim
             # check for directions is which the space is discontinuous
             # so that we don't apply supg in that direction
-            if is_cg(self.function_space):
+            if is_cg(self.test_space):
                 vals = default_vals
             else:
-                space = self.function_space.ufl_element().sobolev_space
+                space = self.test_space.ufl_element().sobolev_space
                 if space.name in ["HDiv", "DirectionalH"]:
                     vals = [default_vals[i] if space[i].name == "H1"
                             else 0. for i in range(dim)]
@@ -348,8 +348,9 @@ class SUPGWrapper(Wrapper):
         # Set up test function
         # -------------------------------------------------------------------- #
 
-        test = TestFunction(self.test_space)
-        uadv = Function(domain.spaces('HDiv'))
+        test = self.time_discretisation.equation.tests[self.idx]
+        self.u_idx = self.time_discretisation.equation.field_names.index('u')
+        uadv = split(self.time_discretisation.equation.X)[self.u_idx]
         self.test = test + dot(dot(uadv, self.tau), grad(test))
         self.transporting_velocity = uadv
 
@@ -360,7 +361,7 @@ class SUPGWrapper(Wrapper):
         Args:
             x_in (:class:`Function`): the original input field.
         """
-
+    
         self.x_in = x_in
 
     def post_apply(self, x_out):
@@ -386,7 +387,7 @@ class SUPGWrapper(Wrapper):
         """
 
         new_residual = residual.label_map(
-            lambda t: t.has_label(transporting_velocity),
+            lambda t: t.has_label(transporting_velocity) and t.get(prognostic) == self.field_name,
             # Update and replace transporting velocity in any terms
             map_if_true=lambda t:
             Term(ufl.replace(t.form, {t.get(transporting_velocity): self.transporting_velocity}), t.labels),

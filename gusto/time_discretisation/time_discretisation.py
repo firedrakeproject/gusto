@@ -220,6 +220,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
             else:
                 if self.wrapper_name == "supg":
+                    self.wrapper.field_names = equation.field_names
                     self.wrapper.setup(self.wrapper_field_name)
                 else:
                     self.wrapper.setup(self.fs, wrapper_bcs)
@@ -250,8 +251,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.bcs = None
         elif self.wrapper is not None:
             # Transfer boundary conditions onto test function space
-            self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
-                        for bc in bcs]
+            # self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
+            #             for bc in bcs]
+            self.bcs = bcs
         else:
             self.bcs = bcs
 

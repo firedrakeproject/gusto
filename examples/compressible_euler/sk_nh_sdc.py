@@ -419,88 +419,88 @@ def skamarock_klemp_nonhydrostatic(
 # }
 
 
-    # nl_solver_parameters = {
-    # "snes_converged_reason": None,
-    # 'ksp_ew': None,
-    # "ksp_ew_version": 1,
-    # "ksp_ew_threshold": 1e-5,
-    # "ksp_ew_rtol0": 1e-3,
-    # "mat_type": "matfree",
-    # "ksp_type": "fgmres",
-    # "ksp_rtol": 1e-5,
-    # 'ksp_atol': 1e-7,
-    # "ksp_converged_reason": None,
-    # "ksp_max_it": 400,
-    # "pc_type": "python",
-    # "ksp_rtol": 1e-5,  # Adjust tolerance
-    # "ksp_atol": 1e-7,
-    # "pc_python_type": "firedrake.AssembledPC",
-    # "assembled": {
-    #     "pc_type": "python",
-    #     "pc_python_type": "firedrake.ASMStarPC",
-    #     "pc_star": {
-    #         "construct_dim": 0,
-    #         "pc_asm_overlap": 2,  # Increased overlap for ASM
-    #         "sub_sub": {
-    #             "pc_type": "ilu",  # Switch from LU to ILU for better performance
-    #             "pc_factor_levels": 2,  # ILU fill level
-    #             "pc_factor_reuse_ordering": True,  # Reuse LU ordering for efficiency
-    #             "pc_factor_fill": 1.2,
-    #         }
-    #     },
-    # },}
-    
     nl_solver_parameters = {
-    # Nonlinear solver: Newton linesearch
-    "snes_type": "newtonls",
-    "snes_rtol": 1e-4,
-    "snes_atol": 1e-5,
-    "snes_max_it": 50,
-
-    # Linear solver: FGMRES with schur complement preconditioner
+    "snes_converged_reason": None,
+    'ksp_ew': None,
+    "ksp_ew_version": 1,
+    "ksp_ew_threshold": 1e-5,
+    "ksp_ew_rtol0": 1e-3,
+    "mat_type": "matfree",
     "ksp_type": "fgmres",
-    "ksp_rtol": 1e-8,
+    "ksp_rtol": 1e-5,
+    'ksp_atol': 1e-7,
+    "ksp_converged_reason": None,
+    "ksp_max_it": 400,
+    "pc_type": "python",
+    "ksp_rtol": 1e-5,  # Adjust tolerance
     "ksp_atol": 1e-7,
-    "pc_type": "fieldsplit",
-    "ksp_max_it": 200,
-    "pc_fieldsplit_type": "schur",
-    "pc_fieldsplit_schur_fact_type": "full",
-    "pc_fieldsplit_schur_precondition": "selfp",
-
-    # u, rho block uses Addidtive Schwarz preconditioner with ASMStar subdomain solver
-    "pc_fieldsplit_0_fields": "0, 1",
-    "fieldsplit_0":{  
-        "ksp_type": "gmres",
+    "pc_python_type": "firedrake.AssembledPC",
+    "assembled": {
         "pc_type": "python",
-        "ksp_rtol": 1e-8,
-        "ksp_atol": 1e-7,
-        "ksp_max_it": 200,
-        "pc_python_type": "firedrake.AssembledPC",
-        "assembled": {
-            "pc_type": "python",
-            "pc_python_type": "firedrake.ASMStarPC",
-            "pc_star": {
-                "construct_dim": 0,
-                "pc_asm_overlap": 2,
-                "sub_sub": {
-                    "pc_type": "ilu",
-                    "pc_factor_levels": 4,
-                    "pc_factor_reuse_ordering": True,
-                    "pc_factor_fill": 1.2,
-                }
-            },
-        },},
-    # theta block, simple cg with block jacobi preconditioner
-    "pc_fieldsplit_1_fields": "2",
-    "fieldsplit_1": {
-        "ksp_type": "cg",
-        "ksp_max_it": 200,  # Maximum iterations for the linear solver
-        "pc_type": "bjacobi",
-        "sub_pc_type": "ilu",
-        "ksp_rtol": 1e-5,
-        "ksp_atol": 1e-7,
-    },
-}
+        "pc_python_type": "firedrake.ASMStarPC",
+        "pc_star": {
+            "construct_dim": 0,
+            "pc_asm_overlap": 2,  # Increased overlap for ASM
+            "sub_sub": {
+                "pc_type": "ilu",  # Switch from LU to ILU for better performance
+                "pc_factor_levels": 2,  # ILU fill level
+                "pc_factor_reuse_ordering": True,  # Reuse LU ordering for efficiency
+                "pc_factor_fill": 1.2,
+            }
+        },
+    },}
+    
+#     nl_solver_parameters = {
+#     # Nonlinear solver: Newton linesearch
+#     "snes_type": "newtonls",
+#     "snes_rtol": 1e-4,
+#     "snes_atol": 1e-5,
+#     "snes_max_it": 50,
+
+#     # Linear solver: FGMRES with schur complement preconditioner
+#     "ksp_type": "fgmres",
+#     "ksp_rtol": 1e-8,
+#     "ksp_atol": 1e-7,
+#     "pc_type": "fieldsplit",
+#     "ksp_max_it": 200,
+#     "pc_fieldsplit_type": "schur",
+#     "pc_fieldsplit_schur_fact_type": "full",
+#     "pc_fieldsplit_schur_precondition": "selfp",
+
+#     # u, rho block uses Addidtive Schwarz preconditioner with ASMStar subdomain solver
+#     "pc_fieldsplit_0_fields": "0, 2",
+#     "fieldsplit_0":{  
+#         "ksp_type": "gmres",
+#         "pc_type": "python",
+#         "ksp_rtol": 1e-8,
+#         "ksp_atol": 1e-7,
+#         "ksp_max_it": 200,
+#         "pc_python_type": "firedrake.AssembledPC",
+#         "assembled": {
+#             "pc_type": "python",
+#             "pc_python_type": "firedrake.ASMStarPC",
+#             "pc_star": {
+#                 "construct_dim": 0,
+#                 "pc_asm_overlap": 2,
+#                 "sub_sub": {
+#                     "pc_type": "ilu",
+#                     "pc_factor_levels": 3,
+#                     "pc_factor_reuse_ordering": True,
+#                     "pc_factor_fill": 1.2,
+#                 }
+#             },
+#         },},
+#     # theta block, simple cg with block jacobi preconditioner
+#     "pc_fieldsplit_1_fields": "1",
+#     "fieldsplit_1": {
+#         "ksp_type": "cg",
+#         "ksp_max_it": 200,  # Maximum iterations for the linear solver
+#         "pc_type": "bjacobi",
+#         "sub_pc_type": "ilu",
+#         "ksp_rtol": 1e-5,
+#         "ksp_atol": 1e-7,
+#     },
+# }
 
 
     # IMEX time stepper
