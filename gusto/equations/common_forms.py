@@ -134,7 +134,7 @@ def linear_continuity_form(test, qbar, ubar):
         :class:`LabelledForm`: a labelled transport form.
     """
 
-    L = qbar*test*div(ubar)*dx
+    L = test*div(qbar*ubar)*dx
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.conservative)
@@ -153,7 +153,7 @@ def linear_continuity_form_1d(test, qbar, ubar):
         :class:`LabelledForm`: a labelled transport form.
     """
 
-    L = qbar*test*ubar.dx(0)*dx
+    L = qbar*test*ubar.dx(0)*dx + qbar.dx(0)*test*ubar*dx
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.conservative)
