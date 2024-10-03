@@ -9,7 +9,7 @@ from gusto.equations.common_forms import (
     advection_form, advection_form_1d, continuity_form,
     continuity_form_1d, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form, diffusion_form_1d,
-    linear_continuity_form, linear_continuity_form_1d
+    linear_continuity_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
 
@@ -361,7 +361,7 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
 
         # Transport term needs special linearisation
         if self.linearisation_map(D_adv.terms[0]):
-            linear_D_adv = linear_continuity_form_1d(phi, H, u_trial)
+            linear_D_adv = linear_continuity_form(phi, H, u_trial)
             # Add linearisation to D_adv
             D_adv = linearisation(D_adv, linear_D_adv)
 
