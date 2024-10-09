@@ -11,7 +11,7 @@ from firedrake import (
     rhs, FacetNormal, div, dx, jump, avg, dS, dS_v, dS_h, ds_v, ds_t, ds_b,
     ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis,
     BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC,
-    conditional, Interpolator
+    conditional, Interpolator, max_value, min_value
 )
 from firedrake.fml import Term, drop
 from firedrake.petsc import flatten_parameters
@@ -26,7 +26,7 @@ from gusto.saturation_function import compute_saturation
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver", "ThermalSWSolver", "MoistConvectiveSWSolver", "MoistDynamicsSWSolver"]
+__all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver", "ThermalSWSolver", "MoistConvectiveSWSolver", "MoistDynamicsSWSolver", "MoistThermalSWSolver"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -1087,3 +1087,232 @@ class MoistDynamicsSWSolver(TimesteppingSolver):
             self.b_e_solver.solve()
 
         b_e.assign(self.b_e)
+
+
+class MoistThermalSWSolver(TimesteppingSolver):
+    """
+    Linear solver object for the moist thermal shallow water equations, where
+    moisture is included in the linear solve.
+
+    This solves a linear problem for the moist thermal shallow water equations
+    with prognostic variables u (velocity), D (depth), b (buoyancy), qv (water
+    vapour) and qc (cloud water).
+     """
+
+    solver_parameters = {
+    "snes_type": "ksponly",
+    "mat_type": "matfree",
+    "ksp_type": "gmres",
+    "ksp_converged_reason": None,
+    "ksp_atol": 1e-5,
+    "ksp_rtol": 1e-5,
+    "ksp_max_it": 400,
+    "pc_type": "python",
+    "pc_python_type": "firedrake.AssembledPC",
+    "assembled_pc_star_sub_sub_pc_type": "lu",
+    "assembled_pc_type": "python",
+    "assembled_pc_python_type": "firedrake.ASMStarPC",
+    "assembled_pc_star_construct_dim": 0,
+    "assembled_pc_star_sub_sub_pc_factor_mat_ordering_type": "rcm",
+    "assembled_pc_star_sub_sub_pc_factor_reuse_ordering": None,
+    "assembled_pc_star_sub_sub_pc_factor_reuse_fill": None,
+    "assembled_pc_star_sub_sub_pc_factor_fill": 1.2
+    }
+
+    def __init__(self, equations, q0, nu, beta2, tau, alpha=0.5,
+                 solver_parameters=None, overwrite_solver_parameters=False):
+        """
+        Args:
+            equations (:class:`PrognosticEquation`): the model's equation.
+            alpha (float, optional): the semi-implicit off-centring factor.
+                Defaults to 0.5. A value of 1 is fully-implicit.
+            q0 (float): scaling factor for the saturation function.
+            nu (float): scaling factor for the saturation function.
+            beta2 (float): feedback proportionality on the buoyancy equation due
+                to phase changes.
+            tau (float): the timescale for the moist process.
+            solver_parameters (dict, optional): contains the options to be
+                passed to the underlying :class:`LinearVariationalSolver`.
+                Defaults to None.
+            overwrite_solver_parameters (bool, optional): if True use only the
+                `solver_parameters` that have been passed in. If False then
+                update the default parameters with the `solver_parameters`
+                passed in. Defaults to False.
+        """
+        self.q0 = q0
+        self.nu = nu
+        self.beta2 = beta2
+        self.tau = tau
+
+        super().__init__(equations, alpha, solver_parameters,
+                         overwrite_solver_parameters)
+
+    @timed_function("Gusto:SolverSetup")
+    def _setup_solver(self):
+        equation = self.equations      # just cutting down line length a bit
+        dt = self.dt
+        beta_ = dt*self.alpha
+        Vu = equation.domain.spaces("HDiv")
+        VD = equation.domain.spaces("DG")
+        Vb = equation.domain.spaces("DG")
+        Vv = equation.domain.spaces("DG")
+        Vc = equation.domain.spaces("DG")
+
+        # Check that we have the correct fields
+        if not equation.field_names[2] == 'b':
+            raise NotImplementedError("Field 'b' must exist to use the moist thermal linear solver in the SIQN scheme")
+        if not equation.field_names[3] == 'water_vapour':
+            raise NotImplementedError("Field 'water_vapour' must exist to use the moist thermal linear solver in the SIQN scheme")
+        if not equation.field_names[4] == 'cloud_water':
+            raise NotImplementedError("Field 'cloud_water' must exist to use the moist thermal linear solver in the SIQN scheme")
+
+        # Store time-stepping coefficients as UFL Constants
+        beta = Constant(beta_)
+
+        # Split up the rhs vector
+        self.xrhs = Function(self.equations.function_space)
+        u_in = split(self.xrhs)[0]
+        D_in = split(self.xrhs)[1]
+        b_in = split(self.xrhs)[2]
+        qv_in = split(self.xrhs)[3]
+        qc_in = split(self.xrhs)[4]
+
+        # Split up the xn vector
+        self.xn = Function(self.equations.function_space)
+        D_xn = split(self.xn)[1]
+        b_xn = split(self.xn)[2]
+        qv_xn = split(self.xn)[3]
+        qc_xn = split(self.xn)[4]
+
+        # Function space and functions for the linear problem
+        W = equation.function_space
+        w, phi, lamda, tau1, tau2 = TestFunctions(W)
+        u, D, b, qv, qc = TrialFunctions(W)
+
+        # Background depth, buoyancy, vapour and cloud
+        Dbar = split(equation.X_ref)[1]
+        bbar = split(equation.X_ref)[2]
+        qvbar = split(equation.X_ref)[3]
+        qcbar = split(equation.X_ref)[4]
+
+        n = FacetNormal(equation.domain.mesh)
+
+        # get saturation function
+        g = equation.parameters.g
+        H = equation.parameters.H
+        # just to shorten line length
+        q0 = self.q0
+        beta2 = self.beta2
+        nu = self.nu
+
+        # check for topography
+        if hasattr(equation.prescribed_fields, "topography"):
+            B = equation.prescribed_fields("topography")
+        else:
+            B = None
+
+        # functions for sat function and source term P
+        self.sat_func = Function(VD)
+        self.P_func = Function(VD)
+
+        # expressions for saturation and P (to be interpolated)
+        sat_expr = compute_saturation(q0, nu, H, g, D_xn, b_xn, B)
+        P_expr = (qv_xn - self.sat_func)/self.tau
+        P_expr = conditional(sat_expr < 0,
+                             max_value(sat_expr,
+                                       -qc_xn/self.tau),
+                             min_value(sat_expr,
+                                       qv_xn/self.tau))
+
+        # interpolators for sat function and P function
+        self.q_sat_interpolator = Interpolator(sat_expr, self.sat_func)
+        self.P_interpolator = Interpolator(P_expr, self.P_func)
+
+        # write the weak form of the system to solve
+        eqn = (
+            # u equation
+            inner(w, (u - u_in)) * dx
+            - beta * (D - Dbar) * div(w*bbar) * dx
+            + beta * jump(w*bbar, n) * avg(D-Dbar) * dS
+            - beta * 0.5 * Dbar * bbar * div(w) * dx
+            - beta * 0.5 * Dbar * b * div(w) * dx
+            - beta * 0.5 * bbar * div(w*(D-Dbar)) * dx
+            + beta * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
+            # D equation
+            + inner(phi, (D - D_in)) * dx
+            + beta * phi * Dbar * div(u) * dx
+            # b equation
+            + inner(lamda, (b - b_in)) * dx
+            - beta * bbar * div(lamda*u) * dx
+            + beta * jump(lamda*u, n) * avg(bbar) * dS
+            + beta * lamda * beta2 * self.P_func * dx
+            # qv equation
+            + inner(tau1, (qv - qv_in)) * dx
+            - beta * qvbar * div(tau1*u) * dx
+            + beta * jump(tau1*u, n) * avg(qvbar) * dS
+            + beta * tau1 * self.P_func * dx
+            # qc equation
+            + inner(tau2, (qc - qc_in)) * dx
+            - beta * qcbar * div(tau2*u) * dx
+            + beta * jump(tau2*u, n) * avg(qcbar) * dS
+            - beta * tau2 * self.P_func * dx
+        )
+
+        if 'coriolis' in equation.prescribed_fields._field_names:
+            f = equation.prescribed_fields('coriolis')
+            eqn += beta * f * inner(w, equation.domain.perp(u)) * dx
+
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
+
+        # Place to put results of solver
+        self.dy = Function(W)
+
+        # Boundary conditions
+        bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
+
+        # Solver
+        problem = LinearVariationalProblem(aeqn, Leqn, self.dy, bcs=bcs)
+
+        self.solver = LinearVariationalSolver(problem,
+                                              solver_parameters=self.solver_parameters)
+
+    @timed_function("Gusto:LinearSolve")
+    def solve(self, xrhs, dy, xn):
+        """
+        Solve the linear problem.
+
+        Args:
+            xrhs (:class:`Function`): the right-hand side field in the
+                appropriate :class:`MixedFunctionSpace`.
+            dy (:class:`Function`): the resulting field in the appropriate
+                :class:`MixedFunctionSpace`.
+        """
+        self.xrhs.assign(xrhs)
+
+        # Check that the reference profiles have been set
+        bbar = split(self.equations.X_ref)[2]
+        b = dy.subfunctions[2]
+        bbar_func = Function(b.function_space()).interpolate(bbar)
+        if bbar_func.dat.data.max() == 0 and bbar_func.dat.data.min() == 0:
+            logger.warning("The reference profile for b in the linear solver is zero. To set a non-zero profile add b to the set_reference_profiles argument.")
+
+        qvbar = split(self.equations.X_ref)[3]
+        qv = dy.subfunctions[3]
+        qvbar_func = Function(qv.function_space()).interpolate(qvbar)
+        if qvbar_func.dat.data.max() == 0 and qvbar_func.dat.data.min() == 0:
+            logger.warning("The reference profile for vapour in the linear solver is zero. To set a non-zero profile add water_vapour to the set_reference_profiles argument.")
+
+        qcbar = split(self.equations.X_ref)[4]
+        qc = dy.subfunctions[3]
+        qcbar_func = Function(qc.function_space()).interpolate(qcbar)
+        if qcbar_func.dat.data.max() == 0 and qcbar_func.dat.data.min() == 0:
+            logger.warning("The reference profile for cloud in the linear solver is zero. To set a non-zero profile add cloud_water to the set_reference_profiles argument.")
+
+        # Call the saturation function and source function interpolators
+        self.q_sat_interpolator.interpolate()
+        self.P_interpolator.interpolate()
+
+        # Solve
+        self.solver.solve()
+        dy.assign(self.dy)
