@@ -220,20 +220,39 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
             else:
                 if self.wrapper_name == "supg":
+                    print("Doing SUPG")
                     self.wrapper.field_names = equation.field_names
                     self.wrapper.setup(self.wrapper_field_name)
                 else:
                     self.wrapper.setup(self.fs, wrapper_bcs)
-                self.fs = self.wrapper.function_space
-                if self.solver_parameters is None:
-                    self.solver_parameters = self.wrapper.solver_parameters
-                new_test = TestFunction(self.wrapper.test_space)
+                # self.fs = self.wrapper.function_space
+                # if self.solver_parameters is None:
+                #     self.solver_parameters = self.wrapper.solver_parameters
+                # new_test = TestFunction(self.wrapper.test_space)
                 # SUPG has a special wrapper
                 if self.wrapper_name == "supg":
+                    print("Doing SUPG")
+                    print(self.wrapper_field_name)
                     new_test = self.wrapper.test
+                    breakpoint()
                     self.residual = self.residual.label_map(
                         lambda t: t.get(prognostic) == self.wrapper_field_name,
-                        map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx),)
+                        map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
+                    # theta_res = self.residual.label_map(
+                    #     lambda t: t.get(prognostic) == self.wrapper_field_name,
+                    #     map_if_false=drop)
+                    # print(theta_res.form.__str__())
+                    # breakpoint()
+                    # u_res = self.residual.label_map(
+                    #     lambda t: t.get(prognostic) == 'u',
+                    #     map_if_false=drop)
+                    # print(u_res.form.__str__())
+                    # breakpoint()
+                    # rho_res = self.residual.label_map(
+                    #     lambda t: t.get(prognostic) == 'rho',
+                    #     map_if_false=drop)
+                    # print(rho_res.form.__str__())
+                    # breakpoint()
                 else:
 
                     # Replace the original test function with the one from the wrapper
@@ -241,7 +260,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         all_terms,
                         map_if_true=replace_test_function(new_test))
 
-                self.residual = self.wrapper.label_terms(self.residual)
+                #self.residual = self.wrapper.label_terms(self.residual)
 
         # -------------------------------------------------------------------- #
         # Make boundary conditions
@@ -591,6 +610,7 @@ class ThetaMethod(TimeDiscretisation):
             x_in (:class:`Function`): the input field.
         """
         self.x1.assign(x_in)
+        self.x_out.assign(x_in)
         self.solver.solve()
         x_out.assign(self.x_out)
 

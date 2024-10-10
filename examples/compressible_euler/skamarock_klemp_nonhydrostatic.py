@@ -104,7 +104,7 @@ def skamarock_klemp_nonhydrostatic(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    theta_opts = SUPGOptions()
+    theta_opts = SUPGOptions(field_name="theta")
     transported_fields = [
         TrapeziumRule(domain, "u"),
         SSPRK3(domain, "rho"),

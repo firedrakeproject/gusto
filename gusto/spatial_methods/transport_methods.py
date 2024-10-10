@@ -9,11 +9,11 @@ from firedrake import (
 from firedrake.fml import Term, keep, drop
 from gusto.core.configuration import IntegrateByParts, TransportEquationType
 from gusto.core.labels import (prognostic, transport, transporting_velocity, ibp_label,
-                               mass_weighted)
+                               mass_weighted, implicit, explicit)
 from gusto.core.logging import logger
 from gusto.spatial_methods.spatial_methods import SpatialMethod
 
-__all__ = ["DefaultTransport", "DGUpwind"]
+__all__ = ["DefaultTransport", "DGUpwind", "Split_DGUpwind"]
 
 
 # ---------------------------------------------------------------------------- #
@@ -236,7 +236,62 @@ class DGUpwind(TransportMethod):
                 raise NotImplementedError('Upwind transport scheme has not been '
                                           + 'implemented for this transport equation type')
         self.form = form
+# ---------------------------------------------------------------------------- #
+# Class for DG Upwind transport methods
+# ---------------------------------------------------------------------------- #
+class Split_DGUpwind(TransportMethod):
+    """
+    The Discontinuous Galerkin Upwind transport scheme.
 
+    Discretises the gradient of a field weakly, taking the upwind value of the
+    transported variable at facets.
+    """
+    def __init__(self, equation, variable, ibp=IntegrateByParts.ONCE,
+                 vector_manifold_correction=False, outflow=False):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the equation, which includes
+                a transport term.
+            variable (str): name of the variable to set the transport scheme for
+            ibp (:class:`IntegrateByParts`, optional): an enumerator for how
+                many times to integrate by parts. Defaults to `ONCE`.
+            vector_manifold_correction (bool, optional): whether to include a
+                vector manifold correction term. Defaults to False.
+            outflow (bool, optional): whether to include outflow at the domain
+                boundaries, through exterior facet terms. Defaults to False.
+        """
+
+        super().__init__(equation, variable)
+        self.ibp = ibp
+        self.vector_manifold_correction = vector_manifold_correction
+        self.outflow = outflow
+
+        # -------------------------------------------------------------------- #
+        # Determine appropriate form to use
+        # -------------------------------------------------------------------- #
+        # first check for 1d mesh and scalar velocity space
+        if equation.domain.mesh.topological_dimension() == 1 and len(equation.domain.spaces("HDiv").shape) == 0:
+            assert not vector_manifold_correction
+            if self.transport_equation_type == TransportEquationType.advective:
+                form = upwind_advection_form_1d(self.domain, self.test,
+                                                self.field,
+                                                ibp=ibp, outflow=outflow)
+            elif self.transport_equation_type == TransportEquationType.conservative:
+                form = upwind_continuity_form_1d(self.domain, self.test,
+                                                 self.field,
+                                                 ibp=ibp, outflow=outflow)
+
+        else:
+            if self.transport_equation_type == TransportEquationType.advective:
+              
+                form = split_upwind_advection_form(self.domain, self.test,
+                                                self.field,
+                                                ibp=ibp, outflow=outflow)
+
+            else:
+                raise NotImplementedError('Upwind transport scheme has not been '
+                                          + 'implemented for this transport equation type')
+        self.form = form
 
 # ---------------------------------------------------------------------------- #
 # Forms for DG Upwind transport
@@ -297,6 +352,87 @@ def upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=Fa
     form = transporting_velocity(L, ubar)
 
     return ibp_label(transport(form, TransportEquationType.advective), ibp)
+
+# ---------------------------------------------------------------------------- #
+# Forms for DG Upwind transport
+# ---------------------------------------------------------------------------- #
+def split_upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+    u"""
+    The form corresponding to the DG upwind advective transport operator.
+
+    This discretises (u.∇)q, for transporting velocity u and transported
+    variable q. An upwind discretisation is used for the facet terms when the
+    form is integrated by parts.
+
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+        outflow (bool, optional): whether to include outflow at the domain
+            boundaries, through exterior facet terms. Defaults to False.
+
+    Raises:
+        ValueError: Can only use outflow option when the integration by parts
+            option is not "never".
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    if outflow and ibp == IntegrateByParts.NEVER:
+        raise ValueError("outflow is True and ibp is None are incompatible options")
+    Vu = domain.spaces("HDiv")
+    k=domain.k
+    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    ubar = Function(Vu)
+    ubar_v = k*inner(ubar, k)
+    ubar_h = ubar - ubar_v
+
+    if ibp == IntegrateByParts.ONCE:
+        L_h = -inner(div(outer(test, ubar_h)), q)*dx
+        L_v = -inner(div(outer(test, ubar_v)), q)*dx
+        print("IBP ONCE")
+    else:
+        L_h = inner(outer(test, ubar_h), grad(q))*dx
+        L_v = inner(outer(test, ubar_v), grad(q))*dx
+        print("IBP TWICE")
+
+    if ibp != IntegrateByParts.NEVER:
+        n = FacetNormal(domain.mesh)
+        un_h = 0.5*(dot(ubar_h, n) + abs(dot(ubar_h, n)))
+
+        L_h += dot(jump(test), (un_h('+')*q('+') - un_h('-')*q('-')))*dS_
+
+        un_v = 0.5*(dot(ubar_v, n) + abs(dot(ubar_v, n)))
+
+        L_v += dot(jump(test), (un_v('+')*q('+') - un_v('-')*q('-')))*dS_
+
+        if ibp == IntegrateByParts.TWICE:
+            L_h -= (inner(test('+'), dot(ubar_h('+'), n('+'))*q('+'))
+                  + inner(test('-'), dot(ubar_h('-'), n('-'))*q('-')))*dS_
+            
+            L_v -= (inner(test('+'), dot(ubar_v('+'), n('+'))*q('+'))
+                  + inner(test('-'), dot(ubar_v('-'), n('-'))*q('-')))*dS_
+
+    if outflow:
+        n = FacetNormal(domain.mesh)
+        un_h = 0.5*(dot(ubar_h, n) + abs(dot(ubar_h, n)))
+        L_h += test*un_h*q*(ds_v + ds_t + ds_b)
+
+        un_v = 0.5*(dot(ubar_v, n) + abs(dot(ubar_v, n)))
+        L_v += test*un_v*q*(ds_v + ds_t + ds_b)
+        print("OUTFLOW")
+
+    form_h = transporting_velocity(L_h, ubar)
+    form_v = transporting_velocity(L_v, ubar)
+    labelled_form = ibp_label(explicit(transport(form_h, TransportEquationType.advective)), ibp)
+    #+ implicit(form_v), ibp)
+    return labelled_form
+
 
 
 def upwind_advection_form_1d(domain, test, q, ibp=IntegrateByParts.ONCE,

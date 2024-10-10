@@ -24,7 +24,7 @@ from gusto import (
     TrapeziumRule, SUPGOptions, CourantNumber, Perturbation, Gradient,
     CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
     compressible_hydrostatic_balance, logger, RichardsonNumber, MixedFSOptions,
-    IMEX_SSP3
+    IMEX_SSP3, ImplicitMidpoint, IMEXRungeKutta
 )
 
 from time import perf_counter
@@ -35,7 +35,7 @@ skamarock_klemp_nonhydrostatic_defaults = {
     'dt': 6.0,
     'tmax': 3600.,
     'dumpfreq': 300,
-    'dirname': 'skamarock_klemp_nonhydrostatic2'
+    'dirname': 'skamarock_klemp_nonhydrostatic3'
 }
 
 
@@ -60,6 +60,10 @@ def skamarock_klemp_nonhydrostatic(
     deltaTheta = 1.0e-2       # Magnitude of theta perturbation (K)
     N = 0.01                  # Brunt-Vaisala frequency (1/s)
 
+    dxval = domain_height/10
+
+    
+
     # ------------------------------------------------------------------------ #
     # Our settings for this set up
     # ------------------------------------------------------------------------ #
@@ -76,14 +80,24 @@ def skamarock_klemp_nonhydrostatic(
     domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
-    theta_opts = SUPGOptions(field_name="theta")
+
     parameters = CompressibleParameters()
+    #tau_val = 1./(2.*sqrt(domain_height))
+    Rval = 287
+    Tval = 288
+    tau_val = 1./(2.*sqrt(Rval*Tval))
+    tau_val = 16.67
+    print(tau_val)
+    print(1/sqrt(15))
+    breakpoint()
+    theta_opts = SUPGOptions( default = tau_val, field_name="theta")
+
     eqns = CompressibleEulerEquations(domain, parameters)
-    eqns = split_continuity_form(eqns)
+    #eqns = split_continuity_form(eqns)
 
-
-    eqns.label_terms(lambda t: not any(t.has_label(time_derivative,transport)), implicit)
-    eqns.label_terms(lambda t: t.has_label(transport), explicit)
+    eqns.label_terms(lambda t: not t.has_label(time_derivative), implicit)
+    #eqns.label_terms(lambda t: not any(t.has_label(time_derivative,transport)), implicit)
+    #eqns.label_terms(lambda t: t.has_label(transport), explicit)
     # eqns.label_terms(lambda t: t.get(prognostic) != 'theta' and t.has_label(transport), explicit)
 
     # I/O
@@ -503,8 +517,9 @@ def skamarock_klemp_nonhydrostatic(
 # }
 
 
-    # IMEX time stepper
-    scheme = IMEX_SSP3(domain, options = theta_opts, solver_parameters=nl_solver_parameters)
+    butcher_imp = np.array([[0.0, 0.0], [0.0, 0.5], [0.0, 1.]])
+    butcher_exp = np.array([[0.0, 0.0], [0.5, 0.0], [0.0, 1.]])
+    scheme = IMEXRungeKutta(domain, butcher_imp, butcher_exp, options =theta_opts, solver_parameters=nl_solver_parameters)
     #Time stepper
     stepper = Timestepper(eqns, scheme, io, transport_methods)
     # ------------------------------------------------------------------------ #
