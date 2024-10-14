@@ -429,8 +429,8 @@ def split_upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outf
 
     form_h = transporting_velocity(L_h, ubar)
     form_v = transporting_velocity(L_v, ubar)
-    labelled_form = ibp_label(explicit(transport(form_h, TransportEquationType.advective)), ibp)
-    #+ implicit(form_v), ibp)
+    labelled_form = ibp_label(explicit(transport(form_h, TransportEquationType.advective))
+    + implicit(form_v), ibp)
     return labelled_form
 
 

@@ -107,6 +107,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         if self.spatial_methods is not None:
             for method in self.spatial_methods:
                 method.replace_form(equation)
+        breakpoint()
 
     def setup_transporting_velocity(self, scheme):
         """
