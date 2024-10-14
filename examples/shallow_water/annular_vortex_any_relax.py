@@ -26,19 +26,22 @@ phimp = phis
 monopolar = False
 
 # scaling for topography term. A0scal = 0 means no topography
-A0scal = 0.125
+A0scal = 0
 
-# True means include relaxation term to counter topography angular momentum effects
-toporel = False
+# scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
+pvmax = 1.8
+pvpole = 0.8
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
 tau_r_ratio = 2
 tau_c_ratio = 0.01
-beta = 4
+
+# beta is scaling factor for h_th
+beta = 1.0
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'none'
+rel_sch = 'rad'
 include_co2 = 'yes'
 
 extra_name = ''
@@ -47,26 +50,35 @@ if include_co2 == 'no':
 if phimp != phis:
     extra_name = f'{extra_name}_phimp--{phimp}'
 
-if toporel:
-    toponame = f'A0-{A0scal}-rel'
-else:
-    toponame = f'A0-{A0scal}-norel'
+# if toporel:
+#     toponame = f'A0-{A0scal}-rel'
+# else:
+toponame = f'A0-{A0scal}-norel'
 
 ### max runtime currently 1 day
-rundays = 30
+rundays = 50
 tmax = rundays * day
 ### timestep
 dt = 450.
 
+pvpoleint = str(pvpole).split('.')[0]
+pvpoledec = str(pvpole).split('.')[1]
+
+pvmaxint = str(pvmax).split('.')[0]
+pvmaxdec = str(pvmax).split('.')[1]
+
+
+betaint = str(beta).split('.')[0]
+betadec = str(beta).split('.')[1]
 
 if rel_sch == 'both':
-    rel_sch_name = f'tau_r--{tau_r_ratio}sol_tau_c--{tau_c_ratio}sol_beta--{beta}'
+    rel_sch_name = f'tau_r--{tau_r_ratio}sol_tau_c--{tau_c_ratio}sol_beta--{betaint}-{betadec}'
     rel_sch_folder = 'Relax_to_pole_and_CO2'
 elif rel_sch == 'co2':
-    rel_sch_name = f'tau_c--{tau_c_ratio}sol_alpha--{beta}'
+    rel_sch_name = f'tau_c--{tau_c_ratio}sol_alpha--{betaint}-{betadec}'
     rel_sch_folder = 'CO2'
 elif rel_sch == 'rad':
-    rel_sch_name = f'tau_r--{tau_r_ratio}sol'
+    rel_sch_name = f'PVmax--{pvmaxint}-{pvmaxdec}_PVpole--{pvpoleint}-{pvpoledec}_tau_r--{tau_r_ratio}sol'
     rel_sch_folder = 'Relax_to_annulus'
 elif rel_sch == 'none':
     rel_sch_name = 'free'
@@ -87,7 +99,10 @@ parameters = ShallowWaterParameters(g=g, H=H, Omega=Omega)
 # Set up model objects
 # ------------------------------------------------------------------------ #
 
-def initial_profiles(omega, radius, phiss, phinn, annulus):
+def initial_profiles(omega, radius, phiss, phinn, annulus, **kwargs):
+
+    pvpole = kwargs.pop('pvpole', 1)
+    pvmax = kwargs.pop('pvmax', 1.6)
 
     # set numerical method parameters
     ny = 1000000
@@ -117,9 +132,9 @@ def initial_profiles(omega, radius, phiss, phinn, annulus):
 
     # Will setup - annulus
     qt = np.where(rlat > 0., 0.3 * qp, qt)
-    qt = np.where(rlat > rlat1, 1.6 * qp, qt)
+    qt = np.where(rlat > rlat1, pvmax * qp, qt)
     if annulus:
-        qt = np.where(rlat > rlat2, qp, qt)
+        qt = np.where(rlat > rlat2, pvpole * qp, qt)
     
     if smoothing:
         # annulus smoothing - linearly for +-1.5deg around each boundary
@@ -224,7 +239,7 @@ def initial_profiles(omega, radius, phiss, phinn, annulus):
 
     return rlat, uini, thini
 
-rlat, uini, hini = initial_profiles(Omega, R, phis, phin, annulus=True)
+rlat, uini, hini = initial_profiles(Omega, R, phis, phin, annulus=True, pvpole=pvpole, pvmax=pvmax)
 rlat_mp, uini_mp, hini_mp = initial_profiles(Omega, R, phimp, phin, annulus=False)
 h_th = min(hini)*beta+H
 
