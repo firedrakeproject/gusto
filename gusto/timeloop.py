@@ -636,10 +636,14 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.xrhs_phys = Function(W)
         self.xrhs_inner_phys = Function(W)
         self.dy = Function(W)
+        self.moist_solver = False
         if linear_solver is None:
             self.linear_solver = LinearTimesteppingSolver(equation_set, self.alpha)
         else:
             self.linear_solver = linear_solver
+            from gusto.linear_solvers import MoistThermalSWSolver
+            if isinstance(self.linear_solver, MoistThermalSWSolver):
+                self.moist_solver = True
         self.forcing = Forcing(equation_set, self.alpha)
         self.bcs = equation_set.bcs
 
@@ -764,7 +768,21 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     logger.info(f'SIQN: Implicit forcing {(outer, inner)}')
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
 
+                 # # # # # # # # # #
+                # ultra-fast physics
+                x_after_ultra_fast(self.field_name).assign(xnp1(self.field_name))
+                if len(self.ultra_fast_physics_schemes) > 0:
+                    with timed_stage("Ultra-fast physics"):
+                        logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
+                        for _, scheme in self.ultra_fast_physics_schemes:
+                            scheme.apply(x_after_ultra_fast(scheme.field_name), x_after_ultra_fast(scheme.field_name))
 
+                xrhs_inner_phys.assign(x_after_ultra_fast(self.field_name) - xnp1(self.field_name))
+                for f in xrhs_inner_phys.subfunctions:
+                    print("x rhs inner phys: ", f.dat.data.min(), f.dat.data.max())
+                xrhs += xrhs_inner_phys
+
+                # # # # # # # # #
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
@@ -776,25 +794,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
 
-                # # # # # # # # # #
-                # ultra-fast physics
-                # x_after_ultra_fast is really x_before_ultra_fast now
-                x_after_ultra_fast(self.field_name).assign(xnp1(self.field_name))
-                if len(self.ultra_fast_physics_schemes) > 0:
-                    with timed_stage("Ultra-fast physics"):
-                        logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
-                        for _, scheme in self.ultra_fast_physics_schemes:
-                            scheme.apply(xnp1(scheme.field_name), x_after_ultra_fast(scheme.field_name))
+                # Update xnp1 values for active tracers not included in the linear solve here in the inner loop, if doing ultra-fast physics
+                if len(self.ultra_fast_physics_schemes) > 0 and self.moist_solver == False:
+                        self.copy_active_tracers(x_after_ultra_fast, xnp1)
 
-                # xrhs_inner_phys isn't used, but just checking what physics is doing here
-                xrhs_inner_phys.assign(xnp1(self.field_name) - x_after_ultra_fast(self.field_name))
-                for f in xrhs_inner_phys.subfunctions:
-                    print("x rhs inner phys: ", f.dat.data.min(), f.dat.data.max())
-
-                # # # # # # # # #
-
-            # Update xnp1 values for active tracers not included in the linear solve
-            self.copy_active_tracers(x_after_fast, xnp1)
+            # Update xnp1 values for active tracers not included in the linear solve if this hasn't already happened in the inner loop
+            if len(self.ultra_fast_physics_schemes) == 0 and self.moist_solver ==False:
+                self.copy_active_tracers(x_after_fast, xnp1)
 
             self._apply_bcs()
 
