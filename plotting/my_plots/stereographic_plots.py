@@ -6,10 +6,16 @@ import matplotlib.path as mpath
 from matplotlib import (cm, colors, gridspec)
 import matplotlib.ticker as mticker
 import pdb
+import os
 
-results_dir = f'/data/home/sh1293/firedrake-real-opt_may24/src/gusto/examples/shallow_water/results/Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_alpha--1_working_long'
+file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--4_len-50sols'
 
-timeind = -1
+results_dir = f'/data/home/sh1293/firedrake-real-opt_may24/src/gusto/examples/shallow_water/results/{file}'
+
+if not os.path.exists(f'{results_dir}/Plots/Stereo_ani/'):
+    os.makedirs(f'{results_dir}/Plots/Stereo_ani/')
+
+# timeind = -1
 
 ds = xr.open_dataset(f'{results_dir}/regrid_output.nc')
 q = ds.PotentialVorticity
@@ -26,10 +32,11 @@ circle = mpath.Path(verts * radius + center)
 
 
 
-for timeind in range(0, len(q.time)):
+# for timeind in range(0, len(q.time)):
+for timeind in [157, 159]:
 # for timeind in range(0, 10):
-    if timeind%100==0:
-        print(timeind)
+    # if timeind%100==0:
+    print(timeind)
     fig = plt.figure(figsize = (8, 8))
     spec = gridspec.GridSpec(ncols=1, nrows=1, width_ratios=[1], figure=fig)
     ax = fig.add_subplot(spec[0], projection = ccrs.NorthPolarStereo())
@@ -43,11 +50,14 @@ for timeind in range(0, len(q.time)):
     ax.set_boundary(circle, transform=ax.transAxes)
     ax.set_extent([-180,180,50,90], crs=ccrs.PlateCarree())
     # pdb.set_trace()
-    contourplot = q[:,:,timeind].plot.contourf(ax=ax, vmin = 0, vmax = 1.75*val, add_colorbar=True,
+    contourplot = q[timeind,:,:].plot.contourf(ax=ax, vmin = 0, vmax = 1.75*val, add_colorbar=True,
                                 transform = ccrs.PlateCarree(), cmap='OrRd', levels=np.linspace(0, 1.75*val, 15), extend = 'both')
 
     # contours = ax.contourf(co2[:,:,-1].lon, co2[:,:,-1].lat, co2[:,:,-1].values, levels=[-0.5, 1.5], colors=None, hatches='xx')
-    contours = co2[:,:,timeind].plot.contour(ax=ax, colors='green', transform=ccrs.PlateCarree(), add_colorbar=False, levels=[0, 1])
+    # contours = co2[timeind,:,:].plot.contour(ax=ax, colors=['blue', 'green', 'yellow'], transform=ccrs.PlateCarree(), add_colorbar=False, levels=[0.1, 0.5, 1])
+    contours = co2[timeind,:,:].plot.contour(ax=ax, colors=['green'], transform=ccrs.PlateCarree(), add_colorbar=False, levels=[0.5])
+    # contours1 = co2[timeind,:,:].plot.contourf(ax=ax, vmin=0, vmax=1, alpha=0.5, cmap='GnBu', extend='both', add_colorbar=True,
+    #                                             transform=ccrs.PlateCarree())
 
     colorbar = contourplot.colorbar
     colorbar.set_label(r'Potential Vorticity ($\frac{2 \Omega}{H}$)')
@@ -55,6 +65,8 @@ for timeind in range(0, len(q.time)):
     ticks2 = ['1.75', '1.5', '1.25', '2', '0.75', '0.5', '0.25', '0']
     colorbar.set_ticks(ticks=ticks1, labels=ticks2)
 
-    # ax.set_title(f'MY{q[:,:,timeind].MY}, Ls{q[:,:,timeind].Ls}')
+    ax.set_title(f'{ds.time.values[timeind]/88774:.4f}sol')
 
     plt.savefig(f'{results_dir}/Plots/Stereo_ani/{timeind:04}.pdf')
+
+print(f'Plotted for \n {file}')

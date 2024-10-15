@@ -29,31 +29,58 @@ def gaussian_lat_lon_grid(nlat, nlon):
 # Directory for results and plots
 # ---------------------------------------------------------------------------- #
 # When copying this example these should not be relative to this file
-results_dir = f'/data/home/sh1293/firedrake-real-opt_may24/src/gusto/examples/shallow_water/results/Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_alpha--1_working_long'
-plot_dir = f'{results_dir}/plots'
+filepath = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.005sol_beta--1_A0-0-norel_len-300sols'
+
+results_dir = f'/data/home/sh1293/firedrake-real-opt_may24/src/gusto/examples/shallow_water/results/{filepath}'
+# plot_dir = f'{results_dir}/plots'
 results_file_name = f'{results_dir}/field_output.nc'
 output_file_name = f'{results_dir}/regrid_output.nc'
-plot_name = f'{plot_dir}/eddy_enstrophy.pdf'
+# plot_name = f'{plot_dir}/eddy_enstrophy.pdf'
 data_file = Dataset(results_file_name, 'r')
-for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity']:
-    field_data = extract_gusto_field(data_file, field_name)
-    coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
-    times = np.arange(np.shape(field_data)[1])
-    # lats = np.arange(-90, 91, 3)
-    # lons = np.arange(-180, 181, 3)
-    lats, lons = gaussian_lat_lon_grid(40, 80)
-    X, Y = np.meshgrid(lons, lats)
-    # pdb.set_trace()
-    new_data = regrid_horizontal_slice(X, Y,
-                                        coords_X, coords_Y, field_data)
-    da = xr.DataArray(data=new_data.astype('float32'),
-                    dims=['lat', 'lon', 'time'],
-                    coords=dict(lat=lats.astype('float32'), lon=lons.astype('float32'), time=times.astype('float32')),
-                    name=field_name)
-    ds1 = da.to_dataset()
-    if field_name == 'D':
-        ds = ds1
-    else:
-        ds = xr.merge([ds, ds1])
+
+times = np.array(data_file['time'])
+
+# lats, lons = gaussian_lat_lon_grid(40, 80)
+lats = np.arange(-90, 91, 3)
+lons = np.arange(-180, 181, 3)
+X, Y = np.meshgrid(lons, lats)
+
+ds_list=[]
+for i in range(0, len(times)):
+# for i in [0, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1]:
+    print(i)
+    for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity']:
+        field_data = extract_gusto_field(data_file, field_name, time_idx=i)
+        # times = np.arange(np.shape(field_data)[1])
+        coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
+
+
+        # field_data_t = field_data[:,i]
+
+        # times = np.arange(np.shape(field_data)[1])
+        # pdb.set_trace()
+        if field_name == 'D_minus_H_rel_flag_less':
+            new_data = regrid_horizontal_slice(X, Y,
+                                                coords_X, coords_Y, field_data,
+                                                periodic_fix='sphere')#, method='nearest')
+        else:
+            new_data = regrid_horizontal_slice(X, Y,
+                                                coords_X, coords_Y, field_data,
+                                                periodic_fix='sphere')
+        da_2d = xr.DataArray(data=new_data.astype('float32'),
+                        dims=['lat', 'lon'],
+                        coords=dict(lat=lats.astype('float32'), lon=lons.astype('float32')),
+                        name=field_name)
+        da = da_2d.expand_dims(time=[times[i].astype('float32')])
+        ds1 = da.to_dataset()
+        if field_name == 'D' and i == 0:
+            ds = ds1
+        else:
+            ds = xr.merge([ds, ds1])
+#         ds_list.append(ds1)
+
+# ds = xr.concat(ds_list, dim='time')
 
 ds.to_netcdf(output_file_name)
+
+print(f'Regridding done for \n {filepath}')
