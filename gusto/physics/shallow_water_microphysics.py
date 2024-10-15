@@ -7,10 +7,12 @@ from firedrake import (
 )
 from firedrake.fml import subject
 from gusto.core.logging import logger
+from gusto.core.labels import prognostic
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
 from types import FunctionType
 
-__all__ = ["InstantRain", "SWSaturationAdjustment"]
+__all__ = ["InstantRain", "SWSaturationAdjustment",
+            "SWHeightRelax", "SWCO2cond"]
 
 
 class InstantRain(PhysicsParametrisation):

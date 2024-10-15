@@ -1,14 +1,5 @@
 """Common diagnostic fields."""
 
-<<<<<<< HEAD:gusto/diagnostics.py
-from firedrake import assemble, dot, dx, Function, sqrt, \
-    TestFunction, TrialFunction, Constant, grad, inner, curl, \
-    LinearVariationalProblem, LinearVariationalSolver, FacetNormal, \
-    ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, jump, pi, \
-    TensorFunctionSpace, SpatialCoordinate, as_vector, \
-    Projector, Interpolator, FunctionSpace, FiniteElement, \
-    TensorProductElement, conditional
-=======
 
 from firedrake import (assemble, dot, dx, Function, sqrt, TestFunction,
                        TrialFunction, Constant, grad, inner, FacetNormal,
@@ -16,8 +7,7 @@ from firedrake import (assemble, dot, dx, Function, sqrt, TestFunction,
                        ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, pi,
                        TensorFunctionSpace, SpatialCoordinate, as_vector,
                        Projector, Interpolator, FunctionSpace, FiniteElement,
-                       TensorProductElement)
->>>>>>> 7fc82a1e1ffb8e8e8efc802c9e835a7b56e16a76:gusto/diagnostics/diagnostics.py
+                       TensorProductElement, conditional)
 from firedrake.assign import Assigner
 from ufl.domain import extract_unique_domain
 
@@ -27,24 +17,12 @@ from gusto.core.logging import logger
 from gusto.core.kernels import MinKernel, MaxKernel
 import numpy as np
 
-<<<<<<< HEAD:gusto/diagnostics.py
-__all__ = ["Diagnostics", "CourantNumber", "Gradient", "XComponent", "YComponent",
-           "ZComponent", "MeridionalComponent", "ZonalComponent", "RadialComponent",
-           "RichardsonNumber", "Energy", "KineticEnergy", "ShallowWaterKineticEnergy",
-           "ShallowWaterPotentialEnergy", "ShallowWaterPotentialEnstrophy",
-           "CompressibleKineticEnergy", "Exner", "Sum", "Difference", "SteadyStateError",
-           "Perturbation", "Theta_e", "InternalEnergy", "PotentialEnergy",
-           "ThermodynamicKineticEnergy", "Dewpoint", "Temperature", "Theta_d",
-           "RelativeHumidity", "Pressure", "Exner_Vt", "HydrostaticImbalance", "Precipitation",
-           "PotentialVorticity", "RelativeVorticity", "AbsoluteVorticity", "Divergence",
-           "BruntVaisalaFrequencySquared", "TracerDensity", "Heaviside_flag_less"]
-=======
 __all__ = ["Diagnostics", "DiagnosticField", "CourantNumber", "Gradient",
            "XComponent", "YComponent", "ZComponent", "MeridionalComponent",
            "ZonalComponent", "RadialComponent", "Energy", "KineticEnergy",
            "Sum", "Difference", "SteadyStateError", "Perturbation",
-           "Divergence", "TracerDensity", "IterativeDiagnosticField"]
->>>>>>> 7fc82a1e1ffb8e8e8efc802c9e835a7b56e16a76:gusto/diagnostics/diagnostics.py
+           "Divergence", "TracerDensity", "IterativeDiagnosticField",
+           "Heaviside_flag_less"]
 
 
 class Diagnostics(object):

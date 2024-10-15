@@ -260,12 +260,16 @@ lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
 bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
 
+# estimate core count for Pileus
+
+print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
+
 H_rel = Function(domain.spaces('L2'))
 
 # I/O (input/output)
-dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
+dirname = f'/data/home/sh1293/results/{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
 print(f'directory name is {dirname}')
-output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=10)
+output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=10, checkpoint=True)
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th)]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
