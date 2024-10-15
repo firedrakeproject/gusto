@@ -354,3 +354,91 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
+
+
+class SWHeightRelax(PhysicsParametrisation):
+    """
+    Setup a relaxation to a specified height profile in the shallow water equations
+
+    The modified mass conservation equation is:
+    Dh/Dt + h nabla.v + (h-H)/tau_r = 0,
+    where H is the specified height profile, and tau_r is the relaxation time
+    """
+
+    def __init__(self, equation, H_rel, tau_r): #, height_name='D'):
+        """
+        Args:
+            equation: the modification term to the mass conservation equation
+            H: the height profile towards which the relaxation occurs
+            tau_r: the relaxation time constant
+        """
+
+        label_name = 'SWHeightRelax'
+        super().__init__(equation, label_name, parameters=None)
+
+        # if height_name not in equation.field_names:
+        #    raise ValueError(f"Field {height_name} does not exist in the equation set")
+        
+        self.D_idx = equation.field_names.index('D')
+        
+
+        W = equation.function_space
+        Vd = W.sub(self.D_idx)
+        self.D = Function(Vd)
+
+
+        test = equation.tests[self.D_idx]
+
+        height_expr = test * (self.D - H_rel)/tau_r * dx
+
+        equation.residual += self.label(subject(prognostic(height_expr, 'D'), equation.X), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Does something I don't understand
+
+        Args:
+            x_in : the field to be evolved
+            dt : the time interval for the scheme
+        """
+        self.D.assign(x_in.split()[self.D_idx])
+
+
+class SWCO2cond(PhysicsParametrisation):
+    """
+    Represents condensation of CO2 occuring when the height value (proxy for temperature) falls below a specified threshold
+    """
+
+    def __init__(self, equation, h_th, tau_c):
+        """
+        Args:
+            h_th: the threshold height below which `CO2 condensation' occurs
+            tau_c: the time constant for the relaxation to the threshold height
+        """
+
+        label_name = 'SWCO2cond'
+        super().__init__(equation, label_name, parameters=None)
+
+        self.D_idx = equation.field_names.index('D')
+
+        W = equation.function_space
+        Vd = W.sub(self.D_idx)
+        self.D = Function(Vd)
+
+        test = equation.tests[self.D_idx]
+
+        heaviside = self.D - h_th
+        heaviside = conditional(heaviside < 0, heaviside, 0)
+        height_expr = test * heaviside/tau_c * dx
+
+        equation.residual += self.label(subject(prognostic(height_expr, 'D'), equation.X), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Does something I don't understand
+
+        Args:
+            x_in : the field to be evolved
+            dt : the time interval for the scheme
+        """
+        self.D.assign(x_in.split()[self.D_idx])
