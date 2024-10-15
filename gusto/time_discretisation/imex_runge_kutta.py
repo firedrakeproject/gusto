@@ -216,6 +216,9 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.x1.assign(x_in)
         self.x_out.assign(x_in)
         solver_list = self.solvers
+        for i, term in enumerate(self.residual):
+            print(i, term.labels.keys())
+
 
         for stage in range(self.nStages):
             self.solver = solver_list[stage]

@@ -234,7 +234,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     print("Doing SUPG")
                     print(self.wrapper_field_name)
                     new_test = self.wrapper.test
-                    breakpoint()
                     self.residual = self.residual.label_map(
                         lambda t: t.get(prognostic) == self.wrapper_field_name,
                         map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))

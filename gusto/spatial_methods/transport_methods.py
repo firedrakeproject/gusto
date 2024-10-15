@@ -9,7 +9,7 @@ from firedrake import (
 from firedrake.fml import Term, keep, drop
 from gusto.core.configuration import IntegrateByParts, TransportEquationType
 from gusto.core.labels import (prognostic, transport, transporting_velocity, ibp_label,
-                               mass_weighted, implicit, explicit)
+                               mass_weighted, implicit, explicit, horizontal, vertical)
 from gusto.core.logging import logger
 from gusto.spatial_methods.spatial_methods import SpatialMethod
 
@@ -105,8 +105,41 @@ class TransportMethod(SpatialMethod):
                 map_if_true=lambda t: new_term)
 
         else:
-            raise RuntimeError('Found multiple transport terms for '
-                               + f'{self.variable}. {len(original_form.terms)} found')
+            horizontal_form = original_form = equation.residual.label_map(
+            lambda t: t.has_label(transport) and t.has_label(horizontal) and t.get(prognostic) == self.variable,
+            map_if_true=keep, map_if_false=drop
+            )
+            vertical_form = original_form = equation.residual.label_map(
+            lambda t: t.has_label(transport) and t.has_label(vertical) and t.get(prognostic) == self.variable,
+            map_if_true=keep, map_if_false=drop
+            )
+
+            # Replace form
+            horizontal_term = horizontal_form.terms[0]
+            vertical_term = vertical_form.terms[0]
+
+            # Update transporting velocity
+            new_horizontal_transporting_velocity = self.form_h.terms[0].get(transporting_velocity)
+            new_vertical_transporting_velocity = self.form_v.terms[0].get(transporting_velocity)
+            horizontal_term = transporting_velocity.update_value(horizontal_term, new_horizontal_transporting_velocity)
+            vertical_term = transporting_velocity.update_value(vertical_term, new_vertical_transporting_velocity)
+
+            # Create new term
+            new_horizontal_term = Term(self.form_h.form, horizontal_term.labels)
+            new_vertical_term = Term(self.form_v.form, vertical_term.labels)
+
+            # Check if this is a conservative transport
+            if horizontal_term.has_label(mass_weighted) or vertical_term.has_label(mass_weighted):
+               raise RuntimeError('Mass weighted transport terms not yet supported for multiple terms')
+
+            # Replace original term with new term
+            equation.residual = equation.residual.label_map(
+                lambda t: t.has_label(transport)  and t.has_label(horizontal) and t.get(prognostic) == self.variable,
+                map_if_true=lambda t: new_horizontal_term)
+
+            equation.residual = equation.residual.label_map(
+                lambda t: t.has_label(transport)  and t.has_label(vertical) and t.get(prognostic) == self.variable,
+                map_if_true=lambda t: new_vertical_term)
 
 
 # ---------------------------------------------------------------------------- #
@@ -284,14 +317,15 @@ class Split_DGUpwind(TransportMethod):
         else:
             if self.transport_equation_type == TransportEquationType.advective:
               
-                form = split_upwind_advection_form(self.domain, self.test,
+                form_h, form_v = split_upwind_advection_form(self.domain, self.test,
                                                 self.field,
                                                 ibp=ibp, outflow=outflow)
 
             else:
                 raise NotImplementedError('Upwind transport scheme has not been '
                                           + 'implemented for this transport equation type')
-        self.form = form
+        self.form_v = form_v
+        self.form_h = form_h
 
 # ---------------------------------------------------------------------------- #
 # Forms for DG Upwind transport
@@ -429,9 +463,10 @@ def split_upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outf
 
     form_h = transporting_velocity(L_h, ubar)
     form_v = transporting_velocity(L_v, ubar)
-    labelled_form = ibp_label(explicit(transport(form_h, TransportEquationType.advective))
-    + implicit(form_v), ibp)
-    return labelled_form
+    labelled_form_h = ibp_label(transport(form_h, TransportEquationType.advective), ibp)  
+    labelled_form_v = ibp_label(transport(form_v, TransportEquationType.advective), ibp)
+    #+ implicit(form_v), ibp)
+    return labelled_form_h, labelled_form_v
 
 
 

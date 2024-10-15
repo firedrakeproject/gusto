@@ -103,6 +103,9 @@ time_derivative = Label("time_derivative")
 transport = Label("transport",
                   validator=lambda value: type(value) == TransportEquationType)
 diffusion = Label("diffusion")
+
+horizontal = Label("horizontal")
+vertical = Label("vertical")
 pressure_gradient = DynamicsLabel("pressure_gradient")
 coriolis = DynamicsLabel("coriolis")
 divergence = DynamicsLabel("divergence")
