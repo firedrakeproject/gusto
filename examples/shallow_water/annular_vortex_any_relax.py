@@ -270,7 +270,7 @@ H_rel = Function(domain.spaces('L2'))
 dirname = f'/data/home/sh1293/results/{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
 print(f'directory name is {dirname}')
 output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=10, checkpoint=True)
-diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th)]
+diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), TracerDensity()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
