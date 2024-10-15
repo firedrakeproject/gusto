@@ -29,8 +29,8 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 1.8
-pvpole = 0.8
+pvmax = 1.6
+pvpole = 1.0
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
@@ -41,7 +41,7 @@ tau_c_ratio = 0.01
 beta = 1.0
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'rad'
+rel_sch = 'none'
 include_co2 = 'yes'
 
 extra_name = ''
@@ -56,7 +56,7 @@ if phimp != phis:
 toponame = f'A0-{A0scal}-norel'
 
 ### max runtime currently 1 day
-rundays = 50
+rundays = 10
 tmax = rundays * day
 ### timestep
 dt = 450.
@@ -259,9 +259,9 @@ fexpr = 2*Omega*x[2]/R
 lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
 bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
 eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
+tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
 
 # estimate core count for Pileus
-
 print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
 
 H_rel = Function(domain.spaces('L2'))
@@ -270,13 +270,14 @@ H_rel = Function(domain.spaces('L2'))
 dirname = f'/data/home/sh1293/results/{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
 print(f'directory name is {dirname}')
 output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=10, checkpoint=True)
-diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), TracerDensity()]
+diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), TracerDensity('tracer', 'tracer')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
 transported_fields = [TrapeziumRule(domain, "u"),
                       SSPRK3(domain, "D")]
-transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
+tracer_transport = [(tracer_eqn, SSPRK3(domain))]
+transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer")]
 
 H_rel = Function(domain.spaces('L2'))
 height_relax = SWHeightRelax(eqns, H_rel, tau_r=tau_r)
@@ -296,7 +297,8 @@ elif rel_sch == 'none':
     physics_schemes = []
 
 # Time stepper
-stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods, physics_schemes=physics_schemes,
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods, physics_schemes=physics_schemes, 
+                                    auxiliary_equations_and_schemes=tracer_transport,
                                     num_outer=2, num_inner=2)
 
 # ------------------------------------------------------------------------ #
@@ -307,6 +309,7 @@ u0 = stepper.fields('u')
 D0 = stepper.fields('D')
 D0_mp = Function(domain.spaces('L2'))
 D0_mp.assign(D0)
+tracer0 = stepper.fields('tracer')
 
 
 
@@ -344,6 +347,9 @@ pcg = PCG64()
 rg = RandomGenerator(pcg)
 #f_normal = rg.normal(uspace, 0.0, 1.5)
 #u0 += f_normal
+
+tracer0.interpolate(1)
+
 
 
 VD = D0.function_space()
