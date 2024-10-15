@@ -12,7 +12,7 @@
 from os import path
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, acos, sin, cos, Constant, norm,
-                       max_value, min_value)
+                       max_value, min_value, pi, conditional)
 from netCDF4 import Dataset
 import pytest
 
@@ -88,13 +88,12 @@ def run_sw_cond_evap(dirname, process):
         v_true = Function(v0.function_space()).interpolate(sat*(0.96+0.005*pert))
         c_true = Function(c0.function_space()).interpolate(Constant(0.0))
         # gain buoyancy
-        factor = parameters.g*beta2
         sat_adj_expr = (v0 - sat) / dt
         sat_adj_expr = conditional(sat_adj_expr < 0,
                                    max_value(sat_adj_expr, -c0 / dt),
                                    min_value(sat_adj_expr, v0 / dt))
         # include factor of -1 in true solution to compare term to LHS in Gusto
-        b_true = Function(b0.function_space()).interpolate(-dt*sat_adj_expr*factor)
+        b_true = Function(b0.function_space()).interpolate(-dt*sat_adj_expr*beta2)
 
     elif process == "condensation":
         # vapour is above saturation
@@ -103,13 +102,12 @@ def run_sw_cond_evap(dirname, process):
         v_true = Function(v0.function_space()).interpolate(Constant(sat))
         c_true = Function(c0.function_space()).interpolate(v0 - sat)
         # lose buoyancy
-        factor = parameters.g*beta2
         sat_adj_expr = (v0 - sat) / dt
         sat_adj_expr = conditional(sat_adj_expr < 0,
                                    max_value(sat_adj_expr, -c0 / dt),
                                    min_value(sat_adj_expr, v0 / dt))
         # include factor of -1 in true solution to compare term to LHS in Gusto
-        b_true = Function(b0.function_space()).interpolate(-dt*sat_adj_expr*factor)
+        b_true = Function(b0.function_space()).interpolate(-dt*sat_adj_expr*beta2)
 
     c_init = Function(c0.function_space()).interpolate(c0)
 

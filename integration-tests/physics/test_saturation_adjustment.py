@@ -5,12 +5,12 @@ of the water mixing ratio is conserved.
 """
 
 from os import path
+import gusto.equations.thermodynamics as td
 from gusto import *
-import gusto.thermodynamics as td
 from firedrake import (norm, Constant, PeriodicIntervalMesh,
                        SpatialCoordinate, ExtrudedMesh, Function, sqrt,
                        conditional)
-from firedrake.fml import identity
+from firedrake.fml import identity, drop
 from netCDF4 import Dataset
 import pytest
 
