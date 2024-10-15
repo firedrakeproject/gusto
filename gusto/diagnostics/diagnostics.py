@@ -1,6 +1,5 @@
 """Common diagnostic fields."""
 
-
 from firedrake import (assemble, dot, dx, Function, sqrt, TestFunction,
                        TrialFunction, Constant, grad, inner, FacetNormal,
                        LinearVariationalProblem, LinearVariationalSolver,
