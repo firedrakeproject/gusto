@@ -44,7 +44,7 @@ beta = 1.0
 rel_sch = 'none'
 include_co2 = 'yes'
 
-extra_name = ''
+extra_name = '_tracer_sinlat'
 if include_co2 == 'no':
     extra_name = f'{extra_name}_no-co2'
 if phimp != phis:
@@ -267,7 +267,8 @@ print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
 H_rel = Function(domain.spaces('L2'))
 
 # I/O (input/output)
-dirname = f'/data/home/sh1293/results/{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
+homepath = '/data/home/sh1293/results'
+dirname = f'{homepath}/{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
 print(f'directory name is {dirname}')
 output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=10, checkpoint=True)
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), TracerDensity('tracer', 'tracer')]
@@ -348,6 +349,8 @@ rg = RandomGenerator(pcg)
 #f_normal = rg.normal(uspace, 0.0, 1.5)
 #u0 += f_normal
 
+
+tracer_profile = sin(theta)
 tracer0.interpolate(1)
 
 
