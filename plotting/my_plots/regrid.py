@@ -31,7 +31,7 @@ def gaussian_lat_lon_grid(nlat, nlon):
 # When copying this example these should not be relative to this file
 filepath = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.005sol_beta--1_A0-0-norel_len-300sols'
 
-results_dir = f'/data/home/sh1293/firedrake-real-opt_may24/src/gusto/examples/shallow_water/results/{filepath}'
+results_dir = f'/data/home/sh1293/results/{filepath}'
 # plot_dir = f'{results_dir}/plots'
 results_file_name = f'{results_dir}/field_output.nc'
 output_file_name = f'{results_dir}/regrid_output.nc'

@@ -14,7 +14,7 @@ from tomplot import (set_tomplot_style, tomplot_contours, tomplot_cmap,
 # Directory for results and plots
 # ---------------------------------------------------------------------------- #
 # When copying this example these should not be relative to this file
-results_dir = f'/data/home/sh1293/firedrake-real-opt_may24/src/gusto/examples/shallow_water/results/Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_alpha--1_working_long'
+results_dir = f'/data/home/sh1293/results/Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_alpha--1_working_long'
 plot_dir = f'{results_dir}/plots'
 results_file_name = f'{results_dir}/field_output.nc'
 plot_name = f'{plot_dir}/hovmoller.png'

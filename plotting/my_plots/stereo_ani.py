@@ -1,7 +1,7 @@
 import os
 import ffmpeg
 
-results_dir = f'/data/home/sh1293/firedrake-real-opt_may24/src/gusto/examples/shallow_water/results/Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_alpha--1_working_long'
+results_dir = f'/data/home/sh1293/results/Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_alpha--1_working_long'
 
 path = f'{results_dir}/Plots/Stereo_ani/'
 delay = 1
