@@ -8,6 +8,7 @@ from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        interpolate, PCG64, RandomGenerator)
 import numpy as np
 from netCDF4 import Dataset
+import shutil
 #import matplotlib.pyplot as plt
 #import xarray as xr
 
@@ -249,11 +250,40 @@ if monopolar:
     phin = 90
 
 
-# Domain
-mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=4, degree=2)
-x = SpatialCoordinate(mesh)
+# # Domain
+# mesh = IcosahedralSphereMesh(radius=R,
+#                              refinement_level=4, degree=2)
+# x = SpatialCoordinate(mesh)
+# domain = Domain(mesh, dt, 'BDM', degree=1)
+
+# # Equation, including mountain given by bexpr
+# fexpr = 2*Omega*x[2]/R
+# lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
+# bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
+# eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
+# tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
+
+# # estimate core count for Pileus
+# print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
+
+# H_rel = Function(domain.spaces('L2'))
+
+# I/O (input/output)
+homepath = '/data/home/sh1293/results'
+dirnameold = f'{homepath}/{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{start_time}sols{extra_name}'
+dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{start_time}-{start_time+rundays}sols{extra_name}'
+dirpath = f'{homepath}/{dirname}'
+# os.makedirs(f'{dirpath}/field_output.nc')
+shutil.copy(f'{dirnameold}/field_output.nc', f'{dirpath}/field_output.nc')
+print(f'directory name is {dirname}')
+output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5')
+
+
+chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
+mesh = chkpt_mesh
 domain = Domain(mesh, dt, 'BDM', degree=1)
+
+x = SpatialCoordinate(mesh)
 
 # Equation, including mountain given by bexpr
 fexpr = 2*Omega*x[2]/R
@@ -267,18 +297,17 @@ print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
 
 H_rel = Function(domain.spaces('L2'))
 
-# I/O (input/output)
-homepath = '/data/home/sh1293/results'
-dirnameold = f'{homepath}/{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{start_time}sols{extra_name}'
-dirname = f'/data/home/sh1293/results/{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{start_time}-{start_time+rundays}sols{extra_name}'
-print(f'directory name is {dirname}')
-output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=10, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5')
+
+
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), TracerDensity('tracer', 'tracer')]
 
-chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
-domain = Domain(chkpt_mesh, dt, 'BDM', degree=1)
-
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+
+
+# chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
+# domain = Domain(chkpt_mesh, dt, 'BDM', degree=1)
+
+# io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
 transported_fields = [TrapeziumRule(domain, "u"),
@@ -355,18 +384,18 @@ def initial_D(X, h):
 # #f_normal = rg.normal(uspace, 0.0, 1.5)
 # #u0 += f_normal
 
-tracer0.interpolate(1)
+# tracer0.interpolate(1)
 
 
 
-VD = D0.function_space()
-Dmesh = VD.mesh()
-WD = VectorFunctionSpace(umesh, VD.ufl_element())
-XD = interpolate(Dmesh.coordinates, WD)
-D0.dat.data[:] = initial_D(XD.dat.data_ro, hini)
-D0_mp.dat.data[:] = initial_D(XD.dat.data_ro, hini_mp)
-D0 += H
-D0_mp += H
+# VD = D0_mp.function_space()
+# Dmesh = VD.mesh()
+# WD = VectorFunctionSpace(umesh, VD.ufl_element())
+# XD = interpolate(Dmesh.coordinates, WD)
+# D0.dat.data[:] = initial_D(XD.dat.data_ro, hini)
+# D0_mp.dat.data[:] = initial_D(XD.dat.data_ro, hini_mp)
+# D0 += H
+# D0_mp += H
 
 # # from firedrake import File
 # # mp_ic = File("mp_ic.pvd")
@@ -380,10 +409,10 @@ D0_mp += H
 # pcg = PCG64()
 # rg = RandomGenerator(pcg)
 # f_normal = rg.normal(VD, 0.0, 1.5e-3*H)
-if rel_sch == 'both':
-    H_rel.assign(D0_mp)
-elif rel_sch == 'rad':
-    H_rel.assign(D0)
+# if rel_sch == 'both':
+#     H_rel.assign(D0_mp)
+# elif rel_sch == 'rad':
+#     H_rel.assign(D0)
     # H_rel.assign(H)
 # D0 += f_normal
 

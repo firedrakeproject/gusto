@@ -267,9 +267,11 @@ print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
 H_rel = Function(domain.spaces('L2'))
 
 # I/O (input/output)
-dirname = f'/data/home/sh1293/results/{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
+homepath = '/data/home/sh1293/results'
+dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
 print(f'directory name is {dirname}')
-output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=10, checkpoint=True)
+dirpath = f'{homepath}/{dirname}'
+output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True)
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), TracerDensity('tracer', 'tracer')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
