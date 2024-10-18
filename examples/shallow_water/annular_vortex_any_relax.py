@@ -350,8 +350,8 @@ rg = RandomGenerator(pcg)
 #u0 += f_normal
 
 
-tracer_profile = sin(theta)
-tracer0.interpolate(1)
+tracer_profile = sin(theta) + 1
+tracer0.interpolate(tracer_profile)
 
 
 
