@@ -5,7 +5,8 @@ Set up Martian annular vortex experiment!
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        as_vector, pi, sqrt, min_value, sin, cos,
-                       interpolate, PCG64, RandomGenerator)
+                       interpolate, PCG64, RandomGenerator,
+                       conditional)
 import numpy as np
 from netCDF4 import Dataset
 #import matplotlib.pyplot as plt
@@ -44,7 +45,7 @@ beta = 1.0
 rel_sch = 'none'
 include_co2 = 'yes'
 
-extra_name = '_tracer_sinlat'
+extra_name = '_tracer_tophat'
 if include_co2 == 'no':
     extra_name = f'{extra_name}_no-co2'
 if phimp != phis:
@@ -268,9 +269,10 @@ H_rel = Function(domain.spaces('L2'))
 
 # I/O (input/output)
 homepath = '/data/home/sh1293/results'
-dirname = f'{homepath}/{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
+dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
+dirpath = f'{homepath}/{dirname}'
 print(f'directory name is {dirname}')
-output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=10, checkpoint=True)
+output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True)
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), TracerDensity('tracer', 'tracer')]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
@@ -350,7 +352,8 @@ rg = RandomGenerator(pcg)
 #u0 += f_normal
 
 
-tracer_profile = sin(theta) + 1
+# tracer_profile = sin(theta) + 1
+tracer_profile = conditional(theta > 80, 1, 0)
 tracer0.interpolate(tracer_profile)
 
 
