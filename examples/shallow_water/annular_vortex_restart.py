@@ -5,10 +5,11 @@ Set up Martian annular vortex experiment!
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        as_vector, pi, sqrt, min_value, sin, cos,
-                       interpolate, PCG64, RandomGenerator,
-                       conditional)
+                       interpolate, PCG64, RandomGenerator)
 import numpy as np
 from netCDF4 import Dataset
+import shutil
+import os
 #import matplotlib.pyplot as plt
 #import xarray as xr
 
@@ -19,8 +20,8 @@ from netCDF4 import Dataset
 day = 88774.
 
 # set inner and outer latitude limits of annulus   
-phis = 55
-phin = 60
+phis = 60
+phin = 70
 phimp = phis
 
 # False means initial vortex is annular, True means it's monopolar
@@ -30,7 +31,7 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 2.0
+pvmax = 1.8
 pvpole = 0.8
 
 # tau_r is radiative relaxation time constant
@@ -57,8 +58,9 @@ if phimp != phis:
 toponame = f'A0-{A0scal}-norel'
 
 ### max runtime currently 1 day
-rundays = 300
-tmax = rundays * day
+start_time = 300
+rundays = 10
+tmax = (rundays + start_time) * day 
 ### timestep
 dt = 450.
 
@@ -249,11 +251,41 @@ if monopolar:
     phin = 90
 
 
-# Domain
-mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=4, degree=2)
-x = SpatialCoordinate(mesh)
+# # Domain
+# mesh = IcosahedralSphereMesh(radius=R,
+#                              refinement_level=4, degree=2)
+# x = SpatialCoordinate(mesh)
+# domain = Domain(mesh, dt, 'BDM', degree=1)
+
+# # Equation, including mountain given by bexpr
+# fexpr = 2*Omega*x[2]/R
+# lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
+# bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
+# eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
+# tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
+
+# # estimate core count for Pileus
+# print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
+
+# H_rel = Function(domain.spaces('L2'))
+
+# I/O (input/output)
+homepath = '/data/home/sh1293/results'
+dirnameold = f'{homepath}/{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{start_time}sols{extra_name}'
+dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{start_time}-{start_time+rundays}sols{extra_name}'
+dirpath = f'{homepath}/{dirname}'
+if not os.path.exists(f'{dirpath}/'):
+    os.makedirs(f'{dirpath}')
+shutil.copy(f'{dirnameold}/field_output.nc', f'{dirpath}/field_output.nc')
+print(f'directory name is {dirname}')
+output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5')
+
+
+chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
+mesh = chkpt_mesh
 domain = Domain(mesh, dt, 'BDM', degree=1)
+
+x = SpatialCoordinate(mesh)
 
 # Equation, including mountain given by bexpr
 fexpr = 2*Omega*x[2]/R
@@ -267,14 +299,17 @@ print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
 
 H_rel = Function(domain.spaces('L2'))
 
-# I/O (input/output)
-homepath = '/data/home/sh1293/results'
-dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
-print(f'directory name is {dirname}')
-dirpath = f'{homepath}/{dirname}'
-output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True)
+
+
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), TracerDensity('tracer', 'tracer')]
+
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+
+
+# chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
+# domain = Domain(chkpt_mesh, dt, 'BDM', degree=1)
+
+# io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
 # Transport schemes
 transported_fields = [TrapeziumRule(domain, "u"),
@@ -308,24 +343,25 @@ stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_method
 # Initial conditions - these need changing!
 # ------------------------------------------------------------------------ #
 
-u0 = stepper.fields('u')
-D0 = stepper.fields('D')
+# u0 = stepper.fields('u')
+# D0 = stepper.fields('D')
 D0_mp = Function(domain.spaces('L2'))
-D0_mp.assign(D0)
-T0 = stepper.fields('tracer')
+D0_an = Function(domain.spaces('L2'))
+# D0_mp.assign(D0)
+# tracer0 = stepper.fields('tracer')
 
 
 
-#ic = xr.Dataset(data_vars=dict(u=(['rlat'], uini), h=(['rlat'], hini)), coords=dict(lat=rlat))
-#ic.to_netcdf('/data/home/sh1293/firedrake-real-opt/src/gusto/examples/shallow_water/results/%s.nc' %(dirname))
+# #ic = xr.Dataset(data_vars=dict(u=(['rlat'], uini), h=(['rlat'], hini)), coords=dict(lat=rlat))
+# #ic.to_netcdf('/data/home/sh1293/firedrake-real-opt/src/gusto/examples/shallow_water/results/%s.nc' %(dirname))
 
-def initial_u(X):
-    lats = []
-    for X0 in X:
-        x, y, z = X0
-        _, lat, _ = lonlatr_from_xyz(x, y, z)
-        lats.append(lat)
-    return np.interp(np.array(lats), rlat, uini)
+# def initial_u(X):
+#     lats = []
+#     for X0 in X:
+#         x, y, z = X0
+#         _, lat, _ = lonlatr_from_xyz(x, y, z)
+#         lats.append(lat)
+#     return np.interp(np.array(lats), rlat, uini)
 
 def initial_D(X, h):
     lats = []
@@ -335,85 +371,68 @@ def initial_D(X, h):
         lats.append(lat)
     return np.interp(np.array(lats), rlat, h)
 
-def initial_T(X):
-    lats = []
-    for X0 in X:
-        x, y, z = X0
-        _, lat, _ = lonlatr_from_xyz(x, y, z)
-        lats.append(lat)
-    return np.interp(np.array(lats), rlat, Tini)
 
+# Vu = FunctionSpace(mesh, "DG", 2)
+# uzonal = Function(Vu)
+# umesh = Vu.mesh()
+# Wu = VectorFunctionSpace(umesh, Vu.ufl_element())
+# Xu = interpolate(umesh.coordinates, Wu)
+# uzonal.dat.data[:] = initial_u(Xu.dat.data_ro)
+# X = SpatialCoordinate(mesh)
+# u0.project(xyz_vector_from_lonlatr(uzonal, Constant(0), Constant(0), X))
 
-Vu = FunctionSpace(mesh, "DG", 2)
-uzonal = Function(Vu)
-umesh = Vu.mesh()
-Wu = VectorFunctionSpace(umesh, Vu.ufl_element())
-Xu = interpolate(umesh.coordinates, Wu)
-uzonal.dat.data[:] = initial_u(Xu.dat.data_ro)
-X = SpatialCoordinate(mesh)
-u0.project(xyz_vector_from_lonlatr(uzonal, Constant(0), Constant(0), X))
+# uspace = u0.function_space()
+# pcg = PCG64()
+# rg = RandomGenerator(pcg)
+# #f_normal = rg.normal(uspace, 0.0, 1.5)
+# #u0 += f_normal
 
-uspace = u0.function_space()
-pcg = PCG64()
-rg = RandomGenerator(pcg)
-#f_normal = rg.normal(uspace, 0.0, 1.5)
-#u0 += f_normal
-
-
-# # tracer_profile = sin(theta) + 1
-# tracer_profile = conditional(theta > 80*pi/180, 1, 0)
-# tracer0.interpolate(tracer_profile)
-
-Tini = np.where(rlat>=80*pi/180, 1, 0)
-
-VT = T0.function_space()
-Tmesh = VT.mesh()
-WT = VectorFunctionSpace(Tmesh, VT.ufl_element())
-XT = interpolate(Tmesh.coordinates, WT)
-T0.dat.data[:] = initial_T(XT.dat.data_ro)
+# tracer0.interpolate(1)
 
 
 
-VD = D0.function_space()
+VD = D0_mp.function_space()
 Dmesh = VD.mesh()
 WD = VectorFunctionSpace(Dmesh, VD.ufl_element())
 XD = interpolate(Dmesh.coordinates, WD)
-D0.dat.data[:] = initial_D(XD.dat.data_ro, hini)
+# D0.dat.data[:] = initial_D(XD.dat.data_ro, hini)
 D0_mp.dat.data[:] = initial_D(XD.dat.data_ro, hini_mp)
-D0 += H
+D0_an.dat.data[:] = initial_D(XD.dat.data_ro, hini)
+# D0 += H
 D0_mp += H
+D0_an += H
 
-# from firedrake import File
-# mp_ic = File("mp_ic.pvd")
-# mp_ic.write(D0_mp)
+# # from firedrake import File
+# # mp_ic = File("mp_ic.pvd")
+# # mp_ic.write(D0_mp)
 
 
-#hinit = Function(D0.function_space()).interpolate(D0/H -1)
-#from firedrake import File
-#of = File(f'{dirname}_H/out.pvd')
-#of.write(hinit)
-pcg = PCG64()
-rg = RandomGenerator(pcg)
-f_normal = rg.normal(VD, 0.0, 1.5e-3*H)
+# #hinit = Function(D0.function_space()).interpolate(D0/H -1)
+# #from firedrake import File
+# #of = File(f'{dirname}_H/out.pvd')
+# #of.write(hinit)
+# pcg = PCG64()
+# rg = RandomGenerator(pcg)
+# f_normal = rg.normal(VD, 0.0, 1.5e-3*H)
 if rel_sch == 'both':
     H_rel.assign(D0_mp)
 elif rel_sch == 'rad':
-    H_rel.assign(D0)
+    H_rel.assign(D0_an)
     # H_rel.assign(H)
-D0 += f_normal
+# D0 += f_normal
 
 
-#print(max(f_normal.dat.data))
-#print(min(f_normal.dat.data))
+# #print(max(f_normal.dat.data))
+# #print(min(f_normal.dat.data))
 
-Dbar = Function(D0.function_space()).assign(H)
-stepper.set_reference_profiles([('D', Dbar)])
+# Dbar = Function(D0.function_space()).assign(H)
+# stepper.set_reference_profiles([('D', Dbar)])
 
 # ------------------------------------------------------------------------ #
 # Run
 # ------------------------------------------------------------------------ #
 
-stepper.run(t=0, tmax=tmax)
+stepper.run(t=start_time * day, tmax=tmax, pick_up=True)
 
 
 # results_file_name = f'{dirname}/field_output.nc'
