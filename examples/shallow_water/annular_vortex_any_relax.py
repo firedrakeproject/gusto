@@ -57,7 +57,7 @@ if phimp != phis:
 toponame = f'A0-{A0scal}-norel'
 
 ### max runtime currently 1 day
-rundays = 10
+rundays = 15
 tmax = rundays * day
 ### timestep
 dt = 450.
@@ -312,7 +312,7 @@ u0 = stepper.fields('u')
 D0 = stepper.fields('D')
 D0_mp = Function(domain.spaces('L2'))
 D0_mp.assign(D0)
-tracer0 = stepper.fields('tracer')
+T0 = stepper.fields('tracer')
 
 
 
@@ -335,6 +335,14 @@ def initial_D(X, h):
         lats.append(lat)
     return np.interp(np.array(lats), rlat, h)
 
+def initial_T(X):
+    lats = []
+    for X0 in X:
+        x, y, z = X0
+        _, lat, _ = lonlatr_from_xyz(x, y, z)
+        lats.append(lat)
+    return np.interp(np.array(lats), rlat, Tini)
+
 
 Vu = FunctionSpace(mesh, "DG", 2)
 uzonal = Function(Vu)
@@ -352,15 +360,23 @@ rg = RandomGenerator(pcg)
 #u0 += f_normal
 
 
-# tracer_profile = sin(theta) + 1
-tracer_profile = conditional(theta > 80, 1, 0)
-tracer0.interpolate(tracer_profile)
+# # tracer_profile = sin(theta) + 1
+# tracer_profile = conditional(theta > 80*pi/180, 1, 0)
+# tracer0.interpolate(tracer_profile)
+
+Tini = np.where(rlat>=80*pi/180, 1, 0)
+
+VT = T0.function_space()
+Tmesh = VT.mesh()
+WT = VectorFunctionSpace(Tmesh, VT.ufl_element())
+XT = interpolate(Tmesh.coordinates, WT)
+T0.dat.data[:] = initial_T(XT.dat.data_ro)
 
 
 
 VD = D0.function_space()
 Dmesh = VD.mesh()
-WD = VectorFunctionSpace(umesh, VD.ufl_element())
+WD = VectorFunctionSpace(Dmesh, VD.ufl_element())
 XD = interpolate(Dmesh.coordinates, WD)
 D0.dat.data[:] = initial_D(XD.dat.data_ro, hini)
 D0_mp.dat.data[:] = initial_D(XD.dat.data_ro, hini_mp)
