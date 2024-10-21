@@ -1216,17 +1216,21 @@ class MoistThermalSWSolver(TimesteppingSolver):
         self.P_func = Function(VD)
 
         # expressions for saturation and P (to be interpolated)
-        sat_expr = compute_saturation(q0, nu, H, g, D_xn, b_xn, B)
-        P_expr = (qv_xn - self.sat_func)/self.tau
-        P_expr = conditional(sat_expr < 0,
-                             max_value(sat_expr,
+        # when doing a comparison with the moist dynamics equations the
+        # saturation function argument should be b_e and not b
+        be_xn = b_xn - beta2*qv_xn
+        sat_expr = compute_saturation(q0, nu, H, g, D_xn, be_xn, B)
+
+        P_expr = (qv_xn - sat_expr)/self.tau
+        P_expr = conditional(P_expr < 0,
+                             max_value(P_expr,
                                        -qc_xn/self.tau),
-                             min_value(sat_expr,
+                             min_value(P_expr,
                                        qv_xn/self.tau))
 
         # interpolators for sat function and P function
-        self.q_sat_interpolator = Interpolator(sat_expr, self.sat_func)
-        self.P_interpolator = Interpolator(P_expr, self.P_func)
+        self.q_sat_interpolator = Interpolator(sat_expr, VD)
+        self.P_interpolator = Interpolator(P_expr, VD)
 
         # write the weak form of the system to solve
         eqn = (
@@ -1289,6 +1293,7 @@ class MoistThermalSWSolver(TimesteppingSolver):
                 :class:`MixedFunctionSpace`.
         """
         self.xrhs.assign(xrhs)
+        self.xn.assign(xn)
 
         # Check that the reference profiles have been set
         bbar = split(self.equations.X_ref)[2]
@@ -1310,8 +1315,8 @@ class MoistThermalSWSolver(TimesteppingSolver):
             logger.warning("The reference profile for cloud in the linear solver is zero. To set a non-zero profile add cloud_water to the set_reference_profiles argument.")
 
         # Call the saturation function and source function interpolators
-        self.q_sat_interpolator.interpolate()
-        self.P_interpolator.interpolate()
+        self.sat_func.assign(self.q_sat_interpolator.interpolate())
+        self.P_func.assign(self.P_interpolator.interpolate())
 
         # Solve
         self.solver.solve()
