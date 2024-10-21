@@ -19,8 +19,8 @@ from netCDF4 import Dataset
 day = 88774.
 
 # set inner and outer latitude limits of annulus   
-phis = 60
-phin = 70
+phis = 55
+phin = 60
 phimp = phis
 
 # False means initial vortex is annular, True means it's monopolar
@@ -30,8 +30,8 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 1.6
-pvpole = 1.0
+pvmax = 2.0
+pvpole = 0.8
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
@@ -42,7 +42,7 @@ tau_c_ratio = 0.01
 beta = 1.0
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'none'
+rel_sch = 'rad'
 include_co2 = 'yes'
 
 extra_name = '_tracer_tophat'
@@ -57,7 +57,7 @@ if phimp != phis:
 toponame = f'A0-{A0scal}-norel'
 
 ### max runtime currently 1 day
-rundays = 15
+rundays = 300
 tmax = rundays * day
 ### timestep
 dt = 450.
