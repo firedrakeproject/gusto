@@ -9,6 +9,7 @@ from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
 import numpy as np
 from netCDF4 import Dataset
 import shutil
+import os
 #import matplotlib.pyplot as plt
 #import xarray as xr
 
@@ -30,8 +31,8 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 1.6
-pvpole = 1.0
+pvmax = 1.8
+pvpole = 0.8
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
@@ -42,10 +43,10 @@ tau_c_ratio = 0.01
 beta = 1.0
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'none'
+rel_sch = 'rad'
 include_co2 = 'yes'
 
-extra_name = ''
+extra_name = '_tracer_tophat'
 if include_co2 == 'no':
     extra_name = f'{extra_name}_no-co2'
 if phimp != phis:
@@ -57,7 +58,7 @@ if phimp != phis:
 toponame = f'A0-{A0scal}-norel'
 
 ### max runtime currently 1 day
-start_time = 10
+start_time = 300
 rundays = 10
 tmax = (rundays + start_time) * day 
 ### timestep
@@ -273,7 +274,8 @@ homepath = '/data/home/sh1293/results'
 dirnameold = f'{homepath}/{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{start_time}sols{extra_name}'
 dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{start_time}-{start_time+rundays}sols{extra_name}'
 dirpath = f'{homepath}/{dirname}'
-# os.makedirs(f'{dirpath}/field_output.nc')
+if not os.path.exists(f'{dirpath}/'):
+    os.makedirs(f'{dirpath}')
 shutil.copy(f'{dirnameold}/field_output.nc', f'{dirpath}/field_output.nc')
 print(f'directory name is {dirname}')
 output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5')
@@ -343,7 +345,8 @@ stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_method
 
 # u0 = stepper.fields('u')
 # D0 = stepper.fields('D')
-# D0_mp = Function(domain.spaces('L2'))
+D0_mp = Function(domain.spaces('L2'))
+D0_an = Function(domain.spaces('L2'))
 # D0_mp.assign(D0)
 # tracer0 = stepper.fields('tracer')
 
@@ -388,14 +391,16 @@ def initial_D(X, h):
 
 
 
-# VD = D0_mp.function_space()
-# Dmesh = VD.mesh()
-# WD = VectorFunctionSpace(umesh, VD.ufl_element())
-# XD = interpolate(Dmesh.coordinates, WD)
+VD = D0_mp.function_space()
+Dmesh = VD.mesh()
+WD = VectorFunctionSpace(Dmesh, VD.ufl_element())
+XD = interpolate(Dmesh.coordinates, WD)
 # D0.dat.data[:] = initial_D(XD.dat.data_ro, hini)
-# D0_mp.dat.data[:] = initial_D(XD.dat.data_ro, hini_mp)
+D0_mp.dat.data[:] = initial_D(XD.dat.data_ro, hini_mp)
+D0_an.dat.data[:] = initial_D(XD.dat.data_ro, hini)
 # D0 += H
-# D0_mp += H
+D0_mp += H
+D0_an += H
 
 # # from firedrake import File
 # # mp_ic = File("mp_ic.pvd")
@@ -409,10 +414,10 @@ def initial_D(X, h):
 # pcg = PCG64()
 # rg = RandomGenerator(pcg)
 # f_normal = rg.normal(VD, 0.0, 1.5e-3*H)
-# if rel_sch == 'both':
-#     H_rel.assign(D0_mp)
-# elif rel_sch == 'rad':
-#     H_rel.assign(D0)
+if rel_sch == 'both':
+    H_rel.assign(D0_mp)
+elif rel_sch == 'rad':
+    H_rel.assign(D0_an)
     # H_rel.assign(H)
 # D0 += f_normal
 
