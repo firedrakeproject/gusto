@@ -778,8 +778,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                             scheme.apply(x_after_ultra_fast(scheme.field_name), x_after_ultra_fast(scheme.field_name))
 
                 xrhs_inner_phys.assign(x_after_ultra_fast(self.field_name) - xnp1(self.field_name))
-                for f in xrhs_inner_phys.subfunctions:
-                    print("x rhs inner phys: ", f.dat.data.min(), f.dat.data.max())
+                # for f in xrhs_inner_phys.subfunctions:
+                #     print("x rhs inner phys: ", f.dat.data.min(), f.dat.data.max())
                 xrhs += xrhs_inner_phys
 
                 # # # # # # # # #
@@ -789,7 +789,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                 with timed_stage("Implicit solve"):
                     logger.info(f'SIQN: Mixed solve {(outer, inner)}')
-                    self.linear_solver.solve(xrhs, dy, xn(self.field_name))  # solves linear system and places result in dy
+                    self.linear_solver.solve(xrhs, dy, x_after_ultra_fast(self.field_name))  # solves linear system and places result in dy
 
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
