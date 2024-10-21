@@ -29,9 +29,9 @@ def gaussian_lat_lon_grid(nlat, nlon):
 # Directory for results and plots
 # ---------------------------------------------------------------------------- #
 # When copying this example these should not be relative to this file
-filepath = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.005sol_beta--1_A0-0-norel_len-300sols'
+filepath = 'Relax_to_annulus/annular_vortex_mars_60-70_PVmax--1-8_PVpole--0-8_tau_r--2sol_A0-0-norel_len-300sols_tracer_tophat'
 
-results_dir = f'/data/home/sh1293/firedrake-real-opt_may24/src/gusto/examples/shallow_water/results/{filepath}'
+results_dir = f'/data/home/sh1293/results/{filepath}'
 # plot_dir = f'{results_dir}/plots'
 results_file_name = f'{results_dir}/field_output.nc'
 output_file_name = f'{results_dir}/regrid_output.nc'
@@ -49,7 +49,7 @@ ds_list=[]
 for i in range(0, len(times)):
 # for i in [0, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1]:
     print(i)
-    for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity']:
+    for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity', 'tracer']:
         field_data = extract_gusto_field(data_file, field_name, time_idx=i)
         # times = np.arange(np.shape(field_data)[1])
         coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
