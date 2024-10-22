@@ -621,6 +621,7 @@ class TrapeziumRule(ThetaMethod):
                          solver_parameters=solver_parameters,
                          options=options)
 
+
 class TR_BDF2(TimeDiscretisation):
     """
     Implements the two stage implicit TR-BDF2 time stepping method, with a
@@ -748,11 +749,11 @@ class TR_BDF2(TimeDiscretisation):
             x_in (:class:`Function`): the input field(s).
         """
         self.xn.assign(x_in)
-        
+
         # Set initial solver guess
         self.xnpg.assign(x_in)
         self.solver_tr.solve()
-        
+
         # Set initial solver guess
         self.x_out.assign(self.xnpg)
         self.solver_bdf2.solve()

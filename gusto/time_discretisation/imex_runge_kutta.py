@@ -122,7 +122,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         # Check all terms are labeled implicit, exlicit
         for t in self.residual:
             if ((not t.has_label(implicit)) and (not t.has_label(explicit))
-               and (not t.has_label(time_derivative))  and (not t.has_label(physics_label))):
+               and (not t.has_label(time_derivative)) and (not t.has_label(physics_label))):
                 raise NotImplementedError("Non time-derivative terms must be labeled as implicit or explicit")
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
@@ -253,7 +253,7 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         # Apply limiter
         if self.limiter is not None:
-                self.limiter.apply(self.x_out)
+            self.limiter.apply(self.x_out)
         x_out.assign(self.x_out)
 
 
