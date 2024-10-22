@@ -7,12 +7,13 @@ called.
 from abc import ABCMeta, abstractmethod
 from firedrake import (
     FunctionSpace, Function, BrokenElement, Projector, Interpolator,
-    VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace
+    VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace,
+    split
 )
 from firedrake.fml import Term
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
 from gusto.recovery import Recoverer, ReversibleRecoverer
-from gusto.core.labels import transporting_velocity
+from gusto.core.labels import transporting_velocity, prognostic
 import ufl
 
 __all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper", "MixedFSWrapper"]
@@ -297,57 +298,34 @@ class SUPGWrapper(Wrapper):
     test function space that is used to solve the problem.
     """
 
-    def setup(self):
+    def setup(self, field_name):
         """Sets up function spaces and fields needed for this wrapper."""
 
         assert isinstance(self.options, SUPGOptions), \
             'SUPG wrapper can only be used with SUPG Options'
 
         domain = self.time_discretisation.domain
+        self.idx = self.time_discretisation.equation.field_names.index(field_name)
         self.function_space = self.time_discretisation.fs
-        self.test_space = self.function_space
+        self.test_space = self.time_discretisation.equation.spaces[self.idx]
         self.x_out = Function(self.function_space)
+        self.field_name = field_name
 
         # -------------------------------------------------------------------- #
         # Work out SUPG parameter
         # -------------------------------------------------------------------- #
 
-        # construct tau, if it is not specified
-        dim = domain.mesh.topological_dimension()
-        if self.options.tau is not None:
-            # if tau is provided, check that is has the right size
-            self.tau = self.options.tau
-            assert as_ufl(self.tau).ufl_shape == (dim, dim), "Provided tau has incorrect shape!"
-        else:
-            # create tuple of default values of size dim
-            default_vals = [self.options.default*self.time_discretisation.dt]*dim
-            # check for directions is which the space is discontinuous
-            # so that we don't apply supg in that direction
-            if is_cg(self.function_space):
-                vals = default_vals
-            else:
-                space = self.function_space.ufl_element().sobolev_space
-                if space.name in ["HDiv", "DirectionalH"]:
-                    vals = [default_vals[i] if space[i].name == "H1"
-                            else 0. for i in range(dim)]
-                else:
-                    raise ValueError("I don't know what to do with space %s" % space)
-            self.tau = Constant(tuple([
-                tuple(
-                    [vals[j] if i == j else 0. for i, v in enumerate(vals)]
-                ) for j in range(dim)])
-            )
-            self.solver_parameters = {'ksp_type': 'gmres',
-                                      'pc_type': 'bjacobi',
-                                      'sub_pc_type': 'ilu'}
-
+        k = domain.k
         # -------------------------------------------------------------------- #
         # Set up test function
         # -------------------------------------------------------------------- #
+        test = self.time_discretisation.equation.tests[self.idx]
+        self.u_idx = self.time_discretisation.equation.field_names.index('u')
+        uadv = split(self.time_discretisation.equation.X)[self.u_idx]
 
-        test = TestFunction(self.test_space)
-        uadv = Function(domain.spaces('HDiv'))
-        self.test = test + dot(dot(uadv, self.tau), grad(test))
+        tau = Constant(self.options.default * self.time_discretisation.dt)*dot(domain.k, uadv)
+
+        self.test = test + tau*dot(domain.k, grad(test))
         self.transporting_velocity = uadv
 
     def pre_apply(self, x_in):
@@ -383,7 +361,7 @@ class SUPGWrapper(Wrapper):
         """
 
         new_residual = residual.label_map(
-            lambda t: t.has_label(transporting_velocity),
+            lambda t: t.has_label(transporting_velocity) and t.get(prognostic) == self.field_name,
             # Update and replace transporting velocity in any terms
             map_if_true=lambda t:
             Term(ufl.replace(t.form, {t.get(transporting_velocity): self.transporting_velocity}), t.labels),

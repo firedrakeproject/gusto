@@ -100,6 +100,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             elif self.wrapper_name == "recovered":
                 self.wrapper = RecoveryWrapper(self, options)
             elif self.wrapper_name == "supg":
+                self.wrapper_field_name = options.field_name
                 self.wrapper = SUPGWrapper(self, options)
             else:
                 raise RuntimeError(
@@ -219,7 +220,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
             else:
                 if self.wrapper_name == "supg":
-                    self.wrapper.setup()
+                    self.wrapper.setup(self.wrapper_field_name)
                 else:
                     self.wrapper.setup(self.fs, wrapper_bcs)
                 self.fs = self.wrapper.function_space
@@ -229,11 +230,14 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 # SUPG has a special wrapper
                 if self.wrapper_name == "supg":
                     new_test = self.wrapper.test
-
-                # Replace the original test function with the one from the wrapper
-                self.residual = self.residual.label_map(
-                    all_terms,
-                    map_if_true=replace_test_function(new_test))
+                    self.residual = self.residual.label_map(
+                        lambda t: t.get(prognostic) == self.wrapper_field_name,
+                        map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
+                else:
+                    # Replace the original test function with the one from the wrapper
+                    self.residual = self.residual.label_map(
+                        all_terms,
+                        map_if_true=replace_test_function(new_test))
 
                 self.residual = self.wrapper.label_terms(self.residual)
 
@@ -243,10 +247,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if not apply_bcs:
             self.bcs = None
-        elif self.wrapper is not None:
-            # Transfer boundary conditions onto test function space
-            self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
-                        for bc in bcs]
+        # elif self.wrapper is not None:
+        #     # Transfer boundary conditions onto test function space
+        #     self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
+        #                 for bc in bcs]
         else:
             self.bcs = bcs
 
