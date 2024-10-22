@@ -103,7 +103,8 @@ time_derivative = Label("time_derivative")
 transport = Label("transport",
                   validator=lambda value: type(value) == TransportEquationType)
 diffusion = Label("diffusion")
-
+eos_mass = Label("eos_mass")
+eos_form = Label("eos_form")
 horizontal = Label("horizontal")
 vertical = Label("vertical")
 pressure_gradient = DynamicsLabel("pressure_gradient")

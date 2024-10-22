@@ -149,28 +149,29 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         for i, (test, field_name) in enumerate(zip(self.tests, self.field_names)):
             prog = split(self.X)[i]
-            mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
+            if field_name != 'exner':
+                mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
 
-            # Check if the field is a conservatively transported tracer. If so,
-            # create a mass-weighted mass form and store this and the original
-            # mass form in a mass-weighted label
-            for j, tracer_name in enumerate(tracer_names):
-                if field_name == tracer_name:
-                    if self.active_tracers[j].transport_eqn == TransportEquationType.tracer_conservative:
-                        standard_mass_form = mass
+                # Check if the field is a conservatively transported tracer. If so,
+                # create a mass-weighted mass form and store this and the original
+                # mass form in a mass-weighted label
+                for j, tracer_name in enumerate(tracer_names):
+                    if field_name == tracer_name:
+                        if self.active_tracers[j].transport_eqn == TransportEquationType.tracer_conservative:
+                            standard_mass_form = mass
 
-                        # The mass-weighted mass form is multiplied by the reference density
-                        ref_density_idx = self.field_names.index(self.active_tracers[j].density_name)
-                        ref_density = split(self.X)[ref_density_idx]
-                        q = prog*ref_density
-                        mass_weighted_form = time_derivative(subject(prognostic(inner(q, test)*dx,
-                                                             field_name), self.X))
+                            # The mass-weighted mass form is multiplied by the reference density
+                            ref_density_idx = self.field_names.index(self.active_tracers[j].density_name)
+                            ref_density = split(self.X)[ref_density_idx]
+                            q = prog*ref_density
+                            mass_weighted_form = time_derivative(subject(prognostic(inner(q, test)*dx,
+                                                                field_name), self.X))
 
-                        mass = mass_weighted(standard_mass_form, mass_weighted_form)
-            if i == 0:
-                mass_form = time_derivative(mass)
-            else:
-                mass_form += time_derivative(mass)
+                            mass = mass_weighted(standard_mass_form, mass_weighted_form)
+                if i == 0:
+                    mass_form = time_derivative(mass)
+                else:
+                    mass_form += time_derivative(mass)
 
         return mass_form
 

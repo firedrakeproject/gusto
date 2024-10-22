@@ -4,7 +4,7 @@ from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import replace_subject, all_terms, drop
 from firedrake.utils import cached_property
-from gusto.core.labels import time_derivative, implicit, explicit, physics_label
+from gusto.core.labels import time_derivative, implicit, explicit, physics_label, eos_mass, eos_form
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
@@ -157,18 +157,34 @@ class IMEXRungeKutta(TimeDiscretisation):
             lambda t: t.has_label(time_derivative),
             map_if_false=lambda t: Constant(self.butcher_imp[stage, stage])*self.dt*t)
         residual += r_imp
+        eos_mass_term = self.residual.label_map(lambda t: t.has_label(eos_mass),
+                                            map_if_false=drop)
+        eos_form_term = self.residual.label_map(lambda t: t.has_label(eos_form),
+                                            map_if_false=drop)
+        residual += eos_mass_term.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual -=  eos_form_term.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x1, old_idx=self.idx))
         return residual.form
 
     @property
     def final_res(self):
         """Set up the discretisation's final residual."""
         # Add time derivative terms  y^{n+1} - y^n
+        eos_mass = self.residual.label_map(lambda t: t.has_label(eos_mass),
+                                            map_if_false=drop)
+        eos_form = self.residual.label_map(lambda t: t.has_label(eos_form),
+                                            map_if_false=drop)
         mass_form = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                             map_if_false=drop)
         residual = mass_form.label_map(all_terms,
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        residual += eos_mass.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual -=  eos_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x1, old_idx=self.idx))
         # Loop through stages up to s-1 and calcualte/sum
         # dt*(b_1*F(y_1) + b_2*F(y_2) + .... + b_s*F(y_s))
         # and
