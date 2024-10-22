@@ -340,7 +340,7 @@ if restart:
                     new_var = tracer_rs_group.createVariable(var_name, variable.datatype, var_dims)
                     
                     # Copy the data from the original variable to the new variable
-                    new_var[:] = variable[:]
+                    new_var[:] = np.zeros_like(variable[:])
                     
                     # Copy attributes of the original variable
                     for attr in variable.ncattrs():
