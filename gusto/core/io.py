@@ -615,8 +615,7 @@ class IO(object):
                             field = chk.load_function(mesh, field_name)
                             state_fields(field_name).assign(field)
                         except:
-                            tracer_field = chk.load_function(mesh, 'tracer')
-                            state_fields(field_name).assign(field)
+                            state_fields.add_field(field_name, space=self.domain.spaces("DG"))
 
                     # Read in reference profiles -- failures are allowed here
                     for field_name in possible_ref_profiles:
