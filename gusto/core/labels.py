@@ -90,6 +90,8 @@ class PhysicsLabel(Label):
 # ---------------------------------------------------------------------------- #
 # Common Labels
 # ---------------------------------------------------------------------------- #
+eos_mass = Label("eos_mass")
+eos_form = Label("eos_form")
 implicit = Label("implicit")
 explicit = Label("explicit")
 transporting_velocity = Label("transporting_velocity", validator=lambda value: type(value) in [Function, ufl.tensors.ListTensor, ufl.indexed.Indexed])

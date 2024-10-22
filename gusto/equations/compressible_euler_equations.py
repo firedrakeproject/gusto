@@ -7,7 +7,7 @@ from firedrake import (
 from firedrake.fml import subject, replace_subject
 from gusto.core.labels import (
     time_derivative, transport, prognostic, hydrostatic, linearisation,
-    pressure_gradient, coriolis, gravity, sponge
+    pressure_gradient, coriolis, gravity, sponge, eos_mass, eos_form
 )
 from gusto.equations.thermodynamics import exner_pressure
 from gusto.equations.common_forms import (
@@ -80,10 +80,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             NotImplementedError: only mixing ratio tracers are implemented.
         """
 
-        field_names = ['u', 'rho', 'theta']
+        field_names = ['u', 'rho', 'theta', 'exner']
 
         if space_names is None:
-            space_names = {'u': 'HDiv', 'rho': 'L2', 'theta': 'theta'}
+            space_names = {'u': 'HDiv', 'rho': 'L2', 'theta': 'theta', 'exner': 'L2'}
 
         if active_tracers is None:
             active_tracers = []
@@ -92,7 +92,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             # Default linearisation is time derivatives and scalar transport terms
             # Don't include active tracers
             linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'rho', 'theta'] \
+                t.get(prognostic) in ['u', 'rho', 'theta', 'exner'] \
                 and (t.has_label(time_derivative)
                      or (t.get(prognostic) != 'u' and t.has_label(transport)))
         super().__init__(field_names, domain, space_names,
@@ -104,18 +104,27 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         g = parameters.g
         cp = parameters.cp
 
-        w, phi, gamma = self.tests[0:3]
-        u, rho, theta = split(self.X)[0:3]
+        w, phi, gamma, xi = self.tests[0:4]
+        u, rho, theta, exner = split(self.X)[0:4]
         u_trial = split(self.trials)[0]
-        _, rho_bar, theta_bar = split(self.X_ref)[0:3]
+        _, rho_bar, theta_bar, exner_bar = split(self.X_ref)[0:4]
         zero_expr = Constant(0.0)*theta
-        exner = exner_pressure(parameters, rho, theta)
         n = FacetNormal(domain.mesh)
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
         # -------------------------------------------------------------------- #
         mass_form = self.generate_mass_terms()
+
+        # -------------------------------------------------------------------- #
+        # Equation of State
+        # -------------------------------------------------------------------- #
+        kappa = parameters.kappa
+        p_0 = parameters.p_0
+        R_d = parameters.R_d
+        eos_mass_term = subject(prognostic(eos_mass(inner(exner, xi)*dx), 'exner'), self.X)
+
+        eos_form_term= subject(prognostic(eos_form((-xi*(rho * R_d * theta / p_0) ** (kappa / (1 - kappa)))*dx), 'exner'), self.X)
 
         # -------------------------------------------------------------------- #
         # Transport Terms
@@ -174,7 +183,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         gravity_form = gravity(subject(prognostic(g*inner(domain.k, w)*dx,
                                                   'u'), self.X))
 
-        residual = (mass_form + adv_form + pressure_gradient_form
+        residual = (eos_mass_term + eos_form_term + mass_form + adv_form + pressure_gradient_form
                     + gravity_form)
 
         # -------------------------------------------------------------------- #

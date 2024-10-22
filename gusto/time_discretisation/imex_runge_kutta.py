@@ -4,7 +4,7 @@ from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import replace_subject, all_terms, drop
 from firedrake.utils import cached_property
-from gusto.core.labels import time_derivative, implicit, explicit
+from gusto.core.labels import time_derivative, implicit, explicit, eos_mass, eos_form
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
@@ -157,6 +157,14 @@ class IMEXRungeKutta(TimeDiscretisation):
             lambda t: t.has_label(time_derivative),
             map_if_false=lambda t: Constant(self.butcher_imp[stage, stage])*self.dt*t)
         residual += r_imp
+        eos_mass_term = self.residual.label_map(lambda t: t.has_label(eos_mass),
+                                            map_if_false=drop)
+        eos_form_term = self.residual.label_map(lambda t: t.has_label(eos_form),
+                                            map_if_false=drop)
+        residual += eos_mass_term.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual -=  eos_form_term.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x1, old_idx=self.idx))
         return residual.form
 
     @property
@@ -190,6 +198,14 @@ class IMEXRungeKutta(TimeDiscretisation):
                 map_if_false=lambda t: Constant(self.butcher_imp[self.nStages, i])*self.dt*t)
             residual += r_imp
             residual += r_exp
+        eos_mass_term = self.residual.label_map(lambda t: t.has_label(eos_mass),
+                                            map_if_false=drop)
+        eos_form_term = self.residual.label_map(lambda t: t.has_label(eos_form),
+                                            map_if_false=drop)
+        residual += eos_mass_term.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual -=  eos_form_term.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x1, old_idx=self.idx))
         return residual.form
 
     @cached_property
