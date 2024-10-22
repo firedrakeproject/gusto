@@ -611,8 +611,12 @@ class IO(object):
                     mesh = self.domain.mesh
                     # Recover compulsory fields from the checkpoint
                     for field_name in self.to_pick_up:
-                        field = chk.load_function(mesh, field_name)
-                        state_fields(field_name).assign(field)
+                        try:
+                            field = chk.load_function(mesh, field_name)
+                            state_fields(field_name).assign(field)
+                        except:
+                            tracer_field = chk.load_function(mesh, 'tracer')
+                            state_fields(field_name).assign(field)
 
                     # Read in reference profiles -- failures are allowed here
                     for field_name in possible_ref_profiles:
