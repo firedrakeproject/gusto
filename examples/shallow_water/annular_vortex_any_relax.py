@@ -9,6 +9,9 @@ from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        conditional)
 import numpy as np
 from netCDF4 import Dataset
+import netCDF4 as nc
+import os
+import shutil
 #import matplotlib.pyplot as plt
 #import xarray as xr
 
@@ -16,11 +19,9 @@ from netCDF4 import Dataset
 # Test case parameters
 # ---------------------------------------------------------------------------- #
 
-day = 88774.
-
 # set inner and outer latitude limits of annulus   
-phis = 55
-phin = 60
+phis = 60
+phin = 70
 phimp = phis
 
 # False means initial vortex is annular, True means it's monopolar
@@ -30,8 +31,8 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 2.0
-pvpole = 0.8
+pvmax = 1.6
+pvpole = 1.0
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
@@ -45,22 +46,50 @@ beta = 1.0
 rel_sch = 'rad'
 include_co2 = 'yes'
 
-extra_name = '_tracer_tophat'
+# do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
+restart = True
+restart_name = 'Relax_to_annulus/annular_vortex_mars_60-70_PVmax--1-8_PVpole--0-8_tau_r--2sol_A0-0-norel_len-300sols_tracer_tophat'
+
+# length of this run, time to start from (only relevant if doing a restart)
+rundays = 5
+start_time = 300
+dt = 450.
+
+# do you want a tracer or not. Edge of tophat function for tracer, north of this the tracer is intialised as 1, south is 0
+# if running a restart, True introduces a new tracer whilst False still maintains the old one
+tracer = True
+hat_edge = 80
+
+# any extra info to include in the directory name
+extra_name = ''
+
+#####################################################################################
+
+day = 88774.
+
 if include_co2 == 'no':
     extra_name = f'{extra_name}_no-co2'
 if phimp != phis:
     extra_name = f'{extra_name}_phimp--{phimp}'
 
-# if toporel:
-#     toponame = f'A0-{A0scal}-rel'
-# else:
+if tracer and not restart:
+    tracername = f'tracer_tophat-{hat_edge}'
+elif tracer and restart:
+    tracername = f'tracer_tophat-{hat_edge}'
+elif not tracer:
+    tracername = f''
+
 toponame = f'A0-{A0scal}-norel'
 
 ### max runtime currently 1 day
-rundays = 300
-tmax = rundays * day
+if restart:
+    tmax = (rundays + start_time) * day
+    lenname = f'len-{start_time}-{start_time+rundays}sols'
+else:
+    tmax = rundays * day
+    lenname = f'len-{rundays}sols'
 ### timestep
-dt = 450.
+
 
 pvpoleint = str(pvpole).split('.')[0]
 pvpoledec = str(pvpole).split('.')[1]
@@ -244,43 +273,121 @@ rlat, uini, hini = initial_profiles(Omega, R, phis, phin, annulus=True, pvpole=p
 rlat_mp, uini_mp, hini_mp = initial_profiles(Omega, R, phimp, phin, annulus=False)
 h_th = min(hini)*beta+H
 
+if tracer and not restart:
+    Tini = np.where(rlat>=hat_edge*pi/180, 1, 0)
+elif tracer and restart:
+    Tini_rs = np.where(rlat>=hat_edge*pi/180, 1, 0)
+elif not tracer:
+    Tini = 0
+    Tini_rs = 0
+
 if monopolar:
     rlat, uini, hini = rlat_mp, uini_mp, hini_mp
     phin = 90
 
+if not restart:
+    # Domain
+    mesh = IcosahedralSphereMesh(radius=R,
+                                refinement_level=4, degree=2)
+    x = SpatialCoordinate(mesh)
+    domain = Domain(mesh, dt, 'BDM', degree=1)
 
-# Domain
-mesh = IcosahedralSphereMesh(radius=R,
-                             refinement_level=4, degree=2)
-x = SpatialCoordinate(mesh)
-domain = Domain(mesh, dt, 'BDM', degree=1)
+    # Equation, including mountain given by bexpr
+    fexpr = 2*Omega*x[2]/R
+    lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
+    bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
+    tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
 
-# Equation, including mountain given by bexpr
-fexpr = 2*Omega*x[2]/R
-lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
-bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
-eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
-tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
+    # estimate core count for Pileus
+    print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
 
-# estimate core count for Pileus
-print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
-
-H_rel = Function(domain.spaces('L2'))
+    # H_rel = Function(domain.spaces('L2'))
 
 # I/O (input/output)
 homepath = '/data/home/sh1293/results'
-dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_len-{rundays}sols{extra_name}'
-print(f'directory name is {dirname}')
+dirnameold = f'{homepath}/{restart_name}'
+dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_{lenname}_{tracername}{extra_name}'
+# print(f'directory name is {dirname}')
 dirpath = f'{homepath}/{dirname}'
-output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True)
+if restart:
+    if not os.path.exists(f'{dirpath}/'):
+        os.makedirs(f'{dirpath}')
+    shutil.copy(f'{dirnameold}/field_output.nc', f'{dirpath}/field_output.nc')
+    # Paths to the original and target files
+    input_file = f'{dirnameold}/field_output.nc'
+    output_file = f'{dirpath}/field_output.nc'
+
+    # Open the original NetCDF file
+    with nc.Dataset(input_file, 'r') as src:
+        # Open the target NetCDF file in append mode
+        with nc.Dataset(output_file, 'a') as dst:
+            
+            # Check if the 'tracer' group exists in the source file
+            if 'tracer' in src.groups:
+                tracer_group = src.groups['tracer']
+                
+                # Create a new group 'tracer_rs' in the destination file
+                tracer_rs_group = dst.createGroup('tracer_rs')
+                
+                # Loop through all the variables in the 'tracer' group
+                for var_name, variable in tracer_group.variables.items():
+                    
+                    # Get the variable's dimensions
+                    var_dims = variable.dimensions
+                    
+                    # Create a new variable in 'tracer_rs' with the same data type and dimensions
+                    new_var = tracer_rs_group.createVariable(var_name, variable.datatype, var_dims)
+                    
+                    # Copy the data from the original variable to the new variable
+                    new_var[:] = variable[:]
+                    
+                    # Copy attributes of the original variable
+                    for attr in variable.ncattrs():
+                        new_var.setncattr(attr, variable.getncattr(attr))
+                
+                print(f"Copied 'tracer' group to 'tracer_rs' group in {output_file}")
+            else:
+                print("'tracer' group not found in the source file.")
+
+
+
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), TracerDensity('tracer', 'tracer')]
+if not restart:
+    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True)
+    # Transport schemes
+    transported_fields = [TrapeziumRule(domain, "u"),
+                        SSPRK3(domain, "D")]
+    tracer_transport = [(tracer_eqn, SSPRK3(domain))]
+    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer")]
+elif restart:
+    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=1, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5')
+
+    chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
+    mesh = chkpt_mesh
+    domain = Domain(mesh, dt, 'BDM', degree=1)
+
+    x = SpatialCoordinate(mesh)
+
+    # Equation, including mountain given by bexpr
+    fexpr = 2*Omega*x[2]/R
+    lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
+    bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
+    tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
+    rs_tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer_rs")
+    # estimate core count for Pileus
+    print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
+
+    # Transport schemes
+    transported_fields = [TrapeziumRule(domain, "u"),
+                        SSPRK3(domain, "D")]
+    tracer_transport = [(tracer_eqn, SSPRK3(domain)), (rs_tracer_eqn, SSPRK3(domain))]
+    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer"), DGUpwind(rs_tracer_eqn, "tracer_rs")]
+
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-# Transport schemes
-transported_fields = [TrapeziumRule(domain, "u"),
-                      SSPRK3(domain, "D")]
-tracer_transport = [(tracer_eqn, SSPRK3(domain))]
-transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer")]
+
 
 H_rel = Function(domain.spaces('L2'))
 height_relax = SWHeightRelax(eqns, H_rel, tau_r=tau_r)
@@ -308,17 +415,6 @@ stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_method
 # Initial conditions - these need changing!
 # ------------------------------------------------------------------------ #
 
-u0 = stepper.fields('u')
-D0 = stepper.fields('D')
-D0_mp = Function(domain.spaces('L2'))
-D0_mp.assign(D0)
-T0 = stepper.fields('tracer')
-
-
-
-#ic = xr.Dataset(data_vars=dict(u=(['rlat'], uini), h=(['rlat'], hini)), coords=dict(lat=rlat))
-#ic.to_netcdf('/data/home/sh1293/firedrake-real-opt/src/gusto/examples/shallow_water/results/%s.nc' %(dirname))
-
 def initial_u(X):
     lats = []
     for X0 in X:
@@ -335,7 +431,7 @@ def initial_D(X, h):
         lats.append(lat)
     return np.interp(np.array(lats), rlat, h)
 
-def initial_T(X):
+def initial_T(X, Tini):
     lats = []
     for X0 in X:
         x, y, z = X0
@@ -344,18 +440,34 @@ def initial_T(X):
     return np.interp(np.array(lats), rlat, Tini)
 
 
-Vu = FunctionSpace(mesh, "DG", 2)
-uzonal = Function(Vu)
-umesh = Vu.mesh()
-Wu = VectorFunctionSpace(umesh, Vu.ufl_element())
-Xu = interpolate(umesh.coordinates, Wu)
-uzonal.dat.data[:] = initial_u(Xu.dat.data_ro)
-X = SpatialCoordinate(mesh)
-u0.project(xyz_vector_from_lonlatr(uzonal, Constant(0), Constant(0), X))
+D0_mp = Function(domain.spaces('L2'))
+# D0_mp.assign(D0)
+D0_an = Function(domain.spaces('L2'))
+if not restart:
+    u0 = stepper.fields('u')
+    D0 = stepper.fields('D')
+    T0 = stepper.fields('tracer')
 
-uspace = u0.function_space()
-pcg = PCG64()
-rg = RandomGenerator(pcg)
+
+
+#ic = xr.Dataset(data_vars=dict(u=(['rlat'], uini), h=(['rlat'], hini)), coords=dict(lat=rlat))
+#ic.to_netcdf('/data/home/sh1293/firedrake-real-opt/src/gusto/examples/shallow_water/results/%s.nc' %(dirname))
+
+
+
+
+    Vu = FunctionSpace(mesh, "DG", 2)
+    uzonal = Function(Vu)
+    umesh = Vu.mesh()
+    Wu = VectorFunctionSpace(umesh, Vu.ufl_element())
+    Xu = interpolate(umesh.coordinates, Wu)
+    uzonal.dat.data[:] = initial_u(Xu.dat.data_ro)
+    X = SpatialCoordinate(mesh)
+    u0.project(xyz_vector_from_lonlatr(uzonal, Constant(0), Constant(0), X))
+
+# uspace = u0.function_space()
+# pcg = PCG64()
+# rg = RandomGenerator(pcg)
 #f_normal = rg.normal(uspace, 0.0, 1.5)
 #u0 += f_normal
 
@@ -364,24 +476,40 @@ rg = RandomGenerator(pcg)
 # tracer_profile = conditional(theta > 80*pi/180, 1, 0)
 # tracer0.interpolate(tracer_profile)
 
-Tini = np.where(rlat>=80*pi/180, 1, 0)
-
-VT = T0.function_space()
-Tmesh = VT.mesh()
-WT = VectorFunctionSpace(Tmesh, VT.ufl_element())
-XT = interpolate(Tmesh.coordinates, WT)
-T0.dat.data[:] = initial_T(XT.dat.data_ro)
 
 
+    VT = T0.function_space()
+    Tmesh = VT.mesh()
+    WT = VectorFunctionSpace(Tmesh, VT.ufl_element())
+    XT = interpolate(Tmesh.coordinates, WT)
+    T0.dat.data[:] = initial_T(XT.dat.data_ro, Tini)
 
-VD = D0.function_space()
-Dmesh = VD.mesh()
-WD = VectorFunctionSpace(Dmesh, VD.ufl_element())
-XD = interpolate(Dmesh.coordinates, WD)
-D0.dat.data[:] = initial_D(XD.dat.data_ro, hini)
+
+
+    VD = D0.function_space()
+    Dmesh = VD.mesh()
+    WD = VectorFunctionSpace(Dmesh, VD.ufl_element())
+    XD = interpolate(Dmesh.coordinates, WD)
+    D0.dat.data[:] = initial_D(XD.dat.data_ro, hini)
+    D0 += H
+
+elif restart:
+    T0 = stepper.fields('tracer_rs')
+    VT = T0.function_space()
+    Tmesh = VT.mesh()
+    WT = VectorFunctionSpace(Tmesh, VT.ufl_element())
+    XT = interpolate(Tmesh.coordinates, WT)
+    T0.dat.data[:] = initial_T(XT.dat.data_ro, Tini_rs)
+
+    VD = D0_mp.function_space()
+    Dmesh = VD.mesh()
+    WD = VectorFunctionSpace(Dmesh, VD.ufl_element())
+    XD = interpolate(Dmesh.coordinates, WD)
+
 D0_mp.dat.data[:] = initial_D(XD.dat.data_ro, hini_mp)
-D0 += H
 D0_mp += H
+D0_an.dat.data[:] = initial_D(XD.dat.data_ro, hini)
+D0_an += H
 
 # from firedrake import File
 # mp_ic = File("mp_ic.pvd")
@@ -392,28 +520,48 @@ D0_mp += H
 #from firedrake import File
 #of = File(f'{dirname}_H/out.pvd')
 #of.write(hinit)
-pcg = PCG64()
-rg = RandomGenerator(pcg)
-f_normal = rg.normal(VD, 0.0, 1.5e-3*H)
+if not restart:
+    pcg = PCG64()
+    rg = RandomGenerator(pcg)
+    f_normal = rg.normal(VD, 0.0, 1.5e-3*H)
+    D0 += f_normal
+
 if rel_sch == 'both':
     H_rel.assign(D0_mp)
 elif rel_sch == 'rad':
-    H_rel.assign(D0)
+    H_rel.assign(D0_an)
     # H_rel.assign(H)
-D0 += f_normal
+
 
 
 #print(max(f_normal.dat.data))
 #print(min(f_normal.dat.data))
 
-Dbar = Function(D0.function_space()).assign(H)
+Dbar = Function(D0_mp.function_space()).assign(H)
 stepper.set_reference_profiles([('D', Dbar)])
+
+
+# confirm the dirname is correct
+if not restart:
+    print(f'Directory name is {dirname}\n\n Input \'y\' to continue')
+    confirm = input()
+elif restart:
+    print(f'Directory name is {dirname},\n old run is {dirnameold}\n\n Input \'y\' to continue')
+    confirm = input()
 
 # ------------------------------------------------------------------------ #
 # Run
 # ------------------------------------------------------------------------ #
 
-stepper.run(t=0, tmax=tmax)
+if confirm == 'y':
+    if not restart: 
+        stepper.run(t=0, tmax=tmax)
+    elif restart:
+        print('restart')
+        stepper.run(t=start_time*day, tmax=tmax, pick_up=True)
+else:
+    print('Confirmation not given')
+
 
 
 # results_file_name = f'{dirname}/field_output.nc'
