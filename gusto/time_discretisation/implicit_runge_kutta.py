@@ -140,6 +140,12 @@ class ImplicitRungeKutta(TimeDiscretisation):
         else:
             self.xnph = self.x1 + self.butcher_matrix[stage, stage]*self.dt*self.x_out
         solver = self.solvers[stage]
+        # Set initial guess for solver
+        if (stage == 0):
+            self.x_out.assign(x0)
+        else:
+            self.x_out.assign(self.k[stage-1])
+
         solver.solve()
 
         self.k[stage].assign(self.x_out)
