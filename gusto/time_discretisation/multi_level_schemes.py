@@ -144,6 +144,8 @@ class BDF2(MultilevelTimeDiscretisation):
 
         self.xnm1.assign(x_in[0])
         self.x1.assign(x_in[1])
+        # Set initial solver guess
+        self.x_out.assign(x_in[1])
         solver.solve()
         x_out.assign(self.x_out)
 
@@ -221,6 +223,8 @@ class Leapfrog(MultilevelTimeDiscretisation):
 
         self.xnm1.assign(x_in[0])
         self.x1.assign(x_in[1])
+        # Set initial solver guess
+        self.x_out.assign(x_in[1])
         solver.solve()
         x_out.assign(self.x_out)
 
@@ -352,6 +356,8 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
 
         for n in range(self.nlevels):
             self.x[n].assign(x_in[n])
+        # Set initial solver guess
+        self.x_out.assign(x_in[-1])
         solver.solve()
         x_out.assign(self.x_out)
 
@@ -507,5 +513,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
         for n in range(self.nlevels):
             self.x[n].assign(x_in[n])
+        # Set initial solver guess
+        self.x_out.assign(x_in[-1])
         solver.solve()
         x_out.assign(self.x_out)
