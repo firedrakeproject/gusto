@@ -7,7 +7,7 @@ from firedrake import (dx, dot, grad, div, inner, outer, cross, curl, split,
 from firedrake.fml import subject, drop
 from gusto.core.configuration import TransportEquationType
 from gusto.core.labels import (transport, transporting_velocity, diffusion,
-                               prognostic, linearisation)
+                               prognostic, linearisation, horizontal, vertical)
 
 __all__ = ["advection_form", "advection_form_1d", "continuity_form",
            "continuity_form_1d", "vector_invariant_form",
@@ -15,7 +15,7 @@ __all__ = ["advection_form", "advection_form_1d", "continuity_form",
            "diffusion_form", "diffusion_form_1d",
            "linear_advection_form", "linear_continuity_form",
            "linear_continuity_form_1d",
-           "split_continuity_form", "tracer_conservative_form"]
+           "split_continuity_form", "tracer_conservative_form", "split_hv_advective_form"]
 
 
 def advection_form(test, q, ubar):
@@ -366,3 +366,72 @@ def tracer_conservative_form(test, q, rho, ubar):
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.tracer_conservative)
+
+
+def split_hv_advective_form(equation, field_name):
+    u"""
+    Splits advective term into horizontal and vertical terms.
+    This describes splitting u.∇(q) terms into u.(∇_h)q and w dq/dz,
+    for transporting velocity u and transported q.
+    Args:
+        equation (:class:`PrognosticEquation`): the model's equation.
+    Returns:
+        :class:`PrognosticEquation`: the model's equation.
+    """
+    k = equation.domain.k   # vertical unit vector
+    for t in equation.residual:
+        print(t.get(prognostic))
+        if (t.get(transport) == TransportEquationType.advective and t.get(prognostic) == field_name):
+            # Get fields and test functions
+            subj = t.get(subject)
+            idx = equation.field_names.index(field_name)
+            W = equation.function_space
+            test = TestFunctions(W)[idx]
+            q = split(subj)[idx]
+            # u is either a prognostic or prescribed field
+            if (hasattr(equation, "field_names")
+               and 'u' in equation.field_names):
+                u_idx = equation.field_names.index('u')
+                uadv = split(equation.X)[u_idx]
+            elif 'u' in equation.prescribed_fields._field_names:
+                uadv = equation.prescribed_fields('u')
+            else:
+                raise ValueError('Cannot get velocity field')
+
+            # Create new advective and divergence terms
+            u_vertical = k*inner(uadv, k)
+            u_horizontal = uadv - u_vertical
+
+            L = inner(test, dot(u_vertical, grad(q)))*dx
+            vertical_adv_term = prognostic(vertical(transport(transporting_velocity(L, uadv), TransportEquationType.advective)), field_name)
+            L = inner(test, dot(u_horizontal, grad(q)))*dx
+            horizontal_adv_term = prognostic( horizontal(transport(transporting_velocity(L, uadv), TransportEquationType.advective)), field_name)
+            #horizontal_adv_term = prognostic(advection_form(test, q, u_horizontal), field_name)
+
+
+            # # Add linearisations of new terms if required
+            if (t.has_label(linearisation)):
+                u_trial = TrialFunctions(W)[u_idx]
+                u_trial_vert = k*inner(u_trial, k)
+                u_trial_horiz = u_trial - u_trial_vert
+                qbar = split(equation.X_ref)[idx]
+                # Add linearisation to adv_term
+                linear_hori_term = horizontal(transport(transporting_velocity(test*dot(u_trial_horiz, grad(qbar))*dx, u_trial), TransportEquationType.advective))
+                adv_horiz_term = linearisation(horizontal_adv_term, linear_hori_term)
+                # Add linearisation to div_term
+                linear_vert_term =  horizontal(transport(transporting_velocity(test*dot(u_trial_vert, grad(qbar))*dx, u_trial), TransportEquationType.advective))
+                adv_vert_term = linearisation(vertical_adv_term, linear_vert_term)
+            else:
+                adv_vert_term = vertical_adv_term
+                adv_horiz_term = horizontal_adv_term
+            # Drop old term
+            equation.residual = equation.residual.label_map(
+                lambda t: t.get(transport) == TransportEquationType.advective and t.get(prognostic) == field_name,
+                map_if_true=drop)
+
+
+            # Add new terms onto residual
+            equation.residual += subject(adv_horiz_term + adv_vert_term, subj)
+
+
+    return equation
