@@ -764,12 +764,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                 # TODO: this is where to update the reference state
 
-                with timed_stage("Apply forcing terms"):
-                    logger.info(f'SIQN: Implicit forcing {(outer, inner)}')
-                    self.forcing.apply(xp, xnp1, xrhs, "implicit")
-
-                 # # # # # # # # # #
-                # ultra-fast physics
+                # # # # # # # # # #
+                # ultra-fast physics before implicit solve
                 x_after_ultra_fast(self.field_name).assign(xnp1(self.field_name))
                 if len(self.ultra_fast_physics_schemes) > 0:
                     with timed_stage("Ultra-fast physics"):
@@ -777,10 +773,25 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                         for _, scheme in self.ultra_fast_physics_schemes:
                             scheme.apply(x_after_ultra_fast(scheme.field_name), x_after_ultra_fast(scheme.field_name))
 
-                xrhs_inner_phys.assign(x_after_ultra_fast(self.field_name) - xnp1(self.field_name))
-                # for f in xrhs_inner_phys.subfunctions:
-                #     print("x rhs inner phys: ", f.dat.data.min(), f.dat.data.max())
-                xrhs += xrhs_inner_phys
+                # # # # # # # # # #
+
+                with timed_stage("Apply forcing terms"):
+                    logger.info(f'SIQN: Implicit forcing {(outer, inner)}')
+                    self.forcing.apply(x_after_ultra_fast, xnp1, xrhs, "implicit")
+
+                 # # # # # # # # # #
+                # # ultra-fast physics
+                # x_after_ultra_fast(self.field_name).assign(xnp1(self.field_name))
+                # if len(self.ultra_fast_physics_schemes) > 0:
+                #     with timed_stage("Ultra-fast physics"):
+                #         logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
+                #         for _, scheme in self.ultra_fast_physics_schemes:
+                #             scheme.apply(x_after_ultra_fast(scheme.field_name), x_after_ultra_fast(scheme.field_name))
+
+                # xrhs_inner_phys.assign(x_after_ultra_fast(self.field_name) - xnp1(self.field_name))
+                # # for f in xrhs_inner_phys.subfunctions:
+                # #     print("x rhs inner phys: ", f.dat.data.min(), f.dat.data.max())
+                # xrhs += xrhs_inner_phys
 
                 # # # # # # # # #
 
