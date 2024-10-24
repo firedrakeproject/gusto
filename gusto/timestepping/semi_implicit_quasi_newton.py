@@ -3,8 +3,10 @@ The Semi-Implicit Quasi-Newton timestepper used by the Met Office's ENDGame
 and GungHo dynamical cores.
 """
 
-from firedrake import (Function, Constant, TrialFunctions, DirichletBC,
-                       LinearVariationalProblem, LinearVariationalSolver)
+from firedrake import (
+    Function, Constant, TrialFunctions, DirichletBC, div, Interpolator,
+    LinearVariationalProblem, LinearVariationalSolver
+)
 from firedrake.fml import drop, replace_subject
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
@@ -35,7 +37,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
                  alpha=Constant(0.5), off_centred_u=False,
-                 num_outer=2, num_inner=2, accelerator=False):
+                 num_outer=2, num_inner=2, accelerator=False,
+                 predictor=None):
 
         """
         Args:
@@ -84,13 +87,24 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 implicit forcing (pressure gradient and Coriolis) terms, and the
                 linear solve. Defaults to 2. Note that default used by the Met
                 Office's ENDGame and GungHo models is 2.
-            accelerator (bool, optional): Whether to zero non-wind implicit forcings
-                for transport terms in order to speed up solver convergence
+            accelerator (bool, optional): Whether to zero non-wind implicit
+                forcings for transport terms in order to speed up solver
+                convergence. Defaults to False.
+            predictor (str, optional): a single string corresponding to the name
+                of a variable to transport using the divergence predictor. This
+                pre-multiplies that variable by (1 - beta*dt*div(u)) before the
+                transport step, and calculates its transport increment from the
+                transport of this variable. This can improve the stability of
+                the time stepper at large time steps, when not using an
+                advective-then-flux formulation. This is only suitable for the
+                use on the conservative variable (e.g. depth or density).
+                Defaults to None, in which case no predictor is used.
         """
 
         self.num_outer = num_outer
         self.num_inner = num_inner
         self.alpha = alpha
+        self.predictor = predictor
 
         # default is to not offcentre transporting velocity but if it
         # is offcentred then use the same value as alpha
@@ -190,6 +204,14 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.bcs = equation_set.bcs
         self.accelerator = accelerator
 
+        if self.predictor is not None:
+            V_DG = equation_set.domain.spaces('DG')
+            self.predictor_field_in = Function(V_DG)
+            div_factor = Constant(1.0) - (Constant(1.0) - self.alpha)*self.dt*div(self.x.n('u'))
+            self.predictor_interpolator = Interpolator(
+                self.x.star(predictor)*div_factor, self.predictor_field_in
+            )
+
     def _apply_bcs(self):
         """
         Set the zero boundary conditions in the velocity.
@@ -252,6 +274,33 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for name in self.tracers_to_copy:
             x_out(name).assign(x_in(name))
 
+    def transport_field(self, name, scheme, xstar, xp):
+        """
+        Performs the transport of a field in xstar, placing the result in xp.
+
+        Args:
+            name (str): the name of the field to be transported.
+            scheme (:class:`TimeDiscretisation`): the time discretisation used
+                for the transport.
+            xstar (:class:`Fields`): the collection of state fields to be
+                transported.
+            xp (:class:`Fields`): the collection of state fields resulting from
+                the transport.
+        """
+
+        if name == self.predictor:
+            # Pre-multiply this variable by (1 - dt*beta*div(u))
+            V = xstar(name).function_space()
+            field_out = Function(V)
+            self.predictor_interpolator.interpolate()
+            scheme.apply(field_out, self.predictor_field_in)
+
+            # xp is xstar plus the increment from the transported predictor
+            xp(name).assign(xstar(name) + field_out - self.predictor_field_in)
+        else:
+            # Standard transport
+            scheme.apply(xp(name), xstar(name))
+
     def timestep(self):
         """Defines the timestep"""
         xn = self.x.n
@@ -288,7 +337,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 for name, scheme in self.active_transport:
                     logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: {name}')
                     # transports a field from xstar and puts result in xp
-                    scheme.apply(xp(name), xstar(name))
+                    self.transport_field(name, scheme, xstar, xp)
 
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:
