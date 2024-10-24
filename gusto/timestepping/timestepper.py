@@ -2,7 +2,7 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, Projector, split
-from firedrake.fml import drop, Term
+from firedrake.fml import drop, Term, LabelledForm
 from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
 from gusto.core import TimeLevelFields, StateFields
@@ -132,6 +132,25 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         )
 
         scheme.residual = transporting_velocity.update_value(scheme.residual, uadv)
+
+        # Now also replace transporting velocity in the terms that are
+        # contained in labels
+        for idx, t in enumerate(scheme.residual.terms):
+            if t.has_label(transporting_velocity):
+                for label in t.labels.keys():
+                    if type(t.labels[label]) is LabelledForm:
+                        t.labels[label] = t.labels[label].label_map(
+                            lambda s: s.has_label(transporting_velocity),
+                            map_if_true=lambda s:
+                            Term(ufl.replace(
+                                s.form,
+                                {s.get(transporting_velocity): uadv}),
+                                s.labels
+                            )
+                        )
+
+                        scheme.residual.terms[idx].labels[label] = \
+                            transporting_velocity.update_value(t.labels[label], uadv)
 
     def log_timestep(self):
         """
