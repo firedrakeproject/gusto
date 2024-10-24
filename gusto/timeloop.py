@@ -764,20 +764,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                 # TODO: this is where to update the reference state
 
-                # # # # # # # # # #
-                # ultra-fast physics before implicit solve
-                x_after_ultra_fast(self.field_name).assign(xnp1(self.field_name))
-                if len(self.ultra_fast_physics_schemes) > 0:
-                    with timed_stage("Ultra-fast physics"):
-                        logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
-                        for _, scheme in self.ultra_fast_physics_schemes:
-                            scheme.apply(x_after_ultra_fast(scheme.field_name), x_after_ultra_fast(scheme.field_name))
-
-                # # # # # # # # # #
-
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'SIQN: Implicit forcing {(outer, inner)}')
-                    self.forcing.apply(x_after_ultra_fast, xnp1, xrhs, "implicit")
+                    self.forcing.apply(xp, xnp1, xrhs, "implicit")
 
                  # # # # # # # # # #
                 # # ultra-fast physics
@@ -796,14 +785,24 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 # # # # # # # # #
 
                 xrhs -= xnp1(self.field_name)
-                xrhs += xrhs_phys
+                # xrhs += xrhs_phys
 
                 with timed_stage("Implicit solve"):
                     logger.info(f'SIQN: Mixed solve {(outer, inner)}')
-                    self.linear_solver.solve(xrhs, dy, x_after_ultra_fast(self.field_name))  # solves linear system and places result in dy
+                    self.linear_solver.solve(xrhs, dy, xnp1(self.field_name))  # solves linear system and places result in dy
 
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
+
+                # # # # # # # # # #
+                # ultra-fast physics after linear solve
+                if len(self.ultra_fast_physics_schemes) > 0:
+                    with timed_stage("Ultra-fast physics"):
+                        logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
+                        for _, scheme in self.ultra_fast_physics_schemes:
+                            scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
+                 # # # # # # # # # #
+
 
                 # Update xnp1 values for active tracers not included in the linear solve here in the inner loop, if doing ultra-fast physics
                 if len(self.ultra_fast_physics_schemes) > 0 and self.moist_solver == False:
