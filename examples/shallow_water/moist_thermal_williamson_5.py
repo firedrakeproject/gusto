@@ -146,9 +146,9 @@ def moist_thermal_williamson_5(
         DGUpwind(eqns, field_name) for field_name in eqns.field_names
     ]
 
-    # Time stepper
+    # Timestepper
     stepper = Timestepper(
-        eqns, io, RK4(domain), spatial_methods=transport_methods
+        eqns, RK4(domain), io, spatial_methods=transport_methods
     )
 
     # ------------------------------------------------------------------------ #
