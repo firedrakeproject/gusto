@@ -7,7 +7,7 @@ preserve a constant in divergence-free flow).
 from gusto import *
 from firedrake import (
     PeriodicRectangleMesh, cos, sin, SpatialCoordinate,
-    assemble, dx, pi, as_vector, errornorm, Function, div, as_vector
+    assemble, dx, pi, as_vector, errornorm, Function, div
 )
 import pytest
 

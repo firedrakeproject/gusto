@@ -12,7 +12,7 @@ from firedrake import (
 )
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations, Sum,
+    ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, GeneralIcosahedralSphereMesh, ZonalComponent,
     MeridionalComponent, RelativeVorticity, RungeKuttaFormulation
 )

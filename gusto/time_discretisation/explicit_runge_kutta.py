@@ -27,16 +27,16 @@ class RungeKuttaFormulation(Enum):
     The following Runge-Kutta methods for solving dy/dt = F(y) are encoded here:
     - `increment`:                                                            \n
         k_0 = F[y^n]                                                          \n
-        k_m = F[y^n - dt*\sum_{i=0}^{m-1} a_{m,i} * k_i], for m = 1 to M - 1  \n
-        y^{n+1} = y^n - dt*\sum_{i=0}^{M-1} b_i*k_i                           \n
+        k_m = F[y^n - dt*Sum_{i=0}^{m-1} a_{m,i} * k_i], for m = 1 to M - 1   \n
+        y^{n+1} = y^n - dt*Sum_{i=0}^{M-1} b_i*k_i                            \n
     - `predictor`:
         y^0 = y^n                                                             \n
-        y^m = q^0 - dt*\sum_{i=0}^{m-1} a_{m,i} * F[y^i], for m = 1 to M - 1  \n
-        y^{n+1} = y^0 - dt*\sum_{i=0}^{m-1} b_i * F[y^i]                      \n
+        y^m = q^0 - dt*Sum_{i=0}^{m-1} a_{m,i} * F[y^i], for m = 1 to M - 1   \n
+        y^{n+1} = y^0 - dt*Sum_{i=0}^{m-1} b_i * F[y^i]                       \n
     - `linear`:
         y^0 = y^n                                                             \n
-        y^m = q^0 - dt*F[\sum_{i=0}^{m-1} a_{m,i} * y^i], for m = 1 to M - 1  \n
-        y^{n+1} = y^0 - dt*F[\sum_{i=0}^{m-1} b_i * y^i]                      \n
+        y^m = q^0 - dt*F[Sum_{i=0}^{m-1} a_{m,i} * y^i], for m = 1 to M - 1   \n
+        y^{n+1} = y^0 - dt*F[Sum_{i=0}^{m-1} b_i * y^i]                       \n
     """
 
     increment = 1595712

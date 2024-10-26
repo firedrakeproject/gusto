@@ -19,7 +19,7 @@ from firedrake import (
 import numpy as np
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, SUPGOptions, CourantNumber, Perturbation, Gradient,
+    SUPGOptions, CourantNumber, Perturbation, Gradient,
     CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
     compressible_hydrostatic_balance, logger, RichardsonNumber,
     RungeKuttaFormulation

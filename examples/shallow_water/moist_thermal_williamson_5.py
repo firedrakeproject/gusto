@@ -24,8 +24,7 @@ from gusto import (
     ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, InstantRain, SWSaturationAdjustment, WaterVapour,
     CloudWater, Rain, GeneralIcosahedralSphereMesh, RelativeVorticity,
-    ZonalComponent, MeridionalComponent, RungeKuttaFormulation, SSPRK3,
-    SemiImplicitQuasiNewton, ThermalSWSolver
+    ZonalComponent, MeridionalComponent
 )
 
 moist_thermal_williamson_5_defaults = {
@@ -143,28 +142,13 @@ def moist_thermal_williamson_5(
         gamma_r=gamma_r
     )
 
-    transported_fields = [
-        SSPRK3(domain, "u", subcycle_by_courant=0.25),
-        SSPRK3(domain, "D", subcycle_by_courant=0.25, rk_formulation=RungeKuttaFormulation.linear),
-        SSPRK3(domain, "b", subcycle_by_courant=0.25),
-        SSPRK3(domain, "water_vapour", subcycle_by_courant=0.25),
-        SSPRK3(domain, "cloud_water", subcycle_by_courant=0.25),
-    ]
     transport_methods = [
-        DGUpwind(eqns, "u"),
-        DGUpwind(eqns, "D", advective_then_flux=True),
-        DGUpwind(eqns, "b"),
-        DGUpwind(eqns, "water_vapour"),
-        DGUpwind(eqns, "cloud_water")
+        DGUpwind(eqns, field_name) for field_name in eqns.field_names
     ]
-
-    # Linear solver
-    linear_solver = ThermalSWSolver(eqns)
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
+    stepper = Timestepper(
+        eqns, io, RK4(domain), spatial_methods=transport_methods
     )
 
     # ------------------------------------------------------------------------ #
