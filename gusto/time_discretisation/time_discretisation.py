@@ -110,7 +110,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         # get default solver options if none passed in
         if solver_parameters is None:
-            self.solver_parameters = {'ksp_type': 'cg',
+            self.solver_parameters = {'ksp_type': 'gmres',
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}
         else:
@@ -350,6 +350,15 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                              + 'arguments to a time discretisation')
         self.fixed_subcycles = fixed_subcycles
         self.subcycle_by_courant = subcycle_by_courant
+
+        # get default solver options if none passed in
+        if solver_parameters is None:
+            self.solver_parameters = {'snes_type': 'ksponly',
+                                      'ksp_type': 'cg',
+                                      'pc_type': 'bjacobi',
+                                      'sub_pc_type': 'ilu'}
+        else:
+            self.solver_parameters = solver_parameters
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """

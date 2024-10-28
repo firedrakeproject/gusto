@@ -160,9 +160,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             return super().solver
 
         elif self.rk_formulation == RungeKuttaFormulation.predictor:
-            # In this case, don't set snes_type to ksp only, as we do want the
-            # outer Newton iteration. This is achieved by not calling the
-            # "super" method, in which the default snes_type is set to ksp_only
             solver_list = []
 
             for stage in range(self.nStages):
@@ -180,9 +177,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             return solver_list
 
         elif self.rk_formulation == RungeKuttaFormulation.linear:
-            # In this case, don't set snes_type to ksp only, as we do want the
-            # outer Newton iteration. This is achieved by not calling the
-            # "super" method, in which the default snes_type is set to ksp_only
             problem = NonlinearVariationalProblem(
                 self.lhs - self.rhs[0], self.x1, bcs=self.bcs
             )
