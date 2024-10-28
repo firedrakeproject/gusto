@@ -385,7 +385,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
         # If the time_derivative term is nonlinear, we must use a nonlinear solver
         if (len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0
-           and self.solver_parameters['snes_type'] == 'ksponly'):
+           and self.solver_parameters.get('snes_type') == 'ksponly' or None):
             message = f'Switching to newton line search nonlinear solver for {self.field_name} ' \
                 + 'as the time derivative term is nonlinear'
             logger.warning(message)
@@ -407,8 +407,6 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         # setup linear solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs - self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
-        self.solver_parameters.setdefault('snes_type', 'ksponly')
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
 
