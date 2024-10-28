@@ -122,7 +122,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         # Check all terms are labeled implicit, exlicit
         for t in self.residual:
             if ((not t.has_label(implicit)) and (not t.has_label(explicit))
-                 and (not t.has_label(time_derivative))):
+               and (not t.has_label(time_derivative))):
                 raise NotImplementedError("Non time-derivative terms must be labeled as implicit or explicit")
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
@@ -240,7 +240,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         for stage in range(self.nStages):
             self.solver = solver_list[stage]
             # Set initial solver guess
-            if stage > 0:
+            if (stage > 0):
                 self.x_out.assign(self.xs[stage-1])
             self.solver.solve()
 
