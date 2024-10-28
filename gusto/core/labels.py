@@ -102,6 +102,7 @@ all_but_last = Label("all_but_last", validator=lambda value: type(value) in [Lab
 
 # labels for terms in the equations
 time_derivative = Label("time_derivative")
+nonlinear_time_derivative = Label("nonlinear_time_derivative")
 transport = Label("transport",
                   validator=lambda value: type(value) == TransportEquationType)
 diffusion = Label("diffusion")

@@ -10,7 +10,8 @@ from firedrake.fml import (
     replace_subject, replace_trial_function
 )
 from gusto.core import PrescribedFields
-from gusto.core.labels import time_derivative, prognostic, linearisation, mass_weighted
+from gusto.core.labels import (nonlinear_time_derivative, time_derivative,
+                               prognostic, linearisation, mass_weighted)
 from gusto.equations.common_forms import (
     advection_form, continuity_form, tracer_conservative_form
 )
@@ -163,8 +164,8 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                         ref_density_idx = self.field_names.index(self.active_tracers[j].density_name)
                         ref_density = split(self.X)[ref_density_idx]
                         q = prog*ref_density
-                        mass_weighted_form = time_derivative(subject(prognostic(inner(q, test)*dx,
-                                                             field_name), self.X))
+                        mass_weighted_form = nonlinear_time_derivative(time_derivative(
+                            subject(prognostic(inner(q, test)*dx, field_name), self.X)))
 
                         mass = mass_weighted(standard_mass_form, mass_weighted_form)
             if i == 0:
