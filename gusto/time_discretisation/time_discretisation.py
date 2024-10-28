@@ -25,7 +25,6 @@ from gusto.time_discretisation.wrappers import *
 __all__ = ["TimeDiscretisation", "ExplicitTimeDiscretisation", "BackwardEuler",
            "ThetaMethod", "TrapeziumRule", "TR_BDF2"]
 
-
 def wrapper_apply(original_apply):
     """Decorator to add steps for using a wrapper around the apply method."""
     def get_apply(self, x_out, x_in):
@@ -353,8 +352,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
         # get default solver options if none passed in
         if solver_parameters is None:
-            self.solver_parameters = {'snes_type': 'ksponly',
-                                      'ksp_type': 'cg',
+            # If the time derivative term is not linear, then use a nonlinear solver
+            self.solver_parameters = {'ksp_type': 'cg',
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}
         else:
@@ -383,6 +382,10 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             self.ncycles = 1
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
+
+        # If the time_derivative term is nonlinear, we must use a nonlinear solver
+        if len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0:
+            self.solver_parameters.setdefault('snes_type', 'newtonls')
 
     @cached_property
     def lhs(self):

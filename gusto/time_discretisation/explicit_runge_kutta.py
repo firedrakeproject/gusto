@@ -374,8 +374,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             if stage == 0:
                 self.field_i[0].assign(x0)
 
-            # Use x0 as a first guess (otherwise may not converge)
-            self.field_i[stage+1].assign(x0)
+            # Use previous stage value as a first guess (otherwise may not converge)
+            self.field_i[stage+1].assign(self.field_i[stage])
 
             # Update field_i for physics / limiters
             for evaluate in self.evaluate_source:
@@ -421,6 +421,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 if self.limiter is not None:
                     self.limiter.apply(self.field_rhs)
 
+                # Use previous stage value as a first guess (otherwise may not converge)
+                self.x1.assign(self.field_lhs[cycle_stage])
                 # Solve problem, placing solution in self.x1
                 self.solver[0].solve()
 
@@ -443,7 +445,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                     evaluate(self.field_rhs, self.original_dt)
                 if self.limiter is not None:
                     self.limiter.apply(self.field_rhs)
-
+                # Use x0 as a first guess (otherwise may not converge)
+                self.x1.assign(x0)
                 # Solve problem, placing solution in self.x1
                 self.solver[1].solve()
 
