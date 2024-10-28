@@ -102,7 +102,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         # Check all terms are labeled implicit, exlicit
         for t in self.residual:
             if ((not t.has_label(implicit)) and (not t.has_label(explicit))
-               and (not t.has_label(time_derivative))):
+               and (not t.has_label(time_derivative)) and (not t.has_label(eos_form))and (not t.has_label(eos_mass))):
                 raise NotImplementedError("Non time-derivative terms must be labeled as implicit or explicit")
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
@@ -163,7 +163,7 @@ class IMEXRungeKutta(TimeDiscretisation):
                                             map_if_false=drop)
         residual += eos_mass_term.label_map(all_terms,
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        residual -=  eos_form_term.label_map(all_terms,
+        residual +=  eos_form_term.label_map(all_terms,
                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
         return residual.form
 
@@ -175,7 +175,7 @@ class IMEXRungeKutta(TimeDiscretisation):
                                             map_if_false=drop)
         residual = mass_form.label_map(all_terms,
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        residual -= mass_form.label_map(all_terms,
+        residual += mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.x1, old_idx=self.idx))
         # Loop through stages up to s-1 and calcualte/sum
         # dt*(b_1*F(y_1) + b_2*F(y_2) + .... + b_s*F(y_s))
@@ -204,7 +204,7 @@ class IMEXRungeKutta(TimeDiscretisation):
                                             map_if_false=drop)
         residual += eos_mass_term.label_map(all_terms,
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        residual -=  eos_form_term.label_map(all_terms,
+        residual +=  eos_form_term.label_map(all_terms,
                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
         return residual.form
 
@@ -231,6 +231,9 @@ class IMEXRungeKutta(TimeDiscretisation):
     def apply(self, x_out, x_in):
         self.x1.assign(x_in)
         solver_list = self.solvers
+
+        for i, term in enumerate(self.residual):
+            print(i, term.labels.keys())
 
         for stage in range(self.nStages):
             self.solver = solver_list[stage]

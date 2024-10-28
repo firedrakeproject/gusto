@@ -118,6 +118,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 transport term should be replaced with the transport term of
                 this discretisation.
         """
+        for i, term in enumerate(scheme.residual):
+            print(i, term.labels.keys())
+
         if self.transporting_velocity == "prognostic" and "u" in self.fields._field_names:
             # Use the prognostic wind variable as the transporting velocity
             u_idx = self.equation.field_names.index('u')
@@ -132,6 +135,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         )
 
         scheme.residual = transporting_velocity.update_value(scheme.residual, uadv)
+        for i, term in enumerate(scheme.residual):
+            print(i, term.labels.keys())
+
 
     def log_timestep(self):
         """

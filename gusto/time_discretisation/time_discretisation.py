@@ -17,7 +17,7 @@ from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
-from gusto.core.labels import time_derivative, prognostic, physics_label, mass_weighted
+from gusto.core.labels import time_derivative, prognostic, physics_label, mass_weighted, eos_form, eos_mass
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
 
@@ -556,9 +556,10 @@ class ThetaMethod(TimeDiscretisation):
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
-            all_terms,
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
+            lambda t: not t.has_label(eos_form),
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+            map_if_false=drop)
+        l = l.label_map(lambda t: any(t.has_label(time_derivative, eos_mass)),
                         map_if_false=lambda t: self.theta*self.dt*t)
 
         return l.form
@@ -567,9 +568,10 @@ class ThetaMethod(TimeDiscretisation):
     def rhs(self):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
-            all_terms,
-            map_if_true=replace_subject(self.x1, old_idx=self.idx))
-        r = r.label_map(lambda t: t.has_label(time_derivative),
+            lambda t: not t.has_label(eos_mass),
+            map_if_true=replace_subject(self.x1, old_idx=self.idx),
+            map_if_false=drop)
+        r = r.label_map(lambda t: any(t.has_label(time_derivative, eos_form)),
                         map_if_false=lambda t: -(1-self.theta)*self.dt*t)
 
         return r.form
@@ -583,7 +585,11 @@ class ThetaMethod(TimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field.
         """
+        for i, term in enumerate(self.residual):
+            print(i, term.labels.keys())
+
         self.x1.assign(x_in)
+        self.x_out.assign(x_in)
         self.solver.solve()
         x_out.assign(self.x_out)
 

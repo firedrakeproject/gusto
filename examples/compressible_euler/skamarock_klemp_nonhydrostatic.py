@@ -21,7 +21,9 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, SUPGOptions, CourantNumber, Perturbation, Gradient,
     CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
-    compressible_hydrostatic_balance, logger, RichardsonNumber
+    compressible_hydrostatic_balance, logger, RichardsonNumber,
+    time_derivative, transport, implicit, explicit, split_continuity_form,
+    IMEXRungeKutta,  Timestepper, thermodynamics, eos_form, eos_mass
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -73,6 +75,11 @@ def skamarock_klemp_nonhydrostatic(
     # Equation
     parameters = CompressibleParameters()
     eqns = CompressibleEulerEquations(domain, parameters)
+    # Check number of optimal cores
+    # print("Opt Cores:", eqns.X.function_space().dim()/50000.)
+    # eqns = split_continuity_form(eqns)
+    # eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport, eos_form, eos_mass)), implicit)
+    # eqns.label_terms(lambda t: t.has_label(transport), explicit)
 
     # I/O
     points_x = np.linspace(0., domain_width, 100)
@@ -104,26 +111,50 @@ def skamarock_klemp_nonhydrostatic(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    theta_opts = SUPGOptions()
-    transported_fields = [
-        TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "rho"),
-        SSPRK3(domain, "theta", options=theta_opts)
-    ]
+    # theta_opts = SUPGOptions()
+    # transported_fields = [
+    #     TrapeziumRule(domain, "u"),
+    #     SSPRK3(domain, "rho"),
+    #     SSPRK3(domain, "theta", options=theta_opts)
+    # ]
     transport_methods = [
         DGUpwind(eqns, "u"),
         DGUpwind(eqns, "rho"),
-        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
+        DGUpwind(eqns, "theta")
     ]
 
-    # Linear solver
-    linear_solver = CompressibleSolver(eqns)
+    nl_solver_parameters = {
+    "snes_converged_reason": None,
+    "snes_lag_preconditioner_persists":None,
+    "snes_lag_preconditioner":-2, 
+    "mat_type": "matfree",
+    "ksp_type": "gmres",
+    'ksp_converged_reason': None,
+    'ksp_monitor_true_residual': None,
+    "ksp_atol": 1e-5,
+    "ksp_rtol": 1e-5,
+    "ksp_max_it": 400,
+    "pc_type": "python",
+    "pc_python_type": "firedrake.AssembledPC",
+    "assembled_pc_star_sub_sub_pc_type": "lu",
+    "assembled_pc_type": "python",
+    "assembled_pc_python_type": "firedrake.ASMStarPC",
+    "assembled_pc_star_construct_dim": 0,
+    "assembled_pc_star_sub_sub_pc_factor_mat_ordering_type": "rcm",
+    "assembled_pc_star_sub_sub_pc_factor_reuse_ordering": None,
+    "assembled_pc_star_sub_sub_pc_factor_reuse_fill": None,
+    "assembled_pc_star_sub_sub_pc_factor_fill": 1.2}
 
-    # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
-    )
+
+    # IMEX time stepper
+
+    # butcher_imp = np.array([[0.0, 0.0], [0.0, 0.5], [0.0, 1.]])
+    # butcher_exp = np.array([[0.0, 0.0], [0.5, 0.0], [0.0, 1.]])
+    # scheme = IMEXRungeKutta(domain, butcher_imp, butcher_exp, solver_parameters=nl_solver_parameters)
+    scheme = TrapeziumRule(domain, solver_parameters=nl_solver_parameters)
+    #Time stepper
+    stepper = Timestepper(eqns, scheme, io, transport_methods)
+
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -132,6 +163,7 @@ def skamarock_klemp_nonhydrostatic(
     u0 = stepper.fields("u")
     rho0 = stepper.fields("rho")
     theta0 = stepper.fields("theta")
+    exner0 = stepper.fields("exner")
 
     # spaces
     Vt = domain.spaces("theta")
@@ -150,7 +182,7 @@ def skamarock_klemp_nonhydrostatic(
     rho_b = Function(Vr)
 
     # Calculate hydrostatic exner
-    compressible_hydrostatic_balance(eqns, theta_b, rho_b)
+    compressible_hydrostatic_balance(eqns, theta_b, rho_b, exner0)
 
     theta_pert = (
         deltaTheta * sin(pi*z/domain_height)
@@ -159,6 +191,8 @@ def skamarock_klemp_nonhydrostatic(
     theta0.interpolate(theta_b + theta_pert)
     rho0.assign(rho_b)
     u0.project(as_vector([wind_initial, 0.0]))
+
+    #exner0.interpolate(thermodynamics.exner_pressure(parameters, rho0, theta0))
 
     stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 

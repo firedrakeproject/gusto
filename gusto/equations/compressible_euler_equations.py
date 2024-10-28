@@ -92,7 +92,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             # Default linearisation is time derivatives and scalar transport terms
             # Don't include active tracers
             linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'rho', 'theta', 'exner'] \
+                t.get(prognostic) in ['u', 'rho', 'theta'] \
                 and (t.has_label(time_derivative)
                      or (t.get(prognostic) != 'u' and t.has_label(transport)))
         super().__init__(field_names, domain, space_names,
