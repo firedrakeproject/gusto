@@ -384,10 +384,10 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         self.x1 = Function(self.fs)
 
         # If the time_derivative term is nonlinear, we must use a nonlinear solver
-        if ( len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0
-             and self.solver_parameters['snes_type'] == 'ksponly' ):
+        if (len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0
+           and self.solver_parameters['snes_type'] == 'ksponly'):
             message = f'Switching to newton line search nonlinear solver for {self.field_name} ' \
-                        + 'as the time derivative term is nonlinear'
+                + 'as the time derivative term is nonlinear'
             logger.warning(message)
             self.solver_parameters.setdefault('snes_type', 'newtonls')
 
