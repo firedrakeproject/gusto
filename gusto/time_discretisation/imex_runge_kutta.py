@@ -240,7 +240,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         for stage in range(self.nStages):
             self.solver = solver_list[stage]
             # Set initial solver guess
-            if (stage > 0):
+            if stage > 0:
                 self.x_out.assign(self.xs[stage-1])
             self.solver.solve()
 

@@ -230,7 +230,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 self.limiter.apply(self.x1)
 
             # Set initial guess for solver
-            if (stage > 0):
+            if stage > 0:
                 self.x_out.assign(self.k[stage-1])
             self.solver.solve()
 
