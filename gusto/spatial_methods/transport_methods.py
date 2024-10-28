@@ -175,7 +175,7 @@ class DGUpwind(TransportMethod):
                 transport equation for all but the last steps of some
                 (potentially subcycled) Runge-Kutta scheme, before using the
                 conservative form for the final step to deliver a mass-
-                conserving increment. This optiona only makes sense to use with
+                conserving increment. This option only makes sense to use with
                 Runge-Kutta, and should be used with the "linear" Runge-Kutta
                 formulation. Defaults to False, in which case the conservative
                 form is used for every step.

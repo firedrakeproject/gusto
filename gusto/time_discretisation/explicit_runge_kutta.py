@@ -31,11 +31,11 @@ class RungeKuttaFormulation(Enum):
         y^{n+1} = y^n - dt*Sum_{i=0}^{M-1} b_i*k_i                            \n
     - `predictor`:
         y^0 = y^n                                                             \n
-        y^m = q^0 - dt*Sum_{i=0}^{m-1} a_{m,i} * F[y^i], for m = 1 to M - 1   \n
+        y^m = y^0 - dt*Sum_{i=0}^{m-1} a_{m,i} * F[y^i], for m = 1 to M - 1   \n
         y^{n+1} = y^0 - dt*Sum_{i=0}^{m-1} b_i * F[y^i]                       \n
     - `linear`:
         y^0 = y^n                                                             \n
-        y^m = q^0 - dt*F[Sum_{i=0}^{m-1} a_{m,i} * y^i], for m = 1 to M - 1   \n
+        y^m = y^0 - dt*F[Sum_{i=0}^{m-1} a_{m,i} * y^i], for m = 1 to M - 1   \n
         y^{n+1} = y^0 - dt*F[Sum_{i=0}^{m-1} b_i * y^i]                       \n
     """
 
