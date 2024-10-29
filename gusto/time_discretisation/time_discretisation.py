@@ -382,6 +382,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             self.ncycles = 1
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
+
         # If the time_derivative term is nonlinear, we must use a nonlinear solver
         if (len(self.residual.label_map(lambda t: t.has_label(nonlinear_time_derivative), map_if_false=drop)) > 0
            and self.solver_parameters.get('snes_type') == 'ksponly'):
