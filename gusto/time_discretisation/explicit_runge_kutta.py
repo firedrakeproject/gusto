@@ -160,9 +160,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             return super().solver
 
         elif self.rk_formulation == RungeKuttaFormulation.predictor:
-            # In this case, don't set snes_type to ksp only, as we do want the
-            # outer Newton iteration. This is achieved by not calling the
-            # "super" method, in which the default snes_type is set to ksp_only
             solver_list = []
 
             for stage in range(self.nStages):
@@ -180,9 +177,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             return solver_list
 
         elif self.rk_formulation == RungeKuttaFormulation.linear:
-            # In this case, don't set snes_type to ksp only, as we do want the
-            # outer Newton iteration. This is achieved by not calling the
-            # "super" method, in which the default snes_type is set to ksp_only
             problem = NonlinearVariationalProblem(
                 self.lhs - self.rhs[0], self.x1, bcs=self.bcs
             )
@@ -358,6 +352,10 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 evaluate(self.x1, self.dt)
             if self.limiter is not None:
                 self.limiter.apply(self.x1)
+
+            # Set initial guess for solver
+            if stage > 0:
+                self.x_out.assign(self.k[stage-1])
             self.solver.solve()
 
             self.k[stage].assign(self.x_out)
@@ -376,8 +374,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             if stage == 0:
                 self.field_i[0].assign(x0)
 
-            # Use x0 as a first guess (otherwise may not converge)
-            self.field_i[stage+1].assign(x0)
+            # Use previous stage value as a first guess (otherwise may not converge)
+            self.field_i[stage+1].assign(self.field_i[stage])
 
             # Update field_i for physics / limiters
             for evaluate in self.evaluate_source:
@@ -423,6 +421,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 if self.limiter is not None:
                     self.limiter.apply(self.field_rhs)
 
+                # Use previous stage value as a first guess (otherwise may not converge)
+                self.x1.assign(self.field_lhs[cycle_stage])
                 # Solve problem, placing solution in self.x1
                 self.solver[0].solve()
 
@@ -445,7 +445,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                     evaluate(self.field_rhs, self.original_dt)
                 if self.limiter is not None:
                     self.limiter.apply(self.field_rhs)
-
+                # Use x0 as a first guess (otherwise may not converge)
+                self.x1.assign(x0)
                 # Solve problem, placing solution in self.x1
                 self.solver[1].solve()
 
