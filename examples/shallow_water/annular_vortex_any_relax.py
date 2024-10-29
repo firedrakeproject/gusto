@@ -43,11 +43,11 @@ tau_c_ratio = 0.01
 beta = 1.0
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'rad'
+rel_sch = 'both'
 include_co2 = 'yes'
 
 # do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
-restart = True
+restart = False
 restart_name = 'Relax_to_annulus/annular_vortex_mars_60-70_PVmax--1-8_PVpole--0-8_tau_r--2sol_A0-0-norel_len-300sols_tracer_tophat'
 
 # length of this run, time to start from (only relevant if doing a restart)
@@ -354,14 +354,15 @@ if restart:
 
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th)]
 if not restart:
-    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, diagfreq=1)
+    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, dumplist=['D', 'topography', 'rainsum'])
     # Transport schemes
     transported_fields = [TrapeziumRule(domain, "u"),
                         SSPRK3(domain, "D")]
     tracer_transport = [(tracer_eqn, SSPRK3(domain))]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer")]
 elif restart:
-    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=1, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5', diagfreq=1)
+    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5',
+                                dumplist=['D', 'topography', 'rainsum'])
 
     chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
     mesh = chkpt_mesh

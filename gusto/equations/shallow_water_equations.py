@@ -201,7 +201,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
             residual += source_form
 
         if extra_fields is not None:
-            state_fields.add_field(extra_fields, space=self.domain.spaces("DG"))
+            self.prescribed_fields.add_field(extra_fields, space=self.domain.spaces("DG"))
 
         # -------------------------------------------------------------------- #
         # Linearise equations
