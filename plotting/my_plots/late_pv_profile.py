@@ -2,7 +2,7 @@ import os
 import matplotlib.pyplot as plt
 import xarray as xr
 
-file = 'Relax_to_annulus/annular_vortex_mars_60-70_PVmax--1-8_PVpole--0-8_tau_r--2sol_A0-0-norel_len-300sols_tracer_tophat'
+file = 'Relax_to_annulus/annular_vortex_mars_55-60_PVmax--2-4_PVpole--1-0_tau_r--2sol_A0-0.0-norel_len-300sols_tracer_tophat-80'
 
 sol_early = 100
 sol_late = 300

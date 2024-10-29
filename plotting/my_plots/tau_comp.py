@@ -4,18 +4,18 @@ import matplotlib.pyplot as plt
 
 path = '/data/home/sh1293/results'
 
-d1 = xr.open_dataset(f'{path}/Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat/regrid_output.nc')
-d2 = xr.open_dataset(f'{path}/Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.005sol_beta--1_A0-0-norel_len-300sols/regrid_output.nc')
+d001 = xr.open_dataset(f'{path}/Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat/regrid_output.nc')
+d0005 = xr.open_dataset(f'{path}/Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.005sol_beta--1_A0-0-norel_len-300sols/regrid_output.nc')
+d002 = xr.open_dataset(f'{path}/Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.02sol_beta--1-0_A0-0.0-norel_len-300sols_tracer_tophat-80/regrid_output.nc')
 
 
-
-datasets = {1:d1, 2:d2}
-colours = {1:'red', 2:'blue'}
+datasets = {1:d001, 2:d0005, 3:d002}
+colours = {1:'red', 2:'blue', 3:'green'}
 
 fig, ax = plt.subplots(4,1, figsize=(8,20))
 
 i=0
-for beta in [1, 2]:
+for beta in [3, 1, 2]:
     print(beta)
     # name = f'{int(10*beta):02d}'
     ds = datasets[beta]
@@ -28,7 +28,7 @@ for beta in [1, 2]:
     ds_merged['condensing_fraction'] = fcs.condensing_area(ds)
     ds_merged['delta_q'] = fcs.delta_q_inst(ds_merged.PotentialVorticity)
 
-    pveddens = ds_merged.PotentialVorticity_eddens.plot(ax=ax[0], color=colour, label='tau_c=0.01sol' if beta==1 else 'tau_c=0.005sol')
+    pveddens = ds_merged.PotentialVorticity_eddens.plot(ax=ax[0], color=colour, label='tau_c=0.01sol' if beta==1 else 'tau_c=0.005sol' if beta==2 else 'tau_c=0.02sol')
     fr = ds_merged.condensing_fraction.plot(ax=ax[1], color=colour)
     freddens = ds_merged.D_minus_H_rel_flag_less_eddens.plot(ax=ax[2], color=colour)
     dq = ds_merged.delta_q.plot(ax=ax[3], color=colour)
@@ -40,4 +40,4 @@ for beta in [1, 2]:
 
     ax[0].legend()
 
-plt.savefig(f'{path}/Relax_to_pole_and_CO2/tau_c_0-005_vs_0-01.pdf')
+plt.savefig(f'{path}/Relax_to_pole_and_CO2/tau_comp.pdf')

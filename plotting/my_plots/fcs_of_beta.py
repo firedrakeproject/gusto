@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 
 path = '/data/home/sh1293/results/Relax_to_pole_and_CO2/'
 
-b10 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_alpha--1_working_long/regrid_output.nc')
-b20 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--2_len-50sols/regrid_output.nc')
-b30 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--3_len-50sols/regrid_output.nc')
-b40 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--4_len-50sols/regrid_output.nc')
-b05 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--0-5_A0-0-norel_len-50sols/regrid_output.nc')
-b15 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-5_A0-0-norel_len-50sols/regrid_output.nc')
-b25 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--2-5_A0-0-norel_len-50sols/regrid_output.nc')
-b35 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--3-5_A0-0-norel_len-50sols/regrid_output.nc')
+b10 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat/regrid_output.nc')
+b20 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--2-0_A0-0-norel_len-300sols_tracer_tophat-80/regrid_output.nc')
+b30 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--3-0_A0-0-norel_len-300sols_tracer_tophat-80/regrid_output.nc')
+b40 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--4-0_A0-0-norel_len-300sols_tracer_tophat-80/regrid_output.nc')
+b05 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--0-5_A0-0-norel_len-300sols_tracer_tophat-80/regrid_output.nc')
+b15 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-5_A0-0-norel_len-300sols_tracer_tophat-80/regrid_output.nc')
+b25 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--2-5_A0-0-norel_len-300sols_tracer_tophat-80/regrid_output.nc')
+b35 = xr.open_dataset(f'{path}/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--3-5_A0-0-norel_len-300sols_tracer_tophat-80/regrid_output.nc')
 
 
 datasets = {0.5:b05, 1:b10, 1.5:b15, 2:b20, 2.5:b25, 3:b30, 3.5:b35, 4:b40}
