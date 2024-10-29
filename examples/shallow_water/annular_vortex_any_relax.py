@@ -296,7 +296,7 @@ if not restart:
     fexpr = 2*Omega*x[2]/R
     lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
     bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr, extra_fields='rainsum')
     tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
 
     # estimate core count for Pileus
@@ -352,16 +352,16 @@ if restart:
 
 
 
-diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), TracerDensity('tracer', 'tracer')]
+diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th)]
 if not restart:
-    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True)
+    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, diagfreq=1)
     # Transport schemes
     transported_fields = [TrapeziumRule(domain, "u"),
                         SSPRK3(domain, "D")]
     tracer_transport = [(tracer_eqn, SSPRK3(domain))]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer")]
 elif restart:
-    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=1, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5')
+    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=1, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5', diagfreq=1)
 
     chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
     mesh = chkpt_mesh
