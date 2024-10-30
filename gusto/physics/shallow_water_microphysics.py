@@ -422,6 +422,7 @@ class SWCO2cond(PhysicsParametrisation):
         super().__init__(equation, label_name, parameters=None)
 
         self.D_idx = equation.field_names.index('D')
+        self.topo = equation.prescribed_fields('topography')
 
         W = equation.function_space
         Vd = W.sub(self.D_idx)
@@ -429,7 +430,7 @@ class SWCO2cond(PhysicsParametrisation):
 
         test = equation.tests[self.D_idx]
 
-        heaviside = self.D - h_th
+        heaviside = self.D + self.topo - h_th
         heaviside = conditional(heaviside < 0, heaviside, 0)
         height_expr = test * heaviside/tau_c * dx
 

@@ -12,6 +12,7 @@ from netCDF4 import Dataset
 import netCDF4 as nc
 import os
 import shutil
+import pdb
 #import matplotlib.pyplot as plt
 #import xarray as xr
 
@@ -47,11 +48,11 @@ rel_sch = 'both'
 include_co2 = 'yes'
 
 # do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
-restart = True
+restart = False
 restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-4sols_tracer_tophat-80'
 
 # length of this run, time to start from (only relevant if doing a restart)
-rundays = 3
+rundays = 2
 start_time = 4
 dt = 450.
 
@@ -60,8 +61,8 @@ dt = 450.
 tracer = True
 hat_edge = 80
 
-# field_to_sum = ('rainsum', 'D_minus_H_rel_flag_less')
-field_to_sum=None
+field_to_sum = ('rainsum', 'CO2cond_flag')
+# field_to_sum=None
 
 # any extra info to include in the directory name
 extra_name = ''
@@ -321,9 +322,9 @@ if not restart:
 
     # H_rel = Function(domain.spaces('L2'))
 
-diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography')]
-dumplist = ['D', 'topography', 'rainsum']
-groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'rainsum', 'D_plus_topography']
+diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography'), SWCO2cond_flag('D', h_th)]
+dumplist = ['D', 'topography', 'rainsum', 'tracer']
+groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'rainsum', 'D_plus_topography', 'CO2cond_flag']
 
 # I/O (input/output)
 homepath = '/data/home/sh1293/results'
@@ -340,24 +341,6 @@ if restart:
     output_file = f'{dirpath}/field_output.nc'
 
     new_groups(input_file, output_file, groups)
-                        
-
-# sort out variables in new netcdf
-    # with nc.Dataset(input_file, 'r') as src:
-    #     with nc.Dataset(output_file, 'a') as dst:
-    #         if 'tracer' in src.groups:
-    #             tracer_group = src.groups['tracer']
-    #             tracer_rs_group = dst.createGroup('tracer_rs')
-    #             for var_name, variable in tracer_group.variables.items():
-    #                 var_dims = variable.dimensions
-    #                 new_var = tracer_rs_group.createVariable(var_name, variable.datatype, var_dims)
-    #                 new_var[:] = np.zeros_like(variable[:])
-    #                 for attr in variable.ncattrs():
-    #                     new_var.setncattr(attr, variable.getncattr(attr))
-                
-    #             print(f"Copied 'tracer' group to 'tracer_rs' group in {output_file}")
-    #         else:
-    #             print("'tracer' group not found in the source file.")
 
 
 
@@ -401,6 +384,7 @@ io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 H_rel = Function(domain.spaces('L2'))
 height_relax = SWHeightRelax(eqns, H_rel, tau_r=tau_r)
 
+# pdb.set_trace()
 co2_cond = SWCO2cond(eqns, h_th=h_th, tau_c=tau_c)
 
 if rel_sch == 'both':

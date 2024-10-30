@@ -2,12 +2,14 @@
 
 
 from firedrake import (dx, TestFunction, TrialFunction, grad, inner, curl,
-                       LinearVariationalProblem, LinearVariationalSolver)
+                       LinearVariationalProblem, LinearVariationalSolver,
+                       conditional)
 from gusto.diagnostics.diagnostics import DiagnosticField, Energy
 
 __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
            "ShallowWaterPotentialEnstrophy", "PotentialVorticity",
-           "RelativeVorticity", "AbsoluteVorticity"]
+           "RelativeVorticity", "AbsoluteVorticity",
+           "SWCO2cond_flag"]
 
 
 class ShallowWaterKineticEnergy(Energy):
@@ -274,3 +276,39 @@ class RelativeVorticity(Vorticity):
             state_fields (:class:`StateFields`): the model's field container.
         """
         super().setup(domain, state_fields, vorticity_type="relative")
+
+
+class SWCO2cond_flag(DiagnosticField):
+    """Base diagnostic for calculating the difference between one field and a constant"""
+    def __init__(self, field_name, constant):
+        """
+        Args:
+            field_name (str): the name of the field to be subtracted from.
+            constant (Functionspace?): the constant to be subtracted.
+        """
+        super().__init__(method='interpolate', required_fields=(field_name))
+        self.field_name = field_name
+        self.constant = constant
+
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return "CO2cond_flag"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+
+        field = state_fields(self.field_name)
+        constant = self.constant
+        topo = state_fields('topography')
+        heaviside = field + topo - constant
+        condit_expr = conditional(heaviside < 0, 1, 0)
+        self.expr = condit_expr
+        space = field.function_space()
+        super().setup(domain, state_fields, space=space)
