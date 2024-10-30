@@ -35,17 +35,21 @@ def delta_q(da, tmin, tmax):
     dabar = da.mean(dim='lon')
     daave = dabar.where(dabar.time>=tmin, drop=True).where(dabar.time<=tmax, drop=True).mean(dim='time')
     PVmax = np.max(daave.values)
+    PVmax_lat = daave.lat[daave.argmax(dim='lat')]
     latmax = np.max(daave.lat.values)
     PVpole = daave.where(daave.lat==latmax, drop=True).values.item()
     dq = PVmax - PVpole
-    return dq
+    dphi = latmax - PVmax_lat
+    return dq, dphi
 
 
 def delta_q_inst(da):
     da = da.where(da.lat >= 50, drop=True)
     daave = da.mean(dim='lon')
     PVmax = daave.max(dim='lat')
+    PVmax_lat = daave.lat[daave.argmax(dim='lat')]
     latmax = np.max(daave.lat.values)
     PVpole = daave.where(daave.lat==latmax, drop=True).mean(dim='lat')
     dq = PVmax - PVpole
-    return dq
+    dphi = latmax - PVmax_lat
+    return dq, dphi

@@ -13,7 +13,7 @@ datasets = {1:dfull, 2:dann}
 colours = {1:'red', 2:'blue'}
 labels = {1:'Full relaxation', 2:'Relax to annulus'}
 
-fig, ax = plt.subplots(2,1, figsize=(8,10))
+fig, ax = plt.subplots(3,1, figsize=(8,15))
 
 i=0
 for beta in [1, 2]:
@@ -27,13 +27,15 @@ for beta in [1, 2]:
     ds_eddens_renamed = ds_eddens.rename({var: f'{var}_eddens' for var in ds_eddens.variables if var !='time'})
     ds_merged = xr.merge([ds, ds_eddens_renamed])
     ds_merged['condensing_fraction'] = fcs.condensing_area(ds)
-    ds_merged['delta_q'] = fcs.delta_q_inst(ds_merged.PotentialVorticity)
+    ds_merged['delta_q'], ds_merged['delta_phi'] = fcs.delta_q_inst(ds_merged.PotentialVorticity)
 
     pveddens = ds_merged.PotentialVorticity_eddens.plot(ax=ax[0], color=colour, label=labels[beta])
     dq = ds_merged.delta_q.plot(ax=ax[1], color=colour)
+    dphi = ds_merged.delta_phi.plot(ax=ax[2], color=colour)
 
     ax[0].set_title('PV eddy enstrophy')
     ax[1].set_title('dq')
+    ax[2].set_title('dphi')
 
     ax[0].legend()
 
