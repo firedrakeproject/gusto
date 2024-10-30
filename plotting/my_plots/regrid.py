@@ -49,7 +49,7 @@ ds_list=[]
 for i in range(0, len(times)):
 # for i in [0, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1]:
     print(i)
-    for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity', 'tracer']:
+    for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity', 'tracer', 'rainsum', 'CO2cond_flag']:
         field_data = extract_gusto_field(data_file, field_name, time_idx=i)
         # times = np.arange(np.shape(field_data)[1])
         coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
