@@ -341,9 +341,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 for _, scheme in self.final_physics_schemes:
                     scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
 
+
+
         logger.debug("Leaving Semi-implicit Quasi-Newton timestep method")
 
-    def run(self, t, tmax, pick_up=False):
+    def run(self, t, tmax, field_to_sum, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax.
 
@@ -357,7 +359,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             assert self.reference_profiles_initialised, \
                 'Reference profiles for must be initialised to use Semi-Implicit Timestepper'
 
-        super().run(t, tmax, pick_up=pick_up)
+        super().run(t, tmax, field_to_sum, pick_up=pick_up)
 
 
 class Forcing(object):

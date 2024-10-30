@@ -141,7 +141,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         logger.info('='*40)
         logger.info(f'at start of timestep {self.step}, t={float(self.t)}, dt={float(self.dt)}')
 
-    def run(self, t, tmax, pick_up=False):
+    def run(self, t, tmax, field_to_sum, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax
 
@@ -194,6 +194,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             with timed_stage("Dump output"):
                 self.io.dump(self.fields, float(self.t), self.step, self.get_initial_timesteps())
+            
+
+            if field_to_sum is not None:
+                field_name = field_to_sum[0]
+                field = self.fields(f'{field_name}')
+                diag_name = field_to_sum[1]
+                diag = self.fields(f'{diag_name}')
+                field += diag
 
         if self.io.output.checkpoint and self.io.output.checkpoint_method == 'dumbcheckpoint':
             self.io.chkpt.close()

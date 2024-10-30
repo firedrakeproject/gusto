@@ -352,7 +352,7 @@ if restart:
 
 
 
-diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th)]
+diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography')]
 if not restart:
     output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, dumplist=['D', 'topography', 'rainsum'])
     # Transport schemes
@@ -556,10 +556,10 @@ elif restart:
 
 if confirm == 'y':
     if not restart: 
-        stepper.run(t=0, tmax=tmax)
+        stepper.run(t=0, tmax=tmax, field_to_sum=('rainsum', 'D_minus_H_rel_flag_less'))
     elif restart:
         print('restart')
-        stepper.run(t=start_time*day, tmax=tmax, pick_up=True)
+        stepper.run(t=start_time*day, tmax=tmax, pick_up=True, field_to_sum=('rainsum', 'D_minus_H_rel_flag_less'))
 else:
     print('Confirmation not given')
 
