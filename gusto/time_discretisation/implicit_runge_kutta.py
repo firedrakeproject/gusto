@@ -11,6 +11,7 @@ from gusto.core.labels import time_derivative
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
+from gusto.time_discretisation.explicit_runge_kutta import RungeKuttaFormulation
 
 
 __all__ = ["ImplicitRungeKutta", "ImplicitMidpoint", "QinZhang"]
@@ -56,8 +57,8 @@ class ImplicitRungeKutta(TimeDiscretisation):
     # ---------------------------------------------------------------------------
 
     def __init__(self, domain, butcher_matrix, field_name=None,
-                 increment_form=True, solver_parameters=None,
-                 limiter=None, options=None,):
+                 rk_formulation=RungeKuttaFormulation.increment,
+                 solver_parameters=None, options=None,):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -67,13 +68,11 @@ class ImplicitRungeKutta(TimeDiscretisation):
                 discretisation.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            increment_form (bool, optional): whether to write the RK scheme in
-                "increment form", solving for increments rather than updated
-                fields. Defaults to True.
+            rk_formulation (:class:`RungeKuttaFormulation`, optional):
+                an enumerator object, describing the formulation of the Runge-
+                Kutta scheme. Defaults to the increment form.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
-            limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
@@ -81,10 +80,10 @@ class ImplicitRungeKutta(TimeDiscretisation):
         """
         super().__init__(domain, field_name=field_name,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         options=options)
         self.butcher_matrix = butcher_matrix
         self.nStages = int(np.shape(self.butcher_matrix)[1])
-        self.increment_form = increment_form
+        self.rk_formulation = rk_formulation
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -98,8 +97,18 @@ class ImplicitRungeKutta(TimeDiscretisation):
 
         super().setup(equation, apply_bcs, *active_labels)
 
-        self.k = [Function(self.fs) for i in range(self.nStages)]
-        self.xs = [Function(self.fs) for i in range(self.nStages)]
+        if self.rk_formulation == RungeKuttaFormulation.predictor:
+            self.xs = [Function(self.fs) for _ in range(self.nStages)]
+        elif self.rk_formulation == RungeKuttaFormulation.increment:
+            self.k = [Function(self.fs) for _ in range(self.nStages)]
+        elif self.rk_formulation == RungeKuttaFormulation.linear:
+            raise NotImplementedError(
+                'Linear Implicit Runge-Kutta formulation is not implemented'
+            )
+        else:
+            raise NotImplementedError(
+                'Runge-Kutta formulation is not implemented'
+            )
 
     def lhs(self):
         return super().lhs
@@ -119,7 +128,6 @@ class ImplicitRungeKutta(TimeDiscretisation):
                                         map_if_true=replace_subject(self.x1, old_idx=self.idx))
         # Loop through stages up to s-1 and calcualte/sum
         # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
-        print(stage)
         for i in range(stage):
             r_imp = self.residual.label_map(
                 lambda t: not t.has_label(time_derivative),
@@ -164,7 +172,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
         return residual.form
 
     def solver(self, stage):
-        if self.increment_form:
+        if self.rk_formulation == RungeKuttaFormulation.increment:
             residual = self.residual.label_map(
                 lambda t: t.has_label(time_derivative),
                 map_if_true=drop,
@@ -178,7 +186,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
 
             problem = NonlinearVariationalProblem(residual.form, self.x_out, bcs=self.bcs)
 
-        else:
+        elif self.rk_formulation == RungeKuttaFormulation.predictor:
             problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
 
         solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
@@ -201,23 +209,28 @@ class ImplicitRungeKutta(TimeDiscretisation):
 
     def solve_stage(self, x0, stage):
         self.x1.assign(x0)
-        if self.increment_form:
+        if self.rk_formulation == RungeKuttaFormulation.increment:
             for i in range(stage):
                 self.x1.assign(self.x1 + self.butcher_matrix[stage, i]*self.dt*self.k[i])
 
-            if self.limiter is not None:
-                self.limiter.apply(self.x1)
-
             if self.idx is None and len(self.fs) > 1:
-                self.xnph = tuple([self.dt*self.butcher_matrix[stage, stage]*a + b
-                                  for a, b in zip(split(self.x_out), split(self.x1))])
+                self.xnph = tuple(
+                    self.dt * self.butcher_matrix[stage, stage] * a + b
+                    for a, b in zip(split(self.x_out), split(self.x1))
+                )
             else:
                 self.xnph = self.x1 + self.butcher_matrix[stage, stage]*self.dt*self.x_out
-            solver = self.solvers[stage]
-            solver.solve()
 
+            solver = self.solvers[stage]
+
+            # Set initial guess for solver
+            if (stage > 0):
+                self.x_out.assign(self.k[stage-1])
+
+            solver.solve()
             self.k[stage].assign(self.x_out)
-        else:
+
+        elif self.rk_formulation == RungeKuttaFormulation.predictor:
             if (stage > 0):
                 self.x_out.assign(self.xs[stage-1])
             solver = self.solvers[stage]
@@ -231,16 +244,13 @@ class ImplicitRungeKutta(TimeDiscretisation):
         for i in range(self.nStages):
             self.solve_stage(x_in, i)
 
-        if self.increment_form:
+        if self.rk_formulation == RungeKuttaFormulation.increment:
             x_out.assign(x_in)
             for i in range(self.nStages):
                 x_out.assign(x_out + self.butcher_matrix[self.nStages, i]*self.dt*self.k[i])
-        else:
+        elif self.rk_formulation == RungeKuttaFormulation.predictor:
             self.final_solver.solve()
             x_out.assign(self.x_out)
-
-        if self.limiter is not None:
-            self.limiter.apply(x_out)
 
 
 class ImplicitMidpoint(ImplicitRungeKutta):
@@ -253,21 +263,20 @@ class ImplicitMidpoint(ImplicitRungeKutta):
     k0 = F[y^n + 0.5*dt*k0]                                                   \n
     y^(n+1) = y^n + dt*k0                                                     \n
     """
-    def __init__(self, domain, field_name=None, increment_form=True,
-                 solver_parameters=None, limiter=None, options=None):
+    def __init__(self, domain, field_name=None,
+                 rk_formulation=RungeKuttaFormulation.increment,
+                 solver_parameters=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            increment_form (bool, optional): whether to write the RK scheme in
-                "increment form", solving for increments rather than updated
-                fields. Defaults to True.
+            rk_formulation (:class:`RungeKuttaFormulation`, optional):
+                an enumerator object, describing the formulation of the Runge-
+                Kutta scheme. Defaults to the increment form.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
-            limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
@@ -275,9 +284,9 @@ class ImplicitMidpoint(ImplicitRungeKutta):
         """
         butcher_matrix = np.array([[0.5], [1.]])
         super().__init__(domain, butcher_matrix, field_name,
-                         increment_form=increment_form,
+                         rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         options=options)
 
 
 class QinZhang(ImplicitRungeKutta):
@@ -291,21 +300,20 @@ class QinZhang(ImplicitRungeKutta):
     k1 = F[y^n + 0.5*dt*k0 + 0.25*dt*k1]                                      \n
     y^(n+1) = y^n + 0.5*dt*(k0 + k1)                                          \n
     """
-    def __init__(self, domain, field_name=None, increment_form=True,
-                 solver_parameters=None, limiter=None, options=None):
+    def __init__(self, domain, field_name=None,
+                 rk_formulation=RungeKuttaFormulation.increment,
+                 solver_parameters=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            increment_form (bool, optional): whether to write the RK scheme in
-                "increment form", solving for increments rather than updated
-                fields. Defaults to True.
+            rk_formulation (:class:`RungeKuttaFormulation`, optional):
+                an enumerator object, describing the formulation of the Runge-
+                Kutta scheme. Defaults to the increment form.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
-            limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
@@ -313,6 +321,6 @@ class QinZhang(ImplicitRungeKutta):
         """
         butcher_matrix = np.array([[0.25, 0], [0.5, 0.25], [0.5, 0.5]])
         super().__init__(domain, butcher_matrix, field_name,
-                         increment_form=increment_form,
+                         rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         options=options)

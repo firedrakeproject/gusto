@@ -9,10 +9,13 @@ def run(timestepper, tmax, f_end):
 
 
 @pytest.mark.parametrize(
-    "scheme", ["ssprk3_increment", "TrapeziumRule", "ImplicitMidpoint",
-               "QinZhang_increment", "QinZhang_predictor",
-               "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth",
-               "Leapfrog", "AdamsMoulton", "AdamsMoulton", "ssprk3_predictor"])
+    "scheme", [
+        "ssprk3_increment", "TrapeziumRule", "ImplicitMidpoint",
+        "QinZhang_increment", "QinZhang_predictor",
+        "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth", "Leapfrog",
+        "AdamsMoulton", "ssprk3_predictor", "ssprk3_linear"
+    ]
+)
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
     if (scheme == "AdamsBashforth"):
         # Tighter stability constraints
@@ -29,17 +32,19 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         eqn = AdvectionEquation(domain, V, "f")
 
     if scheme == "ssprk3_increment":
-        transport_scheme = SSPRK3(domain, increment_form=True)
+        transport_scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.increment)
     elif scheme == "ssprk3_predictor":
-        transport_scheme = SSPRK3(domain, increment_form=False)
+        transport_scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.predictor)
+    elif scheme == "ssprk3_linear":
+        transport_scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.linear)
     elif scheme == "TrapeziumRule":
         transport_scheme = TrapeziumRule(domain)
     elif scheme == "ImplicitMidpoint":
         transport_scheme = ImplicitMidpoint(domain)
     elif scheme == "QinZhang_increment":
-        transport_scheme = QinZhang(domain, increment_form=True)
+        transport_scheme = QinZhang(domain, rk_formulation=RungeKuttaFormulation.increment)
     elif scheme == "QinZhang_predictor":
-        transport_scheme = QinZhang(domain, increment_form=False)
+        transport_scheme = QinZhang(domain, rk_formulation=RungeKuttaFormulation.predictor)
     elif scheme == "RK4":
         transport_scheme = RK4(domain)
     elif scheme == "Heun":
