@@ -141,7 +141,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         logger.info('='*40)
         logger.info(f'at start of timestep {self.step}, t={float(self.t)}, dt={float(self.dt)}')
 
-    def run(self, t, tmax, field_to_sum, pick_up=False):
+    def run(self, t, tmax, field_to_sum=None, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax
 

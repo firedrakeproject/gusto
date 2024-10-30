@@ -345,7 +345,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         logger.debug("Leaving Semi-implicit Quasi-Newton timestep method")
 
-    def run(self, t, tmax, field_to_sum, pick_up=False):
+    def run(self, t, tmax, field_to_sum=None, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax.
 

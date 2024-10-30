@@ -47,18 +47,21 @@ rel_sch = 'both'
 include_co2 = 'yes'
 
 # do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
-restart = False
-restart_name = 'Relax_to_annulus/annular_vortex_mars_60-70_PVmax--1-8_PVpole--0-8_tau_r--2sol_A0-0-norel_len-300sols_tracer_tophat'
+restart = True
+restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-4sols_tracer_tophat-80'
 
 # length of this run, time to start from (only relevant if doing a restart)
-rundays = 5
-start_time = 300
+rundays = 3
+start_time = 4
 dt = 450.
 
 # do you want a tracer or not. Edge of tophat function for tracer, north of this the tracer is intialised as 1, south is 0
 # if running a restart, True introduces a new tracer whilst False still maintains the old one
 tracer = True
 hat_edge = 80
+
+# field_to_sum = ('rainsum', 'D_minus_H_rel_flag_less')
+field_to_sum=None
 
 # any extra info to include in the directory name
 extra_name = ''
@@ -269,6 +272,20 @@ def initial_profiles(omega, radius, phiss, phinn, annulus, **kwargs):
 
     return rlat, uini, thini
 
+def new_groups(input_file, output_file, names):
+    with nc.Dataset(input_file, 'r') as src:
+        with nc.Dataset(output_file, 'a') as dst:
+            PV_group = src.groups['PotentialVorticity']
+            for name in names:
+                if name not in dst.groups:
+                    new_group = dst.createGroup(f'{name}')
+                    for var_name, variable in PV_group.variables.items():
+                        var_dims = variable.dimensions
+                        new_var = new_group.createVariable(var_name, variable.datatype, var_dims)
+                        new_var[:] = np.zeros_like(variable[:])
+                        for attr in variable.ncattrs():
+                            new_var.setncattr(attr, variable.getncattr(attr))
+
 rlat, uini, hini = initial_profiles(Omega, R, phis, phin, annulus=True, pvpole=pvpole, pvmax=pvmax)
 rlat_mp, uini_mp, hini_mp = initial_profiles(Omega, R, phimp, phin, annulus=False)
 h_th = min(hini)*beta+H
@@ -304,6 +321,10 @@ if not restart:
 
     # H_rel = Function(domain.spaces('L2'))
 
+diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography')]
+dumplist = ['D', 'topography', 'rainsum']
+groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'rainsum', 'D_plus_topography']
+
 # I/O (input/output)
 homepath = '/data/home/sh1293/results'
 dirnameold = f'{homepath}/{restart_name}'
@@ -318,51 +339,38 @@ if restart:
     input_file = f'{dirnameold}/field_output.nc'
     output_file = f'{dirpath}/field_output.nc'
 
-    # Open the original NetCDF file
-    with nc.Dataset(input_file, 'r') as src:
-        # Open the target NetCDF file in append mode
-        with nc.Dataset(output_file, 'a') as dst:
-            
-            # Check if the 'tracer' group exists in the source file
-            if 'tracer' in src.groups:
-                tracer_group = src.groups['tracer']
+    new_groups(input_file, output_file, groups)
+                        
+
+# sort out variables in new netcdf
+    # with nc.Dataset(input_file, 'r') as src:
+    #     with nc.Dataset(output_file, 'a') as dst:
+    #         if 'tracer' in src.groups:
+    #             tracer_group = src.groups['tracer']
+    #             tracer_rs_group = dst.createGroup('tracer_rs')
+    #             for var_name, variable in tracer_group.variables.items():
+    #                 var_dims = variable.dimensions
+    #                 new_var = tracer_rs_group.createVariable(var_name, variable.datatype, var_dims)
+    #                 new_var[:] = np.zeros_like(variable[:])
+    #                 for attr in variable.ncattrs():
+    #                     new_var.setncattr(attr, variable.getncattr(attr))
                 
-                # Create a new group 'tracer_rs' in the destination file
-                tracer_rs_group = dst.createGroup('tracer_rs')
-                
-                # Loop through all the variables in the 'tracer' group
-                for var_name, variable in tracer_group.variables.items():
-                    
-                    # Get the variable's dimensions
-                    var_dims = variable.dimensions
-                    
-                    # Create a new variable in 'tracer_rs' with the same data type and dimensions
-                    new_var = tracer_rs_group.createVariable(var_name, variable.datatype, var_dims)
-                    
-                    # Copy the data from the original variable to the new variable
-                    new_var[:] = np.zeros_like(variable[:])
-                    
-                    # Copy attributes of the original variable
-                    for attr in variable.ncattrs():
-                        new_var.setncattr(attr, variable.getncattr(attr))
-                
-                print(f"Copied 'tracer' group to 'tracer_rs' group in {output_file}")
-            else:
-                print("'tracer' group not found in the source file.")
+    #             print(f"Copied 'tracer' group to 'tracer_rs' group in {output_file}")
+    #         else:
+    #             print("'tracer' group not found in the source file.")
 
 
 
-diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography')]
+
 if not restart:
-    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, dumplist=['D', 'topography', 'rainsum'])
+    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, dumplist=dumplist)
     # Transport schemes
     transported_fields = [TrapeziumRule(domain, "u"),
                         SSPRK3(domain, "D")]
     tracer_transport = [(tracer_eqn, SSPRK3(domain))]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer")]
 elif restart:
-    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5',
-                                dumplist=['D', 'topography', 'rainsum'])
+    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5', dumplist=dumplist)
 
     chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
     mesh = chkpt_mesh
@@ -374,7 +382,7 @@ elif restart:
     fexpr = 2*Omega*x[2]/R
     lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
     bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr, extra_fields='rainsum')
     tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
     rs_tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer_rs")
     # estimate core count for Pileus
@@ -556,10 +564,10 @@ elif restart:
 
 if confirm == 'y':
     if not restart: 
-        stepper.run(t=0, tmax=tmax, field_to_sum=('rainsum', 'D_minus_H_rel_flag_less'))
+        stepper.run(t=0, tmax=tmax, field_to_sum=field_to_sum)
     elif restart:
         print('restart')
-        stepper.run(t=start_time*day, tmax=tmax, pick_up=True, field_to_sum=('rainsum', 'D_minus_H_rel_flag_less'))
+        stepper.run(t=start_time*day, tmax=tmax, pick_up=True, field_to_sum=field_to_sum)
 else:
     print('Confirmation not given')
 
