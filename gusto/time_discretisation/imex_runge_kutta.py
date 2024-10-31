@@ -127,6 +127,11 @@ class IMEXRungeKutta(TimeDiscretisation):
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        eos = residual.label_map(lambda t: any(t.has_label(eos_mass,eos_form)),
+                        map_if_false= drop)
+        eos = eos.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual += eos
         # Loop through stages up to s-1 and calcualte/sum
         # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
         # and
@@ -157,14 +162,8 @@ class IMEXRungeKutta(TimeDiscretisation):
             lambda t: t.has_label(time_derivative),
             map_if_false=lambda t: Constant(self.butcher_imp[stage, stage])*self.dt*t)
         residual += r_imp
-        eos_mass_term = self.residual.label_map(lambda t: t.has_label(eos_mass),
-                                            map_if_false=drop)
-        eos_form_term = self.residual.label_map(lambda t: t.has_label(eos_form),
-                                            map_if_false=drop)
-        residual += eos_mass_term.label_map(all_terms,
-                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        residual +=  eos_form_term.label_map(all_terms,
-                                       map_if_true=replace_subject(self.x1, old_idx=self.idx))
+
+
         return residual.form
 
     @property
@@ -175,8 +174,13 @@ class IMEXRungeKutta(TimeDiscretisation):
                                             map_if_false=drop)
         residual = mass_form.label_map(all_terms,
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        residual += mass_form.label_map(all_terms,
+        residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        eos = residual.label_map(lambda t: any(t.has_label(eos_mass,eos_form)),
+                        map_if_false= drop)
+        eos = eos.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual += eos
         # Loop through stages up to s-1 and calcualte/sum
         # dt*(b_1*F(y_1) + b_2*F(y_2) + .... + b_s*F(y_s))
         # and
@@ -198,14 +202,6 @@ class IMEXRungeKutta(TimeDiscretisation):
                 map_if_false=lambda t: Constant(self.butcher_imp[self.nStages, i])*self.dt*t)
             residual += r_imp
             residual += r_exp
-        eos_mass_term = self.residual.label_map(lambda t: t.has_label(eos_mass),
-                                            map_if_false=drop)
-        eos_form_term = self.residual.label_map(lambda t: t.has_label(eos_form),
-                                            map_if_false=drop)
-        residual += eos_mass_term.label_map(all_terms,
-                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        residual +=  eos_form_term.label_map(all_terms,
-                                       map_if_true=replace_subject(self.x1, old_idx=self.idx))
         return residual.form
 
     @cached_property

@@ -23,7 +23,8 @@ from gusto import (
     CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
     compressible_hydrostatic_balance, logger, RichardsonNumber,
     time_derivative, transport, implicit, explicit, split_continuity_form,
-    IMEXRungeKutta,  Timestepper, thermodynamics, eos_form, eos_mass
+    IMEXRungeKutta,  Timestepper, thermodynamics, eos_form, eos_mass,
+    ImplicitMidpoint
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -77,8 +78,8 @@ def skamarock_klemp_nonhydrostatic(
     eqns = CompressibleEulerEquations(domain, parameters)
     # Check number of optimal cores
     # print("Opt Cores:", eqns.X.function_space().dim()/50000.)
-    # eqns = split_continuity_form(eqns)
-    # eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport, eos_form, eos_mass)), implicit)
+    eqns = split_continuity_form(eqns)
+    eqns.label_terms(lambda t: not any(t.has_label(time_derivative, eos_form, eos_mass)), implicit)
     # eqns.label_terms(lambda t: t.has_label(transport), explicit)
 
     # I/O
@@ -148,11 +149,12 @@ def skamarock_klemp_nonhydrostatic(
 
     # IMEX time stepper
 
-    # butcher_imp = np.array([[0.0, 0.0], [0.0, 0.5], [0.0, 1.]])
-    # butcher_exp = np.array([[0.0, 0.0], [0.5, 0.0], [0.0, 1.]])
-    # scheme = IMEXRungeKutta(domain, butcher_imp, butcher_exp, solver_parameters=nl_solver_parameters)
-    scheme = TrapeziumRule(domain, solver_parameters=nl_solver_parameters)
+    butcher_imp =np.array([[0.5], [1.]])
+    butcher_exp = np.array([[0.5], [1.]])
+    scheme = IMEXRungeKutta(domain, butcher_imp, butcher_exp, solver_parameters=nl_solver_parameters)
+    #scheme = TrapeziumRule(domain, solver_parameters=nl_solver_parameters)
     #Time stepper
+    scheme=ImplicitMidpoint(domain, solver_parameters=nl_solver_parameters)
     stepper = Timestepper(eqns, scheme, io, transport_methods)
 
 

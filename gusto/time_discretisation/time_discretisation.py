@@ -556,10 +556,10 @@ class ThetaMethod(TimeDiscretisation):
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
-            lambda t: not t.has_label(eos_form),
+            all_terms,
             map_if_true=replace_subject(self.x_out, old_idx=self.idx),
             map_if_false=drop)
-        l = l.label_map(lambda t: any(t.has_label(time_derivative, eos_mass)),
+        l = l.label_map(lambda t: any(t.has_label(time_derivative, eos_mass, eos_form)),
                         map_if_false=lambda t: self.theta*self.dt*t)
 
         return l.form
@@ -568,10 +568,10 @@ class ThetaMethod(TimeDiscretisation):
     def rhs(self):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
-            lambda t: not t.has_label(eos_mass),
+            lambda t: not any(t.has_label(eos_mass, eos_form)),
             map_if_true=replace_subject(self.x1, old_idx=self.idx),
             map_if_false=drop)
-        r = r.label_map(lambda t: any(t.has_label(time_derivative, eos_form)),
+        r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -(1-self.theta)*self.dt*t)
 
         return r.form
