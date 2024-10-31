@@ -19,7 +19,7 @@ from firedrake import (
 import numpy as np
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, SUPGOptions, CourantNumber, Perturbation, Gradient,
+    SUPGOptions, CourantNumber, Perturbation, Gradient,
     CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
     compressible_hydrostatic_balance, logger, RichardsonNumber,
     time_derivative, transport, implicit, explicit, split_continuity_form,
@@ -151,10 +151,10 @@ def skamarock_klemp_nonhydrostatic(
 
     butcher_imp =np.array([[0.5], [1.]])
     butcher_exp = np.array([[0.5], [1.]])
-    scheme = IMEXRungeKutta(domain, butcher_imp, butcher_exp, solver_parameters=nl_solver_parameters)
+    scheme = IMEXRungeKutta(domain, butcher_imp, butcher_exp, nonlinear_solver_parameters=nl_solver_parameters)
     #scheme = TrapeziumRule(domain, solver_parameters=nl_solver_parameters)
     #Time stepper
-    scheme=ImplicitMidpoint(domain, solver_parameters=nl_solver_parameters)
+    #scheme=ImplicitMidpoint(domain, solver_parameters=nl_solver_parameters)
     stepper = Timestepper(eqns, scheme, io, transport_methods)
 
 
