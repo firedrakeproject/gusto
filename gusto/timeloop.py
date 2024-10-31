@@ -770,22 +770,29 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                  # # # # # # # # # #
                 # # ultra-fast physics
-                # x_after_ultra_fast(self.field_name).assign(xnp1(self.field_name))
-                # if len(self.ultra_fast_physics_schemes) > 0:
-                #     with timed_stage("Ultra-fast physics"):
-                #         logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
-                #         for _, scheme in self.ultra_fast_physics_schemes:
-                #             scheme.apply(x_after_ultra_fast(scheme.field_name), x_after_ultra_fast(scheme.field_name))
+                if outer == 0 and inner == 0:
+                    x_after_ultra_fast(self.field_name).assign(xp(self.field_name))
+                else:
+                    x_after_ultra_fast(self.field_name).assign(xnp1(self.field_name))
+                    self.copy_active_tracers(xp, x_after_ultra_fast)
+                if len(self.ultra_fast_physics_schemes) > 0:
+                    with timed_stage("Ultra-fast physics"):
+                        logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
+                        for _, scheme in self.ultra_fast_physics_schemes:
+                            scheme.apply(x_after_ultra_fast(scheme.field_name), x_after_ultra_fast(scheme.field_name))
 
-                # xrhs_inner_phys.assign(x_after_ultra_fast(self.field_name) - xnp1(self.field_name))
-                # # for f in xrhs_inner_phys.subfunctions:
-                # #     print("x rhs inner phys: ", f.dat.data.min(), f.dat.data.max())
-                # xrhs += xrhs_inner_phys
+                if outer == 0 and inner == 0:
+                    xrhs_inner_phys.assign(x_after_ultra_fast(self.field_name) - xp(self.field_name))
+                else:
+                    xrhs_inner_phys.assign(x_after_ultra_fast(self.field_name) - xnp1(self.field_name))
+                # for f in xrhs_inner_phys.subfunctions:
+                #     print("x rhs inner phys: ", f.dat.data.min(), f.dat.data.max())
+                xrhs += xrhs_inner_phys
 
                 # # # # # # # # #
 
                 xrhs -= xnp1(self.field_name)
-                # xrhs += xrhs_phys
+                xrhs += xrhs_phys
 
                 with timed_stage("Implicit solve"):
                     logger.info(f'SIQN: Mixed solve {(outer, inner)}')
@@ -796,11 +803,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                 # # # # # # # # # #
                 # ultra-fast physics after linear solve
-                if len(self.ultra_fast_physics_schemes) > 0:
-                    with timed_stage("Ultra-fast physics"):
-                        logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
-                        for _, scheme in self.ultra_fast_physics_schemes:
-                            scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
+                # if len(self.ultra_fast_physics_schemes) > 0:
+                #     with timed_stage("Ultra-fast physics"):
+                #         logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
+                #         for _, scheme in self.ultra_fast_physics_schemes:
+                #             scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
                  # # # # # # # # # #
 
 
