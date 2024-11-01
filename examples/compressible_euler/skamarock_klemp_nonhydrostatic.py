@@ -19,9 +19,10 @@ from firedrake import (
 import numpy as np
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, SUPGOptions, CourantNumber, Perturbation, Gradient,
+    SUPGOptions, CourantNumber, Perturbation, Gradient,
     CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
-    compressible_hydrostatic_balance, logger, RichardsonNumber
+    compressible_hydrostatic_balance, logger, RichardsonNumber,
+    RungeKuttaFormulation
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -106,13 +107,13 @@ def skamarock_klemp_nonhydrostatic(
     # Transport schemes
     theta_opts = SUPGOptions()
     transported_fields = [
-        TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "rho"),
-        SSPRK3(domain, "theta", options=theta_opts)
+        SSPRK3(domain, "u", subcycle_by_courant=0.25),
+        SSPRK3(domain, "rho", subcycle_by_courant=0.25, rk_formulation=RungeKuttaFormulation.linear),
+        SSPRK3(domain, "theta", subcycle_by_courant=0.25, options=theta_opts)
     ]
     transport_methods = [
         DGUpwind(eqns, "u"),
-        DGUpwind(eqns, "rho"),
+        DGUpwind(eqns, "rho", advective_then_flux=True),
         DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
     ]
 
