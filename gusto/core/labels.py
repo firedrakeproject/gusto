@@ -97,9 +97,12 @@ prognostic = Label("prognostic", validator=lambda value: type(value) == str)
 linearisation = Label("linearisation", validator=lambda value: type(value) in [LabelledForm, Term])
 mass_weighted = Label("mass_weighted", validator=lambda value: type(value) in [LabelledForm, Term])
 ibp_label = Label("ibp", validator=lambda value: type(value) == IntegrateByParts)
+all_but_last = Label("all_but_last", validator=lambda value: type(value) in [LabelledForm, Term])
+
 
 # labels for terms in the equations
 time_derivative = Label("time_derivative")
+nonlinear_time_derivative = Label("nonlinear_time_derivative")
 transport = Label("transport",
                   validator=lambda value: type(value) == TransportEquationType)
 diffusion = Label("diffusion")

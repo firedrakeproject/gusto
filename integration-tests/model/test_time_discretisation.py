@@ -9,9 +9,12 @@ def run(timestepper, tmax, f_end):
 
 
 @pytest.mark.parametrize(
-    "scheme", ["ssprk3_increment", "TrapeziumRule", "ImplicitMidpoint",
-               "QinZhang", "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth",
-               "Leapfrog", "AdamsMoulton", "AdamsMoulton", "ssprk3_predictor"])
+    "scheme", [
+        "ssprk3_increment", "TrapeziumRule", "ImplicitMidpoint", "QinZhang",
+        "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth", "Leapfrog",
+        "AdamsMoulton", "AdamsMoulton", "ssprk3_predictor", "ssprk3_linear"
+    ]
+)
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
     if (scheme == "AdamsBashforth"):
         # Tighter stability constraints
@@ -28,9 +31,11 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         eqn = AdvectionEquation(domain, V, "f")
 
     if scheme == "ssprk3_increment":
-        transport_scheme = SSPRK3(domain, increment_form=True)
+        transport_scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.increment)
     elif scheme == "ssprk3_predictor":
-        transport_scheme = SSPRK3(domain, increment_form=False)
+        transport_scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.predictor)
+    elif scheme == "ssprk3_linear":
+        transport_scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.linear)
     elif scheme == "TrapeziumRule":
         transport_scheme = TrapeziumRule(domain)
     elif scheme == "ImplicitMidpoint":

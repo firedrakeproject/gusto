@@ -56,7 +56,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
     # ---------------------------------------------------------------------------
 
     def __init__(self, domain, butcher_matrix, field_name=None,
-                 solver_parameters=None, limiter=None, options=None,):
+                 solver_parameters=None, options=None,):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -68,8 +68,6 @@ class ImplicitRungeKutta(TimeDiscretisation):
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
-            limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
@@ -77,7 +75,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
         """
         super().__init__(domain, field_name=field_name,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         options=options)
         self.butcher_matrix = butcher_matrix
         self.nStages = int(np.shape(self.butcher_matrix)[1])
 
@@ -131,15 +129,16 @@ class ImplicitRungeKutta(TimeDiscretisation):
         for i in range(stage):
             self.x1.assign(self.x1 + self.butcher_matrix[stage, i]*self.dt*self.k[i])
 
-        if self.limiter is not None:
-            self.limiter.apply(self.x1)
-
         if self.idx is None and len(self.fs) > 1:
             self.xnph = tuple([self.dt*self.butcher_matrix[stage, stage]*a + b
                                for a, b in zip(split(self.x_out), split(self.x1))])
         else:
             self.xnph = self.x1 + self.butcher_matrix[stage, stage]*self.dt*self.x_out
         solver = self.solvers[stage]
+        # Set initial guess for solver
+        if (stage > 0):
+            self.x_out.assign(self.k[stage-1])
+
         solver.solve()
 
         self.k[stage].assign(self.x_out)
@@ -154,9 +153,6 @@ class ImplicitRungeKutta(TimeDiscretisation):
         for i in range(self.nStages):
             x_out.assign(x_out + self.butcher_matrix[self.nStages, i]*self.dt*self.k[i])
 
-        if self.limiter is not None:
-            self.limiter.apply(x_out)
-
 
 class ImplicitMidpoint(ImplicitRungeKutta):
     u"""
@@ -169,7 +165,7 @@ class ImplicitMidpoint(ImplicitRungeKutta):
     y^(n+1) = y^n + dt*k0                                                     \n
     """
     def __init__(self, domain, field_name=None, solver_parameters=None,
-                 limiter=None, options=None):
+                 options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -178,8 +174,6 @@ class ImplicitMidpoint(ImplicitRungeKutta):
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
-            limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
@@ -188,7 +182,7 @@ class ImplicitMidpoint(ImplicitRungeKutta):
         butcher_matrix = np.array([[0.5], [1.]])
         super().__init__(domain, butcher_matrix, field_name,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         options=options)
 
 
 class QinZhang(ImplicitRungeKutta):
@@ -203,7 +197,7 @@ class QinZhang(ImplicitRungeKutta):
     y^(n+1) = y^n + 0.5*dt*(k0 + k1)                                          \n
     """
     def __init__(self, domain, field_name=None, solver_parameters=None,
-                 limiter=None, options=None):
+                 options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -212,8 +206,6 @@ class QinZhang(ImplicitRungeKutta):
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
-            limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
@@ -222,4 +214,4 @@ class QinZhang(ImplicitRungeKutta):
         butcher_matrix = np.array([[0.25, 0], [0.5, 0.25], [0.5, 0.5]])
         super().__init__(domain, butcher_matrix, field_name,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         options=options)
