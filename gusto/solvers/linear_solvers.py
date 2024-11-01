@@ -666,7 +666,7 @@ class ThermalSWSolver(TimesteppingSolver):
             - beta_u * 0.5 * bbar * div(w*(D-Dbar)) * dx
             + beta_u * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
             + inner(phi, (D - D_in)) * dx
-            + beta_d * phi * Dbar * div(u) * dx
+            + beta_d * phi * div(Dbar*u) * dx
         )
 
         if 'coriolis' in equation.prescribed_fields._field_names:
@@ -882,7 +882,7 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
             inner(w, (u - u_in)) * dx
             - beta_u * (D - Dbar) * div(w*g) * dx
             + inner(phi, (D - D_in)) * dx
-            + beta_d * phi * Dbar * div(u) * dx
+            + beta_d * phi * div(Dbar*u) * dx
         )
 
         if 'coriolis' in equation.prescribed_fields._field_names:
