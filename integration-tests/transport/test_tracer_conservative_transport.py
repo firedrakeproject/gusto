@@ -105,7 +105,9 @@ def setup_conservative_transport(dirname, pair_of_spaces, desirable_property):
 
     opts = MixedFSOptions(suboptions=suboptions)
 
-    transport_scheme = SSPRK3(domain, options=opts, increment_form=False)
+    transport_scheme = SSPRK3(
+        domain, options=opts, rk_formulation=RungeKuttaFormulation.predictor
+    )
     transport_methods = [DGUpwind(eqn, "m_X"), DGUpwind(eqn, "rho_d")]
 
     # Timestepper
