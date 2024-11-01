@@ -70,7 +70,7 @@ logfile_level = os.environ.get("GUSTO_FILE_LOG_LEVEL", DEBUG)
 logconsole_level = os.environ.get("GUSTO_CONSOLE_LOG_LEVEL", INFO)
 log_level_list = [log_level, logfile_level, logconsole_level]
 log_levels = [
-    logging.getLevelNamesMapping().get(x) if isinstance(x, str)
+    logging.getLevelName(x) if isinstance(x, str)
     else x
     for x in log_level_list
 ]
