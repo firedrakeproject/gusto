@@ -12,9 +12,9 @@ from firedrake import (
 )
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations, Sum,
+    ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, GeneralIcosahedralSphereMesh, ZonalComponent,
-    MeridionalComponent, RelativeVorticity
+    MeridionalComponent, RelativeVorticity, RungeKuttaFormulation
 )
 
 williamson_5_defaults = {
@@ -84,8 +84,14 @@ def williamson_5(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"), SSPRK3(domain, "D")]
-    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
+    transported_fields = [
+        SSPRK3(domain, "u", subcycle_by_courant=0.25),
+        SSPRK3(domain, "D", subcycle_by_courant=0.25, rk_formulation=RungeKuttaFormulation.linear)
+    ]
+    transport_methods = [
+        DGUpwind(eqns, "u"),
+        DGUpwind(eqns, "D", advective_then_flux=True)
+    ]
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
