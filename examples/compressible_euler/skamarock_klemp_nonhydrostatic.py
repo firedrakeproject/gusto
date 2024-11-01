@@ -24,7 +24,7 @@ from gusto import (
     compressible_hydrostatic_balance, logger, RichardsonNumber,
     time_derivative, transport, implicit, explicit, split_continuity_form,
     IMEXRungeKutta,  Timestepper, thermodynamics, eos_form, eos_mass,
-    ImplicitMidpoint
+    ImplicitMidpoint, RungeKuttaFormulation
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -78,7 +78,7 @@ def skamarock_klemp_nonhydrostatic(
     eqns = CompressibleEulerEquations(domain, parameters)
     # Check number of optimal cores
     # print("Opt Cores:", eqns.X.function_space().dim()/50000.)
-    eqns = split_continuity_form(eqns)
+    #eqns = split_continuity_form(eqns)
     eqns.label_terms(lambda t: not any(t.has_label(time_derivative, eos_form, eos_mass)), implicit)
     # eqns.label_terms(lambda t: t.has_label(transport), explicit)
 
@@ -154,7 +154,7 @@ def skamarock_klemp_nonhydrostatic(
     scheme = IMEXRungeKutta(domain, butcher_imp, butcher_exp, nonlinear_solver_parameters=nl_solver_parameters)
     #scheme = TrapeziumRule(domain, solver_parameters=nl_solver_parameters)
     #Time stepper
-    #scheme=ImplicitMidpoint(domain, solver_parameters=nl_solver_parameters)
+    scheme=ImplicitMidpoint(domain, solver_parameters=nl_solver_parameters, rk_formulation=RungeKuttaFormulation.predictor,)
     stepper = Timestepper(eqns, scheme, io, transport_methods)
 
 

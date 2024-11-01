@@ -7,7 +7,7 @@ from firedrake import (Function, split, NonlinearVariationalProblem,
 from firedrake.fml import replace_subject, all_terms, drop
 from firedrake.utils import cached_property
 
-from gusto.core.labels import time_derivative
+from gusto.core.labels import time_derivative, eos_form, eos_mass
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
@@ -126,11 +126,16 @@ class ImplicitRungeKutta(TimeDiscretisation):
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        eos = residual.label_map(lambda t: any(t.has_label(eos_mass,eos_form)),
+                        map_if_false= drop)
+        eos = eos.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual += eos
         # Loop through stages up to s-1 and calcualte/sum
         # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
         for i in range(stage):
             r_imp = self.residual.label_map(
-                lambda t: not t.has_label(time_derivative),
+                lambda t: not any(t.has_label(time_derivative, eos_form, eos_mass)),
                 map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
                 map_if_false=drop)
             r_imp = r_imp.label_map(
@@ -139,7 +144,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
             residual += r_imp
         # Calculate and add on dt*a_ss*F(y_s)
         r_imp = self.residual.label_map(
-            lambda t: not t.has_label(time_derivative),
+            lambda t: not any(t.has_label(time_derivative,eos_mass,eos_form)),
             map_if_true=replace_subject(self.x_out, old_idx=self.idx),
             map_if_false=drop)
         r_imp = r_imp.label_map(
@@ -158,11 +163,18 @@ class ImplicitRungeKutta(TimeDiscretisation):
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        eos = residual.label_map(lambda t: any(t.has_label(eos_mass,eos_form)),
+                        map_if_false= drop)
+        eos = eos.label_map(lambda t: t.has_label(eos_mass),
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        eos = eos.label_map(lambda t: t.has_label(eos_form),
+                                       map_if_true=replace_subject(self.xs[-1], old_idx=self.idx))
+        residual += eos
         # Loop through stages up to s-1 and calcualte/sum
         # dt*(b_1*F(y_1) + b_2*F(y_2) + .... + b_s*F(y_s))
         for i in range(self.nStages):
             r_imp = self.residual.label_map(
-                lambda t: not t.has_label(time_derivative),
+                lambda t: not any(t.has_label(time_derivative, eos_form, eos_mass)),
                 map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
                 map_if_false=drop)
             r_imp = r_imp.label_map(
@@ -196,9 +208,12 @@ class ImplicitRungeKutta(TimeDiscretisation):
     def final_solver(self):
         """Set up a solver for the final solve to evaluate time level n+1."""
         # setup solver using lhs and rhs defined in derived class
+        solver_parameters = {   'ksp_type': 'cg',
+                                      'pc_type': 'bjacobi',
+                                      'sub_pc_type': 'ilu'}
         problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=solver_parameters, options_prefix=solver_name)
 
     @cached_property
     def solvers(self):
@@ -249,6 +264,8 @@ class ImplicitRungeKutta(TimeDiscretisation):
             for i in range(self.nStages):
                 x_out.assign(x_out + self.butcher_matrix[self.nStages, i]*self.dt*self.k[i])
         elif self.rk_formulation == RungeKuttaFormulation.predictor:
+            print("DOING FINAL SOLVE")
+            self.x_out.assign(self.xs[-1])
             self.final_solver.solve()
             x_out.assign(self.x_out)
 

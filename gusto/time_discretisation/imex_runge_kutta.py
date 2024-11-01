@@ -238,7 +238,11 @@ class IMEXRungeKutta(TimeDiscretisation):
     @cached_property
     def final_solver(self):
         """Set up a solver for the final solve to evaluate time level n+1."""
-        # setup solver using lhs and rhs defined in derived class
+        # setup solver using lhs and rhs defined in derived
+        solver_parameters = {   'snes_type': 'ksponly',
+                                'ksp_type': 'cg',
+                                      'pc_type': 'bjacobi',
+                                      'sub_pc_type': 'ilu'}
         problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.linear_solver_parameters, options_prefix=solver_name)
