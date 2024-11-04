@@ -4,7 +4,7 @@ from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import replace_subject, all_terms, drop
 from firedrake.utils import cached_property
-from gusto.core.labels import time_derivative, implicit, explicit
+from gusto.core.labels import time_derivative, implicit, explicit, prognostic
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
@@ -236,6 +236,26 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.x1.assign(x_in)
         self.x_out.assign(x_in)
         solver_list = self.solvers
+        u_form = self.residual.label_map(lambda t: t.get(prognostic) =='u',
+                                         map_if_false=drop)
+        rho_form = self.residual.label_map(lambda t: t.get(prognostic) =='rho',
+                                         map_if_false=drop)
+        theta_form = self.residual.label_map(lambda t: t.get(prognostic) =='theta',
+                                         map_if_false=drop)
+        water_vapour_form = self.residual.label_map(lambda t: t.get(prognostic) =='water_vapour',
+                                         map_if_false=drop)
+        cloud_liquid_form = self.residual.label_map(lambda t: t.get(prognostic) =='cloud_liquid',
+                                         map_if_false=drop)
+        print("u_form")
+        print(u_form.form.__str__())
+        print("rho_form")
+        print(rho_form.form.__str__())
+        print("theta_form")
+        print(theta_form.form.__str__())
+        print("water_vapour_form")
+        print(water_vapour_form.form.__str__())
+        print("cloud_liquid_form")
+        print(cloud_liquid_form.form.__str__())
 
         for stage in range(self.nStages):
             self.solver = solver_list[stage]

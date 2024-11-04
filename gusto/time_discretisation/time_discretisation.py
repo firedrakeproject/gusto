@@ -222,7 +222,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     self.wrapper.setup(self.wrapper_field_name)
                 else:
                     self.wrapper.setup(self.fs, wrapper_bcs)
-                self.fs = self.wrapper.function_space
+                    self.fs = self.wrapper.function_space
                 if self.solver_parameters is None:
                     self.solver_parameters = self.wrapper.solver_parameters
                 new_test = TestFunction(self.wrapper.test_space)
