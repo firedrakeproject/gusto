@@ -305,9 +305,13 @@ class SUPGWrapper(Wrapper):
             'SUPG wrapper can only be used with SUPG Options'
 
         domain = self.time_discretisation.domain
-        self.idx = self.time_discretisation.equation.field_names.index(field_name)
+        if hasattr(self.time_discretisation.equation, "field_names"):
+            self.idx = self.time_discretisation.equation.field_names.index(field_name)
+            self.test_space = self.time_discretisation.equation.spaces[self.idx]
+        else:
+            self.idx = None
+            self.test_space = self.time_discretisation.fs
         self.function_space = self.time_discretisation.fs
-        self.test_space = self.time_discretisation.equation.spaces[self.idx]
         self.x_out = Function(self.function_space)
         self.field_name = field_name
 
@@ -319,9 +323,13 @@ class SUPGWrapper(Wrapper):
         # -------------------------------------------------------------------- #
         # Set up test function
         # -------------------------------------------------------------------- #
-        test = self.time_discretisation.equation.tests[self.idx]
-        self.u_idx = self.time_discretisation.equation.field_names.index('u')
-        uadv = split(self.time_discretisation.equation.X)[self.u_idx]
+        if hasattr(self.time_discretisation.equation, "field_names"):
+            self.u_idx = self.time_discretisation.equation.field_names.index('u')
+            uadv = split(self.time_discretisation.equation.X)[self.u_idx]
+            test = self.time_discretisation.equation.tests[self.idx]
+        else:
+            uadv = Function(domain.spaces('HDiv'))
+            test = TestFunction(self.test_space)
 
         tau = Constant(self.options.default * self.time_discretisation.dt)*dot(domain.k, uadv)
 
