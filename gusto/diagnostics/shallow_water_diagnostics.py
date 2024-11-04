@@ -6,8 +6,8 @@ from firedrake import (dx, TestFunction, TrialFunction, grad, inner, curl,
 from gusto.diagnostics.diagnostics import DiagnosticField, Energy
 
 __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
-           "ShallowWaterPotentialEnstrophy", "PotentialVorticity",
-           "RelativeVorticity", "AbsoluteVorticity"]
+           "ShallowWaterPotentialEnstrophy", "ShallowWaterPotentialVorticity",
+           "ShallowWaterRelativeVorticity", "ShallowWaterAbsoluteVorticity"]
 
 
 class ShallowWaterKineticEnergy(Energy):
@@ -136,7 +136,7 @@ class ShallowWaterPotentialEnstrophy(DiagnosticField):
         super().setup(domain, state_fields)
 
 
-class Vorticity(DiagnosticField):
+class ShallowWaterVorticity(DiagnosticField):
     """Base diagnostic field class for shallow-water vorticity variables."""
 
     def setup(self, domain, state_fields, vorticity_type=None):
@@ -191,9 +191,9 @@ class Vorticity(DiagnosticField):
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={"ksp_type": "cg"})
 
 
-class PotentialVorticity(Vorticity):
+class ShallowWaterPotentialVorticity(ShallowWaterVorticity):
     u"""Diagnostic field for shallow-water potential vorticity, q=(∇×(u+f))/D"""
-    name = "PotentialVorticity"
+    name = "ShallowWaterPotentialVorticity"
 
     def __init__(self, space=None, method='solve'):
         """
@@ -220,9 +220,9 @@ class PotentialVorticity(Vorticity):
         super().setup(domain, state_fields, vorticity_type="potential")
 
 
-class AbsoluteVorticity(Vorticity):
+class ShallowWaterAbsoluteVorticity(ShallowWaterVorticity):
     u"""Diagnostic field for absolute vorticity, ζ=∇×(u+f)"""
-    name = "AbsoluteVorticity"
+    name = "ShallowWaterAbsoluteVorticity"
 
     def __init__(self, space=None, method='solve'):
         """
@@ -248,9 +248,9 @@ class AbsoluteVorticity(Vorticity):
         super().setup(domain, state_fields, vorticity_type="absolute")
 
 
-class RelativeVorticity(Vorticity):
+class ShallowWaterRelativeVorticity(ShallowWaterVorticity):
     u"""Diagnostic field for relative vorticity, ζ=∇×u"""
-    name = "RelativeVorticity"
+    name = "ShallowWaterRelativeVorticity"
 
     def __init__(self, space=None, method='solve'):
         """
