@@ -280,9 +280,15 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         if not apply_bcs:
             self.bcs = None
         elif self.wrapper is not None:
-            # Transfer boundary conditions onto test function space
-            self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
-                        for bc in bcs]
+            if self.wrapper_name == 'mixed_options':
+                # For now, avoid placing boundary conditions as
+                # a boundary condition cannot be applied on a
+                # mixed space directly.
+                self.bcs = bcs
+            else:
+                # Transfer boundary conditions onto test function space
+                self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
+                            for bc in bcs]
         else:
             self.bcs = bcs
 

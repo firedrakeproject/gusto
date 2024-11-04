@@ -382,16 +382,16 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'transporting velocity, outer iteration {outer}')
                 for name, scheme in self.active_transport:
-                    logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: {name}')
                     if isinstance(name, list):
                         # Transport multiple fields from xstar. This transports any
                         # terms in the list, with the others remaining unchanged
                         # from xstar into xp.
-                        logger.info(f'SIQN: Transport {outer}: Simultaneous transport of {name}')
+                        logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: '
+                                    + 'Simultaneous transport of {name}')
                         self.transport_field(xp(self.field_name), xstar(self.field_name))
                     else:
                         # transport a single field from xstar and put the result in xp
-                        logger.info(f'SIQN: Transport {outer}: {name}')
+                        logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: {name}')
                         self.transport_field(xp(name), xstar(name))
 
             # Fast physics -----------------------------------------------------
