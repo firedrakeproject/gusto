@@ -17,10 +17,10 @@ from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
-from gusto.core.labels import time_derivative, prognostic, physics_label, mass_weighted
+from gusto.core.labels import (time_derivative, prognostic, physics_label,
+                               mass_weighted, nonlinear_time_derivative)
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
-
 
 __all__ = ["TimeDiscretisation", "ExplicitTimeDiscretisation", "BackwardEuler",
            "ThetaMethod", "TrapeziumRule", "TR_BDF2"]
@@ -94,7 +94,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                             'Time discretisation: suboption SUPG is currently not implemented within MixedOptions')
                     else:
                         raise RuntimeError(
-                            f'Time discretisation: suboption wrapper {wrapper_name} not implemented')
+                            f'Time discretisation: suboption wrapper {suboption.name} not implemented')
+
             elif self.wrapper_name == "embedded_dg":
                 self.wrapper = EmbeddedDGWrapper(self, options)
             elif self.wrapper_name == "recovered":
@@ -110,7 +111,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         # get default solver options if none passed in
         if solver_parameters is None:
-            self.solver_parameters = {'ksp_type': 'cg',
+            self.solver_parameters = {'ksp_type': 'gmres',
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}
         else:
@@ -218,12 +219,14 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                             self.residual = self.residual.label_map(
                                 lambda t: t.get(prognostic) == field and t.has_label(mass_weighted),
                                 map_if_true=lambda t: t.get(mass_weighted))
-
         # -------------------------------------------------------------------- #
         # Set up Wrappers
         # -------------------------------------------------------------------- #
 
         if self.wrapper is not None:
+
+            wrapper_bcs = bcs if apply_bcs else None
+
             if self.wrapper_name == "mixed_options":
 
                 self.wrapper.wrapper_spaces = equation.spaces
@@ -235,7 +238,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         raise ValueError(f"The option defined for {field} is for a field that does not exist in the equation set")
 
                     field_idx = equation.field_names.index(field)
-                    subwrapper.setup(equation.spaces[field_idx])
+                    subwrapper.setup(equation.spaces[field_idx], wrapper_bcs)
 
                     # Update the function space to that needed by the wrapper
                     self.wrapper.wrapper_spaces[field_idx] = subwrapper.function_space
@@ -254,7 +257,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 if self.wrapper_name == "supg":
                     self.wrapper.setup()
                 else:
-                    self.wrapper.setup(self.fs)
+                    self.wrapper.setup(self.fs, wrapper_bcs)
                 self.fs = self.wrapper.function_space
                 if self.solver_parameters is None:
                     self.solver_parameters = self.wrapper.solver_parameters
@@ -384,6 +387,15 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         self.fixed_subcycles = fixed_subcycles
         self.subcycle_by_courant = subcycle_by_courant
 
+        # get default solver options if none passed in
+        if solver_parameters is None:
+            self.solver_parameters = {'snes_type': 'ksponly',
+                                      'ksp_type': 'cg',
+                                      'pc_type': 'bjacobi',
+                                      'sub_pc_type': 'ilu'}
+        else:
+            self.solver_parameters = solver_parameters
+
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
@@ -408,6 +420,19 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
 
+        # If the time_derivative term is nonlinear, we must use a nonlinear solver
+        if (
+            len(self.residual.label_map(
+                lambda t: t.has_label(nonlinear_time_derivative),
+                map_if_false=drop
+            )) > 0 and self.solver_parameters.get('snes_type') == 'ksponly'
+        ):
+            message = ('Switching to newton line search'
+                       + f' nonlinear solver for {self.field_name}'
+                       + ' as the time derivative term is nonlinear')
+            logger.warning(message)
+            self.solver_parameters['snes_type'] = 'newtonls'
+
     @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
@@ -424,8 +449,6 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         # setup linear solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.lhs - self.rhs, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        # If snes_type not specified by user, set this to ksp only to avoid outer Newton iteration
-        self.solver_parameters.setdefault('snes_type', 'ksponly')
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
 
@@ -456,6 +479,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
         self.x0.assign(x_in)
         for i in range(self.ncycles):
+            self.subcycle_idx = i
             self.apply_cycle(self.x1, self.x0)
             self.x0.assign(self.x1)
         x_out.assign(self.x1)
@@ -516,6 +540,7 @@ class BackwardEuler(TimeDiscretisation):
 
         return r.form
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
@@ -532,6 +557,8 @@ class BackwardEuler(TimeDiscretisation):
             self.x_out.assign(x_in)
 
         self.x1.assign(x_in)
+        # Set initial solver guess
+        self.x_out.assign(x_in)
         self.solver.solve()
         x_out.assign(self.x_out)
 
@@ -606,6 +633,7 @@ class ThetaMethod(TimeDiscretisation):
 
         return r.form
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
@@ -615,6 +643,8 @@ class ThetaMethod(TimeDiscretisation):
             x_in (:class:`Function`): the input field.
         """
         self.x1.assign(x_in)
+        # Set initial solver guess
+        self.x_out.assign(x_in)
         self.solver.solve()
         x_out.assign(self.x_out)
 
@@ -649,7 +679,6 @@ class TrapeziumRule(ThetaMethod):
                          options=options)
 
 
-# TODO: this should be implemented as an ImplicitRK
 class TR_BDF2(TimeDiscretisation):
     """
     Implements the two stage implicit TR-BDF2 time stepping method, with a
@@ -767,6 +796,7 @@ class TR_BDF2(TimeDiscretisation):
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
         """
         Apply the time discretisation to advance one whole time step.
@@ -776,6 +806,12 @@ class TR_BDF2(TimeDiscretisation):
             x_in (:class:`Function`): the input field(s).
         """
         self.xn.assign(x_in)
+
+        # Set initial solver guess
+        self.xnpg.assign(x_in)
         self.solver_tr.solve()
+
+        # Set initial solver guess
+        self.x_out.assign(self.xnpg)
         self.solver_bdf2.solve()
         x_out.assign(self.x_out)

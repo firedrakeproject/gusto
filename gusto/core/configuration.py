@@ -8,7 +8,8 @@ __all__ = [
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
     "BoussinesqParameters", "CompressibleParameters",
     "ShallowWaterParameters",
-    "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions", "MixedFSOptions",
+    "EmbeddedDGOptions", "ConservativeEmbeddedDGOptions", "RecoveryOptions",
+    "ConservativeRecoveryOptions", "SUPGOptions", "MixedFSOptions",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
 ]
 
@@ -114,6 +115,7 @@ class BoussinesqParameters(Configuration):
     g = 9.810616
     N = 0.01  # Brunt-Vaisala frequency (1/s)
     cs = 340  # sound speed (for compressible case) (m/s)
+    Omega = None
 
 
 class CompressibleParameters(Configuration):
@@ -136,6 +138,7 @@ class CompressibleParameters(Configuration):
     w_sat2 = -17.27  # second const. in Teten's formula (no units)
     w_sat3 = 35.86  # third const. in Teten's formula (K)
     w_sat4 = 610.9  # fourth const. in Teten's formula (Pa)
+    Omega = None    # Rotation rate
 
 
 class ShallowWaterParameters(Configuration):
@@ -162,6 +165,14 @@ class EmbeddedDGOptions(WrapperOptions):
     embedding_space = None
 
 
+class ConservativeEmbeddedDGOptions(EmbeddedDGOptions):
+    """Specifies options for a conservative embedded DG method."""
+
+    project_back_method = 'conservative_project'
+    rho_name = None
+    orig_rho_space = None
+
+
 class RecoveryOptions(WrapperOptions):
     """Specifies options for a recovery wrapper method."""
 
@@ -173,6 +184,15 @@ class RecoveryOptions(WrapperOptions):
     project_high_method = 'interpolate'
     project_low_method = 'project'
     broken_method = 'interpolate'
+
+
+class ConservativeRecoveryOptions(RecoveryOptions):
+    """Specifies options for a conservative recovery wrapper method."""
+
+    rho_name = None
+    orig_rho_space = None
+    project_high_method = 'conservative_project'
+    project_low_method = 'conservative_project'
 
 
 class SUPGOptions(WrapperOptions):
