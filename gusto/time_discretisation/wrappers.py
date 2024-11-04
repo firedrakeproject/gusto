@@ -325,7 +325,8 @@ class SUPGWrapper(Wrapper):
         # -------------------------------------------------------------------- #
         if hasattr(self.time_discretisation.equation, "field_names"):
             self.u_idx = self.time_discretisation.equation.field_names.index('u')
-            uadv = split(self.time_discretisation.equation.X)[self.u_idx]
+            #uadv = split(self.time_discretisation.equation.X)[self.u_idx]
+            uadv = Function(domain.spaces('HDiv'))
             test = self.time_discretisation.equation.tests[self.idx]
         else:
             uadv = Function(domain.spaces('HDiv'))
@@ -369,7 +370,7 @@ class SUPGWrapper(Wrapper):
         """
 
         new_residual = residual.label_map(
-            lambda t: t.has_label(transporting_velocity) and t.get(prognostic) == self.field_name,
+            lambda t: t.has_label(transporting_velocity),
             # Update and replace transporting velocity in any terms
             map_if_true=lambda t:
             Term(ufl.replace(t.form, {t.get(transporting_velocity): self.transporting_velocity}), t.labels),
