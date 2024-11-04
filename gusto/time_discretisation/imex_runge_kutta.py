@@ -141,17 +141,13 @@ class IMEXRungeKutta(TimeDiscretisation):
         """Set up the discretisation's residual for a given stage."""
         # Add time derivative terms  y_s - y^n for stage s
         mass_form = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
+            lambda t: any(t.has_label(time_derivative,eos_mass, eos_form)),
             map_if_false=drop)
         residual = mass_form.label_map(all_terms,
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        residual -= mass_form.label_map(all_terms,
-                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
-        eos = residual.label_map(lambda t: any(t.has_label(eos_mass,eos_form)),
-                        map_if_false= drop)
-        eos = eos.label_map(all_terms,
-                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        residual += eos
+        residual -= mass_form.label_map(lambda t: t.has_label(time_derivative),
+                                        map_if_true=replace_subject(self.x1, old_idx=self.idx),
+                                        map_if_false=drop)
         # Loop through stages up to s-1 and calcualte/sum
         # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
         # and
@@ -190,17 +186,14 @@ class IMEXRungeKutta(TimeDiscretisation):
     def final_res(self):
         """Set up the discretisation's final residual."""
         # Add time derivative terms  y^{n+1} - y^n
-        mass_form = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                            map_if_false=drop)
+        mass_form = self.residual.label_map(
+            lambda t: any(t.has_label(time_derivative,eos_mass, eos_form)),
+            map_if_false=drop)
         residual = mass_form.label_map(all_terms,
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        residual -= mass_form.label_map(all_terms,
-                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
-        eos = residual.label_map(lambda t: any(t.has_label(eos_mass,eos_form)),
-                        map_if_false= drop)
-        eos = eos.label_map(all_terms,
-                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        residual += eos
+        residual -= mass_form.label_map(lambda t: t.has_label(time_derivative),
+                                        map_if_true=replace_subject(self.x1, old_idx=self.idx),
+                                        map_if_false=drop)
         # Loop through stages up to s-1 and calcualte/sum
         # dt*(b_1*F(y_1) + b_2*F(y_2) + .... + b_s*F(y_s))
         # and

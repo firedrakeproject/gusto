@@ -609,7 +609,10 @@ class ThetaMethod(TimeDiscretisation):
         """
         for i, term in enumerate(self.residual):
             print(i, term.labels.keys())
-
+        print("LHS")
+        print(self.lhs.__str__())
+        print("RHS")
+        print(self.rhs.__str__())
         self.x1.assign(x_in)
         # Set initial solver guess
         self.x_out.assign(x_in)
