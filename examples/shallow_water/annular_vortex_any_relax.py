@@ -21,8 +21,8 @@ import pdb
 # ---------------------------------------------------------------------------- #
 
 # set inner and outer latitude limits of annulus   
-phis = 57
-phin = 62
+phis = 60
+phin = 70
 phimp = phis
 
 # False means initial vortex is annular, True means it's monopolar
@@ -32,8 +32,8 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 2.3
-pvpole = 1.1
+pvmax = 1.6
+pvpole = 1.0
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
@@ -44,7 +44,7 @@ tau_c_ratio = 0.01
 beta = 1.0
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'rad'
+rel_sch = 'both'
 include_co2 = 'yes'
 
 # do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
@@ -52,7 +52,7 @@ restart = False
 restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-4sols_tracer_tophat-80'
 
 # length of this run, time to start from (only relevant if doing a restart)
-rundays = 300
+rundays = 1
 start_time = 0
 dt = 450.
 
@@ -65,7 +65,7 @@ field_to_sum = ('rainsum', 'CO2cond_flag')
 # field_to_sum=None
 
 # any extra info to include in the directory name
-extra_name = ''
+extra_name = '_integral_diagnostic_test_1'
 
 #####################################################################################
 
@@ -322,9 +322,9 @@ if not restart:
 
     # H_rel = Function(domain.spaces('L2'))
 
-diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography'), SWCO2cond_flag('D', h_th)]
+diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography'), SWCO2cond_flag('D', h_th), Time_integral_1('SWCO2cond_flag')]
 dumplist = ['D', 'topography', 'rainsum', 'tracer']
-groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'rainsum', 'D_plus_topography', 'CO2cond_flag']
+groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'rainsum', 'D_plus_topography', 'CO2cond_flag', 'CO2cond_flag_time_integral_1']
 
 # I/O (input/output)
 homepath = '/data/home/sh1293/results'
