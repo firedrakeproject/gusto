@@ -531,11 +531,13 @@ class Forcing(object):
 
         # now we can set up the explicit and implicit problems
         explicit_forcing_problem = LinearVariationalProblem(
-            a.form, L_explicit.form, self.xF, bcs=bcs
+            a.form, L_explicit.form, self.xF, bcs=bcs,
+            constant_jacobian=True
         )
 
         implicit_forcing_problem = LinearVariationalProblem(
-            a.form, L_implicit.form, self.xF, bcs=bcs
+            a.form, L_implicit.form, self.xF, bcs=bcs,
+            constant_jacobian=True
         )
 
         self.solvers = {}
