@@ -8,9 +8,11 @@ import matplotlib.ticker as mticker
 import pdb
 import os
 
-file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--4_len-50sols'
+file = 'Relax_to_annulus/annular_vortex_mars_55-60_PVmax--2-4_PVpole--1-0_tau_r--2sol_A0-0.0-norel_len-300sols_tracer_tophat-80'
 
-results_dir = f'/data/home/sh1293/firedrake-real-opt_may24/src/gusto/examples/shallow_water/results/{file}'
+start_sol = 100
+
+results_dir = f'/data/home/sh1293/results/{file}'
 
 if not os.path.exists(f'{results_dir}/Plots/Stereo_ani/'):
     os.makedirs(f'{results_dir}/Plots/Stereo_ani/')
@@ -19,7 +21,10 @@ if not os.path.exists(f'{results_dir}/Plots/Stereo_ani/'):
 
 ds = xr.open_dataset(f'{results_dir}/regrid_output.nc')
 q = ds.PotentialVorticity
-co2 = ds.D_minus_H_rel_flag_less
+try:
+    co2 = ds.CO2cond_flag
+except:
+    co2 = ds.D_minus_H_rel_flag_less
 
 omega = 2*np.pi/88774
 hbart = 17000
@@ -32,8 +37,8 @@ circle = mpath.Path(verts * radius + center)
 
 
 
-# for timeind in range(0, len(q.time)):
-for timeind in [157, 159]:
+for timeind in range(int(start_sol*88774/4500), len(q.time)):
+# for timeind in [153, 154, 155, 156]:
 # for timeind in range(0, 10):
     # if timeind%100==0:
     print(timeind)
@@ -50,8 +55,12 @@ for timeind in [157, 159]:
     ax.set_boundary(circle, transform=ax.transAxes)
     ax.set_extent([-180,180,50,90], crs=ccrs.PlateCarree())
     # pdb.set_trace()
-    contourplot = q[timeind,:,:].plot.contourf(ax=ax, vmin = 0, vmax = 1.75*val, add_colorbar=True,
-                                transform = ccrs.PlateCarree(), cmap='OrRd', levels=np.linspace(0, 1.75*val, 15), extend = 'both')
+    # contourplot = q[timeind,:,:].plot.contourf(ax=ax, vmin = 0, vmax = 1.75*val, add_colorbar=True,
+    #                             transform = ccrs.PlateCarree(), cmap='OrRd', levels=np.linspace(0, 1.75*val, 15), extend = 'both')
+
+    contourplot = q[timeind,:,:].plot.contourf(ax=ax, add_colorbar=True,
+                                transform = ccrs.PlateCarree(), cmap='OrRd', levels=25, vmin=0, vmax=1.75*val, extend = 'both')
+
 
     # contours = ax.contourf(co2[:,:,-1].lon, co2[:,:,-1].lat, co2[:,:,-1].values, levels=[-0.5, 1.5], colors=None, hatches='xx')
     # contours = co2[timeind,:,:].plot.contour(ax=ax, colors=['blue', 'green', 'yellow'], transform=ccrs.PlateCarree(), add_colorbar=False, levels=[0.1, 0.5, 1])
@@ -62,7 +71,7 @@ for timeind in [157, 159]:
     colorbar = contourplot.colorbar
     colorbar.set_label(r'Potential Vorticity ($\frac{2 \Omega}{H}$)')
     ticks1 = [1.75*val, 1.5*val, 1.25*val, 1*val, 0.75*val, 0.5*val, 0.25*val, 0]
-    ticks2 = ['1.75', '1.5', '1.25', '2', '0.75', '0.5', '0.25', '0']
+    ticks2 = ['1.75', '1.5', '1.25', '1', '0.75', '0.5', '0.25', '0']
     colorbar.set_ticks(ticks=ticks1, labels=ticks2)
 
     ax.set_title(f'{ds.time.values[timeind]/88774:.4f}sol')

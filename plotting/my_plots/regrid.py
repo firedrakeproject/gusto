@@ -29,7 +29,7 @@ def gaussian_lat_lon_grid(nlat, nlon):
 # Directory for results and plots
 # ---------------------------------------------------------------------------- #
 # When copying this example these should not be relative to this file
-filepath = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.02sol_beta--1-0_A0-0.0-norel_len-300sols_tracer_tophat-80'
+filepath = 'Relax_to_annulus/annular_vortex_mars_55-60_PVmax--2-4_PVpole--1-0_tau_r--2sol_A0-0.0-norel_len-300sols_tracer_tophat-80'
 
 results_dir = f'/data/home/sh1293/results/{filepath}'
 # plot_dir = f'{results_dir}/plots'
@@ -50,7 +50,11 @@ for i in range(0, len(times)):
 # for i in [0, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1]:
     print(i)
     for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity', 'tracer', 'rainsum', 'CO2cond_flag']:
-        field_data = extract_gusto_field(data_file, field_name, time_idx=i)
+        try:
+            field_data = extract_gusto_field(data_file, field_name, time_idx=i)
+        except:
+            print(f'field {field_name} not present')
+            continue
         # times = np.arange(np.shape(field_data)[1])
         coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
 

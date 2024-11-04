@@ -21,8 +21,8 @@ import pdb
 # ---------------------------------------------------------------------------- #
 
 # set inner and outer latitude limits of annulus   
-phis = 60
-phin = 70
+phis = 57
+phin = 62
 phimp = phis
 
 # False means initial vortex is annular, True means it's monopolar
@@ -32,8 +32,8 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 1.6
-pvpole = 1.0
+pvmax = 2.3
+pvpole = 1.1
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
@@ -44,7 +44,7 @@ tau_c_ratio = 0.01
 beta = 1.0
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'both'
+rel_sch = 'rad'
 include_co2 = 'yes'
 
 # do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
@@ -52,8 +52,8 @@ restart = False
 restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-4sols_tracer_tophat-80'
 
 # length of this run, time to start from (only relevant if doing a restart)
-rundays = 2
-start_time = 4
+rundays = 300
+start_time = 0
 dt = 450.
 
 # do you want a tracer or not. Edge of tophat function for tracer, north of this the tracer is intialised as 1, south is 0
