@@ -61,11 +61,8 @@ dt = 450.
 tracer = True
 hat_edge = 80
 
-field_to_sum = ('rainsum', 'CO2cond_flag')
-# field_to_sum=None
-
 # any extra info to include in the directory name
-extra_name = '_integral_diagnostic_test_1'
+extra_name = ''
 
 #####################################################################################
 
@@ -314,7 +311,7 @@ if not restart:
     fexpr = 2*Omega*x[2]/R
     lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
     bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr, extra_fields='rainsum')
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
     tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
 
     # estimate core count for Pileus
@@ -323,8 +320,8 @@ if not restart:
     # H_rel = Function(domain.spaces('L2'))
 
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography'), SWCO2cond_flag('D', h_th), CumulativeSum('CO2cond_flag')]
-dumplist = ['D', 'topography', 'rainsum', 'tracer']
-groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'rainsum', 'D_plus_topography', 'CO2cond_flag', 'CO2cond_flag_cumulative']
+dumplist = ['D', 'topography', 'tracer']
+groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'D_plus_topography', 'CO2cond_flag', 'CO2cond_flag_cumulative']
 
 # I/O (input/output)
 homepath = '/data/home/sh1293/results'
@@ -365,7 +362,7 @@ elif restart:
     fexpr = 2*Omega*x[2]/R
     lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
     bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr, extra_fields='rainsum')
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
     tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
     rs_tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer_rs")
     # estimate core count for Pileus

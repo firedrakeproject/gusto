@@ -30,7 +30,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
                  space_names=None, linearisation_map='default',
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None,
-                 thermal=False, extra_fields=None):
+                 thermal=False):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -200,8 +200,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
                                                     'u'), self.X))
             residual += source_form
 
-        if extra_fields is not None:
-            self.prescribed_fields.add_field(extra_fields, space=self.domain.spaces("DG"))
 
         # -------------------------------------------------------------------- #
         # Linearise equations
