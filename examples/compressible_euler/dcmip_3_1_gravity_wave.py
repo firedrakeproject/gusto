@@ -17,7 +17,10 @@ from gusto import (
     TrapeziumRule, SUPGOptions, lonlatr_from_xyz, CompressibleParameters,
     CompressibleEulerEquations, CompressibleSolver, ZonalComponent,
     compressible_hydrostatic_balance, Perturbation, GeneralCubedSphereMesh,
+    Timestepper, IMEX_SSP3, split_continuity_form, explicit, implicit,
+    time_derivative, transport, IMEXRungeKutta
 )
+import numpy as np
 
 dcmip_3_1_gravity_wave_defaults = {
     'ncells_per_edge': 8,
@@ -85,6 +88,13 @@ def dcmip_3_1_gravity_wave(
     eqns = CompressibleEulerEquations(
         domain, parameters, u_transport_option=u_eqn_type
     )
+    print("Opt Cores:", eqns.X.function_space().dim()/50000.)
+    eqns = split_continuity_form(eqns)
+    eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
+    #eqns.label_terms(lambda t: not any(t.has_label(time_derivative, horizontal)), implicit)
+    eqns.label_terms(lambda t: t.has_label(transport), explicit)
+    # eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(vertical), implicit)
+    # eqns.label_terms(lambda t: t.has_label(transport) and not any(t.has_label(horizontal, vertical)), explicit)
 
     # I/O
     output = OutputParameters(
@@ -96,24 +106,43 @@ def dcmip_3_1_gravity_wave(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [
-        TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "rho", fixed_subcycles=2),
-        SSPRK3(domain, "theta", options=SUPGOptions(), fixed_subcycles=2)
-    ]
+    # transported_fields = [
+    #     TrapeziumRule(domain, "u"),
+    #     SSPRK3(domain, "rho", fixed_subcycles=2),
+    #     SSPRK3(domain, "theta", options=SUPGOptions(), fixed_subcycles=2)
+    # ]
     transport_methods = [
         DGUpwind(eqns, field) for field in ["u", "rho", "theta"]
     ]
 
-    # Linear solver
-    linear_solver = CompressibleSolver(eqns)
+    nl_solver_parameters = {
+    "snes_converged_reason": None,
+    "snes_lag_preconditioner_persists":None,
+    "snes_lag_preconditioner":-2,
+    "mat_type": "matfree",
+    "ksp_type": "gmres",
+    "ksp_converged_reason": None,
+    "ksp_atol": 1e-5,
+    "ksp_rtol": 1e-5,
+    "ksp_max_it": 400,
+    "pc_type": "python",
+    "pc_python_type": "firedrake.AssembledPC",
+    "assembled_pc_star_sub_sub_pc_type": "lu",
+    "assembled_pc_type": "python",
+    "assembled_pc_python_type": "firedrake.ASMStarPC",
+    "assembled_pc_star_construct_dim": 0,
+    "assembled_pc_star_sub_sub_pc_factor_mat_ordering_type": "rcm",
+    "assembled_pc_star_sub_sub_pc_factor_reuse_ordering": None,
+    "assembled_pc_star_sub_sub_pc_factor_reuse_fill": None,
+    "assembled_pc_star_sub_sub_pc_factor_fill": 1.2}
 
-    # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
-    )
 
+    # IMEX time stepper
+
+    butcher_imp = np.array([[0.0, 0.0], [0.0, 0.5], [0.0, 1.]])
+    butcher_exp = np.array([[0.0, 0.0], [0.5, 0.0], [0.0, 1.]])
+    scheme = IMEXRungeKutta(domain, butcher_imp, butcher_exp, solver_parameters=nl_solver_parameters)
+    stepper = Timestepper(eqns, scheme, io, transport_methods)
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
