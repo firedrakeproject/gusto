@@ -9,10 +9,10 @@ from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        conditional)
 import numpy as np
 from netCDF4 import Dataset
-import netCDF4 as nc
+# import netCDF4 as nc
 import os
 import shutil
-import pdb
+# import pdb
 #import matplotlib.pyplot as plt
 #import xarray as xr
 
@@ -274,8 +274,8 @@ def initial_profiles(omega, radius, phiss, phinn, annulus, **kwargs):
     return rlat, uini, thini
 
 def new_groups(input_file, output_file, names):
-    with nc.Dataset(input_file, 'r') as src:
-        with nc.Dataset(output_file, 'a') as dst:
+    with Dataset(input_file, 'r') as src:
+        with Dataset(output_file, 'a') as dst:
             PV_group = src.groups['PotentialVorticity']
             for name in names:
                 if name not in dst.groups:
@@ -322,9 +322,9 @@ if not restart:
 
     # H_rel = Function(domain.spaces('L2'))
 
-diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography'), SWCO2cond_flag('D', h_th), Time_integral_1('CO2cond_flag')]
+diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography'), SWCO2cond_flag('D', h_th), Time_integral('CO2cond_flag')]
 dumplist = ['D', 'topography', 'rainsum', 'tracer']
-groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'rainsum', 'D_plus_topography', 'CO2cond_flag', 'CO2cond_flag_time_integral_1']
+groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'rainsum', 'D_plus_topography', 'CO2cond_flag', 'CO2cond_flag_time_integral']
 
 # I/O (input/output)
 homepath = '/data/home/sh1293/results'
