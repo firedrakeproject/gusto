@@ -172,6 +172,9 @@ class CompressibleSolver(TimesteppingSolver):
         super().__init__(equations, alpha, tau_values, solver_parameters,
                          overwrite_solver_parameters)
 
+        if (equations.prognostic_eos is True):
+            NotImplementedError("Prognostic EoS is not implemented for Semi-Implicit Quasi Newton (SIQN) scheme")
+
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
 
