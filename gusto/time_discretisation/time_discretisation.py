@@ -18,7 +18,7 @@ from firedrake.utils import cached_property
 
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.core.labels import (time_derivative, prognostic, physics_label,
-                               mass_weighted, nonlinear_time_derivative, eos_form, eos_mass)
+                               mass_weighted, nonlinear_time_derivative, equation_of_state)
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
 
@@ -264,7 +264,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
+            lambda t: any(t.has_label(time_derivative, equation_of_state)),
             map_if_true=replace_subject(self.x_out, old_idx=self.idx),
             map_if_false=drop)
 
@@ -274,8 +274,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
     def rhs(self):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
-            all_terms,
-            map_if_true=replace_subject(self.x1, old_idx=self.idx))
+            lambda t: not t.has_label(equation_of_state),
+            map_if_true=replace_subject(self.x1, old_idx=self.idx),
+            map_if_false=drop)
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
@@ -400,7 +401,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
+            lambda t: any(t.has_label(time_derivative, equation_of_state)),
             map_if_true=replace_subject(self.x_out, self.idx),
             map_if_false=drop)
 
@@ -488,7 +489,7 @@ class BackwardEuler(TimeDiscretisation):
         l = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
+        l = l.label_map(lambda t: any(t.has_label(time_derivative, equation_of_state)),
                         map_if_false=lambda t: self.dt*t)
 
         return l.form
@@ -581,7 +582,7 @@ class ThetaMethod(TimeDiscretisation):
             all_terms,
             map_if_true=replace_subject(self.x_out, old_idx=self.idx),
             map_if_false=drop)
-        l = l.label_map(lambda t: any(t.has_label(time_derivative, eos_mass, eos_form)),
+        l = l.label_map(lambda t: any(t.has_label(time_derivative, equation_of_state)),
                         map_if_false=lambda t: self.theta*self.dt*t)
 
         return l.form
@@ -590,7 +591,7 @@ class ThetaMethod(TimeDiscretisation):
     def rhs(self):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
-            lambda t: not any(t.has_label(eos_mass, eos_form)),
+            lambda t: not t.has_label(equation_of_state),
             map_if_true=replace_subject(self.x1, old_idx=self.idx),
             map_if_false=drop)
         r = r.label_map(lambda t: t.has_label(time_derivative),
@@ -607,14 +608,8 @@ class ThetaMethod(TimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field.
         """
-        for i, term in enumerate(self.residual):
-            print(i, term.labels.keys())
-        print("LHS")
-        print(self.lhs.__str__())
-        print("RHS")
-        print(self.rhs.__str__())
         self.x1.assign(x_in)
-        # Set initial solver guess
+        # Set initial solver guesslhs
         self.x_out.assign(x_in)
         self.solver.solve()
         x_out.assign(self.x_out)
@@ -705,7 +700,7 @@ class TR_BDF2(TimeDiscretisation):
         l = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.xnpg, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
+        l = l.label_map(lambda t: any(t.has_label(time_derivative, equation_of_state)),
                         map_if_false=lambda t: 0.5*self.gamma*self.dt*t)
 
         return l.form
@@ -714,8 +709,9 @@ class TR_BDF2(TimeDiscretisation):
     def rhs(self):
         """Set up the time discretisation's right hand side for the TR stage."""
         r = self.residual.label_map(
-            all_terms,
-            map_if_true=replace_subject(self.xn, old_idx=self.idx))
+            lambda t: not t.has_label(equation_of_state),
+            map_if_true=replace_subject(self.xn, old_idx=self.idx),
+            map_if_false=drop)
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -0.5*self.gamma*self.dt*t)
 
@@ -728,7 +724,7 @@ class TR_BDF2(TimeDiscretisation):
         l = self.residual.label_map(
             all_terms,
             map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
+        l = l.label_map(lambda t: any(t.has_label(time_derivative, equation_of_state)),
                         map_if_false=lambda t: ((1.0-self.gamma)/(2.0-self.gamma))*self.dt*t)
 
         return l.form

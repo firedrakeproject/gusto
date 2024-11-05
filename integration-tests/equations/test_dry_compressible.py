@@ -9,9 +9,9 @@ from gusto import thermodynamics as tde
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
                        sqrt, ExtrudedMesh, as_vector)
 import numpy as np
+import pytest
 
-
-def run_dry_compressible(tmpdir):
+def run_dry_compressible(tmpdir, equation_form):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -31,29 +31,59 @@ def run_dry_compressible(tmpdir):
 
     # Equation
     parameters = CompressibleParameters()
-    eqn = CompressibleEulerEquations(domain, parameters)
-
+    if equation_form == "prognostic_eos":
+        eqn = CompressibleEulerEquations(domain, parameters, prognostic_eos=True)
+    elif equation_form == "eliminated_eos":
+        eqn = CompressibleEulerEquations(domain, parameters, prognostic_eos=False)
     # I/O
     output = OutputParameters(dirname=tmpdir+"/dry_compressible",
                               dumpfreq=2, chkptfreq=2, checkpoint=True)
     io = IO(domain, output)
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"),
-                          SSPRK3(domain, "rho"),
-                          SSPRK3(domain, "theta")]
-    transport_methods = [DGUpwind(eqn, 'u'),
-                         DGUpwind(eqn, 'rho'),
-                         DGUpwind(eqn, 'theta')]
+    if equation_form == "prognostic_eos":
+        transport_methods = [DGUpwind(eqn, 'u'),
+                            DGUpwind(eqn, 'rho'),
+                            DGUpwind(eqn, 'theta')]
+        solver_parameters =  {
+            "snes_converged_reason": None,
+            "snes_lag_preconditioner_persists":None,
+            "snes_lag_preconditioner":-2,
+            "mat_type": "matfree",
+            "ksp_type": "gmres",
+            'ksp_converged_reason': None,
+            'ksp_monitor_true_residual': None,
+            "ksp_atol": 1e-5,
+            "ksp_rtol": 1e-5,
+            "ksp_max_it": 400,
+            "pc_type": "python",
+            "pc_python_type": "firedrake.AssembledPC",
+            "assembled_pc_star_sub_sub_pc_type": "lu",
+            "assembled_pc_type": "python",
+            "assembled_pc_python_type": "firedrake.ASMStarPC",
+            "assembled_pc_star_construct_dim": 0,
+            "assembled_pc_star_sub_sub_pc_factor_mat_ordering_type": "rcm",
+            "assembled_pc_star_sub_sub_pc_factor_reuse_ordering": None,
+            "assembled_pc_star_sub_sub_pc_factor_reuse_fill": None,
+            "assembled_pc_star_sub_sub_pc_factor_fill": 1.2}
+        scheme = TrapeziumRule(domain, solver_parameters=solver_parameters)
+        stepper = Timestepper(eqn, scheme, io, transport_methods)
+    elif equation_form == "eliminated_eos":
+        transported_fields = [TrapeziumRule(domain, "u"),
+                            SSPRK3(domain, "rho"),
+                            SSPRK3(domain, "theta")]
+        transport_methods = [DGUpwind(eqn, 'u'),
+                            DGUpwind(eqn, 'rho'),
+                            DGUpwind(eqn, 'theta')]
 
-    # Linear solver
-    linear_solver = CompressibleSolver(eqn)
+        # Linear solver
+        linear_solver = CompressibleSolver(eqn)
 
-    # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
-                                      transport_methods,
-                                      linear_solver=linear_solver,
-                                      num_outer=4, num_inner=1)
+        # Time stepper
+        stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
+                                        transport_methods,
+                                        linear_solver=linear_solver,
+                                        num_outer=4, num_inner=1)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -61,6 +91,8 @@ def run_dry_compressible(tmpdir):
 
     R_d = parameters.R_d
     g = parameters.g
+    p_0 = parameters.p_0
+    cp = parameters.cp
 
     rho0 = stepper.fields("rho")
     theta0 = stepper.fields("theta")
@@ -73,6 +105,10 @@ def run_dry_compressible(tmpdir):
     p = Constant(100000.0) * exp(-z / zH)
     theta0.interpolate(tde.theta(parameters, T, p))
     rho0.interpolate(p / (R_d * T))
+
+    if equation_form == "prognostic_eos":
+        exner = stepper.fields("exner")
+        exner.interpolate((p/p_0)**(R_d/cp))
 
     # Add horizontal translation to ensure some transport happens
     u0.project(as_vector([0.5, 0.0]))
@@ -105,18 +141,18 @@ def run_dry_compressible(tmpdir):
 
     return stepper, check_stepper
 
-
-def test_dry_compressible(tmpdir):
+@pytest.mark.parametrize("equation_form", ["eliminated_eos", "prognostic_eos"])
+def test_dry_compressible(tmpdir, equation_form):
 
     dirname = str(tmpdir)
-    stepper, check_stepper = run_dry_compressible(dirname)
+    stepper, check_stepper = run_dry_compressible(dirname, equation_form)
 
     for variable in ['u', 'rho', 'theta']:
         new_variable = stepper.fields(variable)
         check_variable = check_stepper.fields(variable)
         diff_array = new_variable.dat.data - check_variable.dat.data
         error = np.linalg.norm(diff_array) / np.linalg.norm(check_variable.dat.data)
-
+        breakpoint()
         # Slack values chosen to be robust to different platforms
         assert error < 1e-10, f'Values for {variable} in ' + \
             'Dry Compressible test do not match KGO values'

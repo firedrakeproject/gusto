@@ -4,7 +4,7 @@ from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import replace_subject, all_terms, drop
 from firedrake.utils import cached_property
-from gusto.core.labels import time_derivative, implicit, explicit, eos_mass, eos_form
+from gusto.core.labels import time_derivative, implicit, explicit, equation_of_state
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
@@ -122,7 +122,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         # Check all terms are labeled implicit, exlicit
         for t in self.residual:
             if ((not t.has_label(implicit)) and (not t.has_label(explicit))
-               and (not t.has_label(time_derivative)) and (not t.has_label(eos_form))and (not t.has_label(eos_mass))):
+               and (not t.has_label(time_derivative)) and (not t.has_label(equation_of_state))):
                 raise NotImplementedError("Non time-derivative terms must be labeled as implicit or explicit")
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
@@ -141,7 +141,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         """Set up the discretisation's residual for a given stage."""
         # Add time derivative terms  y_s - y^n for stage s
         mass_form = self.residual.label_map(
-            lambda t: any(t.has_label(time_derivative,eos_mass, eos_form)),
+            lambda t: any(t.has_label(time_derivative, equation_of_state)),
             map_if_false=drop)
         residual = mass_form.label_map(all_terms,
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
@@ -187,7 +187,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         """Set up the discretisation's final residual."""
         # Add time derivative terms  y^{n+1} - y^n
         mass_form = self.residual.label_map(
-            lambda t: any(t.has_label(time_derivative,eos_mass, eos_form)),
+            lambda t: any(t.has_label(time_derivative, equation_of_state)),
             map_if_false=drop)
         residual = mass_form.label_map(all_terms,
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))

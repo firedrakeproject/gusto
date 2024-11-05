@@ -7,7 +7,7 @@ from firedrake import (
 from firedrake.fml import subject, replace_subject
 from gusto.core.labels import (
     time_derivative, transport, prognostic, hydrostatic, linearisation,
-    pressure_gradient, coriolis, gravity, sponge, eos_mass, eos_form
+    pressure_gradient, coriolis, gravity, sponge, equation_of_state
 )
 from gusto.equations.thermodynamics import exner_pressure
 from gusto.equations.common_forms import (
@@ -40,7 +40,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
-                 active_tracers=None):
+                 active_tracers=None, prognostic_eos=False):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -75,15 +75,20 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations.. Defaults to None.
+            prognostic_eos (bool, optional): a boolean to specify whether the
+                equation of state should be treated as a prognostic equation.
 
         Raises:
             NotImplementedError: only mixing ratio tracers are implemented.
         """
-
-        field_names = ['u', 'rho', 'theta', 'exner']
-
-        if space_names is None:
-            space_names = {'u': 'HDiv', 'rho': 'L2', 'theta': 'theta', 'exner': 'L2'}
+        if prognostic_eos:
+            field_names = ['u', 'rho', 'theta', 'exner']
+            if space_names is None:
+                space_names = {'u': 'HDiv', 'rho': 'L2', 'theta': 'theta', 'exner': 'L2'}
+        else:
+            field_names = ['u', 'rho', 'theta']
+            if space_names is None:
+                space_names = {'u': 'HDiv', 'rho': 'L2', 'theta': 'theta'}
 
         if active_tracers is None:
             active_tracers = []
@@ -103,11 +108,19 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         self.parameters = parameters
         g = parameters.g
         cp = parameters.cp
+        self.prognostic_eos = prognostic_eos
 
-        w, phi, gamma, xi = self.tests[0:4]
-        u, rho, theta, exner = split(self.X)[0:4]
+        if self.prognostic_eos:
+            w, phi, gamma, xi = self.tests[0:4]
+            u, rho, theta, exner = split(self.X)[0:4]
+            _, rho_bar, theta_bar, exner_bar = split(self.X_ref)[0:4]
+        else:
+            w, phi, gamma = self.tests[0:3]
+            u, rho, theta = split(self.X)[0:3]
+            _, rho_bar, theta_bar = split(self.X_ref)[0:3]
+            exner = exner_pressure(parameters, rho, theta)
+
         u_trial = split(self.trials)[0]
-        _, rho_bar, theta_bar, exner_bar = split(self.X_ref)[0:4]
         zero_expr = Constant(0.0)*theta
         n = FacetNormal(domain.mesh)
 
@@ -115,16 +128,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Time Derivative Terms
         # -------------------------------------------------------------------- #
         mass_form = self.generate_mass_terms()
-
-        # -------------------------------------------------------------------- #
-        # Equation of State
-        # -------------------------------------------------------------------- #
-        kappa = parameters.kappa
-        p_0 = parameters.p_0
-        R_d = parameters.R_d
-        eos_mass_term = subject(prognostic(eos_mass(inner(exner, xi)*dx), 'exner'), self.X)
-
-        eos_form_term= subject(prognostic(eos_form((-xi*(rho * R_d * theta / p_0) ** (kappa / (1 - kappa)))*dx), 'exner'), self.X)
 
         # -------------------------------------------------------------------- #
         # Transport Terms
@@ -183,8 +186,18 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         gravity_form = gravity(subject(prognostic(g*inner(domain.k, w)*dx,
                                                   'u'), self.X))
 
-        residual = (eos_mass_term + eos_form_term + mass_form + adv_form + pressure_gradient_form
+        residual = (mass_form + adv_form + pressure_gradient_form
                     + gravity_form)
+
+        # -------------------------------------------------------------------- #
+        # Equation of State
+        # -------------------------------------------------------------------- #
+        if self.prognostic_eos:
+            kappa = parameters.kappa
+            p_0 = parameters.p_0
+            R_d = parameters.R_d
+            eos_form = subject(prognostic(equation_of_state((inner(exner, xi)-xi*(rho * R_d * theta / p_0) ** (kappa / (1 - kappa)))*dx), 'exner'), self.X)
+            residual += eos_form
 
         # -------------------------------------------------------------------- #
         # Moist Thermodynamic Divergence Term

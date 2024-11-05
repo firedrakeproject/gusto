@@ -55,7 +55,7 @@ from firedrake.fml import (
 from firedrake.utils import cached_property
 from gusto.time_discretisation.wrappers import *
 from gusto.time_discretisation.time_discretisation import wrapper_apply
-from gusto.core.labels import (time_derivative, implicit, explicit)
+from gusto.core.labels import (time_derivative, implicit, explicit, equation_of_state)
 
 from qmat import genQCoeffs, genQDeltaCoeffs
 
@@ -322,7 +322,7 @@ class SDC(object, metaclass=ABCMeta):
                                     replace_subject(self.Urhs, old_idx=self.idx),
                                     drop)
         # F(y)
-        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+        L = self.residual.label_map(lambda t: any(t.has_label(time_derivative, equation_of_state)),
                                     drop,
                                     replace_subject(self.Uin, old_idx=self.idx))
         residual_rhs = a - L
@@ -332,7 +332,7 @@ class SDC(object, metaclass=ABCMeta):
     def res_fin(self):
         """Set up the residual for final solve."""
         # y_(n+1)
-        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+        a = self.residual.label_map(lambda t: any(t.has_label(time_derivative, equation_of_state)),
                                     replace_subject(self.U_fin, old_idx=self.idx),
                                     drop)
         # y_n
@@ -355,12 +355,13 @@ class SDC(object, metaclass=ABCMeta):
         # Add time derivative terms  y^(k+1)_m - y_start for node m. y_start is y_n for Z2N formulation
         # and y^(k)_m for N2N formulation
         mass_form = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
+            lambda t: any(t.has_label(time_derivative, equation_of_state)),
             map_if_false=drop)
         residual = mass_form.label_map(all_terms,
                                        map_if_true=replace_subject(self.U_SDC, old_idx=self.idx))
-        residual -= mass_form.label_map(all_terms,
-                                        map_if_true=replace_subject(self.U_start, old_idx=self.idx))
+        residual -= mass_form.label_map(lambda t: not t.has_label(equation_of_state),
+                                        map_if_true=replace_subject(self.U_start, old_idx=self.idx),
+                                        map_if_false=drop)
         # Loop through nodes up to m-1 and calcualte
         # sum(j=1,m-1) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
         for i in range(m):
