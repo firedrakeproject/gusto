@@ -27,7 +27,8 @@ from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver", "ThermalSWSolver", "MoistConvectiveSWSolver"]
+__all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver",
+           "ThermalSWSolver", "MoistConvectiveSWSolver"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -374,6 +375,20 @@ class CompressibleSolver(TimesteppingSolver):
         python_context = self.hybridized_solver.snes.ksp.pc.getPythonContext()
         attach_custom_monitor(python_context, logging_ksp_monitor_true_residual)
 
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        """
+        Updates the reference profiles.
+        """
+
+        with timed_region("Gusto:HybridProjectRhobar"):
+            logger.info('Compressible linear solver: rho average solve')
+            self.rho_avg_solver.solve()
+
+        with timed_region("Gusto:HybridProjectExnerbar"):
+            logger.info('Compressible linear solver: Exner average solve')
+            self.exner_avg_solver.solve()
+
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
         """
@@ -386,15 +401,6 @@ class CompressibleSolver(TimesteppingSolver):
                 :class:`MixedFunctionSpace`.
         """
         self.xrhs.assign(xrhs)
-
-        # TODO: can we avoid computing these each time the solver is called?
-        with timed_region("Gusto:HybridProjectRhobar"):
-            logger.info('Compressible linear solver: rho average solve')
-            self.rho_avg_solver.solve()
-
-        with timed_region("Gusto:HybridProjectExnerbar"):
-            logger.info('Compressible linear solver: Exner average solve')
-            self.exner_avg_solver.solve()
 
         # Solve the hybridized system
         logger.info('Compressible linear solver: hybridized solve')
@@ -660,7 +666,7 @@ class ThermalSWSolver(TimesteppingSolver):
             - beta_u * 0.5 * bbar * div(w*(D-Dbar)) * dx
             + beta_u * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
             + inner(phi, (D - D_in)) * dx
-            + beta_d * phi * Dbar * div(u) * dx
+            + beta_d * phi * div(Dbar*u) * dx
         )
 
         if 'coriolis' in equation.prescribed_fields._field_names:
@@ -876,7 +882,7 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
             inner(w, (u - u_in)) * dx
             - beta_u * (D - Dbar) * div(w*g) * dx
             + inner(phi, (D - D_in)) * dx
-            + beta_d * phi * Dbar * div(u) * dx
+            + beta_d * phi * div(Dbar*u) * dx
         )
 
         if 'coriolis' in equation.prescribed_fields._field_names:

@@ -14,7 +14,9 @@ def run(timestepper, tmax, f_end):
 
 
 @pytest.mark.parametrize("geometry", ["slice", "sphere"])
-@pytest.mark.parametrize("equation_form", ["advective", "continuity"])
+@pytest.mark.parametrize("equation_form", [
+    "advective", "continuity", "advective_then_flux"
+])
 def test_dg_transport_scalar(tmpdir, geometry, equation_form, tracer_setup):
     setup = tracer_setup(tmpdir, geometry)
     domain = setup.domain
@@ -25,8 +27,12 @@ def test_dg_transport_scalar(tmpdir, geometry, equation_form, tracer_setup):
     else:
         eqn = ContinuityEquation(domain, V, "f")
 
-    transport_scheme = SSPRK3(domain)
-    transport_method = DGUpwind(eqn, "f")
+    if equation_form == "advective_then_flux":
+        transport_method = DGUpwind(eqn, "f", advective_then_flux=True)
+        transport_scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.linear)
+    else:
+        transport_method = DGUpwind(eqn, "f")
+        transport_scheme = SSPRK3(domain)
 
     time_varying_velocity = False
     timestepper = PrescribedTransport(

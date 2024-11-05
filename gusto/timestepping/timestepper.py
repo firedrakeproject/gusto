@@ -2,10 +2,11 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, Projector, split
-from firedrake.fml import drop, Term
+from firedrake.fml import drop, Term, LabelledForm
 from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
 from gusto.core import TimeLevelFields, StateFields
+from gusto.core.io import TimeData
 from gusto.core.labels import transport, diffusion, prognostic, transporting_velocity
 from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
@@ -30,6 +31,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.dt = self.equation.domain.dt
         self.t = self.equation.domain.t
         self.reference_profiles_initialised = False
+        self.last_ref_update_time = None
 
         self.setup_fields()
         self.setup_scheme()
@@ -133,6 +135,25 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         scheme.residual = transporting_velocity.update_value(scheme.residual, uadv)
 
+        # Now also replace transporting velocity in the terms that are
+        # contained in labels
+        for idx, t in enumerate(scheme.residual.terms):
+            if t.has_label(transporting_velocity):
+                for label in t.labels.keys():
+                    if type(t.labels[label]) is LabelledForm:
+                        t.labels[label] = t.labels[label].label_map(
+                            lambda s: s.has_label(transporting_velocity),
+                            map_if_true=lambda s:
+                            Term(ufl.replace(
+                                s.form,
+                                {s.get(transporting_velocity): uadv}),
+                                s.labels
+                            )
+                        )
+
+                        scheme.residual.terms[idx].labels[label] = \
+                            transporting_velocity.update_value(t.labels[label], uadv)
+
     def log_timestep(self):
         """
         Logs the start of a time step.
@@ -141,7 +162,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         logger.info('='*40)
         logger.info(f'at start of timestep {self.step}, t={float(self.t)}, dt={float(self.dt)}')
 
-    def run(self, t, tmax, field_to_sum=None, pick_up=False):
+    def run(self, t, tmax, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax
 
@@ -163,9 +184,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         if pick_up:
             # Pick up fields, and return other info to be picked up
-            t, reference_profiles, self.step, initial_timesteps = self.io.pick_up_from_checkpoint(self.fields)
-            self.set_reference_profiles(reference_profiles)
+            time_data, reference_profiles = self.io.pick_up_from_checkpoint(self.fields)
+            t = time_data.t
+            self.step = time_data.step
+            initial_timesteps = time_data.initial_steps
+            last_ref_update_time = time_data.last_ref_update_time
+            self.set_reference_profiles(reference_profiles, last_ref_update_time)
             self.set_initial_timesteps(initial_timesteps)
+
         else:
             self.step = 1
 
@@ -193,22 +219,19 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.step += 1
 
             with timed_stage("Dump output"):
-                self.io.dump(self.fields, float(self.t), self.step, self.get_initial_timesteps())
-            
-
-            if field_to_sum is not None:
-                field_name = field_to_sum[0]
-                field = self.fields(f'{field_name}')
-                diag_name = field_to_sum[1]
-                diag = self.fields(f'{diag_name}')
-                field += diag
+                time_data = TimeData(
+                    t=float(self.t), step=self.step,
+                    initial_steps=self.get_initial_timesteps(),
+                    last_ref_update_time=self.last_ref_update_time
+                )
+                self.io.dump(self.fields, time_data)
 
         if self.io.output.checkpoint and self.io.output.checkpoint_method == 'dumbcheckpoint':
             self.io.chkpt.close()
 
         logger.info(f'TIMELOOP complete. t={float(self.t):.5f}, {tmax=:.5f}')
 
-    def set_reference_profiles(self, reference_profiles):
+    def set_reference_profiles(self, reference_profiles, last_ref_update_time=None):
         """
         Initialise the model's reference profiles.
 
@@ -216,6 +239,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             where 'field_name' is the string giving the name of the reference
             profile field expr is the :class:`ufl.Expr` whose value is used to
             set the reference field.
+        last_ref_update_time (float, optional): the last time that the reference
+            profiles were updated. Defaults to None.
         """
         for field_name, profile in reference_profiles:
             if field_name+'_bar' in self.fields:
@@ -244,6 +269,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                     logger.warning(f'Setting reference profile for diagnostic {field_name}')
                     # Don't need to do anything else as value in field container has already been set
         self.reference_profiles_initialised = True
+
+        self.last_ref_update_time = last_ref_update_time
 
 
 class Timestepper(BaseTimestepper):
