@@ -387,12 +387,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                         # terms in the list, with the others remaining unchanged
                         # from xstar into xp.
                         logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: '
-                                    + 'Simultaneous transport of {name}')
-                        self.transport_field(xp(self.field_name), xstar(self.field_name))
+                                    + f'Simultaneous transport of {name}')
+                        self.transport_field(self.field_name, scheme, xstar, xp)
                     else:
                         # transport a single field from xstar and put the result in xp
                         logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: {name}')
-                        self.transport_field(xp(name), xstar(name))
+                        self.transport_field(name, scheme, xstar, xp)
 
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))

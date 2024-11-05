@@ -135,12 +135,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             if isinstance(self.field_name, list):
                 # Multiple fields are being solved for simultaneously.
                 # This enables conservative transport to be implemented with SIQN.
-
-                # Use the full mixed space for self.fs. The field_name and residual
-                # The field_name, residual, and BCs are set up later.
+                # Use the full mixed space for self.fs, with the
+                # field_name, residual, and BCs being set up later.
                 self.fs = equation.function_space
                 self.idx = None
-
             else:
                 self.idx = equation.field_names.index(self.field_name)
                 self.fs = equation.spaces[self.idx]
@@ -187,7 +185,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # Set the field name and bcs if using simultaneous transport.
         if isinstance(self.field_name, list):
             self.field_name = equation.field_name
-            bcs = equation.bcs[self.field_name]
+            # Remove this once the bcs are correctly applied
+            # to the new mixed fs space.
+            bcs = None  # equation.bcs[self.field_name]
 
         self.evaluate_source = []
         self.physics_names = []
@@ -281,10 +281,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.bcs = None
         elif self.wrapper is not None:
             if self.wrapper_name == 'mixed_options':
-                # For now, avoid placing boundary conditions as
-                # a boundary condition cannot be applied on a
-                # mixed space directly.
-                self.bcs = bcs
+                # Need to change this to apply the correct Dirichlet
+                # condition to the modified function space
+                self.bcs = None
             else:
                 # Transfer boundary conditions onto test function space
                 self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
