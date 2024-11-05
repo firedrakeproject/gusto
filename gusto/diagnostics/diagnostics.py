@@ -134,6 +134,8 @@ class DiagnosticField(object, metaclass=ABCMeta):
 
         assert method in ['interpolate', 'project', 'solve', 'assign'], \
             f'Invalid evaluation method {self.method} for diagnostic {self.name}'
+        
+        
 
         self._initialised = False
         self.required_fields = required_fields
@@ -1050,7 +1052,7 @@ class Heaviside_flag_less(DiagnosticField):
             field_name (str): the name of the field to be subtracted from.
             constant (Functionspace?): the constant to be subtracted.
         """
-        super().__init__(method='interpolate', required_fields=(field_name))
+        super().__init__(method='interpolate', required_fields=(field_name,))
         self.field_name = field_name
         self.constant = constant
 
@@ -1086,7 +1088,7 @@ class Time_integral_1(Sum):
         """
         self.field_name1 = name
         self.field_name2 = name+'_time_integral_1'
-        DiagnosticField.__init__(self, method='assign', required_fields=(name))
+        DiagnosticField.__init__(self, method='assign', required_fields=(name,))
 
     def setup(self, domain, state_fields):
         """
@@ -1146,7 +1148,7 @@ class Time_integral(DiagnosticField):
         """
         self.field_name = name
         self.integral_name = name+"_time_integral"
-        DiagnosticField.__init__(self, method='assign', required_fields=(self.field_name))
+        DiagnosticField.__init__(self, method='assign', required_fields=(self.field_name,))
 
     def setup(self, domain, state_fields):
         """

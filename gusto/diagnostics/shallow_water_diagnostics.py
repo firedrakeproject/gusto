@@ -286,7 +286,7 @@ class SWCO2cond_flag(DiagnosticField):
             field_name (str): the name of the field to be subtracted from.
             constant (Functionspace?): the constant to be subtracted.
         """
-        super().__init__(method='interpolate', required_fields=(field_name))
+        super().__init__(method='interpolate', required_fields=(field_name,))
         self.field_name = field_name
         self.constant = constant
 
