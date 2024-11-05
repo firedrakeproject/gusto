@@ -21,7 +21,7 @@ __all__ = ["Diagnostics", "DiagnosticField", "CourantNumber", "Gradient",
            "ZonalComponent", "RadialComponent", "Energy", "KineticEnergy",
            "Sum", "Difference", "SteadyStateError", "Perturbation",
            "Divergence", "TracerDensity", "IterativeDiagnosticField",
-           "Heaviside_flag_less", "Time_integral", "Time_integral_1"]
+           "Heaviside_flag_less", "CumulativeSum", "Time_integral_1"]
 
 
 class Diagnostics(object):
@@ -1139,15 +1139,15 @@ class Time_integral_1(Sum):
         return self.field_name2
 
 
-class Time_integral(DiagnosticField):
-    """Base diagnostic for computing the time integral of a field."""
+class CumulativeSum(DiagnosticField):
+    """Base diagnostic for cumulatively summing a field."""
     def __init__(self, name):
         """
         Args:
-            name (str): name of the field to take the time integral of.
+            name (str): name of the field to take the cumulative sum of.
         """
         self.field_name = name
-        self.integral_name = name+"_time_integral"
+        self.integral_name = name+"_cumulative"
         DiagnosticField.__init__(self, method='assign', required_fields=(self.field_name,))
 
     def setup(self, domain, state_fields):
@@ -1158,17 +1158,11 @@ class Time_integral(DiagnosticField):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        # if not hasattr(domain.spaces, "DG0"):
-        #     DG0 = domain.spaces.create_space("DG0", "DG", 0)
-        # else:
-        #     DG0 = domain.spaces("DG0")
-        # assert DG0.extruded, 'Cannot compute precipitation on a non-extruded mesh'
-        
 
         # Gather fields
         self.integrand = state_fields(self.field_name)
 
-        #space
+        # space
         self.space = self.integrand.function_space()
 
         self.field = state_fields(self.integral_name, space=self.space, dump=True, pick_up=True)
@@ -1176,7 +1170,7 @@ class Time_integral(DiagnosticField):
         self.field.assign(0.0)
 
     def compute(self):
-        """Increment the precipitation diagnostic."""
+        """Increment the cumulative sum diagnostic."""
         self.field.assign(self.field + self.integrand)
 
     @property

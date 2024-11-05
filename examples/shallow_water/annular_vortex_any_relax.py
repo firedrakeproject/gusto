@@ -322,9 +322,9 @@ if not restart:
 
     # H_rel = Function(domain.spaces('L2'))
 
-diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography'), SWCO2cond_flag('D', h_th), Time_integral('CO2cond_flag')]
+diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography'), SWCO2cond_flag('D', h_th), CumulativeSum('CO2cond_flag')]
 dumplist = ['D', 'topography', 'rainsum', 'tracer']
-groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'rainsum', 'D_plus_topography', 'CO2cond_flag', 'CO2cond_flag_time_integral']
+groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'rainsum', 'D_plus_topography', 'CO2cond_flag', 'CO2cond_flag_cumulative']
 
 # I/O (input/output)
 homepath = '/data/home/sh1293/results'
