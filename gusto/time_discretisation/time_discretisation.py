@@ -354,9 +354,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         # get default solver options if none passed in
         if solver_parameters is None:
             self.solver_parameters = {'snes_type': 'ksponly',
-                                      'ksp_type': 'cg',
-                                      'pc_type': 'bjacobi',
-                                      'sub_pc_type': 'ilu'}
+                                      'ksp_type': 'preonly',
+                                      'pc_type': 'lu'}
         else:
             self.solver_parameters = solver_parameters
 
