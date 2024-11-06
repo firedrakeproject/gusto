@@ -5,7 +5,7 @@ Time discretisation objects discretise ∂y/∂t = F(y), for variable y, time t 
 operator F.
 """
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 import math
 
 from firedrake import (Function, TestFunction, TestFunctions, DirichletBC,
@@ -261,7 +261,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
     def nlevels(self):
         return 1
 
-    @abstractproperty
+    @property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
@@ -271,7 +271,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         return l.form
 
-    @abstractproperty
+    @property
     def rhs(self):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(

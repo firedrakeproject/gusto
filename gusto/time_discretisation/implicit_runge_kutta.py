@@ -31,7 +31,9 @@ class ImplicitRungeKutta(TimeDiscretisation):
     For each i = 1, s  in an s stage method
     we have the intermediate solutions:                                       \n
     y_i = y^n +  dt*(a_i1*k_1 + a_i2*k_2 + ... + a_ii*k_i)                    \n
-    We compute the gradient at the intermediate location, k_i = F(y_i)        \n
+    For the increment form we compute the gradient at the                     \n
+    intermediate location, k_i = F(y_i), whilst for the                       \n
+    predictor form we solve for each intermediate solution y_i.               \n
 
     At the last stage, compute the new solution by:                           \n
     y^{n+1} = y^n + dt*(b_1*k_1 + b_2*k_2 + .... + b_s*k_s)
@@ -110,14 +112,8 @@ class ImplicitRungeKutta(TimeDiscretisation):
                 'Runge-Kutta formulation is not implemented'
             )
 
-    def lhs(self):
-        return super().lhs
-
-    def rhs(self):
-        return super().rhs
-
     def res(self, stage):
-        """Set up the discretisation's residual for a given stage."""
+        """Set up the residual for the predictor formulation for a given stage."""
         # Add time derivative terms  y_s - y^n for stage s
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
@@ -150,7 +146,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
 
     @property
     def final_res(self):
-        """Set up the discretisation's final residual."""
+        """Set up the final residual fpr the predictor formulation."""
         # Add time derivative terms  y^{n+1} - y^n
         mass_form = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                             map_if_false=drop)
@@ -194,7 +190,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
 
     @cached_property
     def final_solver(self):
-        """Set up a solver for the final solve to evaluate time level n+1."""
+        """Set up a solver for the final solve for the predictor formulation to evaluate time level n+1."""
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
