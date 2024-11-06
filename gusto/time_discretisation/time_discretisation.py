@@ -397,6 +397,21 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                        + ' as the time derivative term is nonlinear')
             logger.warning(message)
             self.solver_parameters['snes_type'] = 'newtonls'
+
+            if len(self.x0.subfunctions) > 1:
+                self.solver_parameters.update({
+                    'ksp_type': 'preonly',
+                    'pc_type': 'fieldsplit',
+                    'pc_fieldsplit_type': 'multiplicative',
+                })
+                for fs in self.fs.subfunctions:
+                    self.solver_parameters.update({
+                        f'fieldsplit_{fs.name}': {
+                            'ksp_type': 'cg',
+                            'pc_type': 'bjacobi',
+                            'sub_pc_type': 'ilu',
+                        }
+                    })
         else:
             self.solver_parameters.setdefault('snes_lag_preconditioner', -2)
             self.solver_parameters.setdefault('snes_lag_preconditioner_persists', None)
