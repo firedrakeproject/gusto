@@ -401,29 +401,6 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             self.solver_parameters.setdefault('snes_lag_preconditioner', -2)
             self.solver_parameters.setdefault('snes_lag_preconditioner_persists', None)
 
-            # The time derivatives for different fields are independent if all the
-            # time derivatives are linear, i.e. the mass matrix is block diagonal.
-            # Solving the time-derivative monolithically is suboptimal for algorithms
-            # with superlinear scaling (i.e. if the factorisation doesn't "recognise"
-            # the block diagonal structure.
-            # Instead we ask PETSc to split up the matrix into individual fields
-            # (fieldsplit), and solve each field independently (additive).
-            # Equivalently, nfields*(Nx^k) < (nfields*N)^k if nfields>1, k>1
-            if len(self.x0.subfunctions) > 1:
-                self.solver_parameters.update({
-                    'ksp_type': 'preonly',
-                    'pc_type': 'fieldsplit',
-                    'pc_fieldsplit_type': 'additive',
-                })
-                for fs in self.fs.subfunctions:
-                    self.solver_parameters.update({
-                        f'fieldsplit_{fs.name}': {
-                            'ksp_type': 'cg',
-                            'pc_type': 'bjacobi',
-                            'sub_pc_type': 'ilu',
-                        }
-                    })
-
     @cached_property
     def lhs(self):
         """Set up the discretisation's left hand side (the time derivative)."""
