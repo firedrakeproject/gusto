@@ -15,7 +15,7 @@ jobs:
   build:
     name: "Build Gusto"
     # The type of runner that the job will run on
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     # The docker container to use.
     container:
       image: firedrakeproject/firedrake-vanilla:latest
@@ -55,7 +55,7 @@ jobs:
           find . -name "*.log" -exec cp --parents {} /__w/gusto/gusto/logs/ \;
       - name: Upload artifact
         if: always()
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           name: log-files
           path: /__w/gusto/gusto/logs
