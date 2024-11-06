@@ -398,8 +398,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             logger.warning(message)
             self.solver_parameters['snes_type'] = 'newtonls'
         else:
-            self.solver_parameters.setdefault('snes_lag_jacobian', -2)
-            self.solver_parameters.setdefault('snes_lag_jacobian_persists', None)
+            self.solver_parameters.setdefault('snes_lag_preconditioner', -2)
+            self.solver_parameters.setdefault('snes_lag_preconditioner_persists', None)
 
     @cached_property
     def lhs(self):
