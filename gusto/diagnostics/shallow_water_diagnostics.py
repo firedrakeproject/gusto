@@ -179,15 +179,18 @@ class Vorticity(DiagnosticField):
 
             if vorticity_type == "potential":
                 a = q*gamma*D*dx
+                constant_jacobian = False
             else:
                 a = q*gamma*dx
+                constant_jacobian = True
 
             L = (- inner(domain.perp(grad(gamma)), u))*dx
             if vorticity_type != "relative":
                 f = state_fields("coriolis")
                 L += gamma*f*dx
 
-            problem = LinearVariationalProblem(a, L, self.field)
+            problem = LinearVariationalProblem(a, L, self.field,
+                                               constant_jacobian=constant_jacobian)
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={"ksp_type": "cg"})
 
 
