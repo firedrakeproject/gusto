@@ -355,7 +355,6 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         if solver_parameters is None:
             self.solver_parameters = {'snes_type': 'ksponly',
                                       'ksp_type': 'cg',
-                                      'ksp_rtol': 1e-10,
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}
         else:
@@ -385,7 +384,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
 
-        # If the time_derivative term is nonlinear, we must use a nonlinear solver
+        # If the time_derivative term is nonlinear, we must use a nonlinear solver,
+        # but if the time_derivative term is linear, we can reuse the factorisations.
         if (
             len(self.residual.label_map(
                 lambda t: t.has_label(nonlinear_time_derivative),
@@ -397,6 +397,9 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                        + ' as the time derivative term is nonlinear')
             logger.warning(message)
             self.solver_parameters['snes_type'] = 'newtonls'
+        else:
+            self.solver_parameters.setdefault('snes_lag_jacobian', -2)
+            self.solver_parameters.setdefault('snes_lag_jacobian_persists', None)
 
     @cached_property
     def lhs(self):
