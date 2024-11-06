@@ -18,7 +18,8 @@ from gusto import (
     CompressibleEulerEquations, CompressibleSolver, ZonalComponent,
     compressible_hydrostatic_balance, Perturbation, GeneralCubedSphereMesh,
     Timestepper, IMEX_SSP3, split_continuity_form, explicit, implicit,
-    time_derivative, transport, IMEXRungeKutta
+    time_derivative, transport, IMEXRungeKutta, split_hv_advective_form,
+    horizontal, vertical, Split_DGUpwind
 )
 import numpy as np
 
@@ -70,7 +71,7 @@ def dcmip_3_1_gravity_wave(
     # ------------------------------------------------------------------------ #
 
     element_order = 1
-    u_eqn_type = 'vector_invariant_form'
+    u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -90,12 +91,20 @@ def dcmip_3_1_gravity_wave(
     )
     print("Opt Cores:", eqns.X.function_space().dim()/50000.)
     eqns = split_continuity_form(eqns)
-    eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
-    #eqns.label_terms(lambda t: not any(t.has_label(time_derivative, horizontal)), implicit)
-    eqns.label_terms(lambda t: t.has_label(transport), explicit)
+    eqns = split_hv_advective_form(eqns, "theta")
+    # eqns = split_hv_advective_form(eqns, "rho")
+    #eqns = split_hv_advective_form(eqns, "u")
+    # eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
+    # #eqns.label_terms(lambda t: not any(t.has_label(time_derivative, horizontal)), implicit)
+    # eqns.label_terms(lambda t: t.has_label(transport), explicit)
     # eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(vertical), implicit)
     # eqns.label_terms(lambda t: t.has_label(transport) and not any(t.has_label(horizontal, vertical)), explicit)
 
+    eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
+    #eqns.label_terms(lambda t: not any(t.has_label(time_derivative, horizontal)), implicit)
+    eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(horizontal), explicit)
+    eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(vertical), implicit)
+    eqns.label_terms(lambda t: t.has_label(transport) and not (t.has_label(horizontal) and  t.has_label(vertical)), explicit)
     # I/O
     output = OutputParameters(
         dirname=dirname, dumpfreq=dumpfreq, dump_vtus=False, dump_nc=True
@@ -112,7 +121,7 @@ def dcmip_3_1_gravity_wave(
     #     SSPRK3(domain, "theta", options=SUPGOptions(), fixed_subcycles=2)
     # ]
     transport_methods = [
-        DGUpwind(eqns, field) for field in ["u", "rho", "theta"]
+        DGUpwind(eqns, "u"), DGUpwind(eqns, "rho")
     ]
 
     nl_solver_parameters = {
@@ -136,13 +145,31 @@ def dcmip_3_1_gravity_wave(
     "assembled_pc_star_sub_sub_pc_factor_reuse_fill": None,
     "assembled_pc_star_sub_sub_pc_factor_fill": 1.2}
 
+    nl_solver_parameters = {
+    "mat_type": "matfree",
+    "ksp_type": "gmres",
+    "ksp_converged_reason": None,
+    "ksp_atol": 1e-5,
+    "ksp_rtol": 1e-5,
+    "ksp_max_it": 400,
+    "pc_type": "python",
+    "pc_python_type": "firedrake.AssembledPC",
+    "assembled_pc_star_sub_sub_pc_type": "lu",
+    "assembled_pc_type": "python",
+    "assembled_pc_python_type": "firedrake.ASMStarPC",
+    "assembled_pc_star_construct_dim": 0,
+    "assembled_pc_star_sub_sub_pc_factor_mat_ordering_type": "rcm",
+    "assembled_pc_star_sub_sub_pc_factor_reuse_ordering": None,
+    "assembled_pc_star_sub_sub_pc_factor_reuse_fill": None,
+    "assembled_pc_star_sub_sub_pc_factor_fill": 1.2}
+
 
     # IMEX time stepper
 
     butcher_imp = np.array([[0.0, 0.0], [0.0, 0.5], [0.0, 1.]])
     butcher_exp = np.array([[0.0, 0.0], [0.5, 0.0], [0.0, 1.]])
-    scheme = IMEXRungeKutta(domain, butcher_imp, butcher_exp, solver_parameters=nl_solver_parameters)
-    stepper = Timestepper(eqns, scheme, io, transport_methods)
+    scheme = IMEXRungeKutta(domain, butcher_imp, butcher_exp, nonlinear_solver_parameters=nl_solver_parameters)
+    stepper = Timestepper(eqns, scheme, io, spatial_methods=transport_methods)
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #

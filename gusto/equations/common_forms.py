@@ -380,7 +380,6 @@ def split_hv_advective_form(equation, field_name):
     """
     k = equation.domain.k   # vertical unit vector
     for t in equation.residual:
-        print(t.get(prognostic))
         if (t.get(transport) == TransportEquationType.advective and t.get(prognostic) == field_name):
             # Get fields and test functions
             subj = t.get(subject)
@@ -431,7 +430,7 @@ def split_hv_advective_form(equation, field_name):
 
 
             # Add new terms onto residual
-            equation.residual += subject(adv_horiz_term + adv_vert_term, subj)
+            equation.residual += subject(adv_horiz_term, subj) + subject(adv_vert_term, subj)
 
 
     return equation
