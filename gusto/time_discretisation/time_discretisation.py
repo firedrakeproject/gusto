@@ -413,8 +413,27 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                         }
                     })
         else:
+            self.solver_parameters.setdefault('snes_lag_jacobian', -2)
+            self.solver_parameters.setdefault('snes_lag_jacobian_persists', None)
             self.solver_parameters.setdefault('snes_lag_preconditioner', -2)
             self.solver_parameters.setdefault('snes_lag_preconditioner_persists', None)
+
+            # The time derivatives for each field are independent if all time
+            # time derivatives are linear, so we solve each one independently.
+            if len(self.x0.subfunctions) > 1:
+                self.solver_parameters.update({
+                    'ksp_type': 'preonly',
+                    'pc_type': 'fieldsplit',
+                    'pc_fieldsplit_type': 'additive',
+                })
+                for fs in self.fs.subfunctions:
+                    self.solver_parameters.update({
+                        f'fieldsplit_{fs.name}': {
+                            'ksp_type': 'cg',
+                            'pc_type': 'bjacobi',
+                            'sub_pc_type': 'ilu',
+                        }
+                    })
 
     @cached_property
     def lhs(self):
