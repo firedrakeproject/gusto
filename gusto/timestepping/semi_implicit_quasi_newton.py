@@ -541,9 +541,14 @@ class Forcing(object):
         )
 
         self.solver_parameters = {
-            'ksp_type': 'cg',
-            'pc_type': 'bjacobi',
-            'sub_pc_type': 'ilu'
+            'ksp_type': 'preonly',
+            'pc_type': 'fieldsplit',
+            'pc_fieldsplit_type': 'additive',
+            **{f'fieldsplit_{fs.name}': {
+                'ksp_type': 'cg',
+                'pc_type': 'bjacobi',
+                'sub_pc_type': 'ilu'
+            } for fs in W.subfunctions}
         }
 
         self.solvers = {}

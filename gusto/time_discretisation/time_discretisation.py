@@ -398,20 +398,18 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             logger.warning(message)
             self.solver_parameters['snes_type'] = 'newtonls'
 
+            # TODO: move this outside the if-else and just set the fieldsplit_type here
             if len(self.x0.subfunctions) > 1:
                 self.solver_parameters.update({
                     'ksp_type': 'preonly',
                     'pc_type': 'fieldsplit',
                     'pc_fieldsplit_type': 'multiplicative',
+                    **{f'fieldsplit_{fs.name}': {
+                        'ksp_type': 'cg',
+                        'pc_type': 'bjacobi',
+                        'sub_pc_type': 'ilu'
+                    } for fs in self.fs.subfunctions}
                 })
-                for fs in self.fs.subfunctions:
-                    self.solver_parameters.update({
-                        f'fieldsplit_{fs.name}': {
-                            'ksp_type': 'cg',
-                            'pc_type': 'bjacobi',
-                            'sub_pc_type': 'ilu',
-                        }
-                    })
         else:
             self.solver_parameters.setdefault('snes_lag_jacobian', -2)
             self.solver_parameters.setdefault('snes_lag_jacobian_persists', None)
@@ -425,15 +423,12 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                     'ksp_type': 'preonly',
                     'pc_type': 'fieldsplit',
                     'pc_fieldsplit_type': 'additive',
+                    **{f'fieldsplit_{fs.name}': {
+                        'ksp_type': 'cg',
+                        'pc_type': 'bjacobi',
+                        'sub_pc_type': 'ilu'
+                    } for fs in self.fs.subfunctions}
                 })
-                for fs in self.fs.subfunctions:
-                    self.solver_parameters.update({
-                        f'fieldsplit_{fs.name}': {
-                            'ksp_type': 'cg',
-                            'pc_type': 'bjacobi',
-                            'sub_pc_type': 'ilu',
-                        }
-                    })
 
     @cached_property
     def lhs(self):
