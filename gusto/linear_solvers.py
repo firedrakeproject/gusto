@@ -1221,16 +1221,19 @@ class MoistThermalSWSolver(TimesteppingSolver):
         be_xn = b_xn - beta2*qv_xn
         sat_expr = compute_saturation(q0, nu, H, g, D_xn, be_xn, B)
 
-        P_expr = (qv_xn - sat_expr)/self.tau
-        P_expr = conditional(P_expr < 0,
-                             max_value(P_expr,
-                                       -qc_xn/self.tau),
-                             min_value(P_expr,
-                                       qv_xn/self.tau))
+        # new idea for P - the physics scheme should be linearised
+        qv_prime = qv_xn - qvbar
+        be_prime = be_xn - (bbar - beta2*qvbar)
+        b_prime = b_xn - bbar   # should we use be_prime or b_prime?
+        D_prime = D_xn - Dbar
+
+        P_prime_expr = (qv_prime + sat_expr * (qv_prime*beta2*nu/g
+                                              + b_prime*nu/g
+                                              + D_prime/D_xn))/self.tau
 
         # interpolators for sat function and P function
         self.q_sat_interpolator = Interpolator(sat_expr, VD)
-        self.P_interpolator = Interpolator(P_expr, VD)
+        self.P_interpolator = Interpolator(P_prime_expr, VD)
 
         # write the weak form of the system to solve
         eqn = (
