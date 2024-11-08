@@ -146,7 +146,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
 
     @property
     def final_res(self):
-        """Set up the final residual fpr the predictor formulation."""
+        """Set up the final residual for the predictor formulation."""
         # Add time derivative terms  y^{n+1} - y^n
         mass_form = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                             map_if_false=drop)
@@ -190,7 +190,10 @@ class ImplicitRungeKutta(TimeDiscretisation):
 
     @cached_property
     def final_solver(self):
-        """Set up a solver for the final solve for the predictor formulation to evaluate time level n+1."""
+        """
+        Set up a solver for the final solve for the predictor
+        formulation to evaluate time level n+1.
+        """
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
