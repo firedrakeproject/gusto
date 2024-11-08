@@ -92,8 +92,8 @@ def dcmip_3_1_gravity_wave(
     print("Opt Cores:", eqns.X.function_space().dim()/50000.)
     eqns = split_continuity_form(eqns)
     eqns = split_hv_advective_form(eqns, "theta")
-    # eqns = split_hv_advective_form(eqns, "rho")
-    #eqns = split_hv_advective_form(eqns, "u")
+    eqns = split_hv_advective_form(eqns, "rho")
+    eqns = split_hv_advective_form(eqns, "u")
     # eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
     # #eqns.label_terms(lambda t: not any(t.has_label(time_derivative, horizontal)), implicit)
     # eqns.label_terms(lambda t: t.has_label(transport), explicit)
@@ -103,7 +103,7 @@ def dcmip_3_1_gravity_wave(
     eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
     #eqns.label_terms(lambda t: not any(t.has_label(time_derivative, horizontal)), implicit)
     eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(horizontal), explicit)
-    eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(vertical), implicit)
+    eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(vertical), explicit)
     eqns.label_terms(lambda t: t.has_label(transport) and not (t.has_label(horizontal) and  t.has_label(vertical)), explicit)
     # I/O
     output = OutputParameters(
@@ -117,11 +117,11 @@ def dcmip_3_1_gravity_wave(
     # Transport schemes
     # transported_fields = [
     #     TrapeziumRule(domain, "u"),
-    #     SSPRK3(domain, "rho", fixed_subcycles=2),
+    #     SSPRK3(domain, "rho", fixed_subcycles=2),    
     #     SSPRK3(domain, "theta", options=SUPGOptions(), fixed_subcycles=2)
     # ]
     transport_methods = [
-        DGUpwind(eqns, "u"), DGUpwind(eqns, "rho")
+        Split_DGUpwind(eqns, "u"), Split_DGUpwind(eqns, "rho"), Split_DGUpwind(eqns, "theta")
     ]
 
     nl_solver_parameters = {
