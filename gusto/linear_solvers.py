@@ -1227,7 +1227,7 @@ class MoistThermalSWSolver(TimesteppingSolver):
         b_prime = b_xn - bbar   # should we use be_prime or b_prime?
         D_prime = D_xn - Dbar
 
-        P_prime_expr = (qv_prime + sat_expr * (qv_prime*beta2*nu/g
+        P_prime_expr = (qvbar + qv_prime + sat_expr * (qv_prime*beta2*nu/g
                                               + b_prime*nu/g
                                               + D_prime/D_xn))/self.tau
 
