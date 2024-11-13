@@ -185,9 +185,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # Set the field name and bcs if using simultaneous transport.
         if isinstance(self.field_name, list):
             self.field_name = equation.field_name
-            # Set up the bcs later, so leave as none
-            # for now. What if no wrapper though ... .
-            bcs = None# equation.bcs[self.field_name]
+            # Set up the bcs later, so leave as None
+            # for now. However, this means no bcs
+            # are passed into the wrapper setups ...
+            bcs = None
 
         self.evaluate_source = []
         self.physics_names = []
@@ -286,8 +287,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 self.bcs = []
                 for idx, field_name in enumerate(self.equation.field_names):
                     for bc in equation.bcs[field_name]:
-                        self.bcs.append(DirichletBC(self.fs.sub(idx), 
-                                                    bc.function_arg, 
+                        self.bcs.append(DirichletBC(self.fs.sub(idx),
+                                                    bc.function_arg,
                                                     bc.sub_domain))
             else:
                 # Transfer boundary conditions onto test function space
