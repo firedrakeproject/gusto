@@ -70,8 +70,8 @@ def thermal_williamson_2(
     params = ShallowWaterParameters(H=mean_depth, g=g)
     Omega = params.Omega
     fexpr = 2*Omega*z/radius
-    eqns = ShallowWaterEquations(
-        domain, params, fexpr=fexpr, u_transport_option=u_eqn_type, thermal=True
+    eqns = ThermalShallowWaterEquations(
+        domain, params, fexpr=fexpr, u_transport_option=u_eqn_type)
     )
 
     # IO

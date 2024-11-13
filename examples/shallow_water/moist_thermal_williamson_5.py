@@ -99,8 +99,8 @@ def moist_thermal_williamson_5(
     tracers = [
         WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')
     ]
-    eqns = ShallowWaterEquations(
-        domain, parameters, fexpr=fexpr, bexpr=tpexpr, thermal=True,
+    eqns = ThermalShallowWaterEquations(
+        domain, parameters, fexpr=fexpr, bexpr=tpexpr,
         active_tracers=tracers, u_transport_option=u_eqn_type
     )
 
