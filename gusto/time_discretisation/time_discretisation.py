@@ -185,9 +185,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # Set the field name and bcs if using simultaneous transport.
         if isinstance(self.field_name, list):
             self.field_name = equation.field_name
-            # Remove this once the bcs are correctly applied
-            # to the new mixed fs space.
-            bcs = None  # equation.bcs[self.field_name]
+            # Set up the bcs later, so leave as none
+            # for now. What if no wrapper though ... .
+            bcs = None# equation.bcs[self.field_name]
 
         self.evaluate_source = []
         self.physics_names = []
@@ -281,9 +281,14 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.bcs = None
         elif self.wrapper is not None:
             if self.wrapper_name == 'mixed_options':
-                # Need to change this to apply the correct Dirichlet
-                # condition to the modified function space
-                self.bcs = None
+                # Define new Dirichlet bcs on the wrapper-modified
+                # mixed function space.
+                self.bcs = []
+                for idx, field_name in enumerate(self.equation.field_names):
+                    for bc in equation.bcs[field_name]:
+                        self.bcs.append(DirichletBC(self.fs.sub(idx), 
+                                                    bc.function_arg, 
+                                                    bc.sub_domain))
             else:
                 # Transfer boundary conditions onto test function space
                 self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
