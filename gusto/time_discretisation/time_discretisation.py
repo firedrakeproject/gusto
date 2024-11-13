@@ -149,14 +149,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         t.labels),
                     drop)
 
-                bcs = equation.bcs[self.field_name]
-
         else:
             self.field_name = equation.field_name
             self.fs = equation.function_space
             self.idx = None
-
-            bcs = equation.bcs[self.field_name]
 
         if len(active_labels) > 0:
             if isinstance(self.field_name, list):
@@ -182,13 +178,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     lambda t: any(t.has_label(time_derivative, *active_labels)),
                     map_if_false=drop)
 
-        # Set the field name and bcs if using simultaneous transport.
+        # Set the field name if using simultaneous transport.
         if isinstance(self.field_name, list):
             self.field_name = equation.field_name
-            # Set up the bcs later, so leave as None
-            # for now. However, this means no bcs
-            # are passed into the wrapper setups ...
-            bcs = None
+
+        bcs = equation.bcs[self.field_name]
 
         self.evaluate_source = []
         self.physics_names = []
@@ -239,7 +233,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         raise ValueError(f"The option defined for {field} is for a field that does not exist in the equation set")
 
                     field_idx = equation.field_names.index(field)
-                    subwrapper.setup(equation.spaces[field_idx], wrapper_bcs)
+                    subwrapper.setup(equation.spaces[field_idx], equation.bcs[field])
 
                     # Update the function space to that needed by the wrapper
                     self.wrapper.wrapper_spaces[field_idx] = subwrapper.function_space
