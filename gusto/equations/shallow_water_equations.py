@@ -295,8 +295,10 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         b_name = 'b_e' if equivalent_buoyancy else 'b'
         self.b_name = b_name
 
+        # Note: we do not pass bexpr to the parent class because we
+        # deal with topography terms here later
         super().__init__(domain, parameters,
-                         fexpr=fexpr, bexpr=bexpr,
+                         fexpr=fexpr, bexpr=None,
                          space_names=space_names,
                          u_transport_option=u_transport_option,
                          linearisation_map=linearisation_map,
@@ -311,7 +313,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         gamma = self.tests[2]
         u, D, b = split(self.X)[0:3]
         n = FacetNormal(domain.mesh)
-        topog = self.prescribed_fields('topography', domain.space('DG')).interpolate(bexpr) if bexpr else None
+        topog = self.prescribed_fields('topography', domain.spaces('DG')).interpolate(bexpr) if bexpr else None
         if equivalent_buoyancy:
             gamma_qt = self.tests[3]
             qt = split(self.X)[3]
