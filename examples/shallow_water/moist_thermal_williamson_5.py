@@ -21,7 +21,7 @@ from firedrake import (
 )
 from gusto import (
     Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
-    ShallowWaterParameters, ShallowWaterEquations, Sum,
+    ShallowWaterParameters, ThermalShallowWaterEquations, Sum,
     lonlatr_from_xyz, InstantRain, SWSaturationAdjustment, WaterVapour,
     CloudWater, Rain, GeneralIcosahedralSphereMesh, RelativeVorticity,
     ZonalComponent, MeridionalComponent

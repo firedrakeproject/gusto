@@ -1,7 +1,7 @@
 """Classes for defining variants of the shallow-water equations."""
 
 from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg,
-                       dS, split)
+                       dS, split, conditional)
 from firedrake.fml import subject, drop
 from gusto.core.labels import (time_derivative, transport, prognostic,
                                linearisation, pressure_gradient, coriolis)
@@ -12,9 +12,12 @@ from gusto.equations.common_forms import (
     linear_continuity_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
+from gusto.physics.shallow_water_microphysics import compute_saturation
+
 
 __all__ = ["ShallowWaterEquations", "LinearShallowWaterEquations",
-           "ThermalShallowWaterEquations",# "LinearThermalShallowWaterEquations",
+           "ThermalShallowWaterEquations",
+           #  "LinearThermalShallowWaterEquations",
            "ShallowWaterEquations_1d", "LinearShallowWaterEquations_1d"]
 
 
@@ -83,7 +86,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         field_names = self.field_names
         space_names = self.space_names
-        
+
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -181,7 +184,8 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
     for Coriolis parameter 'f' and bottom surface 'b'.
     """
 
-    def __init__(self, domain, parameters, fexpr=None, bexpr=None,
+    def __init__(self, domain, parameters, equivalent_buoyancy=False,
+                 fexpr=None, bexpr=None,
                  space_names=None, linearisation_map='default',
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None):
@@ -221,8 +225,15 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             NotImplementedError: active tracers are not yet implemented.
         """
 
-        self.field_names.append('b')
-        self.space_names['b'] = 'L2'
+        if equivalent_buoyancy:
+            b_name = 'b'
+            self.field_names.append(b_name)
+            self.space_names[b_name] = 'L2'
+        else:
+            b_name = 'b_e'
+            for new_field in [b_name, 'q_t']:
+                self.field_names.append(new_field)
+                self.space_names[new_field] = 'L2'
 
         super().__init__(domain, parameters,
                          fexpr=fexpr, bexpr=bexpr,
@@ -237,34 +248,80 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         H = parameters.H
 
         w = self.tests[0]
-        u, D, b = split(self.X)
+        gamma = self.tests[2]
+        u, D, b = split(self.X)[0:2]
+        n = FacetNormal(domain.mesh)
+        topog = self.prescribed_fields('topography', domain.space('DG')).interpolate(bexpr) if bexpr else None
+        if equivalent_buoyancy:
+            gamma_qt = self.tests[3]
+            qt = split(self.X)[3]
 
+        # -------------------------------------------------------------------- #
+        # Add pressure gradient-like terms to residual
+        # -------------------------------------------------------------------- #
         # drop usual pressure gradient term
         residual = self.residual.label_map(
             lambda t: t.has_label(pressure_gradient),
             drop)
 
-        # thermal source terms not involving topography.
+        # add (moist) thermal source terms not involving topography -
         # label these as the equivalent pressure gradient term
-        n = FacetNormal(domain.mesh)
-        source_form = pressure_gradient(
-            subject(prognostic(-D*div(b*w)*dx - 0.5*b*div(D*w)*dx
-                               + jump(b*w, n)*avg(D)*dS
-                               + 0.5*jump(D*w, n)*avg(b)*dS,
-                               'u'), self.X))
+        if equivalent_buoyancy:
+            q0 = parameters.q0
+            nu = parameters.nu
+            beta2 = parameters.beta2
+            qsat_expr = compute_saturation(q0, nu, H, g, D, b_name, topog)
+            qv = conditional(qt < qsat_expr, qt, qsat_expr)
+            source_form = pressure_gradient(subject(prognostic(
+                -D * div(b*w) * dx - 0.5 * b * div(D*w) * dx
+                + jump(b*w, n) * avg(D) * dS + 0.5 * jump(D*w, n) * avg(b) * dS
+                - beta2 * D * div(qv*w)*dx - 0.5 * beta2 * qv * div(D*w) * dx
+                + beta2 * jump(qv*w, n) * avg(D) * dS
+                + 0.5 * beta2 * jump(D*w, n) * avg(qv) * dS,
+                'u'), self.X))
+        else:
+            source_form = pressure_gradient(
+                subject(prognostic(-D * div(b*w) * dx - 0.5 * b * div(D*w) * dx
+                                   + jump(b*w, n) * avg(D) * dS
+                                   + 0.5 * jump(D*w, n) * avg(b) * dS,
+                                   'u'), self.X))
         residual += source_form
 
-        gamma = self.tests[2]
-        b_adv = prognostic(advection_form(gamma, b, u), 'b')
+        # -------------------------------------------------------------------- #
+        # add transport terms:
+        # -------------------------------------------------------------------- #
+        b_adv = prognostic(advection_form(gamma, b, u), b_name)
         residual += subject(b_adv, self.X)
-        
+
+        if equivalent_buoyancy:
+            qt_adv = prognostic(advection_form(gamma_qt, qt, u), "q_t")
+            residual += subject(qt_adv, self.X)
+
+        # -------------------------------------------------------------------- #
+        # add topography terms:
+        # -------------------------------------------------------------------- #
+        if bexpr is not None:
+            if equivalent_buoyancy:
+                topography_form = subject(prognostic(
+                    -topog * div(b*w) * dx
+                    + jump(b*w, n) * avg(topog) * dS
+                    - beta2 * topog * div(qv*w) * dx
+                    + beta2 * jump(qv*w, n) * avg(topog) * dS,
+                    'u'), self.X)
+            else:
+                topography_form = subject(prognostic(
+                    -topog * div(b*w) * dx
+                    + jump(b*w, n) * avg(topog) * dS,
+                    'u'), self.X)
+            residual += topography_form
+
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
-        
+
 class LinearShallowWaterEquations(ShallowWaterEquations):
     u"""
     Class for the linear (rotating) shallow-water equations, which describe the

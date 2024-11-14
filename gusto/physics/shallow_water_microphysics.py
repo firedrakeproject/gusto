@@ -3,14 +3,16 @@ Defines microphysics routines to be used with the moist shallow water equations.
 """
 
 from firedrake import (
-    Interpolator, conditional, Function, dx, min_value, max_value, Constant
+    Interpolator, conditional, Function, dx, min_value, max_value, exp,
+    Constant
 )
 from firedrake.fml import subject
 from gusto.core.logging import logger
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
 from types import FunctionType
 
-__all__ = ["InstantRain", "SWSaturationAdjustment"]
+
+__all__ = ["InstantRain", "SWSaturationAdjustment", "compute_saturation"]
 
 
 class InstantRain(PhysicsParametrisation):
@@ -360,3 +362,11 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
+
+
+def compute_saturation(q0, nu, H, g, D, b, B=None):
+    if B is None:
+        sat_expr = q0*H/(D) * exp(nu*(1-b/g))
+    else:
+        sat_expr = q0*H/(D+B) * exp(nu*(1-b/g))
+    return sat_expr

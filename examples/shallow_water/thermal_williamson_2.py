@@ -15,7 +15,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import Function, SpatialCoordinate, sin, cos
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
+    TrapeziumRule, ShallowWaterParameters, ThermalShallowWaterEquations,
     RelativeVorticity, PotentialVorticity, SteadyStateError,
     ZonalComponent, MeridionalComponent, ThermalSWSolver,
     xyz_vector_from_lonlatr, lonlatr_from_xyz, GeneralIcosahedralSphereMesh
