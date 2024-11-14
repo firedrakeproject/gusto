@@ -29,7 +29,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
     for Coriolis parameter 'f' and bottom surface 'b'.
     """
 
-
     def __init__(self, domain, parameters, fexpr=None, bexpr=None,
                  space_names=None, linearisation_map='default',
                  u_transport_option='vector_invariant_form',
