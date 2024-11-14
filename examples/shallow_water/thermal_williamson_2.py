@@ -71,7 +71,7 @@ def thermal_williamson_2(
     Omega = params.Omega
     fexpr = 2*Omega*z/radius
     eqns = ThermalShallowWaterEquations(
-        domain, params, fexpr=fexpr, u_transport_option=u_eqn_type)
+        domain, params, fexpr=fexpr, u_transport_option=u_eqn_type
     )
 
     # IO
