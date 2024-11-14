@@ -12,7 +12,7 @@ from gusto.physics.physics_parametrisation import PhysicsParametrisation
 from types import FunctionType
 
 
-__all__ = ["InstantRain", "SWSaturationAdjustment", "compute_saturation"]
+__all__ = ["InstantRain", "SWSaturationAdjustment"]
 
 
 class InstantRain(PhysicsParametrisation):
@@ -363,10 +363,3 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         for interpolator in self.source_interpolators:
             interpolator.interpolate()
 
-
-def compute_saturation(q0, nu, H, g, D, b, B=None):
-    if B is None:
-        sat_expr = q0*H/(D) * exp(nu*(1-b/g))
-    else:
-        sat_expr = q0*H/(D+B) * exp(nu*(1-b/g))
-    return sat_expr

@@ -12,7 +12,6 @@ from gusto.equations.common_forms import (
     linear_continuity_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
-from gusto.physics.shallow_water_microphysics import compute_saturation
 
 
 __all__ = ["ShallowWaterEquations", "LinearShallowWaterEquations",
@@ -226,14 +225,14 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         """
 
         if equivalent_buoyancy:
-            b_name = 'b'
-            self.field_names.append(b_name)
-            self.space_names[b_name] = 'L2'
-        else:
             b_name = 'b_e'
             for new_field in [b_name, 'q_t']:
                 self.field_names.append(new_field)
                 self.space_names[new_field] = 'L2'
+        else:
+            b_name = 'b'
+            self.field_names.append(b_name)
+            self.space_names[b_name] = 'L2'
 
         super().__init__(domain, parameters,
                          fexpr=fexpr, bexpr=bexpr,
@@ -249,7 +248,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
 
         w = self.tests[0]
         gamma = self.tests[2]
-        u, D, b = split(self.X)[0:2]
+        u, D, b = split(self.X)[0:3]
         n = FacetNormal(domain.mesh)
         topog = self.prescribed_fields('topography', domain.space('DG')).interpolate(bexpr) if bexpr else None
         if equivalent_buoyancy:
@@ -571,3 +570,11 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
 
         # Use the underlying routine to do a first linearisation of the equations
         self.linearise_equation_set()
+
+
+def compute_saturation(q0, nu, H, g, D, b, B=None):
+    if B is None:
+        sat_expr = q0*H/(D) * exp(nu*(1-b/g))
+    else:
+        sat_expr = q0*H/(D+B) * exp(nu*(1-b/g))
+    return sat_expr
