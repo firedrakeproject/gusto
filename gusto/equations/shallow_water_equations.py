@@ -450,7 +450,8 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
             # Coriolis and transport term from depth equation
             linearisation_map = lambda t: \
                 (any(t.has_label(time_derivative, pressure_gradient, coriolis))
-                 or (t.get(prognostic) in ['D', 'b'] and t.has_label(transport)))
+                 or (t.get(prognostic) in ['D', self.b_name]
+                     and t.has_label(transport)))
 
         super().__init__(domain, parameters,
                          equivalent_buoyancy=equivalent_buoyancy,
