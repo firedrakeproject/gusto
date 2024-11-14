@@ -24,9 +24,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
     u"""
     Class for the (rotating) shallow-water equations, which evolve the velocity
     'u' and the depth field 'D', via some variant of:                         \n
-    ∂u/∂t + (u.∇)u + f×u + g*∇(D+b) = 0,                                      \n
+    ∂u/∂t + (u.∇)u + f×u + g*∇(D+B) = 0,                                      \n
     ∂D/∂t + ∇.(D*u) = 0,                                                      \n
-    for Coriolis parameter 'f' and bottom surface 'b'.
+    for Coriolis parameter 'f' and bottom surface 'B'.
     """
 
     def __init__(self, domain, parameters, fexpr=None, bexpr=None,
@@ -64,9 +64,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
-
-        Raises:
-            NotImplementedError: active tracers are not yet implemented.
         """
 
         if active_tracers is None:
@@ -178,11 +175,11 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     u"""
     Class for the linear (rotating) shallow-water equations, which describe the
     velocity 'u' and the depth field 'D', solving some variant of:            \n
-    ∂u/∂t + f×u + g*∇(D+b) = 0,                                               \n
+    ∂u/∂t + f×u + g*∇(D+B) = 0,                                               \n
     ∂D/∂t + H*∇.(u) = 0,                                                      \n
-    for mean depth 'H', Coriolis parameter 'f' and bottom surface 'b'.
+    for mean depth 'H', Coriolis parameter 'f' and bottom surface 'B'.
 
-    This is set up the from the underlying :class:`ShallowWaterEquations`,
+    This is set up from the underlying :class:`ShallowWaterEquations`,
     which is then linearised.
     """
 
@@ -244,10 +241,19 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
 class ThermalShallowWaterEquations(ShallowWaterEquations):
     u"""
     Class for the (rotating) shallow-water equations, which evolve the velocity
-    'u' and the depth field 'D', via some variant of:                         \n
-    ∂u/∂t + (u.∇)u + f×u + g*∇(D+b) = 0,                                      \n
+    'u' and the depth field 'D', via some variant of either:                  \n
+    ∂u/∂t + (u.∇)u + f×u + b*∇(D+B) + 0.5*D*∇b= 0,                            \n
     ∂D/∂t + ∇.(D*u) = 0,                                                      \n
-    for Coriolis parameter 'f' and bottom surface 'b'.
+    ∂b/∂t + u.∇(b) = 0,                                                       \n
+    for Coriolis parameter 'f', bottom surface 'B' and buoyancy field b,
+    or, if equivalent_buoyancy=True:
+    ∂u/∂t + (u.∇)u + f×u + b_e*∇(D+B) + 0.5*D*∇(b_e + beta_2 q_v)= 0,         \n
+    ∂D/∂t + ∇.(D*u) = 0,                                                      \n
+    ∂b_e/∂t + u.∇(b_e) = 0,                                                   \n
+    ∂q_t/∂t + u.∇(q_t) = 0,                                                   \n
+    for Coriolis parameter 'f', bottom surface 'B', equivalent buoyancy field \n
+    `b_e`=b-beta_2 q_v, and total moisture `q_t`=q_v+q_c, i.e. the sum of     \n
+    water vapour and cloud water.
     """
 
     def __init__(self, domain, parameters, equivalent_buoyancy=False,
@@ -261,6 +267,9 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
+            equivalent_buoyancy (bool, optional): switch to specify formulation
+                (see comments above). Defaults to False to give standard
+                thermal shallow water.
             fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
                 parameter. Defaults to None.
             bexpr (:class:`ufl.Expr`, optional): an expression for the bottom
@@ -286,9 +295,6 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
-
-        Raises:
-            NotImplementedError: active tracers are not yet implemented.
         """
 
         self.equivalent_buoyancy = equivalent_buoyancy
@@ -343,8 +349,9 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 'u'), self.X))
         else:
             source_form = pressure_gradient(
-                subject(prognostic(-D * div(b*w) * dx - 0.5 * b * div(D*w) * dx
+                subject(prognostic(-D * div(b*w) * dx
                                    + jump(b*w, n) * avg(D) * dS
+                                   - 0.5 * b * div(D*w) * dx
                                    + 0.5 * jump(D*w, n) * avg(b) * dS,
                                    'u'), self.X))
         residual += source_form
@@ -397,13 +404,14 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
 
 class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
     u"""
-    Class for the linear (rotating) shallow-water equations, which describe the
-    velocity 'u' and the depth field 'D', solving some variant of:            \n
-    ∂u/∂t + f×u + g*∇(D+b) = 0,                                               \n
+    Class for the linear (rotating) thermal shallow-water equations, which
+    describe the velocity 'u' and depth field 'D', solving some variant of:   \n
+    ∂u/∂t + f×u + bbar*∇D + 0.5*H*∇b = 0,                                     \n
     ∂D/∂t + H*∇.(u) = 0,                                                      \n
-    for mean depth 'H', Coriolis parameter 'f' and bottom surface 'b'.
+    ∂b/∂t + u.∇bbar = 0,                                                      \n
+    for mean depth 'H', mean buoyancy `bbar`, Coriolis parameter 'f'
 
-    This is set up the from the underlying :class:`ShallowWaterEquations`,
+    This is set up from the underlying :class:`ThermalShallowWaterEquations`,
     which is then linearised.
     """
 
@@ -418,6 +426,9 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
+            equivalent_buoyancy (bool, optional): switch to specify formulation
+                (see comments above). Defaults to False to give standard
+                thermal shallow water.
             fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
                 parameter. Defaults to None.
             bexpr (:class:`ufl.Expr`, optional): an expression for the bottom
