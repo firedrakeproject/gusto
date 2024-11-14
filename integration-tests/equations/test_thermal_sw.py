@@ -41,7 +41,7 @@ def setup_sw(dirname, dt, u_transport_option):
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
     eqns = ThermalShallowWaterEquations(domain, parameters, fexpr=fexpr,
-                                 u_transport_option=u_transport_option)
+                                        u_transport_option=u_transport_option)
 
     # I/O
     diagnostic_fields = [SteadyStateError('D'),
