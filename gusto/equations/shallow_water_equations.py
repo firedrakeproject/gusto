@@ -16,7 +16,7 @@ from gusto.equations.prognostic_equations import PrognosticEquationSet
 
 __all__ = ["ShallowWaterEquations", "LinearShallowWaterEquations",
            "ThermalShallowWaterEquations",
-           #  "LinearThermalShallowWaterEquations",
+           "LinearThermalShallowWaterEquations",
            "ShallowWaterEquations_1d", "LinearShallowWaterEquations_1d"]
 
 
@@ -189,8 +189,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     def __init__(self, domain, parameters, fexpr=None, bexpr=None,
                  space_names=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
-                 no_normal_flow_bc_ids=None, active_tracers=None,
-                 thermal=False):
+                 no_normal_flow_bc_ids=None, active_tracers=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -222,9 +221,6 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
-            thermal (flag, optional): specifies whether the equations have a
-                thermal or buoyancy variable that feeds back on the momentum.
-                Defaults to False.
         """
 
         if linearisation_map == 'default':
@@ -239,7 +235,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
-                         active_tracers=active_tracers, thermal=thermal)
+                         active_tracers=active_tracers)
 
         # Use the underlying routine to do a first linearisation of the equations
         self.linearise_equation_set()
@@ -408,8 +404,7 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
                  fexpr=None, bexpr=None,
                  space_names=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
-                 no_normal_flow_bc_ids=None, active_tracers=None,
-                 thermal=False):
+                 no_normal_flow_bc_ids=None, active_tracers=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -441,9 +436,6 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
-            thermal (flag, optional): specifies whether the equations have a
-                thermal or buoyancy variable that feeds back on the momentum.
-                Defaults to False.
         """
 
         if linearisation_map == 'default':
@@ -459,7 +451,7 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
-                         active_tracers=active_tracers, thermal=thermal)
+                         active_tracers=active_tracers)
 
         # Use the underlying routine to do a first linearisation of the equations
         self.linearise_equation_set()
