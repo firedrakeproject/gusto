@@ -29,8 +29,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
     for Coriolis parameter 'f' and bottom surface 'b'.
     """
 
-    field_names = ['u', 'D']
-    space_names = {'u': 'HDiv', 'D': 'L2'}
 
     def __init__(self, domain, parameters, fexpr=None, bexpr=None,
                  space_names=None, linearisation_map='default',
@@ -83,10 +81,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 and (any(t.has_label(time_derivative, pressure_gradient))
                      or (t.get(prognostic) in ['D'] and t.has_label(transport)))
 
-        field_names = self.field_names
-        space_names = self.space_names
+        self.setup()
 
-        super().__init__(field_names, domain, space_names,
+        super().__init__(self.field_names, domain, self.space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
@@ -172,6 +169,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
+
+    def setup(self):
+        self.field_names = ['u', 'D']
+        self.space_names = {'u': 'HDiv', 'D': 'L2'}
 
 
 class LinearShallowWaterEquations(ShallowWaterEquations):
@@ -291,15 +292,9 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             NotImplementedError: active tracers are not yet implemented.
         """
 
-        if equivalent_buoyancy:
-            b_name = 'b_e'
-            for new_field in [b_name, 'q_t']:
-                self.field_names.append(new_field)
-                self.space_names[new_field] = 'L2'
-        else:
-            b_name = 'b'
-            self.field_names.append(b_name)
-            self.space_names[b_name] = 'L2'
+        self.equivalent_buoyancy = equivalent_buoyancy
+        b_name = 'b_e' if equivalent_buoyancy else 'b'
+        self.b_name = b_name
 
         super().__init__(domain, parameters,
                          fexpr=fexpr, bexpr=bexpr,
@@ -386,6 +381,17 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         # -------------------------------------------------------------------- #
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
+
+    def setup(self):
+        self.field_names = ['u', 'D']
+        self.space_names = {'u': 'HDiv', 'D': 'L2'}
+        if self.equivalent_buoyancy:
+            for new_field in [self.b_name, 'q_t']:
+                self.field_names.append(new_field)
+                self.space_names[new_field] = 'L2'
+        else:
+            self.field_names.append(self.b_name)
+            self.space_names[self.b_name] = 'L2'
 
 
 class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
