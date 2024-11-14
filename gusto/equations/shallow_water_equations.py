@@ -1,7 +1,7 @@
 """Classes for defining variants of the shallow-water equations."""
 
 from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg,
-                       dS, split, conditional)
+                       dS, split, conditional, exp)
 from firedrake.fml import subject, drop
 from gusto.core.labels import (time_derivative, transport, prognostic,
                                linearisation, pressure_gradient, coriolis)
@@ -174,6 +174,77 @@ class ShallowWaterEquations(PrognosticEquationSet):
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
 
+class LinearShallowWaterEquations(ShallowWaterEquations):
+    u"""
+    Class for the linear (rotating) shallow-water equations, which describe the
+    velocity 'u' and the depth field 'D', solving some variant of:            \n
+    ∂u/∂t + f×u + g*∇(D+b) = 0,                                               \n
+    ∂D/∂t + H*∇.(u) = 0,                                                      \n
+    for mean depth 'H', Coriolis parameter 'f' and bottom surface 'b'.
+
+    This is set up the from the underlying :class:`ShallowWaterEquations`,
+    which is then linearised.
+    """
+
+    def __init__(self, domain, parameters, fexpr=None, bexpr=None,
+                 space_names=None, linearisation_map='default',
+                 u_transport_option="vector_invariant_form",
+                 no_normal_flow_bc_ids=None, active_tracers=None,
+                 thermal=False):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
+            fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
+                parameter. Defaults to None.
+            bexpr (:class:`ufl.Expr`, optional): an expression for the bottom
+                surface of the fluid. Defaults to None.
+            space_names (dict, optional): a dictionary of strings for names of
+                the function spaces to use for the spatial discretisation. The
+                keys are the names of the prognostic variables. Defaults to None
+                in which case the spaces are taken from the de Rham complex. Any
+                buoyancy variable is taken by default to lie in the L2 space.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes both time derivatives,
+                the 'D' transport term, pressure gradient and Coriolis terms.
+            u_transport_option (str, optional): specifies the transport term
+                used for the velocity equation. Supported options are:
+                'vector_invariant_form', 'vector_advection_form' and
+                'circulation_form'.
+                Defaults to 'vector_invariant_form'.
+            no_normal_flow_bc_ids (list, optional): a list of IDs of domain
+                boundaries at which no normal flow will be enforced. Defaults to
+                None.
+            active_tracers (list, optional): a list of `ActiveTracer` objects
+                that encode the metadata for any active tracers to be included
+                in the equations. Defaults to None.
+            thermal (flag, optional): specifies whether the equations have a
+                thermal or buoyancy variable that feeds back on the momentum.
+                Defaults to False.
+        """
+
+        if linearisation_map == 'default':
+            # Default linearisation is time derivatives, pressure gradient,
+            # Coriolis and transport term from depth equation
+            linearisation_map = lambda t: \
+                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                 or (t.get(prognostic) in ['D', 'b'] and t.has_label(transport)))
+
+        super().__init__(domain, parameters,
+                         fexpr=fexpr, bexpr=bexpr, space_names=space_names,
+                         linearisation_map=linearisation_map,
+                         u_transport_option=u_transport_option,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=active_tracers, thermal=thermal)
+
+        # Use the underlying routine to do a first linearisation of the equations
+        self.linearise_equation_set()
+
+
 class ThermalShallowWaterEquations(ShallowWaterEquations):
     u"""
     Class for the (rotating) shallow-water equations, which evolve the velocity
@@ -321,7 +392,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
 
-class LinearShallowWaterEquations(ShallowWaterEquations):
+class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
     u"""
     Class for the linear (rotating) shallow-water equations, which describe the
     velocity 'u' and the depth field 'D', solving some variant of:            \n
@@ -333,7 +404,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     which is then linearised.
     """
 
-    def __init__(self, domain, parameters, fexpr=None, bexpr=None,
+    def __init__(self, domain, parameters, equivalent_buoyancy=False,
+                 fexpr=None, bexpr=None,
                  space_names=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None,
@@ -382,6 +454,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                  or (t.get(prognostic) in ['D', 'b'] and t.has_label(transport)))
 
         super().__init__(domain, parameters,
+                         equivalent_buoyancy=equivalent_buoyancy,
                          fexpr=fexpr, bexpr=bexpr, space_names=space_names,
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
