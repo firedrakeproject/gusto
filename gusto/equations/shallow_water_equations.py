@@ -391,6 +391,10 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
     def compute_saturation(self, X, topog=None):
+        # Returns the saturation expression as a function of the
+        # parameters specified in self.parameters and the input
+        # functions X and topog. The latter are left as inputs to the
+        # function so that it can also be used for initialisation
         q0 = self.parameters.q0
         nu = self.parameters.nu
         g = self.parameters.g
