@@ -89,7 +89,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
     def __init__(self, domain, butcher_matrix, field_name=None,
                  fixed_subcycles=None, subcycle_by_courant=None,
                  rk_formulation=RungeKuttaFormulation.increment,
-                 solver_parameters=None, limiter=None, options=None):
+                 solver_parameters=None, limiter=None, options=None,
+                 augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -123,7 +124,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                          fixed_subcycles=fixed_subcycles,
                          subcycle_by_courant=subcycle_by_courant,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
         self.butcher_matrix = butcher_matrix
         self.nbutcher = int(np.shape(self.butcher_matrix)[0])
         self.rk_formulation = rk_formulation
@@ -210,7 +212,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         if self.rk_formulation == RungeKuttaFormulation.increment:
             l = self.residual.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_true=replace_subject(self.x_out, self.idx),
+                map_if_true=replace_subject(self.x_out, old_idx=self.idx, new_idx=self.new_idx),
                 map_if_false=drop)
 
             return l.form
@@ -220,7 +222,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             for stage in range(self.nStages):
                 l = self.residual.label_map(
                     lambda t: t.has_label(time_derivative),
-                    map_if_true=replace_subject(self.field_i[stage+1], self.idx),
+                    map_if_true=replace_subject(self.field_i[stage+1], old_idx=self.idx, new_idx=self.new_idx),
                     map_if_false=drop)
                 lhs_list.append(l)
 
@@ -229,7 +231,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         if self.rk_formulation == RungeKuttaFormulation.linear:
             l = self.residual.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_true=replace_subject(self.x1, self.idx),
+                map_if_true=replace_subject(self.x1, old_idx=self.idx, new_idx=self.new_idx),
                 map_if_false=drop)
 
             return l.form
@@ -246,7 +248,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         if self.rk_formulation == RungeKuttaFormulation.increment:
             r = self.residual.label_map(
                 all_terms,
-                map_if_true=replace_subject(self.x1, old_idx=self.idx))
+                map_if_true=replace_subject(self.x1, old_idx=self.idx, new_idx=self.new_idx))
 
             r = r.label_map(
                 lambda t: t.has_label(time_derivative),
@@ -273,7 +275,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             for stage in range(self.nStages):
                 r = self.residual.label_map(
                     all_terms,
-                    map_if_true=replace_subject(self.field_i[0], old_idx=self.idx))
+                    map_if_true=replace_subject(self.field_i[0], old_idx=self.idx, new_idx=self.new_idx))
 
                 r = r.label_map(
                     lambda t: t.has_label(time_derivative),
@@ -284,7 +286,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                     r_i = self.residual.label_map(
                         lambda t: t.has_label(time_derivative),
                         map_if_true=drop,
-                        map_if_false=replace_subject(self.field_i[i], old_idx=self.idx)
+                        map_if_false=replace_subject(self.field_i[i], old_idx=self.idx, new_idx=self.new_idx)
                     )
 
                     r -= self.butcher_matrix[stage, i]*self.dt*r_i
@@ -297,8 +299,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             r = self.residual.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_true=replace_subject(self.x0, old_idx=self.idx),
-                map_if_false=replace_subject(self.field_rhs, old_idx=self.idx)
+                map_if_true=replace_subject(self.x0, old_idx=self.idx, new_idx=self.new_idx),
+                map_if_false=replace_subject(self.field_rhs, old_idx=self.idx, new_idx=self.new_idx)
             )
             r = r.label_map(
                 lambda t: t.has_label(time_derivative),
@@ -325,8 +327,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 )
             r_all_but_last = r_all_but_last.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_true=replace_subject(self.x0, old_idx=self.idx),
-                map_if_false=replace_subject(self.field_rhs, old_idx=self.idx)
+                map_if_true=replace_subject(self.x0, old_idx=self.idx, new_idx=self.new_idx),
+                map_if_false=replace_subject(self.field_rhs, old_idx=self.idx, new_idx=self.new_idx)
             )
             r_all_but_last = r_all_but_last.label_map(
                 lambda t: t.has_label(time_derivative),
@@ -468,6 +470,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
         """
 
+        if self.augmentation is not None:
+            self.augmentation.update(x_in)
+
         # TODO: is this limiter application necessary?
         if self.limiter is not None:
             self.limiter.apply(x_in)
@@ -546,7 +551,8 @@ class SSPRK3(ExplicitRungeKutta):
             self, domain, field_name=None,
             fixed_subcycles=None, subcycle_by_courant=None,
             rk_formulation=RungeKuttaFormulation.increment,
-            solver_parameters=None, limiter=None, options=None
+            solver_parameters=None, limiter=None, options=None,
+            augmentation=None
     ):
         """
         Args:
@@ -586,7 +592,8 @@ class SSPRK3(ExplicitRungeKutta):
                          subcycle_by_courant=subcycle_by_courant,
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
 
 
 class RK4(ExplicitRungeKutta):
