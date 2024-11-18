@@ -338,7 +338,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             q0 = parameters.q0
             nu = parameters.nu
             beta2 = parameters.beta2
-            qsat_expr = compute_saturation(q0, nu, H, g, D, b_name, topog)
+            qsat_expr = compute_saturation(q0, nu, H, g, D, b, topog)
             qv = conditional(qt < qsat_expr, qt, qsat_expr)
             source_form = pressure_gradient(subject(prognostic(
                 -D * div(b*w) * dx - 0.5 * b * div(D*w) * dx
@@ -458,7 +458,7 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
 
         if linearisation_map == 'default':
             # Default linearisation is time derivatives, pressure gradient,
-            # Coriolis and transport term from depth equation
+            # Coriolis and transport term from depth and buoyancy equation
             linearisation_map = lambda t: \
                 (any(t.has_label(time_derivative, pressure_gradient, coriolis))
                  or (t.get(prognostic) in ['D', self.b_name]
