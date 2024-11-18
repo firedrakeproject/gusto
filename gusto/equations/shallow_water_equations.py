@@ -338,7 +338,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             q0 = parameters.q0
             nu = parameters.nu
             beta2 = parameters.beta2
-            qsat_expr = compute_saturation(q0, nu, H, g, D, b, topog)
+            qsat_expr = compute_saturation(self.X, topog)
             qv = conditional(qt < qsat_expr, qt, qsat_expr)
             source_form = pressure_gradient(subject(prognostic(
                 -D * div(b*w) * dx - 0.5 * b * div(D*w) * dx
@@ -389,6 +389,18 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         # -------------------------------------------------------------------- #
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
+
+    def compute_saturation(self, X, topog=None):
+        q0 = self.parameters.q0
+        nu = self.parameters.nu
+        g = self.parameters.g
+        H = self.parameters.H
+        D, b = split(X)[1:3]
+        if topog is None:
+            sat_expr = q0*H/(D) * exp(nu*(1-b/g))
+        else:
+            sat_expr = q0*H/(D+topog) * exp(nu*(1-b/g))
+            return sat_expr
 
     def setup(self):
         self.field_names = ['u', 'D']
@@ -654,11 +666,3 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
 
         # Use the underlying routine to do a first linearisation of the equations
         self.linearise_equation_set()
-
-
-def compute_saturation(q0, nu, H, g, D, b, B=None):
-    if B is None:
-        sat_expr = q0*H/(D) * exp(nu*(1-b/g))
-    else:
-        sat_expr = q0*H/(D+B) * exp(nu*(1-b/g))
-    return sat_expr
