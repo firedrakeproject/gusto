@@ -94,7 +94,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 None.
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
-                in the equations.. Defaults to None.
+                in the equations. Defaults to None.
         """
 
         self.field_names = field_names
