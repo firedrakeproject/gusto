@@ -72,7 +72,7 @@ class VerticalHybridizationPC(PCBase):
         for i, Vi in enumerate(V):
 
             # Vector-valued spaces will have a non-empty value_shape
-            if Vi.ufl_element().value_shape:
+            if Vi.value_shape:
                 self.vidx = i
             else:
                 self.pidx = i
