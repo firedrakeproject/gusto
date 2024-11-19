@@ -331,9 +331,8 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                      or (t.get(prognostic) in ['D', self.b_name]
                          and t.has_label(transport)))
 
-
-        PrognosticEquationSet.__init__(self,
-            field_names, domain, space_names,
+        PrognosticEquationSet.__init__(
+            self, field_names, domain, space_names,
             linearisation_map=linearisation_map,
             no_normal_flow_bc_ids=no_normal_flow_bc_ids,
             active_tracers=active_tracers)
@@ -441,7 +440,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             sat_expr = q0*H/(D) * exp(nu*(1-b/g))
         else:
             sat_expr = q0*H/(D+topog) * exp(nu*(1-b/g))
-            return sat_expr
+        return sat_expr
 
 
 class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
