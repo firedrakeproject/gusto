@@ -72,7 +72,8 @@ def williamson_5(
     rsq = min_value(R0**2, (lamda - lamda_c)**2 + (phi - phi_c)**2)
     r = sqrt(rsq)
     tpexpr = mountain_height * (1 - r/R0)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=tpexpr)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
+                                 topog_expr=tpexpr)
 
     # I/O
     output = OutputParameters(
