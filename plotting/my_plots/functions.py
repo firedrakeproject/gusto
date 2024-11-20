@@ -53,3 +53,5 @@ def delta_q_inst(da):
     dq = PVmax - PVpole
     dphi = latmax - PVmax_lat
     return dq, dphi
+
+# there's a load of functions I've deleted because I'm an idiot. THey all need rewriting (at a time when I can't remember what they hell they are or what they're doing arghhhhhhhhhh)

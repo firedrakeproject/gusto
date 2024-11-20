@@ -21,8 +21,8 @@ import shutil
 # ---------------------------------------------------------------------------- #
 
 # set inner and outer latitude limits of annulus   
-phis = 57
-phin = 62
+phis = 60
+phin = 70
 phimp = phis
 
 # False means initial vortex is annular, True means it's monopolar
@@ -32,8 +32,8 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 2.3
-pvpole = 1.1
+pvmax = 1.6
+pvpole = 1.0
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
@@ -44,7 +44,7 @@ tau_c_ratio = 0.01
 beta = 1.0
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'rad'
+rel_sch = 'none'
 include_co2 = 'yes'
 
 # refinement level
@@ -55,7 +55,7 @@ restart = False
 restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-4sols_tracer_tophat-80'
 
 # length of this run, time to start from (only relevant if doing a restart)
-rundays = 300
+rundays = 30
 start_time = 0
 dt = 450.
 
@@ -319,7 +319,7 @@ if not restart:
     tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
 
     # estimate core count for Pileus
-    print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
+    print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
     # H_rel = Function(domain.spaces('L2'))
 
@@ -549,10 +549,10 @@ elif restart:
 
 if confirm == 'y':
     if not restart: 
-        stepper.run(t=0, tmax=tmax, field_to_sum=field_to_sum)
+        stepper.run(t=0, tmax=tmax)
     elif restart:
         print('restart')
-        stepper.run(t=start_time*day, tmax=tmax, pick_up=True, field_to_sum=field_to_sum)
+        stepper.run(t=start_time*day, tmax=tmax, pick_up=True)
 else:
     print('Confirmation not given')
 
