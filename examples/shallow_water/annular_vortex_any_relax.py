@@ -47,6 +47,9 @@ beta = 1.0
 rel_sch = 'both'
 include_co2 = 'yes'
 
+# refinement level
+ref_lev = 5
+
 # do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
 restart = False
 restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-4sols_tracer_tophat-80'
@@ -91,6 +94,7 @@ else:
     lenname = f'len-{rundays}sols'
 ### timestep
 
+refname = f'ref-{ref_lev}'
 
 pvpoleint = str(pvpole).split('.')[0]
 pvpoledec = str(pvpole).split('.')[1]
@@ -326,7 +330,7 @@ groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_l
 # I/O (input/output)
 homepath = '/data/home/sh1293/results'
 dirnameold = f'{homepath}/{restart_name}'
-dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_{lenname}_{tracername}{extra_name}'
+dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_{lenname}_{tracername}_{refname}{extra_name}'
 # print(f'directory name is {dirname}')
 dirpath = f'{homepath}/{dirname}'
 if restart:
@@ -366,7 +370,7 @@ elif restart:
     tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
     rs_tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer_rs")
     # estimate core count for Pileus
-    print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} ')
+    print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
     # Transport schemes
     transported_fields = [TrapeziumRule(domain, "u"),
