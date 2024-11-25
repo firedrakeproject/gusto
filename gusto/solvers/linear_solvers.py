@@ -391,7 +391,7 @@ class CompressibleSolver(TimesteppingSolver):
             self.exner_avg_solver.solve()
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -563,7 +563,7 @@ class BoussinesqSolver(TimesteppingSolver):
         self.log_ksp_residuals(self.up_solver.snes.ksp)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -633,8 +633,8 @@ class ThermalSWSolver(TimesteppingSolver):
         Vb = equation.domain.spaces("DG")
 
         # Check that the third field is buoyancy
-        if not equation.field_names[2] == 'b' and not (equation.field_names[2] == 'b' and equivalent_buoyancy):
-            raise NotImplementedError("Field 'b' must exist to use the thermal linear solver in the SIQN scheme")
+        if not equation.field_names[2] == 'b' and not (equation.field_names[2] == 'b_e' and equivalent_buoyancy):
+            raise NotImplementedError("Field 'b' or 'b_e' must exist to use the thermal linear solver in the SIQN scheme")
 
         # Store time-stepping coefficients as UFL Constants
         beta_u = Constant(beta_u_)
@@ -665,6 +665,7 @@ class ThermalSWSolver(TimesteppingSolver):
                 topog = None
             self.q_sat_func = Function(VD)
             self.q_v_bar = Function(VD)
+            self.xn = Function(self.equations.function_space)
             q_t_xn = split(self.xn)[3]
 
             # set up interpolators that use the xn values for D and b_e
@@ -732,7 +733,7 @@ class ThermalSWSolver(TimesteppingSolver):
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -750,6 +751,11 @@ class ThermalSWSolver(TimesteppingSolver):
         bbar_func = Function(b.function_space()).interpolate(bbar)
         if bbar_func.dat.data.max() == 0 and bbar_func.dat.data.min() == 0:
             logger.warning("The reference profile for b in the linear solver is zero. To set a non-zero profile add b to the set_reference_profiles argument.")
+
+        if self.equations.equivalent_buoyancy:
+            self.xn.assign(xn)
+            self.q_sat_func.assign(self.q_sat_expr_interpolator.interpolate())
+            self.q_v_bar.assign(self.q_v_interpolator.interpolate())
 
         with timed_region("Gusto:VelocityDepthSolve"):
             logger.info('Thermal linear solver: mixed solve')
@@ -833,7 +839,7 @@ class LinearTimesteppingSolver(object):
                                               options_prefix='linear_solver')
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -935,7 +941,7 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 

@@ -399,7 +399,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 # Linear solve -------------------------------------------------
                 with timed_stage("Implicit solve"):
                     logger.info(f'Semi-implicit Quasi Newton: Mixed solve {(outer, inner)}')
-                    self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in dy
+                    self.linear_solver.solve(xrhs, dy, xn(self.field_name))  # solves linear system and places result in dy
 
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
