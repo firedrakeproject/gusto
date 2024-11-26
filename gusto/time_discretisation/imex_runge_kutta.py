@@ -244,31 +244,34 @@ class IMEXRungeKutta(TimeDiscretisation):
                                          map_if_false=drop)
         water_vapour_form = self.residual.label_map(lambda t: t.get(prognostic) =='water_vapour',
                                          map_if_false=drop)
-        cloud_liquid_form = self.residual.label_map(lambda t: t.get(prognostic) =='cloud_liquid',
+        cloud_water_form = self.residual.label_map(lambda t: t.get(prognostic) =='cloud_water',
                                          map_if_false=drop)
-        print("u_form")
-        print(u_form.form.__str__())
-        print("rho_form")
-        print(rho_form.form.__str__())
-        print("theta_form")
-        print(theta_form.form.__str__())
-        print("water_vapour_form")
-        print(water_vapour_form.form.__str__())
-        print("cloud_liquid_form")
-        print(cloud_liquid_form.form.__str__())
+        # print("u_form")
+        # print(u_form.form.__str__())
+        # print("rho_form")
+        # print(rho_form.form.__str__())
+        # print("theta_form")
+        # print(theta_form.form.__str__())
+        # print("water_vapour_form")
+        # print(water_vapour_form.form.__str__())
+        # print("cloud_water_form")
+        # print(cloud_water_form.form.__str__())
 
         for stage in range(self.nStages):
             self.solver = solver_list[stage]
             # Set initial solver guess
             if (stage > 0):
                 self.x_out.assign(self.xs[stage-1])
+            for evaluate in self.evaluate_source:
+                evaluate(self.xs[stage-1], self.dt)
             self.solver.solve()
 
             # Apply limiter
             if self.limiter is not None:
                 self.limiter.apply(self.x_out)
             self.xs[stage].assign(self.x_out)
-
+        for evaluate in self.evaluate_source:
+                evaluate(self.xs[self.nStages-1], self.dt)
         self.final_solver.solve()
 
         # Apply limiter

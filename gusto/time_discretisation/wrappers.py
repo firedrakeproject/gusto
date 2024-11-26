@@ -343,6 +343,7 @@ class SUPGWrapper(Wrapper):
 
         domain = self.time_discretisation.domain
         if hasattr(self.time_discretisation.equation, "field_names"):
+            print("field_name:", field_name)
             self.idx = self.time_discretisation.equation.field_names.index(field_name)
             self.test_space = self.time_discretisation.equation.spaces[self.idx]
         else:

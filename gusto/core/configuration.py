@@ -200,9 +200,9 @@ class SUPGOptions(WrapperOptions):
 
     name = "supg"
     tau = None
-    default = 1/sqrt(15)
+    default = 1/(32*sqrt(15))
     ibp = IntegrateByParts.TWICE
-    field_name=None
+    field_names = ["theta", "water_vapour", "cloud_water"]
 
 
 class MixedFSOptions(WrapperOptions):

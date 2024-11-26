@@ -101,7 +101,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             elif self.wrapper_name == "recovered":
                 self.wrapper = RecoveryWrapper(self, options)
             elif self.wrapper_name == "supg":
-                self.wrapper_field_name = options.field_name
+                self.wrapper_field_names = options.field_names
                 self.wrapper = SUPGWrapper(self, options)
             else:
                 raise RuntimeError(
@@ -220,26 +220,26 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
             else:
                 if self.wrapper_name == "supg":
-                    self.wrapper.setup(self.wrapper_field_name)
+                    for field_name in self.wrapper_field_names:
+                        print("Wrapper field_name:", field_name)
+                        self.wrapper.setup(field_name)
+                        new_test = self.wrapper.test
+                        self.residual = self.residual.label_map(
+                            lambda t: t.get(prognostic) == field_name,
+                            map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
+                        self.residual = self.wrapper.label_terms(self.residual)
                 else:
                     self.wrapper.setup(self.fs, wrapper_bcs)
                     self.fs = self.wrapper.function_space
-                if self.solver_parameters is None:
-                    self.solver_parameters = self.wrapper.solver_parameters
-                new_test = TestFunction(self.wrapper.test_space)
-                # SUPG has a special wrapper
-                if self.wrapper_name == "supg":
-                    new_test = self.wrapper.test
-                    self.residual = self.residual.label_map(
-                        lambda t: t.get(prognostic) == self.wrapper_field_name,
-                        map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
-                else:
+                    if self.solver_parameters is None:
+                        self.solver_parameters = self.wrapper.solver_parameters
+                    new_test = TestFunction(self.wrapper.test_space)
                     # Replace the original test function with the one from the wrapper
                     self.residual = self.residual.label_map(
                         all_terms,
                         map_if_true=replace_test_function(new_test))
 
-                self.residual = self.wrapper.label_terms(self.residual)
+                    self.residual = self.wrapper.label_terms(self.residual)
 
         # -------------------------------------------------------------------- #
         # Make boundary conditions
