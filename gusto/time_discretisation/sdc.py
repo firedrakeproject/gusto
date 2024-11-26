@@ -206,16 +206,13 @@ class SDC(object, metaclass=ABCMeta):
         self.base.setup(equation, apply_bcs, *active_labels)
         self.equation = self.base.equation
         self.residual = self.base.residual
+        self.evaluate_source = self.base.evaluate_source
 
         for t in self.residual:
             # Check all terms are labeled implicit or explicit
             if ((not t.has_label(implicit)) and (not t.has_label(explicit))
                and (not t.has_label(time_derivative))):
                 raise NotImplementedError("Non time-derivative terms must be labeled as implicit or explicit")
-
-            # Check we are not using wrappers for implicit schemes
-            if (t.has_label(implicit) and self.wrapper is not None):
-                raise NotImplementedError("Implicit terms not supported with wrappers")
 
             # Check we are not using limiters for implicit schemes
             if (t.has_label(implicit) and self.limiter is not None):
@@ -234,7 +231,7 @@ class SDC(object, metaclass=ABCMeta):
                         raise ValueError(f"The option defined for {field} is for a field that does not exist in the equation set")
 
                     field_idx = equation.field_names.index(field)
-                    subwrapper.setup(equation.spaces[Wrappersfield_idx])
+                    subwrapper.setup(equation.spaces[field_idx])
 
                     # Update the function space to that needed by the wrapper
                     self.wrapper.wrapper_spaces[field_idx] = subwrapper.function_space
@@ -484,6 +481,9 @@ class SDC(object, metaclass=ABCMeta):
             # for Z2N: sum(j=1,M) (q_mj*F(y_m^k) +  q_mj*S(y_m^k))
             for m in range(1, self.M+1):
                 self.Uin.assign(self.Unodes[m])
+                # Include physics terms
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Uin, self.base.dt)
                 self.solver_rhs.solve()
                 self.fUnodes[m-1].assign(self.Urhs)
             self.compute_quad()
@@ -499,6 +499,10 @@ class SDC(object, metaclass=ABCMeta):
                     self.U_start.assign(self.Unodes1[m-1])
                 self.solver = solver_list[m-1]
                 self.U_SDC.assign(self.Unodes[m])
+
+                # Evaluate physics terms
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes[m], self.base.dt)
 
                 # Compute
                 # for N2N:
@@ -522,10 +526,17 @@ class SDC(object, metaclass=ABCMeta):
             if self.final_update:
                 for m in range(1, self.M+1):
                     self.Uin.assign(self.Unodes1[m])
+                    # Include physics terms
+                    for evaluate in self.evaluate_source:
+                        evaluate(self.Uin, self.base.dt)
                     self.solver_rhs.solve()
                     self.fUnodes[m-1].assign(self.Urhs)
                 self.compute_quad_final()
                 # Compute y_(n+1) = y_n + sum(j=1,M) q_j*F(y_j)
+
+                # Evaluate physics terms
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes[-1], self.base.dt)
                 self.U_fin.assign(self.Unodes[-1])
                 self.solver_fin.solve()
                 # Apply limiter if required

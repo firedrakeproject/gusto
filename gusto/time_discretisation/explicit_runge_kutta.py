@@ -379,11 +379,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             # Update field_i for physics / limiters
             for evaluate in self.evaluate_source:
-                # TODO: not implemented! Here we need to evaluate the m-th term
                 # in the i-th RHS with field_m
-                raise NotImplementedError(
-                    'Physics not implemented with RK schemes that use the '
-                    + 'predictor form')
+                evaluate(self.field_i[stage], self.dt)
             if self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
 
