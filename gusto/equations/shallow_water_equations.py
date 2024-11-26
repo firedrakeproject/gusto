@@ -101,7 +101,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
     def _setup_residual(self, fexpr, topog_expr, u_transport_option):
 
         g = self.parameters.g
-        H = self.parameters.H
 
         w, phi = self.tests[0:2]
         u, D = split(self.X)[0:2]
@@ -386,6 +385,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             beta2 = self.parameters.beta2
             qsat_expr = self.compute_saturation(self.X, topog)
             qv = conditional(qt < qsat_expr, qt, qsat_expr)
+            qvbar = conditional(qtbar < qsat_expr, qtbar, qsat_expr)
             source_form = pressure_gradient(subject(prognostic(
                 -D * div(b*w) * dx - 0.5 * b * div(D*w) * dx
                 + jump(b*w, n) * avg(D) * dS + 0.5 * jump(D*w, n) * avg(b) * dS
@@ -432,7 +432,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         if self.equivalent_buoyancy:
             qt_adv = prognostic(advection_form(gamma_qt, qt, u), "q_t")
             if self.linearisation_map(qt_adv.terms[0]):
-                linear_b_adv = linear_advection_form(gamma_qt, qtbar, u_trial)
+                linear_qt_adv = linear_advection_form(gamma_qt, qtbar, u_trial)
                 qt_adv = linearisation(qt_adv, linear_qt_adv)
             residual += subject(qt_adv, self.X)
 
