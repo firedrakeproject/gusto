@@ -9,7 +9,7 @@ from gusto.equations.common_forms import (
     advection_form, advection_form_1d, continuity_form,
     continuity_form_1d, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form, diffusion_form_1d,
-    linear_continuity_form
+    linear_continuity_form, linear_advection_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
 
@@ -106,6 +106,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         w, phi = self.tests[0:2]
         u, D = split(self.X)[0:2]
         u_trial = split(self.trials)[0]
+        Dbar = split(self.X_ref)[1]
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -131,7 +132,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         # Transport term needs special linearisation
         if self.linearisation_map(D_adv.terms[0]):
-            linear_D_adv = linear_continuity_form(phi, H, u_trial)
+            linear_D_adv = linear_continuity_form(phi, Dbar, u_trial)
             # Add linearisation to D_adv
             D_adv = linearisation(D_adv, linear_D_adv)
 
@@ -250,7 +251,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
 class ThermalShallowWaterEquations(ShallowWaterEquations):
     u"""
     Class for the (rotating) shallow-water equations, which evolve the velocity
-    'u' and the depth field 'D', via some variant of either:                  \n
+    'u' and the depth field 'D' via some variant of either:                  \n
     ∂u/∂t + (u.∇)u + f×u + b*∇(D+B) + 0.5*D*∇b= 0,                            \n
     ∂D/∂t + ∇.(D*u) = 0,                                                      \n
     ∂b/∂t + u.∇(b) = 0,                                                       \n
@@ -361,11 +362,14 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         w = self.tests[0]
         gamma = self.tests[2]
         u, D, b = split(self.X)[0:3]
+        Dbar, bbar = split(self.X_ref)[1:3]
+        u_trial, D_trial, b_trial = split(self.trials)[0:3]
         n = FacetNormal(self.domain.mesh)
         topog = self.prescribed_fields('topography', self.domain.spaces('DG')).interpolate(topog_expr) if topog_expr else None
         if self.equivalent_buoyancy:
             gamma_qt = self.tests[3]
             qt = split(self.X)[3]
+            qtbar = split(self.X_ref)[3]
 
         # -------------------------------------------------------------------- #
         # Add pressure gradient-like terms to residual
@@ -376,7 +380,8 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             drop)
 
         # add (moist) thermal source terms not involving topography -
-        # label these as the equivalent pressure gradient term
+        # label these as the equivalent pressure gradient term and
+        # provide linearisation
         if self.equivalent_buoyancy:
             beta2 = self.parameters.beta2
             qsat_expr = self.compute_saturation(self.X, topog)
@@ -388,6 +393,13 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 + beta2 * jump(qv*w, n) * avg(D) * dS
                 + 0.5 * beta2 * jump(D*w, n) * avg(qv) * dS,
                 'u'), self.X))
+            linear_source_form = pressure_gradient(subject(prognostic(
+                -D_trial * div(bbar*w) * dx - 0.5 * b_trial * div(Dbar*w) * dx
+                + jump(bbar*w, n) * avg(D_trial) * dS + 0.5 * jump(Dbar*w, n) * avg(b_trial) * dS
+                - beta2 * D_trial * div(qvbar*w)*dx - 0.5 * beta2 * qvbar * div(Dbar*w) * dx
+                + beta2 * jump(qvbar*w, n) * avg(D_trial) * dS
+                + 0.5 * beta2 * jump(Dbar*w, n) * avg(qvbar) * dS,
+                'u'), self.X))
         else:
             source_form = pressure_gradient(
                 subject(prognostic(-D * div(b*w) * dx
@@ -395,16 +407,33 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                                    - 0.5 * b * div(D*w) * dx
                                    + 0.5 * jump(D*w, n) * avg(b) * dS,
                                    'u'), self.X))
+            linear_source_form = pressure_gradient(
+                subject(prognostic(-D_trial * div(bbar*w) * dx
+                                   + jump(bbar*w, n) * avg(D_trial) * dS
+                                   - 0.5 * b_trial * div(Dbar*w) * dx
+                                   + 0.5 * jump(Dbar*w, n) * avg(b_trial) * dS
+                                   - 0.5 * bbar * div(Dbar*w) * dx
+                                   + 0.5 * jump(Dbar*w, n) * avg(bbar) * dS
+                                   - 0.5 * bbar * div(D_trial*w) * dx
+                                   + 0.5 * jump(D_trial*w, n) * avg(bbar) * dS,
+                                   'u'), self.X))
+        source_form = linearisation(source_form, linear_source_form)
         residual += source_form
 
         # -------------------------------------------------------------------- #
-        # add transport terms:
+        # add transport terms and their linearisations:
         # -------------------------------------------------------------------- #
         b_adv = prognostic(advection_form(gamma, b, u), self.b_name)
+        if self.linearisation_map(b_adv.terms[0]):
+            linear_b_adv = linear_advection_form(gamma, bbar, u_trial)
+            b_adv = linearisation(b_adv, linear_b_adv)
         residual += subject(b_adv, self.X)
 
         if self.equivalent_buoyancy:
             qt_adv = prognostic(advection_form(gamma_qt, qt, u), "q_t")
+            if self.linearisation_map(qt_adv.terms[0]):
+                linear_b_adv = linear_advection_form(gamma_qt, qtbar, u_trial)
+                qt_adv = linearisation(qt_adv, linear_qt_adv)
             residual += subject(qt_adv, self.X)
 
         # -------------------------------------------------------------------- #
@@ -451,6 +480,7 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
     ∂u/∂t + f×u + bbar*∇D + 0.5*H*∇b = 0,                                     \n
     ∂D/∂t + H*∇.(u) = 0,                                                      \n
     ∂b/∂t + u.∇bbar = 0,                                                      \n
+    ∂q_t/∂t + u.∇(q_tbar) = 0,                                                \n
     for mean depth 'H', mean buoyancy `bbar`, Coriolis parameter 'f'
 
     This is set up from the underlying :class:`ThermalShallowWaterEquations`,

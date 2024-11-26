@@ -10,7 +10,7 @@ import numpy as np
 # ----------------------------------------------------------------- #
 day = 24.*60.*60.
 tmax = 6*day
-dt = 2000
+dt = 250
 ndumps = 24
 ref = 3
 # Shallow water parameters
@@ -33,6 +33,10 @@ domain = Domain(mesh, dt, 'BDM', 1)
 Omega = parameters.Omega
 fexpr = 2*Omega*x[2]/R
 eqns = LinearThermalShallowWaterEquations(domain, parameters, fexpr=fexpr)
+for t in eqns.residual:
+    for k, v in t.labels.items():
+        print(k, v)
+    print(t.form)
 
 dirname = "linear_thermal_galewsky_jet"
 dumpfreq = int(tmax / (ndumps*dt))
@@ -48,7 +52,7 @@ output = OutputParameters(dirname=dirname,
 diagnostic_fields = [PotentialVorticity(), RelativeVorticity(), CourantNumber()]
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-transport_methods = [DefaultTransport(eqns, "D")]
+transport_methods = [DefaultTransport(eqns, "D"), DefaultTransport(eqns, "b")]
 
 stepper = Timestepper(eqns, RK4(domain), io, spatial_methods=transport_methods)
 
@@ -161,4 +165,4 @@ stepper.set_reference_profiles([('D', Dbar), ('b', bbar)])
 # Run
 # ----------------------------------------------------------------- #
 
-stepper.run(t=0, tmax=20*dt)
+stepper.run(t=0, tmax=tmax)
