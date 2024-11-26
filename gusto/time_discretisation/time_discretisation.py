@@ -101,7 +101,13 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             elif self.wrapper_name == "recovered":
                 self.wrapper = RecoveryWrapper(self, options)
             elif self.wrapper_name == "supg":
-                self.wrapper_field_names = options.field_names
+                if len(options.field_names) > 0:
+                    self.wrapper_field_names = options.field_names
+                elif len(options.field_names) == 0 and self.field_name is not None:
+                    self.wrapper_field_names = [self.field_name]
+                else:
+                    raise ValueError("No field names provided for SUPG wrapper applied to a MixedFunctionSpace")
+
                 self.wrapper = SUPGWrapper(self, options)
             else:
                 raise RuntimeError(
@@ -221,7 +227,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             else:
                 if self.wrapper_name == "supg":
                     for field_name in self.wrapper_field_names:
-                        print("Wrapper field_name:", field_name)
                         self.wrapper.setup(field_name)
                         new_test = self.wrapper.test
                         self.residual = self.residual.label_map(
@@ -247,10 +252,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if not apply_bcs:
             self.bcs = None
-        # elif self.wrapper is not None:
-        #     # Transfer boundary conditions onto test function space
-        #     self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
-        #                 for bc in bcs]
+        elif self.wrapper is not None and not "supg":
+            # Transfer boundary conditions onto test function space
+            self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
+                        for bc in bcs]
         else:
             self.bcs = bcs
 
