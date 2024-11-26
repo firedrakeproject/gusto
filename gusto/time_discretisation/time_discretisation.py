@@ -17,7 +17,7 @@ from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
-from gusto.core.labels import (time_derivative, prognostic, physics_label,
+from gusto.core.labels import (time_derivative, prognostic, physics_label, transport,
                                mass_weighted, nonlinear_time_derivative)
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
@@ -225,7 +225,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         self.wrapper.setup(field_name)
                         new_test = self.wrapper.test
                         self.residual = self.residual.label_map(
-                            lambda t: t.get(prognostic) == field_name,
+                            lambda t: t.get(prognostic) == field_name and t.has_label(transport),
                             map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
                         self.residual = self.wrapper.label_terms(self.residual)
                 else:
