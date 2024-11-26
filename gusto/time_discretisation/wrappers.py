@@ -7,8 +7,7 @@ called.
 from abc import ABCMeta, abstractmethod
 from firedrake import (
     FunctionSpace, Function, BrokenElement, Projector, Interpolator,
-    VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace,
-    split
+    VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace
 )
 from firedrake.fml import Term
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
@@ -353,7 +352,6 @@ class SUPGWrapper(Wrapper):
         self.x_out = Function(self.function_space)
         self.field_name = field_name
 
-       
         # -------------------------------------------------------------------- #
         # Work out SUPG parameter
         # -------------------------------------------------------------------- #
@@ -392,7 +390,6 @@ class SUPGWrapper(Wrapper):
         # -------------------------------------------------------------------- #
         if hasattr(self.time_discretisation.equation, "field_names"):
             self.u_idx = self.time_discretisation.equation.field_names.index('u')
-            #uadv = split(self.time_discretisation.equation.X)[self.u_idx]
             uadv = Function(domain.spaces('HDiv'))
             test = self.time_discretisation.equation.tests[self.idx]
         else:
