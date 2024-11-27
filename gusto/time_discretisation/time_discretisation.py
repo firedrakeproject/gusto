@@ -91,7 +91,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         self.wrapper.subwrappers.update({field: RecoveryWrapper(self, suboption)})
                     elif suboption.name == "supg":
                         raise RuntimeError(
-                            f'Time discretisation: suboption SUPG is not implemented within MixedOptions')
+                            'Time discretisation: suboption SUPG is not implemented within MixedOptions')
                     else:
                         raise RuntimeError(
                             f'Time discretisation: suboption wrapper {suboption.name} not implemented')
