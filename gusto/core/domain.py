@@ -6,9 +6,10 @@ model's time interval.
 
 from gusto.core.coordinates import Coordinates
 from gusto.core.function_spaces import Spaces, check_degree_args
-from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
-                       inner, grad, VectorFunctionSpace, Function, FunctionSpace,
-                       perp)
+from firedrake import (
+    Constant, SpatialCoordinate, sqrt, CellNormal, cross, inner, grad,
+    VectorFunctionSpace, Function, FunctionSpace, perp, curl
+)
 import numpy as np
 
 
@@ -113,12 +114,14 @@ class Domain(object):
                 V = VectorFunctionSpace(mesh, "DG", sphere_degree)
                 self.outward_normals = Function(V).interpolate(CellNormal(mesh))
                 self.perp = lambda u: cross(self.outward_normals, u)
+                self.divperp = lambda u: inner(self.outward_normals, curl(u))
         else:
             kvec = [0.0]*dim
             kvec[dim-1] = 1.0
             self.k = Constant(kvec)
             if dim == 2:
                 self.perp = perp
+                self.divperp = lambda u: -u[0].dx(1) + u[1].dx(0)
 
         # -------------------------------------------------------------------- #
         # Construct information relating to height/radius
