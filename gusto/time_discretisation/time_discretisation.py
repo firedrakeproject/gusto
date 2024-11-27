@@ -91,7 +91,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         self.wrapper.subwrappers.update({field: RecoveryWrapper(self, suboption)})
                     elif suboption.name == "supg":
                         raise RuntimeError(
-                            'Time discretisation: suboption SUPG is currently not implemented within MixedOptions')
+                            f'Time discretisation: suboption SUPG is not implemented within MixedOptions')
                     else:
                         raise RuntimeError(
                             f'Time discretisation: suboption wrapper {suboption.name} not implemented')
@@ -224,12 +224,15 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         for field_name in self.wrapper_field_names:
                             self.wrapper.setup(field_name)
                             new_test = self.wrapper.test
+                            # If we are not just solving transport equations, we have to make sure to only replace
+                            # time derivative and transport terms with the new test function
                             self.residual = self.residual.label_map(
-                                lambda t: t.get(prognostic) == field_name and t.has_label(transport),
+                                lambda t: t.get(prognostic) == field_name and any(t.has_label(transport, time_derivative)),
                                 map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
                     elif len(self.wrapper.options.field_names) == 0 and self.field_name is not None:
                         self.wrapper.setup(self.field_name)
                         new_test = self.wrapper.test
+                        # We are solving transport equations, and we can replace all terms with the new test function
                         self.residual = self.residual.label_map(
                             all_terms,
                             map_if_true=replace_test_function(new_test))
@@ -237,15 +240,15 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         raise ValueError("No field names provided for SUPG wrapper applied to a MixedFunctionSpace")
                 else:
                     self.wrapper.setup(self.fs, wrapper_bcs)
-                    self.fs = self.wrapper.function_space
-                    if self.solver_parameters is None:
-                        self.solver_parameters = self.wrapper.solver_parameters
                     new_test = TestFunction(self.wrapper.test_space)
                     # Replace the original test function with the one from the wrapper
                     self.residual = self.residual.label_map(
                         all_terms,
                         map_if_true=replace_test_function(new_test))
 
+                if self.solver_parameters is None:
+                    self.solver_parameters = self.wrapper.solver_parameters
+                self.fs = self.wrapper.function_space
                 self.residual = self.wrapper.label_terms(self.residual)
 
         # -------------------------------------------------------------------- #

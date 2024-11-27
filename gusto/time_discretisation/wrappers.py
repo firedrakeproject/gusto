@@ -341,8 +341,7 @@ class SUPGWrapper(Wrapper):
             'SUPG wrapper can only be used with SUPG Options'
 
         domain = self.time_discretisation.domain
-        if hasattr(self.time_discretisation.equation, "field_names"):
-            print("field_name:", field_name)
+        if len(self.time_discretisation.field_name) > 1:
             self.idx = self.time_discretisation.equation.field_names.index(field_name)
             self.test_space = self.time_discretisation.equation.spaces[self.idx]
         else:
@@ -388,7 +387,7 @@ class SUPGWrapper(Wrapper):
         # -------------------------------------------------------------------- #
         # Set up test function
         # -------------------------------------------------------------------- #
-        if hasattr(self.time_discretisation.equation, "field_names"):
+        if len(self.time_discretisation.field_name) > 1:
             self.u_idx = self.time_discretisation.equation.field_names.index('u')
             uadv = Function(domain.spaces('HDiv'))
             test = self.time_discretisation.equation.tests[self.idx]
