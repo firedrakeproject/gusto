@@ -12,10 +12,9 @@ from gusto.core import logger
 from gusto.recovery import Recoverer, BoundaryMethod
 
 
-__all__ = [
-    "boussinesq_hydrostatic_balance", "compressible_hydrostatic_balance",
-    "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"
-]
+__all__ = ["boussinesq_hydrostatic_balance",
+           "compressible_hydrostatic_balance", "remove_initial_w",
+           "saturated_hydrostatic_balance", "unsaturated_hydrostatic_balance"]
 
 
 def boussinesq_hydrostatic_balance(equation, b0, p0, top=False, params=None):
@@ -218,6 +217,23 @@ def compressible_hydrostatic_balance(equation, theta0, rho0, exner0=None,
         rho0.assign(rho_)
     else:
         rho0.interpolate(thermodynamics.rho(parameters, theta0, exner))
+
+
+def remove_initial_w(u):
+    """
+    Removes the vertical component of a velocity field.
+
+    Args:
+        u (:class:`Function`): the velocity field to be altered.
+    """
+    Vu = u.function_space()
+    Vv = FunctionSpace(Vu._ufl_domain, Vu.ufl_element()._elements[-1])
+    bc = DirichletBC(Vu[0], 0.0, "bottom")
+    bc.apply(u)
+    uv = Function(Vv).project(u)
+    ustar = Function(u.function_space()).project(uv)
+    uin = Function(u.function_space()).assign(u - ustar)
+    u.assign(uin)
 
 
 def saturated_hydrostatic_balance(equation, state_fields, theta_e, mr_t,
