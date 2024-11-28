@@ -342,8 +342,7 @@ class SUPGWrapper(Wrapper):
             'SUPG wrapper can only be used with SUPG Options'
 
         domain = self.time_discretisation.domain
-        if hasattr(self.time_discretisation.equation, "field_names"):
-            print("field_name:", field_name)
+        if len(self.time_discretisation.equation.tests) > 1:
             self.idx = self.time_discretisation.equation.field_names.index(field_name)
             self.test_space = self.time_discretisation.equation.spaces[self.idx]
         else:
@@ -357,22 +356,48 @@ class SUPGWrapper(Wrapper):
         # Work out SUPG parameter
         # -------------------------------------------------------------------- #
 
-        k = domain.k
+        # construct tau, if it is not specified
+        dim = domain.mesh.topological_dimension()
+        if self.options.tau is not None:
+            # if tau is provided, check that is has the right size
+            self.tau = self.options.tau
+            assert as_ufl(self.tau).ufl_shape == (dim, dim), "Provided tau has incorrect shape!"
+        else:
+            # create tuple of default values of size dim
+            default_vals = [self.options.default*self.time_discretisation.dt]*dim
+            # check for directions is which the space is discontinuous
+            # so that we don't apply supg in that direction
+            if is_cg(self.test_space):
+                vals = default_vals
+            else:
+                space = self.test_space.ufl_element().sobolev_space
+                if space.name in ["HDiv", "DirectionalH"]:
+                    vals = [default_vals[i] if space[i].name == "H1"
+                            else 0. for i in range(dim)]
+                else:
+                    raise ValueError("I don't know what to do with space %s" % space)
+            self.tau = Constant(tuple([
+                tuple(
+                    [vals[j] if i == j else 0. for i, v in enumerate(vals)]
+                ) for j in range(dim)])
+            )
+            self.solver_parameters = {'ksp_type': 'gmres',
+                                      'pc_type': 'bjacobi',
+                                      'sub_pc_type': 'ilu'}
+
+
         # -------------------------------------------------------------------- #
         # Set up test function
         # -------------------------------------------------------------------- #
-        if hasattr(self.time_discretisation.equation, "field_names"):
+        if len(self.time_discretisation.equation.tests) > 1:
             self.u_idx = self.time_discretisation.equation.field_names.index('u')
-            #uadv = split(self.time_discretisation.equation.X)[self.u_idx]
             uadv = Function(domain.spaces('HDiv'))
             test = self.time_discretisation.equation.tests[self.idx]
         else:
             uadv = Function(domain.spaces('HDiv'))
             test = TestFunction(self.test_space)
 
-        tau = Constant(self.options.default * self.time_discretisation.dt)*dot(domain.k, uadv)
-
-        self.test = test + tau*dot(domain.k, grad(test))
+        self.test = test + dot(dot(uadv, self.tau), grad(test))
         self.transporting_velocity = uadv
 
     def pre_apply(self, x_in):
