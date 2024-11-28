@@ -132,14 +132,22 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.residual = equation.residual
 
         if self.field_name is not None and hasattr(equation, "field_names"):
-            self.idx = equation.field_names.index(self.field_name)
-            self.fs = equation.spaces[self.idx]
-            self.residual = self.residual.label_map(
-                lambda t: t.get(prognostic) == self.field_name,
-                lambda t: Term(
-                    split_form(t.form)[self.idx].form,
-                    t.labels),
-                drop)
+            if isinstance(self.field_name, list):
+                # Multiple fields are being solved for simultaneously.
+                # This enables conservative transport to be implemented with SIQN.
+                # Use the full mixed space for self.fs, with the
+                # field_name, residual, and BCs being set up later.
+                self.fs = equation.function_space
+                self.idx = None
+            else:
+                self.idx = equation.field_names.index(self.field_name)
+                self.fs = equation.spaces[self.idx]
+                self.residual = self.residual.label_map(
+                    lambda t: t.get(prognostic) == self.field_name,
+                    lambda t: Term(
+                        split_form(t.form)[self.idx].form,
+                        t.labels),
+                    drop)
 
         else:
             self.field_name = equation.field_name
@@ -152,6 +160,34 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.residual = self.residual.label_map(
                 lambda t: any(t.has_label(time_derivative, *active_labels)),
                 map_if_false=drop)
+            if isinstance(self.field_name, list):
+                # Multiple fields are being solved for simultaneously.
+                # Keep all time derivative terms:
+                residual = self.residual.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    map_if_false=drop)
+
+                # Only keep active labels for prognostics in the list:
+                for subname in self.field_name:
+                    field_residual = self.residual.label_map(
+                        lambda t: t.get(prognostic) == subname,
+                        map_if_false=drop)
+
+                    residual += field_residual.label_map(
+                        lambda t: t.has_label(*active_labels),
+                        map_if_false=drop)
+
+                self.residual = residual
+            else:
+                self.residual = self.residual.label_map(
+                    lambda t: any(t.has_label(time_derivative, *active_labels)),
+                    map_if_false=drop)
+
+        # Set the field name if using simultaneous transport.
+        if isinstance(self.field_name, list):
+            self.field_name = equation.field_name
+
+        bcs = equation.bcs[self.field_name]
 
         self.evaluate_source = []
         self.physics_names = []
@@ -244,9 +280,19 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         if not apply_bcs:
             self.bcs = None
         elif self.wrapper is not None:
-            # Transfer boundary conditions onto test function space
-            self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
-                        for bc in bcs]
+            if self.wrapper_name == 'mixed_options':
+                # Define new Dirichlet BCs on the wrapper-modified
+                # mixed function space.
+                self.bcs = []
+                for idx, field_name in enumerate(self.equation.field_names):
+                    for bc in equation.bcs[field_name]:
+                        self.bcs.append(DirichletBC(self.fs.sub(idx),
+                                                    bc.function_arg,
+                                                    bc.sub_domain))
+            else:
+                # Transfer boundary conditions onto test function space
+                self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
+                            for bc in bcs]
         else:
             self.bcs = bcs
 
