@@ -17,6 +17,7 @@ from gusto.solvers import LinearTimesteppingSolver
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
+import numpy as np
 
 
 __all__ = ["SemiImplicitQuasiNewton"]
@@ -121,6 +122,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         self.spatial_methods = spatial_methods
 
+        # Flag for if we have simultaneous transport
+        self.simult = False
+
         if physics_schemes is not None:
             self.final_physics_schemes = physics_schemes
         else:
@@ -150,6 +154,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             if isinstance(scheme.field_name, list):
                 # This means that multiple fields are being transported simultaneously
+                print('setting simult as True')
+                self.simult = True
                 for subfield in scheme.field_name:
                     assert subfield in equation_set.field_names
 
@@ -254,7 +260,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     def setup_fields(self):
         """Sets up time levels n, star, p and np1"""
         self.x = TimeLevelFields(self.equation, 1)
-        self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast"))
+        print(self.x.levels)
+        if self.simult is True:
+            # If there is any simultaneous transport, add a temporary field:
+            self.x.add_fields(self.equation, levels=("star", "p", "simult", "after_slow", "after_fast"))
+        else:
+            self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast"))
+        print(self.x.levels)
         for aux_eqn, _ in self.auxiliary_equations_and_schemes:
             self.x.add_fields(aux_eqn)
         # Prescribed fields for auxiliary eqns should come from prognostics of
@@ -262,6 +274,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # need passing to StateFields
         self.fields = StateFields(self.x, self.equation.prescribed_fields,
                                   *self.io.output.dumplist)
+
 
     def setup_scheme(self):
         """Sets up transport, diffusion and physics schemes"""
@@ -353,6 +366,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xrhs_phys = self.xrhs_phys
         dy = self.dy
 
+        if self.simult:
+            xsimult = self.x.simult
+
         # Update reference profiles --------------------------------------------
         self.update_reference_profiles()
 
@@ -374,6 +390,33 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # the correct values
         xp(self.field_name).assign(xstar(self.field_name))
 
+        #print(self.fields)
+        #print(xp)
+
+        #self.io.log_courant(self.fields, 'transporting_velocity',
+        #                    message='All fields at start of timestep')
+
+        #for field_name in ['u']:
+        #    logger.info('About to start SIQN loop')
+        #    field_data_xn = xn(field_name).dat.data
+        #    field_data_xp = xp(field_name).dat.data
+        #    field_data_xstar = xstar(field_name).dat.data
+        #    field_data_xn1 = xnp1(field_name).dat.data
+        #    field_diff = field_data_xp - field_data_xstar
+        #    logger.info(f'{field_name}, xn, min: {field_data_xn.min()}, max: {field_data_xn.max()}')
+        #    logger.info(f'{field_name}, xp, min: {field_data_xp.min()}, max: {field_data_xp.max()}')
+        #    logger.info(f'{field_name}, xstar, min: {field_data_xstar.min()}, max: {field_data_xstar.max()}')
+        #    logger.info(f'xstar - xp, {field_diff.max()}')
+        #    logger.info(f'{field_name}, xnp1, min: {field_data_xn1.min()}, max: {field_data_xn1.max()}')
+
+        # Compute difference between xp and xstar for all fields:
+        #for field_name in self.equation.field_names:
+        #    field_data_xp = xp(field_name).dat.data
+        #    field_data_xstar = xstar(field_name).dat.data
+        #    field_diff = field_data_xp - field_data_xstar
+        #    logger.info(f'{field_name} xstar - xp, {field_diff.max()}')
+
+
         # OUTER ----------------------------------------------------------------
         for outer in range(self.num_outer):
 
@@ -384,15 +427,31 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 for name, scheme in self.active_transport:
                     if isinstance(name, list):
                         # Transport multiple fields from xstar. This transports any
-                        # terms in the list, with the others remaining unchanged
-                        # from xstar into xp.
+                        # terms in the list, with the others remaining unchanged.
+                        # We first transport to xsimult, then extract the fields
+                        # and pass them to xp -- this avoids overwriting any 
+                        # previously transported fields.
                         logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: '
                                     + f'Simultaneous transport of {name}')
-                        self.transport_field(self.field_name, scheme, xstar, xp)
+                        print(self.field_name)
+                        print(scheme)
+                        self.transport_field(self.field_name, scheme, xstar, xsimult)
+                        for field_name in name:
+                            print('moving {field_name} from xsimult to xp')
+                            xp(field_name).assign(xsimult(field_name))
                     else:
                         # transport a single field from xstar and put the result in xp
                         logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: {name}')
+                        print(name)
+                        print(scheme)
                         self.transport_field(name, scheme, xstar, xp)
+
+                    # Compute difference between xp and xstar for all fields:
+                    for field_name in self.equation.field_names:
+                        field_data_xp = xp(field_name).dat.data
+                        field_data_xstar = xstar(field_name).dat.data
+                        field_diff = field_data_xp - field_data_xstar
+                        logger.info(f'{field_name} xstar - xp, {field_diff.max()}')
 
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))
@@ -428,7 +487,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xnp1)
-
             self._apply_bcs()
 
         for name, scheme in self.auxiliary_schemes:
@@ -446,7 +504,18 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 for _, scheme in self.final_physics_schemes:
                     scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
 
-        logger.debug("Leaving Semi-implicit Quasi-Newton timestep method")
+        #for field_name in ['u']:
+        #    logger.info('About to end SIQN loop')
+        #    field_data = xn(field_name).dat.data
+        #    logger.info(f'{field_name}, xn, min: {field_data.min()}, max: {field_data.max()}')
+        #    field_data = xp(field_name).dat.data
+        #    logger.info(f'{field_name}, xp, min: {field_data.min()}, max: {field_data.max()}')
+        #    field_data = xstar(field_name).dat.data
+        #    logger.info(f'{field_name}, xstar, min: {field_data.min()}, max: {field_data.max()}')
+        #    field_data = xnp1(field_name).dat.data
+        #    logger.info(f'{field_name}, xnp1, min: {field_data.min()}, max: {field_data.max()}')
+
+        logger.info("Leaving Semi-implicit Quasi-Newton timestep method")
 
     def run(self, t, tmax, pick_up=False):
         """
