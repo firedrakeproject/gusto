@@ -202,7 +202,7 @@ class SUPGOptions(WrapperOptions):
     tau = None
     default = 1/(sqrt(15))
     ibp = IntegrateByParts.TWICE
-    field_names = ["theta", "water_vapour", "cloud_water"]
+    field_names = []
 
 
 class MixedFSOptions(WrapperOptions):

@@ -7,8 +7,7 @@ called.
 from abc import ABCMeta, abstractmethod
 from firedrake import (
     FunctionSpace, Function, BrokenElement, Projector, Interpolator,
-    VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace,
-    split
+    VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace
 )
 from firedrake.fml import Term
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
@@ -342,7 +341,7 @@ class SUPGWrapper(Wrapper):
             'SUPG wrapper can only be used with SUPG Options'
 
         domain = self.time_discretisation.domain
-        if len(self.time_discretisation.equation.tests) > 1:
+        if self.time_discretisation.wrapper_field_names is not None:
             self.idx = self.time_discretisation.equation.field_names.index(field_name)
             self.test_space = self.time_discretisation.equation.spaces[self.idx]
         else:
@@ -385,11 +384,10 @@ class SUPGWrapper(Wrapper):
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}
 
-
         # -------------------------------------------------------------------- #
         # Set up test function
         # -------------------------------------------------------------------- #
-        if len(self.time_discretisation.equation.tests) > 1:
+        if self.time_discretisation.wrapper_field_names is not None:
             self.u_idx = self.time_discretisation.equation.field_names.index('u')
             uadv = Function(domain.spaces('HDiv'))
             test = self.time_discretisation.equation.tests[self.idx]

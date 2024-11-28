@@ -91,7 +91,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         self.wrapper.subwrappers.update({field: RecoveryWrapper(self, suboption)})
                     elif suboption.name == "supg":
                         raise RuntimeError(
-                            'Time discretisation: suboption SUPG is currently not implemented within MixedOptions')
+                            'Time discretisation: suboption SUPG is not implemented within MixedOptions')
                     else:
                         raise RuntimeError(
                             f'Time discretisation: suboption wrapper {suboption.name} not implemented')
@@ -101,7 +101,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             elif self.wrapper_name == "recovered":
                 self.wrapper = RecoveryWrapper(self, options)
             elif self.wrapper_name == "supg":
-                self.wrapper_field_names = options.field_names
+                if options.field_names:
+                    self.wrapper_field_names = options.field_names
+                else:
+                    self.wrapper_field_names = None
                 self.wrapper = SUPGWrapper(self, options)
             else:
                 raise RuntimeError(
@@ -220,19 +223,25 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
             else:
                 if self.wrapper_name == "supg":
-                    for field_name in self.wrapper_field_names:
-                        print("Wrapper field_name:", field_name)
-                        self.wrapper.setup(field_name)
+                    if self.wrapper_field_names is not None:
+                        for field_name in self.wrapper_field_names:
+                            self.wrapper.setup(field_name)
+                            new_test = self.wrapper.test
+                            self.residual = self.residual.label_map(
+                                lambda t: t.get(prognostic) == field_name and t.has_label(transport),
+                                map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
+                            self.residual = self.wrapper.label_terms(self.residual)
+                    else:
+                        self.wrapper.setup(self.field_name)
                         new_test = self.wrapper.test
                         self.residual = self.residual.label_map(
-                            lambda t: t.get(prognostic) == field_name and t.has_label(transport),
-                            map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
+                            all_terms,
+                            map_if_true=replace_test_function(new_test))
                         self.residual = self.wrapper.label_terms(self.residual)
+
                 else:
                     self.wrapper.setup(self.fs, wrapper_bcs)
                     self.fs = self.wrapper.function_space
-                    if self.solver_parameters is None:
-                        self.solver_parameters = self.wrapper.solver_parameters
                     new_test = TestFunction(self.wrapper.test_space)
                     # Replace the original test function with the one from the wrapper
                     self.residual = self.residual.label_map(
@@ -240,6 +249,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         map_if_true=replace_test_function(new_test))
 
                     self.residual = self.wrapper.label_terms(self.residual)
+                if self.solver_parameters is None:
+                    self.solver_parameters = self.wrapper.solver_parameters
 
         # -------------------------------------------------------------------- #
         # Make boundary conditions
@@ -247,10 +258,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if not apply_bcs:
             self.bcs = None
-        # elif self.wrapper is not None:
-        #     # Transfer boundary conditions onto test function space
-        #     self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
-        #                 for bc in bcs]
+        elif self.wrapper is not None and self.wrapper_name != "supg":
+            # Transfer boundary conditions onto test function space
+            self.bcs = [DirichletBC(self.fs, bc.function_arg, bc.sub_domain)
+                        for bc in bcs]
         else:
             self.bcs = bcs
 
