@@ -29,7 +29,7 @@ def test_supg_transport_scalar(tmpdir, equation_form, scheme, space,
         V = domain.spaces("theta")
         ibp = IntegrateByParts.TWICE
 
-    opts = SUPGOptions(field_name="f", ibp=ibp)
+    opts = SUPGOptions(ibp=ibp)
 
     if equation_form == "advective":
         eqn = AdvectionEquation(domain, V, "f")
@@ -74,7 +74,7 @@ def test_supg_transport_vector(tmpdir, equation_form, scheme, space,
         V = domain.spaces("HDiv")
         ibp = IntegrateByParts.TWICE
 
-    opts = SUPGOptions(field_name="f", ibp=ibp)
+    opts = SUPGOptions(ibp=ibp)
 
     if equation_form == "advective":
         eqn = AdvectionEquation(domain, V, "f")
