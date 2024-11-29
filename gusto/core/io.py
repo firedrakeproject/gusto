@@ -8,7 +8,8 @@ import time
 from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.core.meshes import get_flat_latlon_mesh
 from firedrake import (Function, functionspaceimpl, Constant,
-                       DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
+                       DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile,
+                       assemble, dx)
 from firedrake.output import VTKFile
 from pyop2.mpi import MPI
 import numpy as np
@@ -328,14 +329,22 @@ class IO(object):
                 # the field to take the Courant number of
                 self.courant_max.assign(courant_max)
 
-            # Compare trader density and straight assemble:
-            # Tracer density:
-            Td_idx = diagnostic_names.index(TracerDensity_m_X_rho_d)
-            Td_diagnostic = self.diagnostic_fields[Td_idx]
-            Td_diagnostic.compute()
-            Td_field = state_fields(courant_name)
-            Td_total = self.diagnostics.total(courant_field)
-            print(Td_total)
+                # Compare trader density and straight assemble:
+
+                # Tracer density:
+                Td_idx = diagnostic_names.index('TracerDensity_m_X_rho_d')
+                Td_diagnostic = self.diagnostic_fields[Td_idx]
+                Td_diagnostic.compute()
+                Td_field = state_fields('TracerDensity_m_X_rho_d')
+                Td_total = self.diagnostics.total(Td_field)
+                print('Tracer density is', Td_total)
+
+                # Straight assemble:
+                m_X = state_fields('m_X')
+                rho_d = state_fields('rho_d')
+                Td_ass = assemble(rho_d*m_X*rho_d*dx)
+
+                print('Assemble value is', Td_ass)
 
 
     def setup_diagnostics(self, state_fields):
