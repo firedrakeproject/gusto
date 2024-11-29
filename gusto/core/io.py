@@ -328,6 +328,16 @@ class IO(object):
                 # the field to take the Courant number of
                 self.courant_max.assign(courant_max)
 
+            # Compare trader density and straight assemble:
+            # Tracer density:
+            Td_idx = diagnostic_names.index(TracerDensity_m_X_rho_d)
+            Td_diagnostic = self.diagnostic_fields[Td_idx]
+            Td_diagnostic.compute()
+            Td_field = state_fields(courant_name)
+            Td_total = self.diagnostics.total(courant_field)
+            print(Td_total)
+
+
     def setup_diagnostics(self, state_fields):
         """
         Prepares the I/O for computing the model's global diagnostics and
