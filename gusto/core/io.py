@@ -1,6 +1,7 @@
 """Provides the model's IO, which controls input, output and diagnostics."""
 
 from os import path, makedirs
+from os.path import abspath, dirname
 import itertools
 from netCDF4 import Dataset
 import sys
@@ -332,19 +333,56 @@ class IO(object):
                 # Compare trader density and straight assemble:
 
                 # Tracer density:
-                Td_idx = diagnostic_names.index('TracerDensity_m_X_rho_d')
-                Td_diagnostic = self.diagnostic_fields[Td_idx]
-                Td_diagnostic.compute()
-                Td_field = state_fields('TracerDensity_m_X_rho_d')
-                Td_total = self.diagnostics.total(Td_field)
-                print('Tracer density is', Td_total)
+                # NL
+                #Td_idx = diagnostic_names.index('TracerDensity_m_X_rho_d')
+                #Td_diagnostic = self.diagnostic_fields[Td_idx]
+                #Td_diagnostic.compute()
+                #Td_field = state_fields('TracerDensity_m_X_rho_d')
+                #Td_total = self.diagnostics.total(Td_field)
+
+                # Bryan Fritsch
+                Td_wv_idx = diagnostic_names.index('TracerDensity_water_vapour_rho')
+                Td_wv_diagnostic = self.diagnostic_fields[Td_wv_idx]
+                Td_wv_diagnostic.compute()
+                Td_wv_field = state_fields('TracerDensity_water_vapour_rho')
+                Td_wv_total = self.diagnostics.total(Td_wv_field)
+
+                Td_cw_idx = diagnostic_names.index('TracerDensity_cloud_water_rho')
+                Td_cw_diagnostic = self.diagnostic_fields[Td_wv_idx]
+                Td_cw_diagnostic.compute()
+                Td_cw_field = state_fields('TracerDensity_cloud_water_rho')
+                Td_cw_total = self.diagnostics.total(Td_cw_field)
+
+                Td_total = Td_cw_total + Td_wv_total
+
+                print(f'Tracer density, (Td(wv) + Td(cw)) is {Td_total}')
+
+                # What if sum first?
+                Td_water_idx = diagnostic_names.index('TracerDensity_water_vapour_plus_cloud_water_rho')
+                Td_water_diagnostic = self.diagnostic_fields[Td_water_idx]
+                Td_water_diagnostic.compute()
+                Td_water_field = state_fields('TracerDensity_water_vapour_plus_cloud_water_rho')
+                Td_water_total = self.diagnostics.total(Td_water_field)
+
+                print(f'Tracer density, (Td(wv+cw)) is {Td_water_total}')
 
                 # Straight assemble:
-                m_X = state_fields('m_X')
-                rho_d = state_fields('rho_d')
-                Td_ass = assemble(rho_d*m_X*rho_d*dx)
+                #m_X = state_fields('m_X')
+                #rho_d = state_fields('rho_d')
+                #Td_ass = assemble(m_X*rho_d*dx)
 
-                print('Assemble value is', Td_ass)
+                rho = state_fields('rho')
+                wv = state_fields('water_vapour')
+                cw = state_fields('cloud_water')
+                Td_ass = assemble(rho*(wv+cw)*dx)
+
+                print(f'Assemble value is {Td_ass}')
+
+                # As a hack, write these to a file.
+                # Or, do this when we output diagnostics 
+
+                print('diff1 = ', abs(Td_total - Td_ass))
+                print('diff2 = ', abs(Td_water_total - Td_ass))
 
 
     def setup_diagnostics(self, state_fields):
@@ -738,6 +776,35 @@ class IO(object):
         if output.dump_diagnostics and (next(self.diagcount) % output.diagfreq) == 0:
             # Output diagnostic data
             self.diagnostic_output.dump(state_fields, t)
+
+            # Hack to output tracer density values here for comparison:
+            # Tracer density:
+            #diagnostic_names = [diagnostic.name for diagnostic in self.diagnostic_fields]
+            #Td_idx = diagnostic_names.index('TracerDensity_m_X_rho_d')
+            #Td_diagnostic = self.diagnostic_fields[Td_idx]
+            #Td_diagnostic.compute()
+            #Td_field = state_fields('TracerDensity_m_X_rho_d')
+            #Td_total = self.diagnostics.total(Td_field)
+            #print('Tracer density is', Td_total)
+
+            # Straight assemble:
+            #m_X = state_fields('m_X')
+            #rho_d = state_fields('rho_d')
+            #Td_ass = assemble(m_X*rho_d*dx)
+
+            #print('Assemble value is', Td_ass)
+
+            # append these to a file
+            #plot_dir = f'{abspath(dirname(__file__))}'
+            #file = open('Td_comps_NL_slice_order_0_advective', "w+")
+            #file.write(str(t))
+            #file.write('Diagnostic')
+            #file.write(str(Td_total))
+            #file.write('Assembled')
+            #file.write(str(Td_ass))
+
+            
+
 
         if len(output.point_data) > 0 and (next(self.pddumpcount) % output.pddumpfreq) == 0:
             # Output pointwise data
