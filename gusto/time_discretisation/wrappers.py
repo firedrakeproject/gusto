@@ -388,7 +388,6 @@ class SUPGWrapper(Wrapper):
         # Set up test function
         # -------------------------------------------------------------------- #
         if self.time_discretisation.wrapper_field_names is not None:
-            self.u_idx = self.time_discretisation.equation.field_names.index('u')
             uadv = Function(domain.spaces('HDiv'))
             test = self.time_discretisation.equation.tests[self.idx]
         else:
