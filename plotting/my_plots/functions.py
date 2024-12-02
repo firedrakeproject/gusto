@@ -54,4 +54,16 @@ def delta_q_inst(da):
     dphi = latmax - PVmax_lat
     return dq, dphi
 
-# there's a load of functions I've deleted because I'm an idiot. THey all need rewriting (at a time when I can't remember what they hell they are or what they're doing arghhhhhhhhhh)
+# there's a load of functions I've deleted because I'm an idiot. They all need rewriting (at a time when I can't remember what they hell they are or what they're doing arghhhhhhhhhh)
+
+def tracer_integral(da, lat_thresh, direction):
+    if direction == 'pole':
+        da = da.where(da.lat >= lat_thresh, drop=True)
+        lat_th = np.min(da.lat).values.item()
+    elif direction == 'equator':
+        da = da.where(da.lat <= lat_thresh, drop=True)
+        lat_th = np.max(da.lat).values.item()
+    da['coslat'] = np.cos(da.lat * np.pi/180.)
+    integrand = da.coslat * da
+    integral = integrand.integrate('lat').integrate('lon')
+    return integral, lat_th

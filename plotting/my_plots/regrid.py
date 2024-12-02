@@ -49,7 +49,7 @@ ds_list=[]
 for i in range(0, len(times)):
 # for i in [0, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1]:
     print(i)
-    for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity', 'tracer', 'rainsum', 'CO2cond_flag']:
+    for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity', 'tracer', 'rainsum', 'CO2cond_flag', 'CO2cond_flag_cumulative']:
         try:
             field_data = extract_gusto_field(data_file, field_name, time_idx=i)
         except:
