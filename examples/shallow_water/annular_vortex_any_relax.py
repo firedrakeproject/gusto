@@ -21,8 +21,8 @@ import shutil
 # ---------------------------------------------------------------------------- #
 
 # set inner and outer latitude limits of annulus   
-phis = 60
-phin = 70
+phis = 57
+phin = 62
 phimp = phis
 
 # False means initial vortex is annular, True means it's monopolar
@@ -32,8 +32,8 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 1.6
-pvpole = 1.0
+pvmax = 2.3
+pvpole = 1.1
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
@@ -44,7 +44,7 @@ tau_c_ratio = 0.01
 beta = 1.0
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'none'
+rel_sch = 'rad'
 include_co2 = 'yes'
 
 # refinement level
@@ -57,7 +57,7 @@ restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_
 # length of this run, time to start from (only relevant if doing a restart)
 rundays = 30
 start_time = 0
-dt = 450.
+dt = (0.25)**(ref_lev-4) * 450.
 
 # do you want a tracer or not. Edge of tophat function for tracer, north of this the tracer is intialised as 1, south is 0
 # if running a restart, True introduces a new tracer whilst False still maintains the old one
@@ -319,7 +319,7 @@ if not restart:
     tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
 
     # estimate core count for Pileus
-    print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
+    logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
     # H_rel = Function(domain.spaces('L2'))
 
@@ -370,7 +370,7 @@ elif restart:
     tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
     rs_tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer_rs")
     # estimate core count for Pileus
-    print(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
+    logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
     # Transport schemes
     transported_fields = [TrapeziumRule(domain, "u"),
@@ -535,28 +535,29 @@ Dbar = Function(D0_mp.function_space()).assign(H)
 stepper.set_reference_profiles([('D', Dbar)])
 
 
-# confirm the dirname is correct
-if not restart:
-    print(f'Directory name is {dirname}\n\n Input \'y\' to continue')
-    confirm = input()
-elif restart:
-    print(f'Directory name is {dirname},\n old run is {dirnameold}\n\n Input \'y\' to continue')
-    confirm = input()
+# # confirm the dirname is correct
+# if not restart:
+#     print(f'Directory name is {dirname}\n\n Input \'y\' to continue')
+#     confirm = input()
+# elif restart:
+#     print(f'Directory name is {dirname},\n old run is {dirnameold}\n\n Input \'y\' to continue')
+#     confirm = input()
 
-# ------------------------------------------------------------------------ #
-# Run
-# ------------------------------------------------------------------------ #
+# # ------------------------------------------------------------------------ #
+# # Run
+# # ------------------------------------------------------------------------ #
 
-if confirm == 'y':
-    if not restart: 
-        stepper.run(t=0, tmax=tmax)
-    elif restart:
-        print('restart')
-        stepper.run(t=start_time*day, tmax=tmax, pick_up=True)
-else:
-    print('Confirmation not given')
+# if confirm == 'y':
+#     if not restart: 
+#         stepper.run(t=0, tmax=tmax)
+#     elif restart:
+#         print('restart')
+#         stepper.run(t=start_time*day, tmax=tmax, pick_up=True)
+# else:
+#     print('Confirmation not given')
 
-
+logger.info(f'Directory name is {dirname}')
+stepper.run(t=0, tmax=tmax)
 
 # results_file_name = f'{dirname}/field_output.nc'
 # output_file_name = f'{dirname}/regrid_output.nc'
