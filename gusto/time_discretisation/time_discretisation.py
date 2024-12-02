@@ -154,12 +154,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.fs = equation.function_space
             self.idx = None
 
-        bcs = equation.bcs[self.field_name]
-
         if len(active_labels) > 0:
-            self.residual = self.residual.label_map(
-                lambda t: any(t.has_label(time_derivative, *active_labels)),
-                map_if_false=drop)
             if isinstance(self.field_name, list):
                 # Multiple fields are being solved for simultaneously.
                 # Keep all time derivative terms:
@@ -167,7 +162,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     lambda t: t.has_label(time_derivative),
                     map_if_false=drop)
 
-                # Only keep active labels for prognostics in the list:
+                # Only keep active labels for prognostics in the list
+                # of simultaneously transported variables:
                 for subname in self.field_name:
                     field_residual = self.residual.label_map(
                         lambda t: t.get(prognostic) == subname,
@@ -211,7 +207,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     # timestepper should be used instead.
                     if len(field_terms.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0:
                         if len(field_terms.label_map(lambda t: not t.has_label(mass_weighted), map_if_false=drop)) > 0:
-                            raise ValueError(f"Mass-weighted and non-mass-weighted terms are present in a timestepping equation for {field}. As these terms cannot be solved for simultaneously, a split timestepping method should be used instead.")
+                            raise ValueError('Mass-weighted and non-mass-weighted terms are present in a timestepping '
+                                             + f'equation for {field}. As these terms cannot be solved for simultaneously, '
+                                             + 'a split timestepping method should be used instead.')
                         else:
                             # Replace the terms with a mass_weighted label with the
                             # mass_weighted form. It is important that the labels from
@@ -235,10 +233,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 for field, subwrapper in self.wrapper.subwrappers.items():
 
                     if field not in equation.field_names:
-                        raise ValueError(f"The option defined for {field} is for a field that does not exist in the equation set")
+                        raise ValueError(f'The option defined for {field} is for a field '
+                                         + 'that does not exist in the equation set.')
 
                     field_idx = equation.field_names.index(field)
-                    subwrapper.setup(equation.spaces[field_idx], wrapper_bcs)
+                    subwrapper.setup(equation.spaces[field_idx], equation.bcs[field])
 
                     # Update the function space to that needed by the wrapper
                     self.wrapper.wrapper_spaces[field_idx] = subwrapper.function_space
