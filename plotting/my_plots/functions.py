@@ -65,5 +65,7 @@ def tracer_integral(da, lat_thresh, direction):
         lat_th = np.max(da.lat).values.item()
     da['coslat'] = np.cos(da.lat * np.pi/180.)
     integrand = da.coslat * da
+    integrand['lat'] = integrand.lat * np.pi/180.
+    integrand['lon'] = integrand.lon * np.pi/180.
     integral = integrand.integrate('lat').integrate('lon')
     return integral, lat_th
