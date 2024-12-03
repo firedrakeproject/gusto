@@ -63,8 +63,13 @@ def run_nonsplit_adv_physics(tmpdir, timestepper):
         stepper = PrescribedTransport(equation, dynamics_schemes,
                                       io, time_varying_velocity,
                                       transport_method=spatial_methods)
-    elif timestepper == 'nonsplit_exp_rk':
-        dynamics_schemes = SSPRK3(domain)
+    elif timestepper == 'nonsplit_exp_rk_predictor':
+        dynamics_schemes = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.predictor)
+        stepper = PrescribedTransport(equation, dynamics_schemes,
+                                      io, time_varying_velocity,
+                                      transport_method=spatial_methods)
+    elif timestepper == 'nonsplit_exp_rk_increment':
+        dynamics_schemes = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.increment)
         stepper = PrescribedTransport(equation, dynamics_schemes,
                                       io, time_varying_velocity,
                                       transport_method=spatial_methods)
@@ -135,7 +140,7 @@ def run_nonsplit_adv_physics(tmpdir, timestepper):
 
 
 @pytest.mark.parametrize("timestepper", ["split", "nonsplit_imex_rk", "nonsplit_imex_sdc",
-                                         "nonsplit_exp_rk", "nonsplit_exp_multistep"])
+                                         "nonsplit_exp_rk_predictor", "nonsplit_exp_rk_increment", "nonsplit_exp_multistep"])
 def test_nonsplit_adv_physics(tmpdir, timestepper):
     """
     Test the nonsplit timestepper in the advection equation with source physics.
