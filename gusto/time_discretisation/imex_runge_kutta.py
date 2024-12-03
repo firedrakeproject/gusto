@@ -239,7 +239,7 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         for stage in range(self.nStages):
             self.solver = solver_list[stage]
-            # Set initial solver guess and evalute physics terms
+            # Set initial solver guess and evaluate physics terms
             if (stage > 0):
                 self.x_out.assign(self.xs[stage-1])
                 for evaluate in self.evaluate_source:
