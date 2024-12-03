@@ -203,6 +203,7 @@ class SUPGOptions(WrapperOptions):
     default = 1/sqrt(15)
     ibp = IntegrateByParts.TWICE
     field_names = None
+    term_labels = None
 
 
 class MixedFSOptions(WrapperOptions):

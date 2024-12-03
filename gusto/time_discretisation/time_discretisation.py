@@ -17,7 +17,7 @@ from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
-from gusto.core.labels import (time_derivative, prognostic, physics_label, transport,
+from gusto.core.labels import (time_derivative, prognostic, physics_label,
                                mass_weighted, nonlinear_time_derivative)
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
@@ -102,6 +102,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 self.wrapper = RecoveryWrapper(self, options)
             elif self.wrapper_name == "supg":
                 self.wrapper_field_names = options.field_names
+                self.supg_term_labels = options.term_labels
                 self.wrapper = SUPGWrapper(self, options)
             else:
                 raise RuntimeError(
@@ -224,16 +225,28 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         for field_name in self.wrapper_field_names:
                             self.wrapper.setup(field_name)
                             new_test = self.wrapper.test
-                            self.residual = self.residual.label_map(
-                                lambda t: t.get(prognostic) == field_name and t.has_label(transport),
-                                map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
+                            if self.supg_term_labels is not None:
+                                for term_label in self.supg_term_labels:
+                                    self.residual = self.residual.label_map(
+                                        lambda t: t.get(prognostic) == field_name and t.has_label(term_label),
+                                        map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
+                            else:
+                                self.residual = self.residual.label_map(
+                                    lambda t: t.get(prognostic) == field_name,
+                                    map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
                             self.residual = self.wrapper.label_terms(self.residual)
                     else:
                         self.wrapper.setup(self.field_name)
                         new_test = self.wrapper.test
-                        self.residual = self.residual.label_map(
-                            all_terms,
-                            map_if_true=replace_test_function(new_test))
+                        if self.supg_term_labels is not None:
+                            for term_label in self.supg_term_labels:
+                                self.residual = self.residual.label_map(
+                                    lambda t: t.has_label(term_label),
+                                    map_if_true=replace_test_function(new_test))
+                        else:
+                            self.residual = self.residual.label_map(
+                                all_terms,
+                                map_if_true=replace_test_function(new_test))
                         self.residual = self.wrapper.label_terms(self.residual)
 
                 else:
