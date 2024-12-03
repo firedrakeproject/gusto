@@ -101,10 +101,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             elif self.wrapper_name == "recovered":
                 self.wrapper = RecoveryWrapper(self, options)
             elif self.wrapper_name == "supg":
-                if options.field_names:
-                    self.wrapper_field_names = options.field_names
-                else:
-                    self.wrapper_field_names = None
+                self.wrapper_field_names = options.field_names
                 self.wrapper = SUPGWrapper(self, options)
             else:
                 raise RuntimeError(

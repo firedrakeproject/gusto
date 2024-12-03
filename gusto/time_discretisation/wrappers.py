@@ -388,12 +388,11 @@ class SUPGWrapper(Wrapper):
         # Set up test function
         # -------------------------------------------------------------------- #
         if self.time_discretisation.wrapper_field_names is not None:
-            uadv = Function(domain.spaces('HDiv'))
             test = self.time_discretisation.equation.tests[self.idx]
         else:
-            uadv = Function(domain.spaces('HDiv'))
             test = TestFunction(self.test_space)
 
+        uadv = Function(domain.spaces('HDiv'))
         self.test = test + dot(dot(uadv, self.tau), grad(test))
         self.transporting_velocity = uadv
 
