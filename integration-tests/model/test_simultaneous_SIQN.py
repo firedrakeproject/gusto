@@ -22,8 +22,15 @@ import pytest
 
 def run_simult_SIQN(tmpdir, order):
 
-    ncolumns = 50
-    nlayers = 50
+    if order == 0:
+        ncolumns = 20
+        nlayers = 20
+        u_eqn_type = "vector_advection_form"
+    else:
+        ncolumns = 10
+        nlayers = 10
+        u_eqn_type = "vector_invariant_form"
+
     dt = 2.0
     tmax = 10.0
 
@@ -34,12 +41,6 @@ def run_simult_SIQN(tmpdir, order):
     Tdash = 2.0               # strength of temperature perturbation, in K
     Tsurf = 320.0             # background theta_e value, in K
     total_water = 0.02        # total moisture mixing ratio, in kg/kg
-
-    # Discretisation of advective term
-    if order == 0:
-        u_eqn_type = "vector_advection_form"
-    else:
-        u_eqn_type = "vector_invariant_form"
 
     # Domain
     mesh_name = 'bryan_fritsch_mesh'

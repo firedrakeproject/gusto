@@ -207,9 +207,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     # timestepper should be used instead.
                     if len(field_terms.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0:
                         if len(field_terms.label_map(lambda t: not t.has_label(mass_weighted), map_if_false=drop)) > 0:
-                            raise ValueError('Mass-weighted and non-mass-weighted terms are present in a timestepping '
-                                             + f'equation for {field}. As these terms cannot be solved for simultaneously, '
-                                             + 'a split timestepping method should be used instead.')
+                            raise ValueError('Mass-weighted and non-mass-weighted terms are present in a '
+                                             + f'timestepping equation for {field}. As these terms cannot '
+                                             + 'be solved for simultaneously, a split timestepping method '
+                                             + 'should be used instead.')
                         else:
                             # Replace the terms with a mass_weighted label with the
                             # mass_weighted form. It is important that the labels from
