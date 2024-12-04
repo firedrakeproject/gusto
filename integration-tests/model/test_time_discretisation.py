@@ -10,9 +10,10 @@ def run(timestepper, tmax, f_end):
 
 @pytest.mark.parametrize(
     "scheme", [
-        "ssprk3_increment", "TrapeziumRule", "ImplicitMidpoint", "QinZhang",
+        "ssprk3_increment", "TrapeziumRule", "ImplicitMidpoint",
+        "QinZhang_increment", "QinZhang_predictor",
         "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth", "Leapfrog",
-        "AdamsMoulton", "AdamsMoulton", "ssprk3_predictor", "ssprk3_linear"
+        "AdamsMoulton", "ssprk3_predictor", "ssprk3_linear"
     ]
 )
 def test_time_discretisation(tmpdir, scheme, tracer_setup):
@@ -40,8 +41,10 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         transport_scheme = TrapeziumRule(domain)
     elif scheme == "ImplicitMidpoint":
         transport_scheme = ImplicitMidpoint(domain)
-    elif scheme == "QinZhang":
-        transport_scheme = QinZhang(domain)
+    elif scheme == "QinZhang_increment":
+        transport_scheme = QinZhang(domain, rk_formulation=RungeKuttaFormulation.increment)
+    elif scheme == "QinZhang_predictor":
+        transport_scheme = QinZhang(domain, rk_formulation=RungeKuttaFormulation.predictor)
     elif scheme == "RK4":
         transport_scheme = RK4(domain)
     elif scheme == "Heun":

@@ -125,12 +125,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
         self.butcher_matrix = butcher_matrix
-        self.nbutcher = int(np.shape(self.butcher_matrix)[0])
+        self.nStages = int(np.shape(self.butcher_matrix)[0])
         self.rk_formulation = rk_formulation
-
-    @property
-    def nStages(self):
-        return self.nbutcher
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
