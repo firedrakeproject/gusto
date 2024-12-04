@@ -12,28 +12,29 @@ def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
+
 def run_coupled(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
     norm1 = norm(timestepper.fields("f1") - f_end) / norm(f_end)
     norm2 = norm(timestepper.fields("f2") - f_end) / norm(f_end)
     return norm1, norm2
 
+
 @pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint"])
 def test_supg_transport_mixed_scalar(tmpdir, scheme, tracer_setup):
     setup = tracer_setup(tmpdir, geometry="slice")
     domain = setup.domain
 
-    V = domain.spaces("theta")
     ibp = IntegrateByParts.TWICE
 
     opts = SUPGOptions(ibp=ibp)
 
     tracer1 = ActiveTracer(name='f1', space="theta",
-                            variable_type=TracerVariableType.mixing_ratio,
-                            transport_eqn=TransportEquationType.advective)
+                        variable_type=TracerVariableType.mixing_ratio,
+                        transport_eqn=TransportEquationType.advective)
     tracer2 = ActiveTracer(name='f2', space="theta",
-                            variable_type=TracerVariableType.mixing_ratio,
-                            transport_eqn=TransportEquationType.conservative)
+                        variable_type=TracerVariableType.mixing_ratio,
+                        transport_eqn=TransportEquationType.conservative)
     tracers = [tracer1, tracer2]
     Vu = domain.spaces("HDiv")
     eqn = CoupledTransportEquation(domain, active_tracers=tracers, Vu=Vu)
@@ -60,6 +61,7 @@ def test_supg_transport_mixed_scalar(tmpdir, scheme, tracer_setup):
         'The transport error for f1 is greater than the permitted tolerance'
     assert error2 < setup.tol, \
         'The transport error for f2 is greater than the permitted tolerance'
+
 
 @pytest.mark.parametrize("equation_form", ["advective", "continuity"])
 @pytest.mark.parametrize("scheme", ["ssprk", "implicit_midpoint"])
