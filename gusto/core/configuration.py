@@ -202,8 +202,7 @@ class SUPGOptions(WrapperOptions):
     tau = None
     default = 1/sqrt(15)
     ibp = IntegrateByParts.TWICE
-    field_names = None
-    term_labels = None
+    suboptions = {}
 
 
 class MixedFSOptions(WrapperOptions):

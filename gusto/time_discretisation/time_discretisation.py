@@ -101,8 +101,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             elif self.wrapper_name == "recovered":
                 self.wrapper = RecoveryWrapper(self, options)
             elif self.wrapper_name == "supg":
-                self.wrapper_field_names = options.field_names
-                self.supg_term_labels = options.term_labels
+                self.suboptions = options.suboptions
                 self.wrapper = SUPGWrapper(self, options)
             else:
                 raise RuntimeError(
@@ -221,12 +220,12 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
             else:
                 if self.wrapper_name == "supg":
-                    if self.wrapper_field_names is not None:
-                        for field_name in self.wrapper_field_names:
+                    if self.suboptions:
+                        for field_name, term_labels in self.suboptions.items():
                             self.wrapper.setup(field_name)
                             new_test = self.wrapper.test
-                            if self.supg_term_labels is not None:
-                                for term_label in self.supg_term_labels:
+                            if term_labels is not None:
+                                for term_label in term_labels:
                                     self.residual = self.residual.label_map(
                                         lambda t: t.get(prognostic) == field_name and t.has_label(term_label),
                                         map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
@@ -238,17 +237,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     else:
                         self.wrapper.setup(self.field_name)
                         new_test = self.wrapper.test
-                        if self.supg_term_labels is not None:
-                            for term_label in self.supg_term_labels:
-                                self.residual = self.residual.label_map(
-                                    lambda t: t.has_label(term_label),
-                                    map_if_true=replace_test_function(new_test))
-                        else:
-                            self.residual = self.residual.label_map(
-                                all_terms,
-                                map_if_true=replace_test_function(new_test))
+                        self.residual = self.residual.label_map(
+                            all_terms,
+                            map_if_true=replace_test_function(new_test))
                         self.residual = self.wrapper.label_terms(self.residual)
-
                 else:
                     self.wrapper.setup(self.fs, wrapper_bcs)
                     self.fs = self.wrapper.function_space

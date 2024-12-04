@@ -30,15 +30,18 @@ def test_supg_transport_mixed_scalar(tmpdir, scheme, tracer_setup):
     opts = SUPGOptions(ibp=ibp)
 
     tracer1 = ActiveTracer(name='f1', space="theta",
-                        variable_type=TracerVariableType.mixing_ratio,
-                        transport_eqn=TransportEquationType.advective)
+                           variable_type=TracerVariableType.mixing_ratio,
+                           transport_eqn=TransportEquationType.advective)
     tracer2 = ActiveTracer(name='f2', space="theta",
-                        variable_type=TracerVariableType.mixing_ratio,
-                        transport_eqn=TransportEquationType.conservative)
+                           variable_type=TracerVariableType.mixing_ratio,
+                           transport_eqn=TransportEquationType.conservative)
     tracers = [tracer1, tracer2]
     Vu = domain.spaces("HDiv")
     eqn = CoupledTransportEquation(domain, active_tracers=tracers, Vu=Vu)
-    opts = SUPGOptions(field_names=["f1", "f2"], term_labels=[transport], ibp=ibp)
+    suboptions = {}
+    suboptions.update({'f1': [time_derivative, transport]})
+    suboptions.update({'f2': None})
+    opts = SUPGOptions(suboptions=suboptions)
     transport_method = [DGUpwind(eqn, "f1", ibp=ibp), DGUpwind(eqn, "f2", ibp=ibp)]
 
     if scheme == "ssprk":
