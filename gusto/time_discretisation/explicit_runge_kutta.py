@@ -281,6 +281,14 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                     lambda t: t.has_label(time_derivative),
                     map_if_true=keep,
                     map_if_false=lambda t: -self.butcher_matrix[stage, 0]*self.dt*t)
+                
+                for evaluate in self.evaluate_source:
+                    evaluate(self.field_i[0], self.dt)
+                    r_phys = self.residual.label_map(
+                                lambda t: t.has_label(physics_label),
+                                map_if_true=replace_subject(self.field_i[0], old_idx=self.idx),
+                                map_if_false=drop)
+                    r -= self.butcher_matrix[stage, 0]*self.dt*r_phys
 
                 for i in range(1, stage+1):
                     r_i = self.residual.label_map(
@@ -291,7 +299,11 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
                     r -= self.butcher_matrix[stage, i]*self.dt*r_i
                     for evaluate in self.evaluate_source:
-                        r_phys = evaluate(self.field_i[i], self.dt).residual
+                        evaluate(self.field_i[i], self.dt)
+                        r_phys = self.residual.label_map(
+                                    lambda t: t.has_label(physics_label),
+                                    map_if_true=replace_subject(self.field_i[i], old_idx=self.idx),
+                                    map_if_false=drop)
                         r -= self.butcher_matrix[stage, i]*self.dt*r_phys
                 rhs_list.append(r)
 
@@ -353,7 +365,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             for i in range(stage):
                 self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
             for evaluate in self.evaluate_source:
-                self.residual += evaluate(self.x1, self.dt)
+                evaluate(self.x1, self.dt)
             if self.limiter is not None:
                 self.limiter.apply(self.x1)
 

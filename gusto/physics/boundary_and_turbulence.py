@@ -141,7 +141,7 @@ class SurfaceFluxes(PhysicsParametrisation):
                 source_mv_expr = test_m_v * source_mv * dx
 
                 self.source_interpolators.append(Interpolator(dmv_expr, source_mv))
-                self.residual -= self.label(subject(prognostic(source_mv_expr, vapour_name),
+                equation.residual -= self.label(subject(prognostic(source_mv_expr, vapour_name),
                                                         X), self.evaluate)
 
                 # Moisture needs including in theta_vd expression
@@ -157,7 +157,7 @@ class SurfaceFluxes(PhysicsParametrisation):
             dtheta_vd_expr = surface_expr * (theta_np1_expr - theta_vd) / self.dt
             source_theta_expr = test_theta * source_theta_vd * dx
             self.source_interpolators.append(Interpolator(dtheta_vd_expr, source_theta_vd))
-            self.residual -= self.label(subject(prognostic(source_theta_expr, 'theta'),
+            equation.residual -= self.label(subject(prognostic(source_theta_expr, 'theta'),
                                                     X), self.evaluate)
 
         # General formulation ------------------------------------------------ #
@@ -170,7 +170,7 @@ class SurfaceFluxes(PhysicsParametrisation):
                 mv_sat = thermodynamics.r_sat(equation.parameters, T, p)
                 dmv_dt = surface_expr * C_E * u_hori_mag * (mv_sat - m_v) / z_a
                 source_mv_expr = test_m_v * dmv_dt * dx
-                self.residual -= self.label(
+                equation.residual -= self.label(
                     prognostic(subject(source_mv_expr, X),
                                vapour_name), self.evaluate)
 
@@ -184,7 +184,7 @@ class SurfaceFluxes(PhysicsParametrisation):
             dx_reduced = dx(degree=4)
             source_theta_expr = test_theta * dtheta_vd_dt * dx_reduced
 
-            self.residual -= self.label(
+            equation.residual -= self.label(
                 subject(prognostic(source_theta_expr, 'theta'), X), self.evaluate)
 
     def evaluate(self, x_in, dt):
@@ -294,7 +294,7 @@ class WindDrag(PhysicsParametrisation):
             self.source_projector = NonlinearVariationalSolver(proj_prob)
 
             source_expr = inner(test, source_u - k*dot(source_u, k)) * dx
-            self.residual -= self.label(subject(prognostic(source_expr, 'u'),
+            equation.residual -= self.label(subject(prognostic(source_expr, 'u'),
                                                     X), self.evaluate)
 
         # General formulation ------------------------------------------------ #
@@ -305,7 +305,7 @@ class WindDrag(PhysicsParametrisation):
             dx_reduced = dx(degree=4)
             source_expr = inner(test, du_dt) * dx_reduced
 
-            self.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
+            equation.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -400,7 +400,7 @@ class StaticAdjustment(PhysicsParametrisation):
 
         source_expr = inner(test, sorted_theta - theta) / self.dt * dx
 
-        self.residual -= self.label(subject(prognostic(source_expr, 'theta'), equation.X), self.evaluate)
+        equation.residual -= self.label(subject(prognostic(source_expr, 'theta'), equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -480,7 +480,7 @@ class SuppressVerticalWind(PhysicsParametrisation):
         # The sink should be just the value of the current vertical wind
         source_expr = -self.strength * inner(test, domain.k*dot(domain.k, wind)) / self.dt * dx
 
-        self.residual -= self.label(subject(prognostic(source_expr, 'u'), equation.X), self.evaluate)
+        equation.residual -= self.label(subject(prognostic(source_expr, 'u'), equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """
@@ -625,7 +625,7 @@ class BoundaryLayerMixing(PhysicsParametrisation):
             + 4*mu*avg(dz)*inner(avg(outer(K*field, n)), avg(outer(test, n)))*dS_v_reduced
         )
 
-        self.residual += self.label(
+        equation.residual += self.label(
             subject(prognostic(source_expr, field_name), X), self.evaluate)
 
     def evaluate(self, x_in, dt):

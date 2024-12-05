@@ -32,11 +32,6 @@ class PhysicsParametrisation(object, metaclass=ABCMeta):
 
         self.label = PhysicsLabel(label_name)
         self.equation = equation
-        self.residual = Constant(0.0)*equation.residual.label_map(
-                    lambda t: t.has_label(time_derivative),
-                    # Drop label from this
-                    map_if_true=lambda t: time_derivative.remove(t),
-                    map_if_false=drop)
         if parameters is None and hasattr(equation, 'parameters'):
             self.parameters = equation.parameters
         else:
@@ -111,7 +106,7 @@ class SourceSink(PhysicsParametrisation):
 
         # Make source/sink term
         self.source = Function(V)
-        self.residual += self.label(subject(test * self.source * dx, equation.X),
+        equation.residual += self.label(subject(test * self.source * dx, equation.X),
                                         self.evaluate)
 
         # Handle whether the expression is time-varying or not
