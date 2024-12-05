@@ -202,7 +202,7 @@ class SUPGOptions(WrapperOptions):
     tau = None
     default = 1/sqrt(15)
     ibp = IntegrateByParts.TWICE
-    suboptions = {}
+    suboptions = None # Dictionary containing field_name and term_labels
 
 
 class MixedFSOptions(WrapperOptions):
@@ -211,7 +211,7 @@ class MixedFSOptions(WrapperOptions):
     prognostic variables."""
 
     name = "mixed_options"
-    suboptions = {}
+    suboptions = None # Dictionary containing field_name and suboption
 
 
 class SpongeLayerParameters(Configuration):

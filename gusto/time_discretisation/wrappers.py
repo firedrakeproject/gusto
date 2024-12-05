@@ -341,7 +341,7 @@ class SUPGWrapper(Wrapper):
             'SUPG wrapper can only be used with SUPG Options'
 
         domain = self.time_discretisation.domain
-        if self.options.suboptions:
+        if self.options.suboptions is not None:
             self.idx = self.time_discretisation.equation.field_names.index(field_name)
             self.test_space = self.time_discretisation.equation.spaces[self.idx]
         else:
@@ -387,7 +387,7 @@ class SUPGWrapper(Wrapper):
         # -------------------------------------------------------------------- #
         # Set up test function
         # -------------------------------------------------------------------- #
-        if self.options.suboptions:
+        if self.options.suboptions is not None:
             test = self.time_discretisation.equation.tests[self.idx]
         else:
             test = TestFunction(self.test_space)

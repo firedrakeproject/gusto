@@ -256,7 +256,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
             else:
                 if self.wrapper_name == "supg":
-                    if self.suboptions:
+                    if self.suboptions is not None:
                         for field_name, term_labels in self.suboptions.items():
                             self.wrapper.setup(field_name)
                             new_test = self.wrapper.test
