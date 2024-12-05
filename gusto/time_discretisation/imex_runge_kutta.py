@@ -4,7 +4,7 @@ from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import replace_subject, all_terms, drop
 from firedrake.utils import cached_property
-from gusto.core.labels import time_derivative, implicit, explicit
+from gusto.core.labels import time_derivative, implicit, explicit, physics_label
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
@@ -122,7 +122,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         # Check all terms are labeled implicit, exlicit
         for t in self.residual:
             if ((not t.has_label(implicit)) and (not t.has_label(explicit))
-               and (not t.has_label(time_derivative))):
+               and (not t.has_label(time_derivative))and (not t.has_label(physics_label))):
                 raise NotImplementedError("Non time-derivative terms must be labeled as implicit or explicit")
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
@@ -168,6 +168,15 @@ class IMEXRungeKutta(TimeDiscretisation):
                 map_if_false=lambda t: Constant(self.butcher_imp[stage, i])*self.dt*t)
             residual += r_imp
             residual += r_exp
+
+            # Calculate physics terms
+            for evaluate in self.evaluate_source:
+                r_phys = evaluate(self.xs[i], self.dt)
+                r_phys = r_phys.label_map(
+                all_terms,
+                map_if_true=lambda t: Constant(self.butcher_exp[stage, i])*self.dt*t)
+                residual += r_phys
+
         # Calculate and add on dt*a_ss*F(y_s)
         r_imp = self.residual.label_map(
             lambda t: t.has_label(implicit),
@@ -210,6 +219,13 @@ class IMEXRungeKutta(TimeDiscretisation):
                 map_if_false=lambda t: Constant(self.butcher_imp[self.nStages, i])*self.dt*t)
             residual += r_imp
             residual += r_exp
+            # Calculate physics terms
+            for evaluate in self.evaluate_source:
+                r_phys = evaluate(self.xs[i], self.dt).residual
+                r_phys = r_phys.label_map(
+                all_terms,
+                map_if_true=lambda t: Constant(self.butcher_exp[self.nStages, i])*self.dt*t)
+                residual += r_phys
         return residual.form
 
     @cached_property
@@ -249,6 +265,7 @@ class IMEXRungeKutta(TimeDiscretisation):
                 self.limiter.apply(self.x_out)
             self.xs[stage].assign(self.x_out)
 
+        # Solve final stage
         self.final_solver.solve()
 
         # Apply limiter

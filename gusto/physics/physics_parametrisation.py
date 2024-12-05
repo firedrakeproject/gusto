@@ -8,9 +8,9 @@ the form of classes with "evaluate" methods.
 """
 
 from abc import ABCMeta, abstractmethod
-from firedrake import Interpolator, Function, dx, Projector
-from firedrake.fml import subject
-from gusto.core.labels import PhysicsLabel
+from firedrake import Interpolator, Function, dx, Projector, Constant
+from firedrake.fml import subject, drop
+from gusto.core.labels import PhysicsLabel, time_derivative
 from gusto.core.logging import logger
 
 
