@@ -334,16 +334,22 @@ class SUPGWrapper(Wrapper):
     test function space that is used to solve the problem.
     """
 
-    def setup(self):
+    def setup(self, field_name):
         """Sets up function spaces and fields needed for this wrapper."""
 
         assert isinstance(self.options, SUPGOptions), \
             'SUPG wrapper can only be used with SUPG Options'
 
         domain = self.time_discretisation.domain
+        if self.options.suboptions is not None:
+            self.idx = self.time_discretisation.equation.field_names.index(field_name)
+            self.test_space = self.time_discretisation.equation.spaces[self.idx]
+        else:
+            self.idx = None
+            self.test_space = self.time_discretisation.fs
         self.function_space = self.time_discretisation.fs
-        self.test_space = self.function_space
         self.x_out = Function(self.function_space)
+        self.field_name = field_name
 
         # -------------------------------------------------------------------- #
         # Work out SUPG parameter
@@ -360,10 +366,10 @@ class SUPGWrapper(Wrapper):
             default_vals = [self.options.default*self.time_discretisation.dt]*dim
             # check for directions is which the space is discontinuous
             # so that we don't apply supg in that direction
-            if is_cg(self.function_space):
+            if is_cg(self.test_space):
                 vals = default_vals
             else:
-                space = self.function_space.ufl_element().sobolev_space
+                space = self.test_space.ufl_element().sobolev_space
                 if space.name in ["HDiv", "DirectionalH"]:
                     vals = [default_vals[i] if space[i].name == "H1"
                             else 0. for i in range(dim)]
@@ -381,8 +387,11 @@ class SUPGWrapper(Wrapper):
         # -------------------------------------------------------------------- #
         # Set up test function
         # -------------------------------------------------------------------- #
+        if self.options.suboptions is not None:
+            test = self.time_discretisation.equation.tests[self.idx]
+        else:
+            test = TestFunction(self.test_space)
 
-        test = TestFunction(self.test_space)
         uadv = Function(domain.spaces('HDiv'))
         self.test = test + dot(dot(uadv, self.tau), grad(test))
         self.transporting_velocity = uadv

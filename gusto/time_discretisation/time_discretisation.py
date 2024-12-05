@@ -91,7 +91,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         self.wrapper.subwrappers.update({field: RecoveryWrapper(self, suboption)})
                     elif suboption.name == "supg":
                         raise RuntimeError(
-                            'Time discretisation: suboption SUPG is currently not implemented within MixedOptions')
+                            'Time discretisation: suboption SUPG is not implemented within MixedOptions')
                     else:
                         raise RuntimeError(
                             f'Time discretisation: suboption wrapper {suboption.name} not implemented')
@@ -101,6 +101,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             elif self.wrapper_name == "recovered":
                 self.wrapper = RecoveryWrapper(self, options)
             elif self.wrapper_name == "supg":
+                self.suboptions = options.suboptions
                 self.wrapper = SUPGWrapper(self, options)
             else:
                 raise RuntimeError(
@@ -255,23 +256,39 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
             else:
                 if self.wrapper_name == "supg":
-                    self.wrapper.setup()
+                    if self.suboptions is not None:
+                        for field_name, term_labels in self.suboptions.items():
+                            self.wrapper.setup(field_name)
+                            new_test = self.wrapper.test
+                            if term_labels is not None:
+                                for term_label in term_labels:
+                                    self.residual = self.residual.label_map(
+                                        lambda t: t.get(prognostic) == field_name and t.has_label(term_label),
+                                        map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
+                            else:
+                                self.residual = self.residual.label_map(
+                                    lambda t: t.get(prognostic) == field_name,
+                                    map_if_true=replace_test_function(new_test, old_idx=self.wrapper.idx))
+                            self.residual = self.wrapper.label_terms(self.residual)
+                    else:
+                        self.wrapper.setup(self.field_name)
+                        new_test = self.wrapper.test
+                        self.residual = self.residual.label_map(
+                            all_terms,
+                            map_if_true=replace_test_function(new_test))
+                        self.residual = self.wrapper.label_terms(self.residual)
                 else:
                     self.wrapper.setup(self.fs, wrapper_bcs)
-                self.fs = self.wrapper.function_space
+                    self.fs = self.wrapper.function_space
+                    new_test = TestFunction(self.wrapper.test_space)
+                    # Replace the original test function with the one from the wrapper
+                    self.residual = self.residual.label_map(
+                        all_terms,
+                        map_if_true=replace_test_function(new_test))
+
+                    self.residual = self.wrapper.label_terms(self.residual)
                 if self.solver_parameters is None:
                     self.solver_parameters = self.wrapper.solver_parameters
-                new_test = TestFunction(self.wrapper.test_space)
-                # SUPG has a special wrapper
-                if self.wrapper_name == "supg":
-                    new_test = self.wrapper.test
-
-                # Replace the original test function with the one from the wrapper
-                self.residual = self.residual.label_map(
-                    all_terms,
-                    map_if_true=replace_test_function(new_test))
-
-                self.residual = self.wrapper.label_terms(self.residual)
 
         # -------------------------------------------------------------------- #
         # Make boundary conditions
@@ -279,7 +296,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         if not apply_bcs:
             self.bcs = None
-        elif self.wrapper is not None:
+        elif self.wrapper is not None and self.wrapper_name != "supg":
             if self.wrapper_name == 'mixed_options':
                 # Define new Dirichlet BCs on the wrapper-modified
                 # mixed function space.
