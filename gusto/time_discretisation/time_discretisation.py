@@ -430,7 +430,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
 
-        # If the time_derivative term is nonlinear, we must use a nonlinear solver
+        # If the time_derivative term is nonlinear, we must use a nonlinear solver,
+        # but if the time_derivative term is linear, we can reuse the factorisations.
         if (
             len(self.residual.label_map(
                 lambda t: t.has_label(nonlinear_time_derivative),
@@ -442,6 +443,38 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                        + ' as the time derivative term is nonlinear')
             logger.warning(message)
             self.solver_parameters['snes_type'] = 'newtonls'
+
+            # TODO: move this outside the if-else and just set the fieldsplit_type here
+            if len(self.x0.subfunctions) > 1:
+                self.solver_parameters.update({
+                    'ksp_type': 'preonly',
+                    'pc_type': 'fieldsplit',
+                    'pc_fieldsplit_type': 'multiplicative',
+                    **{f'fieldsplit_{fs.name}': {
+                        'ksp_type': 'cg',
+                        'pc_type': 'bjacobi',
+                        'sub_pc_type': 'ilu'
+                    } for fs in self.fs.subfunctions}
+                })
+        else:
+            self.solver_parameters.setdefault('snes_lag_jacobian', -2)
+            self.solver_parameters.setdefault('snes_lag_jacobian_persists', None)
+            self.solver_parameters.setdefault('snes_lag_preconditioner', -2)
+            self.solver_parameters.setdefault('snes_lag_preconditioner_persists', None)
+
+            # The time derivatives for each field are independent if all time
+            # time derivatives are linear, so we solve each one independently.
+            if len(self.x0.subfunctions) > 1:
+                self.solver_parameters.update({
+                    'ksp_type': 'preonly',
+                    'pc_type': 'fieldsplit',
+                    'pc_fieldsplit_type': 'additive',
+                    **{f'fieldsplit_{fs.name}': {
+                        'ksp_type': 'cg',
+                        'pc_type': 'bjacobi',
+                        'sub_pc_type': 'ilu'
+                    } for fs in self.fs.subfunctions}
+                })
 
     @cached_property
     def lhs(self):
