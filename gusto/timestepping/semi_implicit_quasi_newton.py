@@ -115,6 +115,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.reference_update_freq = reference_update_freq
         self.to_update_ref_profile = False
 
+        # Flag for if we have simultaneous transport
+        self.simult = False
+
         # default is to not offcentre transporting velocity but if it
         # is offcentred then use the same value as alpha
         self.alpha_u = Constant(alpha) if off_centred_u else Constant(0.5)
@@ -148,15 +151,30 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.transported_fields = []
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
-            assert scheme.field_name in equation_set.field_names
-            self.active_transport.append((scheme.field_name, scheme))
-            self.transported_fields.append(scheme.field_name)
-            # Check that there is a corresponding transport method
-            method_found = False
-            for method in spatial_methods:
-                if scheme.field_name == method.variable and method.term_label == transport:
-                    method_found = True
-            assert method_found, f'No transport method found for variable {scheme.field_name}'
+            if isinstance(scheme.field_name, list):
+                # This means that multiple fields are being transported simultaneously
+                self.simult = True
+                for subfield in scheme.field_name:
+                    assert subfield in equation_set.field_names
+
+                    # Check that there is a corresponding transport method for
+                    # each field in the list
+                    method_found = False
+                    for method in spatial_methods:
+                        if subfield == method.variable and method.term_label == transport:
+                            method_found = True
+                    assert method_found, f'No transport method found for variable {scheme.field_name}'
+                self.active_transport.append((scheme.field_name, scheme))
+            else:
+                assert scheme.field_name in equation_set.field_names
+
+                # Check that there is a corresponding transport method
+                method_found = False
+                for method in spatial_methods:
+                    if scheme.field_name == method.variable and method.term_label == transport:
+                        method_found = True
+                        self.active_transport.append((scheme.field_name, scheme))
+                assert method_found, f'No transport method found for variable {scheme.field_name}'
 
         self.diffusion_schemes = []
         if diffusion_schemes is not None:
@@ -240,7 +258,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     def setup_fields(self):
         """Sets up time levels n, star, p and np1"""
         self.x = TimeLevelFields(self.equation, 1)
-        self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast"))
+        if self.simult is True:
+            # If there is any simultaneous transport, add an extra 'simult' field:
+            self.x.add_fields(self.equation, levels=("star", "p", "simult", "after_slow", "after_fast"))
+        else:
+            self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast"))
         for aux_eqn, _ in self.auxiliary_equations_and_schemes:
             self.x.add_fields(aux_eqn)
         # Prescribed fields for auxiliary eqns should come from prognostics of
@@ -282,32 +304,44 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         for name in self.tracers_to_copy:
             x_out(name).assign(x_in(name))
 
-    def transport_field(self, name, scheme, xstar, xp):
+    def transport_fields(self, outer, xstar, xp):
         """
-        Performs the transport of a field in xstar, placing the result in xp.
+        Transports all fields in xstar with a transport scheme
+        and places the result in xp.
 
         Args:
-            name (str): the name of the field to be transported.
-            scheme (:class:`TimeDiscretisation`): the time discretisation used
-                for the transport.
+            outer (int): the outer loop iteration number
             xstar (:class:`Fields`): the collection of state fields to be
                 transported.
             xp (:class:`Fields`): the collection of state fields resulting from
                 the transport.
         """
+        for name, scheme in self.active_transport:
+            if isinstance(name, list):
+                # Transport multiple fields from xstar simultaneously.
+                # We transport the mixed function space from xstar to xsimult, then
+                # extract the updated fields and pass them to xp; this avoids overwriting
+                # any previously transported fields.
+                logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: '
+                            + f'Simultaneous transport of {name}')
+                scheme.apply(self.x.simult(self.field_name), xstar(self.field_name))
+                for field_name in name:
+                    xp(field_name).assign(self.x.simult(field_name))
+            else:
+                logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: {name}')
+                # transports a single field from xstar and puts the result in xp
+                if name == self.predictor:
+                    # Pre-multiply this variable by (1 - dt*beta*div(u))
+                    V = xstar(name).function_space()
+                    field_out = Function(V)
+                    self.predictor_interpolator.interpolate()
+                    scheme.apply(field_out, self.predictor_field_in)
 
-        if name == self.predictor:
-            # Pre-multiply this variable by (1 - dt*beta*div(u))
-            V = xstar(name).function_space()
-            field_out = Function(V)
-            self.predictor_interpolator.interpolate()
-            scheme.apply(field_out, self.predictor_field_in)
-
-            # xp is xstar plus the increment from the transported predictor
-            xp(name).assign(xstar(name) + field_out - self.predictor_field_in)
-        else:
-            # Standard transport
-            scheme.apply(xp(name), xstar(name))
+                    # xp is xstar plus the increment from the transported predictor
+                    xp(name).assign(xstar(name) + field_out - self.predictor_field_in)
+                else:
+                    # Standard transport
+                    scheme.apply(xp(name), xstar(name))
 
     def update_reference_profiles(self):
         """
@@ -367,10 +401,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             with timed_stage("Transport"):
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'transporting velocity, outer iteration {outer}')
-                for name, scheme in self.active_transport:
-                    logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: {name}')
-                    # transports a field from xstar and puts result in xp
-                    self.transport_field(name, scheme, xstar, xp)
+                self.transport_fields(outer, xstar, xp)
 
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))
@@ -531,11 +562,13 @@ class Forcing(object):
 
         # now we can set up the explicit and implicit problems
         explicit_forcing_problem = LinearVariationalProblem(
-            a.form, L_explicit.form, self.xF, bcs=bcs
+            a.form, L_explicit.form, self.xF, bcs=bcs,
+            constant_jacobian=True
         )
 
         implicit_forcing_problem = LinearVariationalProblem(
-            a.form, L_implicit.form, self.xF, bcs=bcs
+            a.form, L_implicit.form, self.xF, bcs=bcs,
+            constant_jacobian=True
         )
 
         self.solvers = {}
