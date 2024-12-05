@@ -575,11 +575,12 @@ class Forcing(object):
             'ksp_type': 'preonly',
             'pc_type': 'fieldsplit',
             'pc_fieldsplit_type': 'additive',
-            **{f'fieldsplit_{fs.name}': {
-                'ksp_type': 'cg',
+            'fieldsplit': {
+                'ksp_type': 'preonly',
                 'pc_type': 'bjacobi',
                 'sub_pc_type': 'ilu'
-            } for fs in W.subfunctions}
+            },
+            'fieldsplit_HDiv_ksp_type': 'cg'
         }
 
         self.solvers = {}

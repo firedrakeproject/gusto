@@ -450,11 +450,12 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                     'ksp_type': 'preonly',
                     'pc_type': 'fieldsplit',
                     'pc_fieldsplit_type': 'multiplicative',
-                    **{f'fieldsplit_{fs.name}': {
-                        'ksp_type': 'cg',
+                    'fieldsplit': {
+                        'ksp_type': 'preonly',
                         'pc_type': 'bjacobi',
                         'sub_pc_type': 'ilu'
-                    } for fs in self.fs.subfunctions}
+                    },
+                    'fieldsplit_HDiv_ksp_type': 'cg'
                 })
         else:
             self.solver_parameters.setdefault('snes_lag_jacobian', -2)
@@ -469,11 +470,12 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                     'ksp_type': 'preonly',
                     'pc_type': 'fieldsplit',
                     'pc_fieldsplit_type': 'additive',
-                    **{f'fieldsplit_{fs.name}': {
-                        'ksp_type': 'cg',
+                    'fieldsplit': {
+                        'ksp_type': 'preonly',
                         'pc_type': 'bjacobi',
                         'sub_pc_type': 'ilu'
-                    } for fs in self.fs.subfunctions}
+                    },
+                    'fieldsplit_HDiv_ksp_type': 'cg'
                 })
 
     @cached_property
