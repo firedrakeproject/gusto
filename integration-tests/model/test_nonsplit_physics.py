@@ -121,10 +121,8 @@ def run_nonsplit_adv_physics(tmpdir, timestepper):
     return error
 
 
-# @pytest.mark.parametrize("timestepper", ["split", "nonsplit_exp_rk_predictor",
-#                                          "nonsplit_exp_rk_increment", "nonsplit_exp_multistep"])
-
-@pytest.mark.parametrize("timestepper", ["nonsplit_exp_multistep"])
+@pytest.mark.parametrize("timestepper", ["split", "nonsplit_exp_rk_predictor",
+                                         "nonsplit_exp_rk_increment", "nonsplit_exp_multistep"])
 def test_nonsplit_adv_physics(tmpdir, timestepper):
     """
     Test the nonsplit timestepper in the advection equation with source physics.

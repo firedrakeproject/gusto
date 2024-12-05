@@ -224,10 +224,6 @@ class Leapfrog(MultilevelTimeDiscretisation):
         self.xnm1.assign(x_in[0])
         self.x1.assign(x_in[1])
 
-        # Evaluate physics terms
-        for evaluate in self.evaluate_source:
-            evaluate(self.x1, self.dt)
-
         # Set initial solver guess
         self.x_out.assign(x_in[1])
         solver.solve()

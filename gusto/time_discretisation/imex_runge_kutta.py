@@ -126,12 +126,6 @@ class IMEXRungeKutta(TimeDiscretisation):
                 raise NotImplementedError("Non time-derivative terms must be labeled as implicit or explicit")
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
-        self.physics_rhs = [Function(self.fs) for _ in range(self.nStages)]
-        self.r_phys = Constant(0.0)*self.residual.label_map(
-                    lambda t: t.has_label(time_derivative),
-                    # Drop label from this
-                    map_if_true=lambda t: time_derivative.remove(t),
-                    map_if_false=drop)
 
     @cached_property
     def lhs(self):
@@ -174,6 +168,15 @@ class IMEXRungeKutta(TimeDiscretisation):
                 map_if_false=lambda t: Constant(self.butcher_imp[stage, i])*self.dt*t)
             residual += r_imp
             residual += r_exp
+
+            # Calculate physics terms
+            for evaluate in self.evaluate_source:
+                r_phys = evaluate(self.xs[i], self.dt)
+                r_phys = r_phys.label_map(
+                all_terms,
+                map_if_true=lambda t: Constant(self.butcher_exp[stage, i])*self.dt*t)
+                residual += r_phys
+
         # Calculate and add on dt*a_ss*F(y_s)
         r_imp = self.residual.label_map(
             lambda t: t.has_label(implicit),
@@ -183,7 +186,6 @@ class IMEXRungeKutta(TimeDiscretisation):
             lambda t: t.has_label(time_derivative),
             map_if_false=lambda t: Constant(self.butcher_imp[stage, stage])*self.dt*t)
         residual += r_imp
-        residual += self.r_phys
         return residual.form
 
     @property
@@ -217,7 +219,13 @@ class IMEXRungeKutta(TimeDiscretisation):
                 map_if_false=lambda t: Constant(self.butcher_imp[self.nStages, i])*self.dt*t)
             residual += r_imp
             residual += r_exp
-        residual += self.r_phys
+            # Calculate physics terms
+            for evaluate in self.evaluate_source:
+                r_phys = evaluate(self.xs[i], self.dt).residual
+                r_phys = r_phys.label_map(
+                all_terms,
+                map_if_true=lambda t: Constant(self.butcher_exp[self.nStages, i])*self.dt*t)
+                residual += r_phys
         return residual.form
 
     @cached_property
@@ -247,37 +255,15 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         for stage in range(self.nStages):
             self.solver = solver_list[stage]
-            # Set initial solver guess and evaluate physics terms
+            # Set initial solver guess
             if (stage > 0):
                 self.x_out.assign(self.xs[stage-1])
-                for evaluate in self.evaluate_source:
-                    evaluate(self.xs[stage-1], self.dt)
-                    self.physics_rhs[stage] = self.residual.label_map(
-                        lambda t: t.has_label(physics_label),
-                        map_if_false=drop
-                    )
-
-                self.r_phys = self.dt*self.butcher_exp[stage-1, 0]*self.physics_rhs[0]
-                for i in range(1, stage):
-                    self.r_phys += self.r_phys + self.dt*self.butcher_exp[stage-1, i]*self.physics_rhs[i]
             self.solver.solve()
 
             # Apply limiter
             if self.limiter is not None:
                 self.limiter.apply(self.x_out)
             self.xs[stage].assign(self.x_out)
-
-        # Evaluate physics terms
-        for evaluate in self.evaluate_source:
-            evaluate(self.xs[self.nStages-1], self.dt)
-            self.physics_rhs[self.nStages-1] = self.residual.label_map(
-                        lambda t: t.has_label(physics_label),
-                        map_if_false=drop
-                    )
-
-        self.r_phys =  self.dt*self.butcher_exp[self.nStages-1, 0]*self.physics_rhs[0]
-        for i in range(1, self.nStages):
-            self.r_phys += self.r_phys + self.dt*self.butcher_exp[self.nStages-1, i]*self.physics_rhs[i]
 
         # Solve final stage
         self.final_solver.solve()

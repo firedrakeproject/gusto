@@ -177,7 +177,7 @@ class SaturationAdjustment(PhysicsParametrisation):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += self.label(subject(test * source * dx,
+            self.residual += self.label(subject(test * source * dx,
                                                     equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):
@@ -289,7 +289,7 @@ class Fallout(PhysicsParametrisation):
         adv_term = transport.remove(adv_term)
 
         adv_term = prognostic(subject(adv_term, equation.X), rain_name)
-        equation.residual += self.label(adv_term, self.evaluate)
+        self.residual += self.label(adv_term, self.evaluate)
 
         # -------------------------------------------------------------------- #
         # Expressions for determining rainfall velocity
@@ -447,7 +447,7 @@ class Coalescence(PhysicsParametrisation):
         # Add term to equation's residual
         test_cl = equation.tests[self.cloud_idx]
         test_r = equation.tests[self.rain_idx]
-        equation.residual += self.label(subject(test_cl * self.source * dx
+        self.residual += self.label(subject(test_cl * self.source * dx
                                                 - test_r * self.source * dx,
                                                 equation.X),
                                         self.evaluate)
@@ -618,7 +618,7 @@ class EvaporationOfRain(PhysicsParametrisation):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += self.label(subject(test * source * dx,
+            self.residual += self.label(subject(test * source * dx,
                                                     equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):

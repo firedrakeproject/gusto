@@ -66,8 +66,8 @@ class TerminatorToy(PhysicsParametrisation):
         source1_expr = test_1 * 2*Kx * dx
         source2_expr = test_2 * -Kx * dx
 
-        equation.residual -= self.label(subject(prognostic(source1_expr, 'X'), Xq), self.evaluate)
-        equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate)
+        self.residual -= self.label(subject(prognostic(source1_expr, 'X'), Xq), self.evaluate)
+        self.residual -= self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate)
 
     def evaluate(self, x_in, dt):
         """

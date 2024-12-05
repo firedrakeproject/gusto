@@ -113,7 +113,7 @@ class InstantRain(PhysicsParametrisation):
             self.saturation_curve = saturation_curve
 
         # lose proportion of vapour above the saturation curve
-        equation.residual += self.label(subject(test_v * self.source * dx,
+        self.residual += self.label(subject(test_v * self.source * dx,
                                                 equation.X),
                                         self.evaluate)
 
@@ -122,13 +122,13 @@ class InstantRain(PhysicsParametrisation):
         if rain_name is not None:
             Vr_idx = equation.field_names.index(rain_name)
             test_r = equation.tests[Vr_idx]
-            equation.residual -= self.label(subject(test_r * self.source * dx,
+            self.residual -= self.label(subject(test_r * self.source * dx,
                                                     equation.X),
                                             self.evaluate)
 
         # if feeding back on the height adjust the height equation
         if convective_feedback:
-            equation.residual += self.label(subject(test_D * beta1 * self.source * dx,
+            self.residual += self.label(subject(test_D * beta1 * self.source * dx,
                                                     equation.X),
                                             self.evaluate)
 
@@ -330,7 +330,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += self.label(subject(test * source * dx,
+            self.residual += self.label(subject(test * source * dx,
                                                     equation.X), self.evaluate)
 
     def evaluate(self, x_in, dt):

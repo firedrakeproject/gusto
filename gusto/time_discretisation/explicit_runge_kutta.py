@@ -273,8 +273,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             for stage in range(self.nStages):
                 r = self.residual.label_map(
-                    all_terms,
-                    map_if_true=replace_subject(self.field_i[0], old_idx=self.idx))
+                    lambda t: not t.has_label(physics_label),
+                    map_if_true=replace_subject(self.field_i[0], old_idx=self.idx),
+                    map_if_false=drop)
 
                 r = r.label_map(
                     lambda t: t.has_label(time_derivative),
@@ -289,7 +290,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                     )
 
                     r -= self.butcher_matrix[stage, i]*self.dt*r_i
-                r -= self.physics_total_rhs
+                    for evaluate in self.evaluate_source:
+                        r_phys = evaluate(self.field_i[i], self.dt).residual
+                        r -= self.butcher_matrix[stage, i]*self.dt*r_phys
                 rhs_list.append(r)
 
             return rhs_list
@@ -350,7 +353,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             for i in range(stage):
                 self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
             for evaluate in self.evaluate_source:
-                evaluate(self.x1, self.dt)
+                self.residual += evaluate(self.x1, self.dt)
             if self.limiter is not None:
                 self.limiter.apply(self.x1)
 
@@ -377,19 +380,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             # Use previous stage value as a first guess (otherwise may not converge)
             self.field_i[stage+1].assign(self.field_i[stage])
-
-            # Update field_i for physics / limiters
-            for evaluate in self.evaluate_source:
-                # in the i-th RHS with field_m
-                evaluate(self.field_i[stage], self.dt)
-                self.physics_rhs[stage] = self.residual.label_map(
-                    lambda t: t.has_label(physics_label),
-                    map_if_true=keep,
-                    map_if_false=drop
-                )
-            self.physics_total_rhs =  self.dt*self.butcher_matrix[stage-1, 0]*self.physics_rhs[0]
-            for i in range(1, stage):
-                self.physics_total_rhs += self.physics_total_rhs + self.dt*self.butcher_matrix[stage-1, i]*self.physics_rhs[i]
             if self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
 
