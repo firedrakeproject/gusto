@@ -9,7 +9,7 @@ from firedrake.fml import replace_subject, all_terms, drop, keep, Term
 from firedrake.utils import cached_property
 from firedrake.formmanipulation import split_form
 
-from gusto.core.labels import time_derivative, all_but_last
+from gusto.core.labels import time_derivative, all_but_last, physics_label
 from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 
@@ -153,6 +153,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             raise NotImplementedError(
                 'Runge-Kutta formulation is not implemented'
             )
+        self.physics_rhs = [Function(self.fs) for _ in range(self.nStages+1)]
 
     @cached_property
     def solver(self):
@@ -282,13 +283,13 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
                 for i in range(1, stage+1):
                     r_i = self.residual.label_map(
-                        lambda t: t.has_label(time_derivative),
+                        lambda t: any(t.has_label(time_derivative, physics_label)),
                         map_if_true=drop,
                         map_if_false=replace_subject(self.field_i[i], old_idx=self.idx)
                     )
 
                     r -= self.butcher_matrix[stage, i]*self.dt*r_i
-
+                r -= self.physics_total_rhs
                 rhs_list.append(r)
 
             return rhs_list
@@ -381,6 +382,14 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             for evaluate in self.evaluate_source:
                 # in the i-th RHS with field_m
                 evaluate(self.field_i[stage], self.dt)
+                self.physics_rhs[stage] = self.residual.label_map(
+                    lambda t: t.has_label(physics_label),
+                    map_if_true=keep,
+                    map_if_false=drop
+                )
+            self.physics_total_rhs =  self.dt*self.butcher_matrix[stage-1, 0]*self.physics_rhs[0]
+            for i in range(1, stage):
+                self.physics_total_rhs += self.physics_total_rhs + self.dt*self.butcher_matrix[stage-1, i]*self.physics_rhs[i]
             if self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
 

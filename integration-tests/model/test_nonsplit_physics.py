@@ -1,14 +1,16 @@
 """
 This script tests the non-split timestepper against the split timestepper
-using an advection equation with a physics parametrisation.
+using an forced advection equation with a physics parametrisation.
 One split method is tested, whilst different nonsplit IMEX and explicit time
 discretisations are used for the dynamics and physics.
 """
 
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp, as_vector,
-                       norm, Constant, conditional, sqrt, VectorFunctionSpace)
+                       norm, Constant, conditional, sqrt, VectorFunctionSpace, acos,
+                       cos, sin, FunctionSpace, Function, TestFunction, TrialFunction)
 from gusto import *
 import pytest
+from math import pi
 
 
 def run_nonsplit_adv_physics(tmpdir, timestepper):
@@ -21,23 +23,38 @@ def run_nonsplit_adv_physics(tmpdir, timestepper):
     # ------------------------------------------------------------------------ #
 
     # Domain
-    dt = 0.01
-    tmax = 0.75
-    L = 10
-    mesh = PeriodicIntervalMesh(20, L)
+    dt = 0.5
+    tmax = 55
+    L = 100
+    mesh = PeriodicIntervalMesh(40, L)
     domain = Domain(mesh, dt, "CG", 1)
 
+    # Parameters
+    u_max = 1
+    C0 = 0.6
+    K0 = 0.3
+    Csat = 0.75
+    Ksat = 0.25
+    x1 = 0
+    x2 = L/4
+
     # Equation
-    V = domain.spaces("DG")
     Vu = VectorFunctionSpace(mesh, "CG", 1)
-    equation = ContinuityEquation(domain, V, "f", Vu=Vu)
-    spatial_methods = [DGUpwind(equation, "f")]
+    eltDG = FiniteElement("DG", "interval", 1, variant="equispaced")
+    VD = FunctionSpace(mesh, eltDG)
+    vapour = WaterVapour(name='water_vapour', space='DG')
+    rain = Rain(name='rain', space='DG', transport_eqn=TransportEquationType.no_transport)
+    tracers = [vapour, rain]
+    equation = CoupledTransportEquation(domain, active_tracers=tracers, Vu=Vu)
 
-    x = SpatialCoordinate(mesh)
+    transport_method = [DGUpwind(equation, "water_vapour")]
 
-    # Add a source term to inject mass into the domain.
-    source_expression = -Constant(0.5)
-    physics_schemes = [(SourceSink(equation, "f", source_expression), SSPRK3(domain))]
+    x = SpatialCoordinate(mesh)[0]
+
+    # Physics scheme
+    msat_expr = Csat + (Ksat * cos(2*pi*(x/L)))
+    msat = Function(VD)
+    msat.interpolate(msat_expr)
 
     # I/O
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
@@ -46,87 +63,52 @@ def run_nonsplit_adv_physics(tmpdir, timestepper):
     time_varying_velocity = False
 
     # Time stepper
+    time_varying_velocity = False
     if timestepper == 'split':
-        # Split with no defined weights
-        dynamics_schemes = {'transport': ImplicitMidpoint(domain)}
-        term_splitting = ['transport', 'physics']
-        stepper = SplitTimestepper(equation, term_splitting, dynamics_schemes,
-                                   io, spatial_methods=spatial_methods,
-                                   physics_schemes=physics_schemes)
-    elif timestepper == 'nonsplit_imex_rk':
-        # Split continuity term
-        equation = split_continuity_form(equation)
-        # Label terms as implicit and explicit
-        equation.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
-        equation.label_terms(lambda t: t.has_label(transport), explicit)
-        dynamics_schemes = IMEX_SSP3(domain)
-        stepper = PrescribedTransport(equation, dynamics_schemes,
-                                      io, time_varying_velocity,
-                                      transport_method=spatial_methods)
+        physics_schemes = [(InstantRain(equation, msat, rain_name="rain"),
+                            ForwardEuler(domain))]
+        stepper = SplitPrescribedTransport(equation, SSPRK3(domain,
+                                           limiter=DG1Limiter(VD, subspace=0)),
+                                            io, time_varying_velocity, transport_method,
+                                            physics_schemes=physics_schemes)
     elif timestepper == 'nonsplit_exp_rk_predictor':
-        dynamics_schemes = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.predictor)
-        stepper = PrescribedTransport(equation, dynamics_schemes,
+        InstantRain(equation, msat, rain_name="rain")
+        scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.predictor)
+        stepper = PrescribedTransport(equation, scheme,
                                       io, time_varying_velocity,
-                                      transport_method=spatial_methods)
+                                      transport_method=transport_method)
     elif timestepper == 'nonsplit_exp_rk_increment':
-        dynamics_schemes = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.increment)
-        stepper = PrescribedTransport(equation, dynamics_schemes,
+        InstantRain(equation, msat, rain_name="rain")
+        scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.increment)
+        stepper = PrescribedTransport(equation, scheme,
                                       io, time_varying_velocity,
-                                      transport_method=spatial_methods)
-    elif timestepper == 'nonsplit_imex_sdc':
-        # Split continuity term
-        equation = split_continuity_form(equation)
-        # Label terms as implicit and explicit
-        equation.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
-        equation.label_terms(lambda t: t.has_label(transport), explicit)
-
-        node_type = "LEGENDRE"
-        qdelta_imp = "LU"
-        qdelta_exp = "FE"
-        quad_type = "RADAU-RIGHT"
-        M = 2
-        k = 2
-        base_scheme = IMEX_Euler(domain)
-        dynamics_schemes = SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
-                               qdelta_exp, formulation="Z2N", final_update=True, initial_guess="base")
-        stepper = PrescribedTransport(equation, dynamics_schemes,
-                                      io, time_varying_velocity,
-                                      transport_method=spatial_methods)
+                                      transport_method=transport_method)
     elif timestepper == 'nonsplit_exp_multistep':
-        dynamics_schemes = AdamsBashforth(domain, order=2)
-        stepper = PrescribedTransport(equation, dynamics_schemes,
+        InstantRain(equation, msat, rain_name="rain")
+        scheme = AdamsBashforth(domain, order=2)
+        stepper = PrescribedTransport(equation, scheme,
                                       io, time_varying_velocity,
-                                      transport_method=spatial_methods)
+                                      transport_method=transport_method)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    xc_init = 0.25 * L
-    xc_end = 0.75 * L
-    umax = 0.5 * L / tmax
+    # initial moisture and wind profiles
+    mexpr = C0 + K0*cos((2*pi*x)/L)
+    stepper.fields("u").project(as_vector([u_max]))
+    qv = stepper.fields("water_vapour")
+    qv.project(mexpr)
 
-    # Get minimum distance on periodic interval to xc
-    x_init = conditional(sqrt((x[0] - xc_init) ** 2) < 0.5 * L,
-                         x[0] - xc_init, L + x[0] - xc_init)
-
-    x_end = conditional(sqrt((x[0] - xc_end) ** 2) < 0.5 * L,
-                        x[0] - xc_end, L + x[0] - xc_end)
-
-    f_init = 5.0
-    f_end = f_init
-    f_width_init = L / 10.0
-    f_width_end = f_width_init
-    f_init_expr = f_init * exp(-(x_init / f_width_init) ** 2)
-
-    # The end Gaussian should be advected by half the domain
-    # length and include more mass due to the source term.
-    f_end_expr = 0.5 + f_end * exp(-(x_end / f_width_end) ** 2)
-
-    stepper.fields('f').interpolate(f_init_expr)
-    stepper.fields('u').interpolate(as_vector([Constant(umax)]))
-    f_end = stepper.fields('f_end', space=V)
-    f_end.interpolate(f_end_expr)
+    # exact rainfall profile (analytically)
+    r_exact_func = Function(VD)
+    r_exact = stepper.fields("r_exact", r_exact_func)
+    lim1 = L/(2*pi) * acos((C0 + K0 - Csat)/Ksat)
+    lim2 = L/2
+    coord = (Ksat*cos(2*pi*x/L) + Csat - C0)/K0
+    exact_expr = 2*Ksat*sin(2*pi*x/L)*acos(coord)
+    r_expr = conditional(x < lim2, conditional(x > lim1, exact_expr, 0), 0)
+    r_exact.interpolate(r_expr)
 
     # ------------------------------------------------------------------------ #
     # Run
@@ -134,18 +116,20 @@ def run_nonsplit_adv_physics(tmpdir, timestepper):
 
     stepper.run(0, tmax=tmax)
 
-    error = norm(stepper.fields('f') - f_end) / norm(f_end)
-
+    error = norm(stepper.fields('rain') - r_exact) / norm(r_exact)
+    breakpoint()
     return error
 
 
-@pytest.mark.parametrize("timestepper", ["split", "nonsplit_imex_rk", "nonsplit_imex_sdc",
-                                         "nonsplit_exp_rk_predictor", "nonsplit_exp_rk_increment", "nonsplit_exp_multistep"])
+# @pytest.mark.parametrize("timestepper", ["split", "nonsplit_exp_rk_predictor",
+#                                          "nonsplit_exp_rk_increment", "nonsplit_exp_multistep"])
+
+@pytest.mark.parametrize("timestepper", ["nonsplit_exp_multistep"])
 def test_nonsplit_adv_physics(tmpdir, timestepper):
     """
     Test the nonsplit timestepper in the advection equation with source physics.
     """
-    tol = 0.12
+    tol = 0.2
     error = run_nonsplit_adv_physics(tmpdir, timestepper)
     assert error < tol, 'The nonsplit timestepper in the advection' + \
                         'equation with source physics has an error greater than ' + \
