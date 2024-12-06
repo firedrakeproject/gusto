@@ -571,13 +571,27 @@ class Forcing(object):
             constant_jacobian=True
         )
 
+        self.solver_parameters = {
+            'ksp_type': 'preonly',
+            'pc_type': 'fieldsplit',
+            'pc_fieldsplit_type': 'additive',
+            'fieldsplit': {
+                'ksp_type': 'preonly',
+                'pc_type': 'bjacobi',
+                'sub_pc_type': 'ilu'
+            },
+            'fieldsplit_HDiv_ksp_type': 'cg'
+        }
+
         self.solvers = {}
         self.solvers["explicit"] = LinearVariationalSolver(
             explicit_forcing_problem,
+            solver_parameters=self.solver_parameters,
             options_prefix="ExplicitForcingSolver"
         )
         self.solvers["implicit"] = LinearVariationalSolver(
             implicit_forcing_problem,
+            solver_parameters=self.solver_parameters,
             options_prefix="ImplicitForcingSolver"
         )
 
