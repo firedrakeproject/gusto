@@ -52,9 +52,10 @@ def setup_zero_limiter(dirname, limiter=False, rain=False):
     else:
         tracers = [WaterVapour(space='DG'), CloudWater(space='DG')]
 
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
-                                 u_transport_option='vector_advection_form',
-                                 thermal=True, active_tracers=tracers)
+    eqns = ThermalShallowWaterEquations(
+        domain, parameters, fexpr=fexpr,
+        u_transport_option='vector_advection_form',
+        active_tracers=tracers)
 
     output = OutputParameters(dirname=dirname, dumpfreq=1)
 

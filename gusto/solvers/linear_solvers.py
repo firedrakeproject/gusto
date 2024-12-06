@@ -10,7 +10,8 @@ from firedrake import (
     TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
     rhs, FacetNormal, div, dx, jump, avg, dS, dS_v, dS_h, ds_v, ds_t, ds_b,
     ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis, cross,
-    BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC, as_vector
+    BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC, as_vector,
+    Interpolator, conditional
 )
 from firedrake.fml import Term, drop
 from firedrake.petsc import flatten_parameters
@@ -390,7 +391,7 @@ class CompressibleSolver(TimesteppingSolver):
             self.exner_avg_solver.solve()
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -562,7 +563,7 @@ class BoussinesqSolver(TimesteppingSolver):
         self.log_ksp_residuals(self.up_solver.snes.ksp)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -591,17 +592,18 @@ class BoussinesqSolver(TimesteppingSolver):
 
 
 class ThermalSWSolver(TimesteppingSolver):
-    """
-    Linear solver object for the thermal shallow water equations.
+    """Linear solver object for the thermal shallow water equations.
 
-    This solves a linear problem for the thermal shallow water equations with
-    prognostic variables u (velocity), D (depth) and b (buoyancy). It follows
-    the following strategy:
+    This solves a linear problem for the thermal shallow water
+    equations with prognostic variables u (velocity), D (depth) and
+    either b (buoyancy) or b_e (equivalent buoyancy). It follows the
+    following strategy:
 
     (1) Eliminate b
     (2) Solve the resulting system for (u, D) using a hybrid-mixed method
     (3) Reconstruct b
-     """
+
+    """
 
     solver_parameters = {
         'ksp_type': 'preonly',
@@ -620,6 +622,8 @@ class ThermalSWSolver(TimesteppingSolver):
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
+        equivalent_buoyancy = equation.equivalent_buoyancy
+
         dt = self.dt
         beta_u_ = dt*self.tau_values.get("u", self.alpha)
         beta_d_ = dt*self.tau_values.get("D", self.alpha)
@@ -629,8 +633,8 @@ class ThermalSWSolver(TimesteppingSolver):
         Vb = equation.domain.spaces("DG")
 
         # Check that the third field is buoyancy
-        if not equation.field_names[2] == 'b':
-            raise NotImplementedError("Field 'b' must exist to use the thermal linear solver in the SIQN scheme")
+        if not equation.field_names[2] == 'b' and not (equation.field_names[2] == 'b_e' and equivalent_buoyancy):
+            raise NotImplementedError("Field 'b' or 'b_e' must exist to use the thermal linear solver in the SIQN scheme")
 
         # Store time-stepping coefficients as UFL Constants
         beta_u = Constant(beta_u_)
@@ -638,10 +642,8 @@ class ThermalSWSolver(TimesteppingSolver):
         beta_b = Constant(beta_b_)
 
         # Split up the rhs vector
-        self.xrhs = Function(self.equations.function_space)
-        u_in = split(self.xrhs)[0]
-        D_in = split(self.xrhs)[1]
-        b_in = split(self.xrhs)[2]
+        self.xrhs = Function(equation.function_space)
+        u_in, D_in, b_in = split(self.xrhs)[0:3]
 
         # Build the reduced function space for u, D
         M = MixedFunctionSpace((Vu, VD))
@@ -649,11 +651,31 @@ class ThermalSWSolver(TimesteppingSolver):
         u, D = TrialFunctions(M)
 
         # Get background buoyancy and depth
-        Dbar = split(equation.X_ref)[1]
-        bbar = split(equation.X_ref)[2]
+        Dbar, bbar = split(equation.X_ref)[1:3]
 
         # Approximate elimination of b
         b = -dot(u, grad(bbar))*beta_b + b_in
+
+        if equivalent_buoyancy:
+            # compute q_v using q_sat to partition q_t into q_v and q_c
+            # check for topography
+            if hasattr(equation.prescribed_fields, "topography"):
+                topog = equation.prescribed_fields("topography")
+            else:
+                topog = None
+            self.q_sat_func = Function(VD)
+            self.q_v_bar = Function(VD)
+            self.xn = Function(self.equations.function_space)
+            q_t_xn = split(self.xn)[3]
+
+            # set up interpolators that use the xn values for D and b_e
+            self.q_sat_expr_interpolator = Interpolator(
+                equation.compute_saturation(self.xn, topog), VD)
+            self.q_v_interpolator = Interpolator(
+                conditional(q_t_xn < self.q_sat_func, q_t_xn, self.q_sat_func),
+                VD)
+
+            bbar += equation.parameters.beta2 * self.q_v_bar
 
         n = FacetNormal(equation.domain.mesh)
 
@@ -711,7 +733,7 @@ class ThermalSWSolver(TimesteppingSolver):
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -729,6 +751,11 @@ class ThermalSWSolver(TimesteppingSolver):
         bbar_func = Function(b.function_space()).interpolate(bbar)
         if bbar_func.dat.data.max() == 0 and bbar_func.dat.data.min() == 0:
             logger.warning("The reference profile for b in the linear solver is zero. To set a non-zero profile add b to the set_reference_profiles argument.")
+
+        if self.equations.equivalent_buoyancy:
+            self.xn.assign(xn)
+            self.q_sat_func.assign(self.q_sat_expr_interpolator.interpolate())
+            self.q_v_bar.assign(self.q_v_interpolator.interpolate())
 
         with timed_region("Gusto:VelocityDepthSolve"):
             logger.info('Thermal linear solver: mixed solve')
@@ -812,7 +839,7 @@ class LinearTimesteppingSolver(object):
                                               options_prefix='linear_solver')
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
@@ -914,7 +941,7 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
 
     @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
+    def solve(self, xrhs, dy, xn):
         """
         Solve the linear problem.
 
