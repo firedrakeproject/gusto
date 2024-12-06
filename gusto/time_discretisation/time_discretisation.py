@@ -458,8 +458,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                     'fieldsplit_HDiv_ksp_type': 'cg'
                 })
         else:
-            # self.solver_parameters.setdefault('snes_lag_jacobian', -2)
-            # self.solver_parameters.setdefault('snes_lag_jacobian_persists', None)
+            self.solver_parameters.setdefault('snes_lag_jacobian', -2)
+            self.solver_parameters.setdefault('snes_lag_jacobian_persists', None)
             self.solver_parameters.setdefault('snes_lag_preconditioner', -2)
             self.solver_parameters.setdefault('snes_lag_preconditioner_persists', None)
 
@@ -467,7 +467,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             # time derivatives are linear, so we solve each one independently.
             if len(self.x0.subfunctions) > 1:
                 self.solver_parameters.update({
-                    'ksp_type': 'cg',
+                    'ksp_type': 'preonly',
                     'pc_type': 'fieldsplit',
                     'pc_fieldsplit_type': 'additive',
                     'fieldsplit': {
@@ -475,7 +475,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                         'pc_type': 'bjacobi',
                         'sub_pc_type': 'ilu'
                     },
-                    # 'fieldsplit_HDiv_ksp_type': 'cg'
+                    'fieldsplit_HDiv_ksp_type': 'cg'
                 })
 
     @cached_property
