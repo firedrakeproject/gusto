@@ -3,7 +3,7 @@ Plots the Skamarock-Klemp gravity wave in a vertical slice.
 
 This plots the initial conditions @ t = 0 s, with
 (a) theta perturbation, (b) theta
-and the final state @ t = 3600 s, with
+and the final state @ t = 3000 s, with
 (a) theta perturbation,
 (b) a 1D slice through the wave
 """
@@ -11,6 +11,7 @@ from os.path import abspath, dirname
 import matplotlib.pyplot as plt
 import numpy as np
 from netCDF4 import Dataset
+import pandas as pd
 from tomplot import (
     set_tomplot_style, tomplot_cmap, plot_contoured_field,
     add_colorbar_ax, tomplot_field_title, extract_gusto_coords,
@@ -49,7 +50,6 @@ final_contour_to_remove = 0.0
 # General options
 # ---------------------------------------------------------------------------- #
 contour_method = 'tricontour'
-xlims = [0, 300.0]
 ylims = [0, 10.0]
 
 # Things that are likely the same for all plots --------------------------------
@@ -59,6 +59,8 @@ data_file = Dataset(results_file_name, 'r')
 # ---------------------------------------------------------------------------- #
 # INITIAL PLOTTING
 # ---------------------------------------------------------------------------- #
+xlims = [0, 300.0]
+
 fig, axarray = plt.subplots(1, 2, figsize=(12, 6), sharex='all', sharey='all')
 time_idx = 0
 
@@ -107,6 +109,9 @@ plt.close()
 # ---------------------------------------------------------------------------- #
 # FINAL PLOTTING
 # ---------------------------------------------------------------------------- #
+x_offset = -3000.0*20/1000.0
+xlims = [-x_offset, 300.0-x_offset]
+
 fig, axarray = plt.subplots(2, 1, figsize=(8, 8), sharex='all')
 time_idx = -1
 
@@ -114,6 +119,21 @@ time_idx = -1
 field_data = extract_gusto_field(data_file, final_field_name, time_idx=time_idx)
 coords_X, coords_Y = extract_gusto_coords(data_file, final_field_name)
 time = data_file['time'][time_idx]
+
+# Wave has wrapped around periodic boundary, so shift the coordinates
+coords_X = np.where(coords_X < xlims[0], coords_X + 300.0, coords_X)
+
+# Sort data given the change in coordinates
+data_dict = {
+    'X': coords_X,
+    'Y': coords_Y,
+    'field': field_data
+}
+data_frame = pd.DataFrame(data_dict)
+data_frame.sort_values(by=['X', 'Y'], inplace=True)
+coords_X = data_frame['X'].values[:]
+coords_Y = data_frame['Y'].values[:]
+field_data = data_frame['field'].values[:]
 
 # Plot 2D data -----------------------------------------------------------------
 ax = axarray[0]
