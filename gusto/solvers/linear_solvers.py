@@ -671,7 +671,7 @@ class ThermalSWSolver(TimesteppingSolver):
 
         if 'coriolis' in equation.prescribed_fields._field_names:
             f = equation.prescribed_fields('coriolis')
-            eqn += beta_u_ * f * inner(w, equation.domain.perp(u)) * dx
+            eqn += beta_u * f * inner(w, equation.domain.perp(u)) * dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
@@ -887,7 +887,7 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
 
         if 'coriolis' in equation.prescribed_fields._field_names:
             f = equation.prescribed_fields('coriolis')
-            eqn += beta_u_ * f * inner(w, equation.domain.perp(u)) * dx
+            eqn += beta_u * f * inner(w, equation.domain.perp(u)) * dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
