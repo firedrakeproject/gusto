@@ -4,10 +4,11 @@ from firedrake import (
     sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg, dS_v,
     conditional, SpatialCoordinate, split, Constant, as_vector
 )
-from firedrake.fml import subject, replace_subject
+from firedrake.fml import subject, drop, keep
 from gusto.core.labels import (
     time_derivative, transport, prognostic, hydrostatic, linearisation,
-    pressure_gradient, coriolis, gravity, sponge
+    pressure_gradient, coriolis, gravity, sponge, implicit,
+    horizontal_prognostic
 )
 from gusto.equations.thermodynamics import exner_pressure
 from gusto.equations.common_forms import (
@@ -332,49 +333,53 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
-        # Replace
-        self.residual = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_true=lambda t: self.hydrostatic_projection(t, 'u')
-        )
-
-        # Add an extra hydrostatic term
         u_idx = self.field_names.index('u')
         u = split(self.X)[u_idx]
+        w = self.tests[u_idx]
         k = self.domain.k
-        self.residual += hydrostatic(
-            subject(
-                prognostic(
-                    -inner(k, self.tests[u_idx]) * inner(k, u) * dx, "u"),
-                self.X
-            )
+        u_vert = k*inner(k, u)
+        u_hori = u - u_vert
+
+        # -------------------------------------------------------------------- #
+        # Add hydrostatic term
+        # -------------------------------------------------------------------- #
+        # Term to appear in both explicit and implicit forcings
+        # For the explicit forcing, this will cancel out the u^n part of the
+        # time derivative
+        self.residual += hydrostatic(subject(prognostic(
+            inner(k, w)*inner(k, u)/domain.dt*dx, 'u'), self.X)
         )
 
-    def hydrostatic_projection(self, term, field_name):
-        """
-        Performs the 'hydrostatic' projection.
+        # Term that appears only in implicit forcing
+        # For the implicit forcing, in combination with the term above, the
+        # u^{n+1} term will be cancelled out
+        self.residual += implicit(hydrostatic(subject(prognostic(
+            Constant(-2.0)*inner(k, w)*inner(k, u)/domain.dt*dx, 'u'), self.X))
+        )
 
-        Takes a term involving a vector prognostic variable and replaces the
-        prognostic with only its horizontal components. It also adds the
-        'hydrostatic' label to that term.
+        # -------------------------------------------------------------------- #
+        # Only transport horizontal wind
+        # -------------------------------------------------------------------- #
+        # Drop wind transport term, it needs replacing with a version that
+        # includes only the horizontal components for the transported field
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(transport) and t.get(prognostic) == 'u',
+            map_if_true=drop,
+            map_if_false=keep
+        )
 
-        Args:
-            term (:class:`Term`): the term to perform the projection upon.
-            field_name (str): the prognostic field to make hydrostatic.
+        # Velocity transport term -- depends on formulation
+        if u_transport_option == "vector_invariant_form":
+            u_term = prognostic(vector_invariant_form(domain, w, u_hori, u), 'u')
+        elif u_transport_option == "vector_advection_form":
+            u_term = prognostic(advection_form(w, u_hori, u), 'u')
+        elif u_transport_option == "circulation_form":
+            circ_form = prognostic(
+                advection_equation_circulation_form(domain, w, u_hori, u), 'u'
+            )
+            ke_form = prognostic(kinetic_energy_form(w, u_hori, u), 'u')
+            u_term = ke_form + circ_form
+        else:
+            raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
-        Returns:
-            :class:`LabelledForm`: the labelled form containing the new term.
-        """
-
-        f_idx = self.field_names.index(field_name)
-        k = self.domain.k
-        X = term.get(subject)
-        field = split(X)[f_idx]
-
-        new_subj = field - inner(field, k) * k
-        # In one step:
-        # - set up the replace_subject routine (which returns a function)
-        # - call that function on the supplied `term` argument,
-        #   to replace the subject with the new hydrostatic subject
-        # - add the hydrostatic label
-        return replace_subject(new_subj, old_idx=f_idx)(term)
+        self.residual += horizontal_prognostic(subject(u_term, self.X))
