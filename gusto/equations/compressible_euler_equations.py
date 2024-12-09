@@ -354,7 +354,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
         # For the implicit forcing, in combination with the term above, the
         # u^{n+1} term will be cancelled out
         self.residual += implicit(hydrostatic(subject(prognostic(
-            Constant(-2.0)*inner(k, w)*inner(k, u)/domain.dt*dx, 'u'), self.X))
+            Constant(-1.0)*inner(k, w)*inner(k, u)/domain.dt*dx, 'u'), self.X))
         )
 
         # -------------------------------------------------------------------- #
