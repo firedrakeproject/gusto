@@ -362,6 +362,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         gamma = self.tests[2]
         u, D, b = split(self.X)[0:3]
         Dbar, bbar = split(self.X_ref)[1:3]
+
         u_trial, D_trial, b_trial = split(self.trials)[0:3]
         n = FacetNormal(self.domain.mesh)
         topog = self.prescribed_fields('topography', self.domain.spaces('DG')).interpolate(topog_expr) if topog_expr else None
@@ -369,6 +370,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             gamma_qt = self.tests[3]
             qt = split(self.X)[3]
             qtbar = split(self.X_ref)[3]
+            qt_trial = split(self.trials)[3]
 
         # -------------------------------------------------------------------- #
         # Add pressure gradient-like terms to residual
@@ -398,7 +400,15 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 + jump(bbar*w, n) * avg(D_trial) * dS + 0.5 * jump(Dbar*w, n) * avg(b_trial) * dS
                 - beta2 * D_trial * div(qvbar*w)*dx - 0.5 * beta2 * qvbar * div(Dbar*w) * dx
                 + beta2 * jump(qvbar*w, n) * avg(D_trial) * dS
-                + 0.5 * beta2 * jump(Dbar*w, n) * avg(qvbar) * dS,
+                + 0.5 * beta2 * jump(Dbar*w, n) * avg(qvbar) * dS
+                - 0.5 * bbar * div(Dbar*w) * dx
+                + 0.5 * jump(Dbar*w, n) * avg(bbar) * dS
+                - 0.5 * bbar * div(D_trial*w) * dx
+                + 0.5 * jump(D_trial*w, n) * avg(bbar) * dS
+                - beta2 * 0.5 * qvbar * div(D_trial*w) * dx
+                + beta2 * 0.5 * jump(D_trial*w, n) * avg(qvbar) * dS
+                - beta2 * 0.5 * qt_trial * div(Dbar*w) * dx
+                + beta2 * 0.5 * jump(Dbar*w, n) * avg(qt_trial) * dS,
                 'u'), self.X))
         else:
             source_form = pressure_gradient(
@@ -528,13 +538,23 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
                 in the equations. Defaults to None.
         """
 
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure gradient,
-            # Coriolis and transport term from depth and buoyancy equation
-            linearisation_map = lambda t: \
-                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
-                 or (t.get(prognostic) in ['D', self.b_name]
-                     and t.has_label(transport)))
+        if equivalent_buoyancy:
+            if linearisation_map == 'default':
+                # Default linearisation is time derivatives, pressure gradient,
+                # Coriolis and transport term from depth, buoyancy and
+                # moisture equation
+                linearisation_map = lambda t: \
+                    (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                     or (t.get(prognostic) in ['D', self.b_name, 'q_t']
+                         and t.has_label(transport)))
+        else:
+            if linearisation_map == 'default':
+                # Default linearisation is time derivatives, pressure gradient,
+                # Coriolis and transport term from depth and buoyancy equation
+                linearisation_map = lambda t: \
+                    (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                     or (t.get(prognostic) in ['D', self.b_name]
+                         and t.has_label(transport)))
 
         super().__init__(domain, parameters,
                          equivalent_buoyancy=equivalent_buoyancy,
