@@ -46,50 +46,6 @@ def test_dry_bryan_fritsch_parallel():
     test_dry_bryan_fritsch()
 
 
-# Hydrostatic equations not currently working
-@pytest.mark.xfail
-def test_mountain_hydrostatic():
-    from mountain_hydrostatic import mountain_hydrostatic
-    test_name = 'mountain_hydrostatic'
-    mountain_hydrostatic(
-        ncolumns=20,
-        nlayers=10,
-        dt=5.0,
-        tmax=50.0,
-        dumpfreq=10,
-        dirname=make_dirname(test_name)
-    )
-
-
-# Hydrostatic equations not currently working
-@pytest.mark.xfail
-@pytest.mark.parallel(nprocs=4)
-def test_mountain_hydrostatic_parallel():
-    test_mountain_hydrostatic()
-
-
-# Hydrostatic equations not currently working
-@pytest.mark.xfail
-def test_skamarock_klemp_hydrostatic():
-    from skamarock_klemp_hydrostatic import skamarock_klemp_hydrostatic
-    test_name = 'skamarock_klemp_hydrostatic'
-    skamarock_klemp_hydrostatic(
-        ncolumns=30,
-        nlayers=5,
-        dt=6.0,
-        tmax=60.0,
-        dumpfreq=10,
-        dirname=make_dirname(test_name)
-    )
-
-
-# Hydrostatic equations not currently working
-@pytest.mark.xfail
-@pytest.mark.parallel(nprocs=2)
-def test_skamarock_klemp_hydrostatic_parallel():
-    test_skamarock_klemp_hydrostatic()
-
-
 def test_skamarock_klemp_nonhydrostatic():
     from skamarock_klemp_nonhydrostatic import skamarock_klemp_nonhydrostatic
     test_name = 'skamarock_klemp_nonhydrostatic'
@@ -99,13 +55,33 @@ def test_skamarock_klemp_nonhydrostatic():
         dt=6.0,
         tmax=60.0,
         dumpfreq=10,
-        dirname=make_dirname(test_name)
+        dirname=make_dirname(test_name),
+        hydrostatic=False
     )
 
 
 @pytest.mark.parallel(nprocs=2)
 def test_skamarock_klemp_nonhydrostatic_parallel():
     test_skamarock_klemp_nonhydrostatic()
+
+
+def test_hyd_switch_skamarock_klemp_nonhydrostatic():
+    from skamarock_klemp_nonhydrostatic import skamarock_klemp_nonhydrostatic
+    test_name = 'hyd_switch_skamarock_klemp_nonhydrostatic'
+    skamarock_klemp_nonhydrostatic(
+        ncolumns=30,
+        nlayers=5,
+        dt=6.0,
+        tmax=60.0,
+        dumpfreq=10,
+        dirname=make_dirname(test_name),
+        hydrostatic=True
+    )
+
+
+@pytest.mark.parallel(nprocs=2)
+def test_hyd_switch_skamarock_klemp_nonhydrostatic_parallel():
+    test_hyd_switch_skamarock_klemp_nonhydrostatic()
 
 
 def test_straka_bubble():
