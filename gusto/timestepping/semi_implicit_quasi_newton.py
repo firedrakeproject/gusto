@@ -5,14 +5,16 @@ and GungHo dynamical cores.
 
 from firedrake import (
     Function, Constant, TrialFunctions, DirichletBC, div, Interpolator,
-    LinearVariationalProblem, LinearVariationalSolver
+    LinearVariationalProblem, LinearVariationalSolver, dot
 )
 from firedrake.fml import drop, replace_subject
+import numpy as np
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
-from gusto.core.labels import (transport, diffusion, time_derivative,
-                               linearisation, prognostic, hydrostatic,
-                               physics_label, sponge, incompressible)
+from gusto.core.labels import (
+    transport, diffusion, time_derivative, linearisation, prognostic,
+    hydrostatic, physics_label, sponge, incompressible, implicit
+)
 from gusto.solvers import LinearTimesteppingSolver
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
@@ -367,6 +369,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 self.linear_solver.update_reference_profiles()
                 self.to_update_ref_profile = False
 
+    def log_w(self, field, time_stage):
+        k = self.equation.domain.k
+        w = Function(self.equation.domain.spaces('theta'))
+        w.interpolate(dot(k, field))
+        logger.info(f'{time_stage} -- w: min {np.min(w.dat.data)}, max {np.max(w.dat.data)}')
+
     def timestep(self):
         """Defines the timestep"""
         xn = self.x.n
@@ -404,6 +412,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             logger.info('Semi-implicit Quasi Newton: Explicit forcing')
             # Put explicit forcing into xstar
             self.forcing.apply(x_after_slow, xn, xstar(self.field_name), "explicit")
+            self.log_w(xstar('u'), 'Explicit forcing')
 
         # set xp here so that variables that are not transported have
         # the correct values
@@ -417,6 +426,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'transporting velocity, outer iteration {outer}')
                 self.transport_fields(outer, xstar, xp)
+                self.log_w(xp('u'), 'Transport')
 
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))
@@ -438,6 +448,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     if (inner > 0 and self.accelerator):
                         # Zero implicit forcing to accelerate solver convergence
                         self.forcing.zero_forcing_terms(self.equation, xp, xrhs, self.transported_fields)
+                    self.log_w(xrhs.subfunctions[0], 'Implicit forcing')
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
@@ -449,6 +460,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
+                self.log_w(xnp1('u'), 'After solver')
 
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xnp1)
@@ -518,7 +530,7 @@ class Forcing(object):
         """
 
         self.field_name = equation.field_name
-        implicit_terms = [incompressible, sponge]
+        implicit_terms = [incompressible, sponge, implicit]
         dt = equation.domain.dt
 
         W = equation.function_space

@@ -3,9 +3,11 @@ This module defines the SpatialMethod base object, which is used to define a
 spatial discretisation of some term.
 """
 
-from firedrake import split
+from firedrake import split, dot
 from firedrake.fml import Term, keep, drop
-from gusto.core.labels import prognostic
+from gusto.core.labels import (
+    prognostic, horizontal_prognostic, vertical_prognostic
+)
 
 __all__ = ['SpatialMethod']
 
@@ -46,6 +48,15 @@ class SpatialMethod(object):
         num_terms = len(self.original_form.terms)
         assert num_terms == 1, f'Unable to find {term_label.label} term ' \
             + f'for {variable}. {num_terms} found'
+
+        # If specified, replace field with only horizontal or vertical part
+        if self.original_form.terms[0].has_label(horizontal_prognostic):
+            k = self.equation.domain.k
+            self.field = self.field - k*dot(k, self.field)
+
+        if self.original_form.terms[0].has_label(vertical_prognostic):
+            k = self.equation.domain.k
+            self.field = k*dot(k, self.field)
 
     def replace_form(self, equation):
         """
