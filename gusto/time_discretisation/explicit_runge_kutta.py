@@ -9,7 +9,7 @@ from firedrake.fml import replace_subject, all_terms, drop, keep, Term
 from firedrake.utils import cached_property
 from firedrake.formmanipulation import split_form
 
-from gusto.core.labels import time_derivative, all_but_last, physics_label
+from gusto.core.labels import time_derivative, all_but_last, source
 from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 
@@ -153,7 +153,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             raise NotImplementedError(
                 'Runge-Kutta formulation is not implemented'
             )
-        self.physics_rhs = [Function(self.fs) for _ in range(self.nStages+1)]
+        self.source_i = [Function(self.fs) for _ in range(self.nStages+1)]
 
     @cached_property
     def solver(self):
@@ -273,7 +273,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             for stage in range(self.nStages):
                 r = self.residual.label_map(
-                    lambda t: not t.has_label(physics_label),
+                    lambda t: not t.has_label(source),
                     map_if_true=replace_subject(self.field_i[0], old_idx=self.idx),
                     map_if_false=drop)
 
@@ -281,30 +281,33 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                     lambda t: t.has_label(time_derivative),
                     map_if_true=keep,
                     map_if_false=lambda t: -self.butcher_matrix[stage, 0]*self.dt*t)
-                
-                for evaluate in self.evaluate_source:
-                    evaluate(self.field_i[0], self.dt)
-                    r_phys = self.residual.label_map(
-                                lambda t: t.has_label(physics_label),
-                                map_if_true=replace_subject(self.field_i[0], old_idx=self.idx),
-                                map_if_false=drop)
-                    r -= self.butcher_matrix[stage, 0]*self.dt*r_phys
+
+                r_source = self.residual.label_map(
+                            lambda t: t.has_label(source),
+                            map_if_true=replace_subject(self.source_i[0], old_idx=self.idx),
+                            map_if_false=drop)
+                r_source = r_source.label_map(
+                    all_terms,
+                    map_if_true=lambda t: self.butcher_matrix[stage, 0]*self.dt*t)
+                r -= r_source
 
                 for i in range(1, stage+1):
                     r_i = self.residual.label_map(
-                        lambda t: any(t.has_label(time_derivative, physics_label)),
+                        lambda t: any(t.has_label(time_derivative, source)),
                         map_if_true=drop,
                         map_if_false=replace_subject(self.field_i[i], old_idx=self.idx)
                     )
 
                     r -= self.butcher_matrix[stage, i]*self.dt*r_i
-                    for evaluate in self.evaluate_source:
-                        evaluate(self.field_i[i], self.dt)
-                        r_phys = self.residual.label_map(
-                                    lambda t: t.has_label(physics_label),
-                                    map_if_true=replace_subject(self.field_i[i], old_idx=self.idx),
-                                    map_if_false=drop)
-                        r -= self.butcher_matrix[stage, i]*self.dt*r_phys
+                    r_source = self.residual.label_map(
+                                lambda t: t.has_label(source),
+                                map_if_true=replace_subject(self.source_i[0], old_idx=self.idx),
+                                map_if_false=drop)
+                    r_source = r_source.label_map(
+                        all_terms,
+                        map_if_true=lambda t: self.butcher_matrix[stage, 0]*self.dt*t)
+                    r -= r_source
+
                 rhs_list.append(r)
 
             return rhs_list
@@ -394,6 +397,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             self.field_i[stage+1].assign(self.field_i[stage])
             if self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
+
+            for evaluate in self.evaluate_source:
+                evaluate(self.source_i[stage], self.field_i[stage], self.dt)
 
             # Obtain field_ip1 = field_n - dt* sum_m{a_im*F[field_m]}
             self.solver[stage].solve()

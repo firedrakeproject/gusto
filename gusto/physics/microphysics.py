@@ -7,11 +7,11 @@ from firedrake import (
     Interpolator, conditional, Function, dx, min_value, max_value, Constant, pi,
     inner, TestFunction, NonlinearVariationalProblem, NonlinearVariationalSolver
 )
-from firedrake.fml import identity, Term, subject
+from firedrake.fml import identity, Term, subject, drop
 from gusto.equations import Phases, TracerVariableType
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.core.labels import transporting_velocity, transport, prognostic
+from gusto.core.labels import transporting_velocity, transport, prognostic, source
 from gusto.core.logging import logger
 from gusto.equations import thermodynamics
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
@@ -88,6 +88,7 @@ class SaturationAdjustment(PhysicsParametrisation):
 
         # Indices of variables in mixed function space
         V_idxs = [vap_idx, cloud_idx]
+        self.V_idxs = V_idxs
         V = equation.function_space.sub(vap_idx)  # space in which to do the calculation
 
         # Get variables used to calculate saturation curve
@@ -177,10 +178,11 @@ class SaturationAdjustment(PhysicsParametrisation):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += self.label(subject(test * source * dx,
-                                                    equation.X), self.evaluate)
+            equation.residual += source(self.label(subject(test * source * dx,
+                                                    equation.X), self.evaluate))
+        self.x_out = equation.residual
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_out, x_in, dt):
         """
         Evaluates the source/sink for the saturation adjustment process.
 
@@ -195,8 +197,9 @@ class SaturationAdjustment(PhysicsParametrisation):
         if isinstance(self.equation, CompressibleEulerEquations):
             self.rho_recoverer.project()
         # Evaluate the source
-        for interpolator in self.source_interpolators:
-            interpolator.interpolate()
+        for source_interpolator in self.source_interpolators:
+                source_interpolator.interpolate()
+        x_out.assign(self.source)
 
 
 class AdvectedMoments(Enum):
@@ -269,7 +272,7 @@ class Fallout(PhysicsParametrisation):
 
         Vu = domain.spaces("HDiv")
         # TODO: there must be a better way than forcing this into the equation
-        v = equation.prescribed_fields(name='rainfall_velocity', space=Vu)
+        self.v = equation.prescribed_fields(name='rainfall_velocity', space=Vu)
 
         # -------------------------------------------------------------------- #
         # Create physics term -- which is actually a transport term
@@ -281,7 +284,7 @@ class Fallout(PhysicsParametrisation):
         # Add rainfall velocity by replacing transport_velocity in term
         adv_term = adv_term.label_map(identity,
                                       map_if_true=lambda t: Term(
-                                          ufl.replace(t.form, {t.get(transporting_velocity): v}),
+                                          ufl.replace(t.form, {t.get(transporting_velocity): self.v}),
                                           t.labels))
 
         # We don't want this term to be picked up by normal transport, so drop
@@ -289,7 +292,7 @@ class Fallout(PhysicsParametrisation):
         adv_term = transport.remove(adv_term)
 
         adv_term = prognostic(subject(adv_term, equation.X), rain_name)
-        equation.residual += self.label(adv_term, self.evaluate)
+        equation.residual += source(self.label(adv_term, self.evaluate))
 
         # -------------------------------------------------------------------- #
         # Expressions for determining rainfall velocity
@@ -299,7 +302,7 @@ class Fallout(PhysicsParametrisation):
         if moments == AdvectedMoments.M0:
             # all rain falls at terminal velocity
             terminal_velocity = Constant(5)  # in m/s
-            v.project(-terminal_velocity*domain.k)
+            self.v.project(-terminal_velocity*domain.k)
         elif moments == AdvectedMoments.M3:
             self.explicit_only = True
             # this advects the third moment M3 of the raindrop
@@ -340,11 +343,12 @@ class Fallout(PhysicsParametrisation):
             # TODO: introduce reduced projector
             test = TestFunction(Vu)
             dx_reduced = dx(degree=4)
-            proj_eqn = inner(test, v + v_expression*domain.k)*dx_reduced
-            proj_prob = NonlinearVariationalProblem(proj_eqn, v)
+            proj_eqn = inner(test, self.v + v_expression*domain.k)*dx_reduced
+            proj_prob = NonlinearVariationalProblem(proj_eqn, self.v)
             self.determine_v = NonlinearVariationalSolver(proj_prob)
 
-    def evaluate(self, x_in, dt):
+
+    def evaluate(self, x_out, x_in, dt):
         """
         Evaluates the source/sink corresponding to the fallout process.
 
@@ -356,6 +360,7 @@ class Fallout(PhysicsParametrisation):
         self.X.assign(x_in)
         if self.moments != AdvectedMoments.M0:
             self.determine_v.solve()
+        x_out.assign(self.v)
 
 
 class Coalescence(PhysicsParametrisation):
@@ -447,12 +452,12 @@ class Coalescence(PhysicsParametrisation):
         # Add term to equation's residual
         test_cl = equation.tests[self.cloud_idx]
         test_r = equation.tests[self.rain_idx]
-        equation.residual += self.label(subject(test_cl * self.source * dx
+        equation.residual += source(self.label(subject(test_cl * self.source * dx
                                                 - test_r * self.source * dx,
                                                 equation.X),
-                                        self.evaluate)
+                                        self.evaluate))
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_out, x_in, dt):
         """
         Evaluates the source/sink for the coalescence process.
 
@@ -466,7 +471,8 @@ class Coalescence(PhysicsParametrisation):
         self.rain.assign(x_in.subfunctions[self.rain_idx])
         self.cloud_water.assign(x_in.subfunctions[self.cloud_idx])
         # Evaluate the source
-        self.source.assign(self.source_interpolator.interpolate())
+        self.source_interpolator.interpolate()
+        x_out.assign(self.source)
 
 
 class EvaporationOfRain(PhysicsParametrisation):
@@ -527,6 +533,7 @@ class EvaporationOfRain(PhysicsParametrisation):
 
         # Indices of variables in mixed function space
         V_idxs = [rain_idx, vap_idx]
+        self.V_idxs = V_idxs
         V = equation.function_space.sub(rain_idx)  # space in which to do the calculation
 
         # Get variables used to calculate saturation curve
@@ -618,10 +625,11 @@ class EvaporationOfRain(PhysicsParametrisation):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += self.label(subject(test * source * dx,
-                                                    equation.X), self.evaluate)
+            equation.residual += source(self.label(subject(test * source * dx,
+                                                    equation.X), self.evaluate))
+        self.x_out = equation.residual
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_out, x_in, dt):
         """
         Applies the process to evaporate rain droplets.
 
@@ -636,5 +644,6 @@ class EvaporationOfRain(PhysicsParametrisation):
         if isinstance(self.equation, CompressibleEulerEquations):
             self.rho_recoverer.project()
         # Evaluate the source
-        for interpolator in self.source_interpolators:
-            interpolator.interpolate()
+        for source_interpolator in self.source_interpolators:
+            source_interpolator.interpolate()
+        x_out.assign(self.source)

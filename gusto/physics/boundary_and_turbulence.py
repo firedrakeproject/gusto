@@ -8,11 +8,11 @@ from firedrake import (
     SpatialCoordinate, dS_v, NonlinearVariationalProblem,
     NonlinearVariationalSolver
 )
-from firedrake.fml import subject
+from firedrake.fml import subject, drop
 from gusto.core.configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.core.labels import prognostic
+from gusto.core.labels import prognostic, source
 from gusto.core.logging import logger
 from gusto.equations import thermodynamics
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
@@ -58,6 +58,7 @@ class SurfaceFluxes(PhysicsParametrisation):
             raise ValueError("Surface fluxes can only be used with Compressible Euler equations")
 
         if vapour_name is not None:
+            self.vapour_name = vapour_name
             if vapour_name not in equation.field_names:
                 raise ValueError(f"Field {vapour_name} does not exist in the equation set")
 
@@ -78,7 +79,7 @@ class SurfaceFluxes(PhysicsParametrisation):
         T_idx = equation.field_names.index('theta')
         rho_idx = equation.field_names.index('rho')
         if vapour_name is not None:
-            m_v_idx = equation.field_names.index(vapour_name)
+            self.m_v_idx = equation.field_names.index(vapour_name)
 
         X = self.X
         tests = TestFunctions(X.function_space()) if implicit_formulation else equation.tests
@@ -89,8 +90,8 @@ class SurfaceFluxes(PhysicsParametrisation):
         test_theta = tests[T_idx]
 
         if vapour_name is not None:
-            m_v = split(X)[m_v_idx]
-            test_m_v = tests[m_v_idx]
+            m_v = split(X)[self.m_v_idx]
+            test_m_v = tests[self.m_v_idx]
         else:
             m_v = None
 
@@ -133,16 +134,16 @@ class SurfaceFluxes(PhysicsParametrisation):
 
             # If moist formulation, determine next vapour value
             if vapour_name is not None:
-                source_mv = Function(Vtheta)
+                self.source_mv = Function(Vtheta)
                 mv_sat = thermodynamics.r_sat(equation.parameters, T, p)
                 mv_np1_expr = ((m_v + C_E*u_hori_mag*mv_sat*self.dt/z_a)
                                / (1 + C_E*u_hori_mag*self.dt/z_a))
                 dmv_expr = surface_expr * (mv_np1_expr - m_v) / self.dt
-                source_mv_expr = test_m_v * source_mv * dx
+                source_mv_expr = test_m_v * self.source_mv * dx
 
-                self.source_interpolators.append(Interpolator(dmv_expr, source_mv))
-                equation.residual -= self.label(subject(prognostic(source_mv_expr, vapour_name),
-                                                        X), self.evaluate)
+                self.source_interpolators.append(Interpolator(dmv_expr, self.source_mv))
+                equation.residual -= source(self.label(subject(prognostic(source_mv_expr, vapour_name),
+                                                        X), self.evaluate))
 
                 # Moisture needs including in theta_vd expression
                 # NB: still using old pressure here, which implies constant p?
@@ -153,12 +154,12 @@ class SurfaceFluxes(PhysicsParametrisation):
             else:
                 theta_np1_expr = thermodynamics.theta(equation.parameters, T_np1_expr, p)
 
-            source_theta_vd = Function(Vtheta)
+            self.source_theta_vd = Function(Vtheta)
             dtheta_vd_expr = surface_expr * (theta_np1_expr - theta_vd) / self.dt
-            source_theta_expr = test_theta * source_theta_vd * dx
-            self.source_interpolators.append(Interpolator(dtheta_vd_expr, source_theta_vd))
-            equation.residual -= self.label(subject(prognostic(source_theta_expr, 'theta'),
-                                                    X), self.evaluate)
+            source_theta_expr = test_theta * self.source_theta_vd * dx
+            self.source_interpolators.append(Interpolator(dtheta_vd_expr, self.source_theta_vd))
+            equation.residual -= source(self.label(subject(prognostic(source_theta_expr, 'theta'),
+                                                    X), self.evaluate))
 
         # General formulation ------------------------------------------------ #
         else:
@@ -170,9 +171,9 @@ class SurfaceFluxes(PhysicsParametrisation):
                 mv_sat = thermodynamics.r_sat(equation.parameters, T, p)
                 dmv_dt = surface_expr * C_E * u_hori_mag * (mv_sat - m_v) / z_a
                 source_mv_expr = test_m_v * dmv_dt * dx
-                equation.residual -= self.label(
+                equation.residual -= source(self.label(
                     prognostic(subject(source_mv_expr, X),
-                               vapour_name), self.evaluate)
+                               vapour_name), self.evaluate))
 
                 # Theta expression depends on dmv_dt
                 epsilon = equation.parameters.R_d / equation.parameters.R_v
@@ -184,10 +185,9 @@ class SurfaceFluxes(PhysicsParametrisation):
             dx_reduced = dx(degree=4)
             source_theta_expr = test_theta * dtheta_vd_dt * dx_reduced
 
-            equation.residual -= self.label(
-                subject(prognostic(source_theta_expr, 'theta'), X), self.evaluate)
-
-    def evaluate(self, x_in, dt):
+            equation.residual -= source(self.label(
+                subject(prognostic(source_theta_expr, 'theta'), X), self.evaluate))
+    def evaluate(self, x_out, x_in, dt):
         """
         Evaluates the source term generated by the physics. This does nothing if
         the implicit formulation is not used.
@@ -206,7 +206,9 @@ class SurfaceFluxes(PhysicsParametrisation):
             self.rho_recoverer.project()
             for source_interpolator in self.source_interpolators:
                 source_interpolator.interpolate()
-
+        if self.vapour_name is not None:
+            x_out.subfunctions[self.m_v_idx].assign(self.source_mv)
+        x_out.subfunctions[self.m_v_idx].assign(self.source_mv)
 
 class WindDrag(PhysicsParametrisation):
     """
@@ -294,8 +296,8 @@ class WindDrag(PhysicsParametrisation):
             self.source_projector = NonlinearVariationalSolver(proj_prob)
 
             source_expr = inner(test, source_u - k*dot(source_u, k)) * dx
-            equation.residual -= self.label(subject(prognostic(source_expr, 'u'),
-                                                    X), self.evaluate)
+            equation.residual -= source(self.label(subject(prognostic(source_expr, 'u'),
+                                                    X), self.evaluate))
 
         # General formulation ------------------------------------------------ #
         else:
@@ -305,9 +307,9 @@ class WindDrag(PhysicsParametrisation):
             dx_reduced = dx(degree=4)
             source_expr = inner(test, du_dt) * dx_reduced
 
-            equation.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
+            equation.residual -= source(self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate))
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_out, x_in, dt):
         """
         Evaluates the source term generated by the physics. This does nothing if
         the implicit formulation is not used.
@@ -324,6 +326,8 @@ class WindDrag(PhysicsParametrisation):
             self.X.assign(x_in)
             self.dt.assign(dt)
             self.source_projector.solve()
+
+            x_out.assign(self.X)
 
 
 class StaticAdjustment(PhysicsParametrisation):
@@ -364,11 +368,11 @@ class StaticAdjustment(PhysicsParametrisation):
         # Extract prognostic variables
         # -------------------------------------------------------------------- #
 
-        theta_idx = equation.field_names.index('theta')
-        Vt = equation.spaces[theta_idx]
+        self.theta_idx = equation.field_names.index('theta')
+        Vt = equation.spaces[self.theta_idx]
         self.theta_to_sort = Function(Vt)
         sorted_theta = Function(Vt)
-        theta = self.X.subfunctions[theta_idx]
+        theta = self.X.subfunctions[self.theta_idx]
 
         if theta_variable == 'theta' and 'water_vapour' in equation.field_names:
             Rv = equation.parameters.R_v
@@ -396,11 +400,11 @@ class StaticAdjustment(PhysicsParametrisation):
         # -------------------------------------------------------------------- #
 
         tests = TestFunctions(self.X.function_space())
-        test = tests[theta_idx]
+        test = tests[self.theta_idx]
 
         source_expr = inner(test, sorted_theta - theta) / self.dt * dx
 
-        equation.residual -= self.label(subject(prognostic(source_expr, 'theta'), equation.X), self.evaluate)
+        equation.residual -= source(self.label(subject(prognostic(source_expr, 'theta'), equation.X), self.evaluate))
 
     def evaluate(self, x_in, dt):
         """
@@ -424,6 +428,8 @@ class StaticAdjustment(PhysicsParametrisation):
             theta_column_data[col].sort()
         self.set_column_data(self.theta_to_sort, theta_column_data, index_data)
         self.set_theta_variable.interpolate()
+
+        x_out.subfunctions[self.theta_idx].assign(self.sorted_theta)
 
 
 class SuppressVerticalWind(PhysicsParametrisation):
@@ -480,9 +486,9 @@ class SuppressVerticalWind(PhysicsParametrisation):
         # The sink should be just the value of the current vertical wind
         source_expr = -self.strength * inner(test, domain.k*dot(domain.k, wind)) / self.dt * dx
 
-        equation.residual -= self.label(subject(prognostic(source_expr, 'u'), equation.X), self.evaluate)
+        equation.residual -= source(self.label(subject(prognostic(source_expr, 'u'), equation.X), self.evaluate))
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_out, x_in, dt):
         """
         Evaluates the source term generated by the physics. This does nothing if
         the implicit formulation is not used.
@@ -502,6 +508,8 @@ class SuppressVerticalWind(PhysicsParametrisation):
         elif not self.spin_up_done:
             self.strength.assign(0.0)
             self.spin_up_done = True
+
+        x_out.assign(self.X)
 
 
 class BoundaryLayerMixing(PhysicsParametrisation):
@@ -625,10 +633,11 @@ class BoundaryLayerMixing(PhysicsParametrisation):
             + 4*mu*avg(dz)*inner(avg(outer(K*field, n)), avg(outer(test, n)))*dS_v_reduced
         )
 
-        equation.residual += self.label(
-            subject(prognostic(source_expr, field_name), X), self.evaluate)
+        equation.residual += source(self.label(
+            subject(prognostic(source_expr, field_name), X), self.evaluate))
+        self.x_out = equation.residual
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_out, x_in, dt):
         """
         Evaluates the source term generated by the physics. This only recovers
         the density field.
@@ -643,3 +652,5 @@ class BoundaryLayerMixing(PhysicsParametrisation):
 
         self.X.assign(x_in)
         self.rho_recoverer.project()
+
+        x_out.assign(self.X)
