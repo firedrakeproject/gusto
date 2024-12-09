@@ -29,7 +29,7 @@ def gaussian_lat_lon_grid(nlat, nlon):
 # Directory for results and plots
 # ---------------------------------------------------------------------------- #
 # When copying this example these should not be relative to this file
-filepath = 'Relax_to_annulus/annular_vortex_mars_55-60_PVmax--2-4_PVpole--1-0_tau_r--2sol_A0-0.0-norel_len-300sols_tracer_tophat-80'
+filepath = 'Free_run/annular_vortex_mars_60-70_free_A0-0-norel_len-30sols_tracer_tophat-80_ref-5'
 
 results_dir = f'/data/home/sh1293/results/{filepath}'
 # plot_dir = f'{results_dir}/plots'
@@ -41,8 +41,8 @@ data_file = Dataset(results_file_name, 'r')
 times = np.array(data_file['time'])
 
 # lats, lons = gaussian_lat_lon_grid(40, 80)
-lats = np.arange(-90, 91, 3)
-lons = np.arange(-180, 181, 3)
+lats = np.arange(-90, 91, 1.5)
+lons = np.arange(-180, 181, 1.5)
 X, Y = np.meshgrid(lons, lats)
 
 ds_list=[]
