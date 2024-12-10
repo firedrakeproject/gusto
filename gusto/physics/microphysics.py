@@ -180,7 +180,7 @@ class SaturationAdjustment(PhysicsParametrisation):
         for test, source in zip(tests, self.source):
             equation.residual += source(self.label(subject(test * source * dx,
                                                     equation.X), self.evaluate))
-        self.x_out = equation.residual
+        self.V_idxs = V_idxs
 
     def evaluate(self, x_out, x_in, dt):
         """
@@ -199,7 +199,8 @@ class SaturationAdjustment(PhysicsParametrisation):
         # Evaluate the source
         for source_interpolator in self.source_interpolators:
                 source_interpolator.interpolate()
-        x_out.assign(self.source)
+        for idx in self.V_idxs:
+            x_out.subfunctions[idx].assign(self.source[idx])
 
 
 class AdvectedMoments(Enum):
@@ -472,7 +473,7 @@ class Coalescence(PhysicsParametrisation):
         self.cloud_water.assign(x_in.subfunctions[self.cloud_idx])
         # Evaluate the source
         self.source_interpolator.interpolate()
-        x_out.assign(self.source)
+        x_out.subfunctions[self.cloud_idx].assign(self.source)
 
 
 class EvaporationOfRain(PhysicsParametrisation):
@@ -627,7 +628,7 @@ class EvaporationOfRain(PhysicsParametrisation):
         for test, source in zip(tests, self.source):
             equation.residual += source(self.label(subject(test * source * dx,
                                                     equation.X), self.evaluate))
-        self.x_out = equation.residual
+        self.V_idxs = V_idxs
 
     def evaluate(self, x_out, x_in, dt):
         """
@@ -646,4 +647,5 @@ class EvaporationOfRain(PhysicsParametrisation):
         # Evaluate the source
         for source_interpolator in self.source_interpolators:
             source_interpolator.interpolate()
-        x_out.assign(self.source)
+        for idx in self.V_idxs:
+            x_out.subfunctions[idx].assign(self.source[idx])

@@ -301,11 +301,11 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                     r -= self.butcher_matrix[stage, i]*self.dt*r_i
                     r_source = self.residual.label_map(
                                 lambda t: t.has_label(source),
-                                map_if_true=replace_subject(self.source_i[0], old_idx=self.idx),
+                                map_if_true=replace_subject(self.source_i[i], old_idx=self.idx),
                                 map_if_false=drop)
                     r_source = r_source.label_map(
                         all_terms,
-                        map_if_true=lambda t: self.butcher_matrix[stage, 0]*self.dt*t)
+                        map_if_true=lambda t: self.butcher_matrix[stage, i]*self.dt*t)
                     r -= r_source
 
                 rhs_list.append(r)
@@ -368,7 +368,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             for i in range(stage):
                 self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
             for evaluate in self.evaluate_source:
-                evaluate(self.x1, self.dt)
+               evaluate(self.source_i[stage], self.x1, self.dt)
             if self.limiter is not None:
                 self.limiter.apply(self.x1)
 
@@ -431,7 +431,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
                 # Evaluate physics and apply limiter, if necessary
                 for evaluate in self.evaluate_source:
-                    evaluate(self.field_rhs, self.dt)
+                    evaluate(self.source_i[0], self.field_rhs, self.dt)
                 if self.limiter is not None:
                     self.limiter.apply(self.field_rhs)
 
@@ -456,7 +456,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
                 # Evaluate physics and apply limiter, if necessary
                 for evaluate in self.evaluate_source:
-                    evaluate(self.field_rhs, self.original_dt)
+                    evaluate(self.source_i[0], self.field_rhs, self.original_dt)
                 if self.limiter is not None:
                     self.limiter.apply(self.field_rhs)
                 # Use x0 as a first guess (otherwise may not converge)

@@ -307,8 +307,8 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
                             map_if_false=drop)
         r_source = r_source.label_map(
             all_terms,
-            map_if_true=lambda t: self.dt*t)
-        r -= r_source
+            map_if_true=lambda t: -self.dt*t)
+        r += r_source
 
         return r.form
 
@@ -331,8 +331,8 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
                             map_if_false=drop)
         r_source = r_source.label_map(
             all_terms,
-            map_if_true=lambda t: self.b[-1]*self.dt*t)
-        r -= r_source
+            map_if_true=lambda t: -self.b[-1]*self.dt*t)
+        r += r_source
         for n in range(self.nlevels-1):
             rtemp = self.residual.label_map(lambda t: any(t.has_label(time_derivative, source)),
                                             map_if_true=drop,
@@ -346,8 +346,8 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
                                 map_if_false=drop)
             r_source = r_source.label_map(
                 all_terms,
-                map_if_true=lambda t: self.b[n]*self.dt*t)
-            r -= r_source
+                map_if_true=lambda t: -self.b[n]*self.dt*t)
+            r += r_source
         return r.form
 
     @property
@@ -385,7 +385,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
         for n in range(self.nlevels):
             self.x[n].assign(x_in[n])
         # Evaluate physics terms
-        for n in range(self.nlevels-1):
+        for n in range(self.nlevels):
             for evaluate in self.evaluate_source:
                 evaluate(self.source_n[n], self.x[n], self.dt)
         # Set initial solver guess

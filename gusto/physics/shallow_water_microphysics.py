@@ -336,7 +336,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             equation.residual += source(self.label(subject(test * source * dx,
                                                     equation.X), self.evaluate))
 
-        self.x_out = equation.residual
+        self.V_idxs = V_idxs
 
     def evaluate(self, x_out, x_in, dt):
         """
@@ -365,4 +365,5 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
         for source_interpolator in self.source_interpolators:
                 source_interpolator.interpolate()
-        x_out.assign(self.source)
+        for idx in self.V_idxs:
+                x_out.subfunctions[idx].assign(self.source[idx])
