@@ -6,7 +6,7 @@ from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        as_vector, pi, sqrt, min_value, sin, cos,
                        interpolate, PCG64, RandomGenerator,
-                       conditional)
+                       conditional, exp)
 import numpy as np
 from netCDF4 import Dataset
 # import netCDF4 as nc
@@ -21,8 +21,8 @@ import shutil
 # ---------------------------------------------------------------------------- #
 
 # set inner and outer latitude limits of annulus   
-phis = 57
-phin = 62
+phis = 60
+phin = 70
 phimp = phis
 
 # False means initial vortex is annular, True means it's monopolar
@@ -32,8 +32,8 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 2.3
-pvpole = 1.1
+pvmax = 1.6
+pvpole = 1.0
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
@@ -44,20 +44,20 @@ tau_c_ratio = 0.01
 beta = 1.0
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'rad'
+rel_sch = 'both'
 include_co2 = 'yes'
 
 # refinement level
-ref_lev = 5
+ref_lev = 4
 
 # do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
 restart = False
-restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-4sols_tracer_tophat-80'
+restart_name = 'Free_run/annular_vortex_mars_60-70_free_A0-0-norel_len-30sols_tracer_tophat-80_ref-4'
 
 # length of this run, time to start from (only relevant if doing a restart)
 rundays = 30
 start_time = 0
-dt = (0.25)**(ref_lev-4) * 450.
+dt = (0.5)**(ref_lev-4) * 450.
 
 # do you want a tracer or not. Edge of tophat function for tracer, north of this the tracer is intialised as 1, south is 0
 # if running a restart, True introduces a new tracer whilst False still maintains the old one
@@ -65,7 +65,7 @@ tracer = True
 hat_edge = 80
 
 # any extra info to include in the directory name
-extra_name = ''
+extra_name = '_uniform'
 
 #####################################################################################
 
@@ -333,15 +333,15 @@ dirnameold = f'{homepath}/{restart_name}'
 dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_{lenname}_{tracername}_{refname}{extra_name}'
 # print(f'directory name is {dirname}')
 dirpath = f'{homepath}/{dirname}'
-if restart:
-    if not os.path.exists(f'{dirpath}/'):
-        os.makedirs(f'{dirpath}')
-    shutil.copy(f'{dirnameold}/field_output.nc', f'{dirpath}/field_output.nc')
-    # Paths to the original and target files
-    input_file = f'{dirnameold}/field_output.nc'
-    output_file = f'{dirpath}/field_output.nc'
+# if restart:
+#     if not os.path.exists(f'{dirpath}/'):
+#         os.makedirs(f'{dirpath}')
+#     shutil.copy(f'{dirnameold}/field_output.nc', f'{dirpath}/field_output.nc')
+#     # Paths to the original and target files
+#     input_file = f'{dirnameold}/field_output.nc'
+#     output_file = f'{dirpath}/field_output.nc'
 
-    new_groups(input_file, output_file, groups)
+#     new_groups(input_file, output_file, groups)
 
 
 
@@ -472,12 +472,15 @@ if not restart:
 
 
 
-    VT = T0.function_space()
-    Tmesh = VT.mesh()
-    WT = VectorFunctionSpace(Tmesh, VT.ufl_element())
-    XT = interpolate(Tmesh.coordinates, WT)
-    T0.dat.data[:] = initial_T(XT.dat.data_ro, Tini)
+    # VT = T0.function_space()
+    # Tmesh = VT.mesh()
+    # WT = VectorFunctionSpace(Tmesh, VT.ufl_element())
+    # XT = interpolate(Tmesh.coordinates, WT)
+    # T0.dat.data[:] = initial_T(XT.dat.data_ro, Tini)
 
+    # f_init = exp(-(x[1]/1e6)**2-(x[0]/1e6)**2)
+    f_init = 1
+    T0.interpolate(f_init)
 
 
     VD = D0.function_space()

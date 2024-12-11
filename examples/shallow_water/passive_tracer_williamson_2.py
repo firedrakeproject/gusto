@@ -21,7 +21,7 @@ from gusto import (
     lonlatr_from_xyz
 )
 
-dir = '/data/home/sh1293/results/passive_tracer_williamson_2_tracer-tophat_longer'
+dir = '/data/home/sh1293/results/passive_tracer_williamson_2_tracer-gaussian_longer'
 days = 300
 
 def initial_T(X, rlat, Tini):
@@ -134,11 +134,11 @@ def williamson_2(
     rlat = np.linspace(-np.pi/2, np.pi/2, num=1000000)[1:-1]
     Tini = np.where(rlat>=80*pi/180, 1, 0)
 
-    VT = tracer0.function_space()
-    Tmesh = VT.mesh()
-    WT = VectorFunctionSpace(Tmesh, VT.ufl_element())
-    XT = interpolate(Tmesh.coordinates, WT)
-    tracer0.dat.data[:] = initial_T(XT.dat.data_ro, rlat, Tini)
+    # VT = tracer0.function_space()
+    # Tmesh = VT.mesh()
+    # WT = VectorFunctionSpace(Tmesh, VT.ufl_element())
+    # XT = interpolate(Tmesh.coordinates, WT)
+    # tracer0.dat.data[:] = initial_T(XT.dat.data_ro, rlat, Tini)
 
     uexpr = u_max*cos(lat)*e_lon
     Dexpr = mean_depth - (radius * Omega * u_max + 0.5*u_max**2)*(sin(lat))**2/g
@@ -150,7 +150,7 @@ def williamson_2(
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
-    # tracer0.interpolate(f_init)
+    tracer0.interpolate(f_init)
 
     Dbar = Function(D0.function_space()).assign(mean_depth)
     stepper.set_reference_profiles([('D', Dbar)])
