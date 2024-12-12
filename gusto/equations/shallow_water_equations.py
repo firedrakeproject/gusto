@@ -369,6 +369,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             gamma_qt = self.tests[3]
             qt = split(self.X)[3]
             qtbar = split(self.X_ref)[3]
+            qt_trial = split(self.trials)[3]
 
         # -------------------------------------------------------------------- #
         # Add pressure gradient-like terms to residual
@@ -394,11 +395,22 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 + 0.5 * beta2 * jump(D*w, n) * avg(qv) * dS,
                 'u'), self.X))
             linear_source_form = pressure_gradient(subject(prognostic(
-                -D_trial * div(bbar*w) * dx - 0.5 * b_trial * div(Dbar*w) * dx
-                + jump(bbar*w, n) * avg(D_trial) * dS + 0.5 * jump(Dbar*w, n) * avg(b_trial) * dS
-                - beta2 * D_trial * div(qvbar*w)*dx - 0.5 * beta2 * qvbar * div(Dbar*w) * dx
+                -D_trial * div(bbar*w) * dx
+                - 0.5 * b_trial * div(Dbar*w) * dx
+                + jump(bbar*w, n) * avg(D_trial) * dS
+                + 0.5 * jump(Dbar*w, n) * avg(b_trial) * dS
+                - beta2 * D_trial * div(qvbar*w)*dx
+                - 0.5 * beta2 * qvbar * div(Dbar*w) * dx
                 + beta2 * jump(qvbar*w, n) * avg(D_trial) * dS
-                + 0.5 * beta2 * jump(Dbar*w, n) * avg(qvbar) * dS,
+                + 0.5 * beta2 * jump(Dbar*w, n) * avg(qvbar) * dS
+                - 0.5 * bbar * div(Dbar*w) * dx
+                + 0.5 * jump(Dbar*w, n) * avg(bbar) * dS
+                - 0.5 * bbar * div(D_trial*w) * dx
+                + 0.5 * jump(D_trial*w, n) * avg(bbar) * dS
+                - beta2 * 0.5 * qvbar * div(D_trial*w) * dx
+                + beta2 * 0.5 * jump(D_trial*w, n) * avg(qvbar) * dS
+                - beta2 * 0.5 * qt_trial * div(Dbar*w) * dx
+                + beta2 * 0.5 * jump(Dbar*w, n) * avg(qt_trial) * dS,
                 'u'), self.X))
         else:
             source_form = pressure_gradient(
@@ -528,13 +540,23 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
                 in the equations. Defaults to None.
         """
 
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure gradient,
-            # Coriolis and transport term from depth and buoyancy equation
-            linearisation_map = lambda t: \
-                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
-                 or (t.get(prognostic) in ['D', self.b_name]
-                     and t.has_label(transport)))
+        if equivalent_buoyancy:
+            if linearisation_map == 'default':
+                # Default linearisation is time derivatives, pressure gradient,
+                # Coriolis and transport term from depth and buoyancy equation
+                linearisation_map = lambda t: \
+                    (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                     or (t.get(prognostic) in ['D', self.b_name, 'q_t']
+                         and t.has_label(transport)))
+
+        else:
+            if linearisation_map == 'default':
+                # Default linearisation is time derivatives, pressure gradient,
+                # Coriolis and transport term from depth and buoyancy equation
+                linearisation_map = lambda t: \
+                    (any(t.has_label(time_derivative, pressure_gradient, coriolis))
+                     or (t.get(prognostic) in ['D', self.b_name]
+                         and t.has_label(transport)))
 
         super().__init__(domain, parameters,
                          equivalent_buoyancy=equivalent_buoyancy,
