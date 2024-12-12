@@ -360,13 +360,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # the correct values
         xp(self.field_name).assign(xstar(self.field_name))
 
-        print("1. check explicit forcing:")
-        increment1 = xstar('u') - xn('u')
-        increment1_func = Function(xstar('u').function_space()).interpolate(increment1)
-        print("u increment:", increment1_func.dat.data.min(), increment1_func.dat.data.max())
-        sample_u_func = Function(xstar('u').function_space()).interpolate(xstar('u'))
-        print("sample u value:", sample_u_func.dat.data.min(), sample_u_func.dat.data.max()) 
-
         # OUTER ----------------------------------------------------------------
         for outer in range(self.num_outer):
 
@@ -376,40 +369,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                                     message=f'transporting velocity, outer iteration {outer}')
                 for name, scheme in self.active_transport:
                     logger.info(f'Semi-implicit Quasi Newton: Transport {outer}: {name}')
-                    # # print D before transport
-                    # print("D before transport:")
-                    # print(xstar(self.field_name).split()[1].dat.data.min(),
-                    #       xstar(self.field_name).split()[1].dat.data.max())
-
-                    # # print div(u) before transport
-                    # print("div(u) before transport:")
-                    # div_u = div(xstar(self.field_name).split()[0])
-                    # div_u_func = Function(xstar(self.field_name).split()[1].function_space()).interpolate(div_u)
-                    # print(div_u_func.dat.data.min(), div_u_func.dat.data.max())
 
                     # transports a field from xstar and puts result in xp
                     self.transport_field(name, scheme, xstar, xp)
 
-                    # # print D after transport
-                    # print("D after transport:")
-                    # print(xp(self.field_name).split()[1].dat.data.min(),
-                    #       xp(self.field_name).split()[1].dat.data.max())
-
-
-                    # # print div(u) after transport
-                    # print("div(u) after transport:")
-                    # div_u_after = div(xp(self.field_name).split()[0])
-                    # div_u_after_func = Function(xp(self.field_name).split()[1].function_space()).interpolate(div_u_after)
-                    # print(div_u_after_func.dat.data.min(), div_u_after_func.dat.data.max())
-
-                    print("2. check transport")
-                    D_diff = xp('D') - xstar('D')
-                    D_diff_func = Function(xp('D').function_space()).interpolate(D_diff)
-                    u_diff = xp('u') - xstar('u')
-                    u_diff_func = Function(xp('u').function_space()).interpolate(u_diff)
-                    print("D diff:", D_diff_func.dat.data.min(), D_diff_func.dat.data.max())
-                    print("u diff:", u_diff_func.dat.data.min(), u_diff_func.dat.data.max())
-                    
 
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))
@@ -432,27 +395,14 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                         # Zero implicit forcing to accelerate solver convergence
                         self.forcing.zero_forcing_terms(self.equation, xp, xrhs, self.transported_fields)
 
-                    print("3. check implicit forcing")
-                    u_diff = xrhs.subfunctions[0] - xp('u')
-                    u_diff_func = Function(xp('u').function_space()).interpolate(u_diff)
-                    print("u increment:", u_diff_func.dat.data.min(), u_diff_func.dat.data.max())
-
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
 
                 # Linear solve -------------------------------------------------
                 with timed_stage("Implicit solve"):
                     logger.info(f'Semi-implicit Quasi Newton: Mixed solve {(outer, inner)}')
-                    print("4. right hand side for the linear solver")
-                    print("u:", xrhs.subfunctions[0].dat.data.min(), xrhs.subfunctions[0].dat.data.max())
-                    print("D:", xrhs.subfunctions[1].dat.data.min(), xrhs.subfunctions[1].dat.data.max())
                     
                     self.linear_solver.solve(xrhs, dy, xn(self.field_name))  # solves linear system and places result in dy
-
-                    print("5. increment from the linear solver")
-                    print("u:", dy.subfunctions[0].dat.data.min(), dy.subfunctions[0].dat.data.max())
-                    print("D:", dy.subfunctions[1].dat.data.min(), dy.subfunctions[1].dat.data.max())
-                    
 
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
