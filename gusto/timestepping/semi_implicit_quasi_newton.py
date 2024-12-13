@@ -8,6 +8,7 @@ from firedrake import (
     LinearVariationalProblem, LinearVariationalSolver
 )
 from firedrake.fml import drop, replace_subject
+from firedrake.petsc import PETSc
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (transport, diffusion, time_derivative,
@@ -361,6 +362,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 self.linear_solver.update_reference_profiles()
                 self.to_update_ref_profile = False
 
+    @PETSc.Log.EventDecorator()
     def timestep(self):
         """Defines the timestep"""
         xn = self.x.n
@@ -385,9 +387,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     scheme.apply(x_after_slow(scheme.field_name), x_after_slow(scheme.field_name))
 
         # Explict forcing ------------------------------------------------------
-        with timed_stage("Apply forcing terms"):
+        with timed_stage("Apply explicit forcing terms"):
             logger.info('Semi-implicit Quasi Newton: Explicit forcing')
             # Put explicit forcing into xstar
+
             self.forcing.apply(x_after_slow, xn, xstar(self.field_name), "explicit")
 
         # set xp here so that variables that are not transported have
@@ -417,7 +420,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             for inner in range(self.num_inner):
 
                 # Implicit forcing ---------------------------------------------
-                with timed_stage("Apply forcing terms"):
+                with timed_stage("Apply implicit forcing terms"):
                     logger.info(f'Semi-implicit Quasi Newton: Implicit forcing {(outer, inner)}')
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
                     if (inner > 0 and self.accelerator):
@@ -457,6 +460,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         logger.debug("Leaving Semi-implicit Quasi-Newton timestep method")
 
+    @PETSc.Log.EventDecorator()
     def run(self, t, tmax, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax.
@@ -599,6 +603,7 @@ class Forcing(object):
             self.solvers["explicit"].snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
             self.solvers["implicit"].snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
 
+    @PETSc.Log.EventDecorator()
     def apply(self, x_in, x_nl, x_out, label):
         """
         Applies the discretisation for a forcing term F(x).

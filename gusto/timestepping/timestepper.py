@@ -213,7 +213,12 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 self.io.log_courant(self.fields, component='horizontal', message='horizontal')
                 self.io.log_courant(self.fields, component='vertical', message='vertical')
 
-            self.timestep()
+            if self.step == 1:
+                with timed_stage("Timestepper setup"):
+                    self.timestep()
+            else:
+                with timed_stage("Timestepper timing"):
+                    self.timestep()
 
             self.t.assign(self.t + self.dt)
             self.step += 1
