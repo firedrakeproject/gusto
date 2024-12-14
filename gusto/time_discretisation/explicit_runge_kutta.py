@@ -212,7 +212,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         if self.rk_formulation == RungeKuttaFormulation.increment:
             l = self.residual.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_true=replace_subject(self.x_out, old_idx=self.idx, new_idx=self.new_idx),
+                map_if_true=replace_subject(self.x_out, old_idx=self.idx),
                 map_if_false=drop)
 
             return l.form
@@ -222,7 +222,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             for stage in range(self.nStages):
                 l = self.residual.label_map(
                     lambda t: t.has_label(time_derivative),
-                    map_if_true=replace_subject(self.field_i[stage+1], old_idx=self.idx, new_idx=self.new_idx),
+                    map_if_true=replace_subject(self.field_i[stage+1], old_idx=self.idx),
                     map_if_false=drop)
                 lhs_list.append(l)
 
@@ -231,7 +231,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         if self.rk_formulation == RungeKuttaFormulation.linear:
             l = self.residual.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_true=replace_subject(self.x1, old_idx=self.idx, new_idx=self.new_idx),
+                map_if_true=replace_subject(self.x1, old_idx=self.idx),
                 map_if_false=drop)
 
             return l.form
@@ -248,7 +248,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         if self.rk_formulation == RungeKuttaFormulation.increment:
             r = self.residual.label_map(
                 all_terms,
-                map_if_true=replace_subject(self.x1, old_idx=self.idx, new_idx=self.new_idx))
+                map_if_true=replace_subject(self.x1, old_idx=self.idx))
 
             r = r.label_map(
                 lambda t: t.has_label(time_derivative),
@@ -275,7 +275,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             for stage in range(self.nStages):
                 r = self.residual.label_map(
                     all_terms,
-                    map_if_true=replace_subject(self.field_i[0], old_idx=self.idx, new_idx=self.new_idx))
+                    map_if_true=replace_subject(self.field_i[0], old_idx=self.idx))
 
                 r = r.label_map(
                     lambda t: t.has_label(time_derivative),
@@ -286,7 +286,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                     r_i = self.residual.label_map(
                         lambda t: t.has_label(time_derivative),
                         map_if_true=drop,
-                        map_if_false=replace_subject(self.field_i[i], old_idx=self.idx, new_idx=self.new_idx)
+                        map_if_false=replace_subject(self.field_i[i], old_idx=self.idx)
                     )
 
                     r -= self.butcher_matrix[stage, i]*self.dt*r_i
@@ -299,8 +299,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             r = self.residual.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_true=replace_subject(self.x0, old_idx=self.idx, new_idx=self.new_idx),
-                map_if_false=replace_subject(self.field_rhs, old_idx=self.idx, new_idx=self.new_idx)
+                map_if_true=replace_subject(self.x0, old_idx=self.idx),
+                map_if_false=replace_subject(self.field_rhs, old_idx=self.idx)
             )
             r = r.label_map(
                 lambda t: t.has_label(time_derivative),
@@ -327,8 +327,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 )
             r_all_but_last = r_all_but_last.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_true=replace_subject(self.x0, old_idx=self.idx, new_idx=self.new_idx),
-                map_if_false=replace_subject(self.field_rhs, old_idx=self.idx, new_idx=self.new_idx)
+                map_if_true=replace_subject(self.x0, old_idx=self.idx),
+                map_if_false=replace_subject(self.field_rhs, old_idx=self.idx)
             )
             r_all_but_last = r_all_but_last.label_map(
                 lambda t: t.has_label(time_derivative),

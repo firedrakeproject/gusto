@@ -161,9 +161,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.fs = self.augmentation.fs
             self.residual = self.augmentation.residual
             self.idx = None
-            self.new_idx = None
-        else:
-            self.new_idx = None
 
         bcs = equation.bcs[self.field_name]
 
@@ -285,7 +282,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """Set up the discretisation's left hand side (the time derivative)."""
         l = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx, new_idx=self.new_idx),
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
             map_if_false=drop)
 
         return l.form
@@ -295,7 +292,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x1, old_idx=self.idx, new_idx=self.new_idx))
+            map_if_true=replace_subject(self.x1, old_idx=self.idx))
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
@@ -458,12 +455,11 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         # If doing adaptive subcycles, update dt and ncycles here
         if self.subcycle_by_courant is not None:
-            self.ncycles = min(12, math.ceil(float(self.courant_max)/self.subcycle_by_courant))
+            self.ncycles = math.ceil(float(self.courant_max)/self.subcycle_by_courant)
             self.dt.assign(self.original_dt/self.ncycles)
 
         self.x0.assign(x_in)
         for i in range(self.ncycles):
-            logger.info(f'Subcycle {i}')
             self.subcycle_idx = i
             self.apply_cycle(self.x1, self.x0)
             self.x0.assign(self.x1)
@@ -561,7 +557,6 @@ class ThetaMethod(TimeDiscretisation):
 
     def __init__(self, domain, theta, field_name=None,
                  solver_parameters=None, options=None,
-                 fixed_subcycles=None, subcycle_by_courant=None,
                  augmentation=None):
         """
         Args:
@@ -592,42 +587,12 @@ class ThetaMethod(TimeDiscretisation):
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
 
-        if fixed_subcycles is not None and subcycle_by_courant is not None:
-            raise ValueError('Cannot specify both subcycle and subcycle_by '
-                             + 'arguments to a time discretisation')
-        self.fixed_subcycles = fixed_subcycles
-        self.subcycle_by_courant = subcycle_by_courant
-
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
                          options=options,
                          augmentation=augmentation)
 
         self.theta = theta
-
-    def setup(self, equation, apply_bcs=True, *active_labels):
-        """
-        Set up the time discretisation based on the equation.
-
-        Args:
-            equation (:class:`PrognosticEquation`): the model's equation.
-            apply_bcs (bool, optional): whether boundary conditions are to be
-                applied. Defaults to True.
-            *active_labels (:class:`Label`): labels indicating which terms of
-                the equation to include.
-        """
-        super().setup(equation, apply_bcs, *active_labels)
-
-        # if user has specified a number of fixed subcycles, then save this
-        # and rescale dt accordingly; else perform just one cycle using dt
-        if self.fixed_subcycles is not None:
-            self.dt.assign(self.dt/self.fixed_subcycles)
-            self.ncycles = self.fixed_subcycles
-        else:
-            self.dt = self.dt
-            self.ncycles = 1
-        self.x0 = Function(self.fs)
-        self.x1 = Function(self.fs)
 
     @cached_property
     def lhs(self):
@@ -651,9 +616,10 @@ class ThetaMethod(TimeDiscretisation):
 
         return r.form
 
-    def apply_cycle(self, x_out, x_in):
+    @wrapper_apply
+    def apply(self, x_out, x_in):
         """
-        Apply the time discretisation through a single sub-step.
+        Apply the time discretisation to advance one whole time step.
 
         Args:
             x_out (:class:`Function`): the output field to be computed.
@@ -666,28 +632,6 @@ class ThetaMethod(TimeDiscretisation):
         self.x_out.assign(x_in)
         self.solver.solve()
         x_out.assign(self.x_out)
-
-    @wrapper_apply
-    def apply(self, x_out, x_in):
-        """
-        Apply the time discretisation to advance one whole time step.
-
-        Args:
-            x_out (:class:`Function`): the output field to be computed.
-            x_in (:class:`Function`): the input field.
-        """
-        # If doing adaptive subcycles, update dt and ncycles here
-        if self.subcycle_by_courant is not None:
-            self.ncycles = min(12, math.ceil(float(self.courant_max)/self.subcycle_by_courant))
-            self.dt.assign(self.original_dt/self.ncycles)
-
-        self.x0.assign(x_in)
-        for i in range(self.ncycles):
-            logger.info(f'Subcycle {i}')
-            self.subcycle_idx = i
-            self.apply_cycle(self.x1, self.x0)
-            self.x0.assign(self.x1)
-        x_out.assign(self.x1)
 
 
 class TrapeziumRule(ThetaMethod):
@@ -721,6 +665,7 @@ class TrapeziumRule(ThetaMethod):
                          options=options, fixed_subcycles=fixed_subcycles,
                          subcycle_by_courant=subcycle_by_courant,
                          augmentation=augmentation)
+
 
 class TR_BDF2(TimeDiscretisation):
     """
