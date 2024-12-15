@@ -1,10 +1,15 @@
+"""
+A module defining objects for temporarily augmenting an equation with another.
+"""
+
+
 from abc import ABCMeta
 from firedrake import (
     MixedFunctionSpace, Function, TestFunctions, split, inner, dx, grad,
     LinearVariationalProblem, LinearVariationalSolver, lhs, rhs, dot,
     ds_b, ds_v, ds_t, ds, FacetNormal, TestFunction, TrialFunction,
     transpose, nabla_grad, outer, dS, dS_h, dS_v, sign, jump, div,
-    Constant, sqrt, cross, curl
+    Constant, sqrt, cross, curl, FunctionSpace, assemble
 )
 from firedrake.fml import subject
 from gusto import (
@@ -18,17 +23,56 @@ class Augmentation(object, metaclass=ABCMeta):
     Augments an equation with another equation to be solved simultaneously.
     """
 
+    @abstractmethod
+    def pre_apply(self, x_in):
+        """
+        Steps to take at the beginning of an apply method, for instance to
+        assign the input field to the internal mixed function.
+        """
+
+        pass
+
+    @abstractmethod
+    def post_apply(self, x_out):
+        """
+        Steps to take at the end of an apply method, for instance to assign the
+        internal mixed function to the output field.
+        """
+
+        pass
+
+    @abstractmethod
+    def update(self, x_in_mixed):
+        """
+        Any intermediate update steps, depending on the current mixed function.
+        """
+
+        pass
+
 
 class VorticityTransport(Augmentation):
     """
-    Solves the transport of a velocity field, simultaneously with the vorticity.
+    Solves the transport of a vector field, simultaneously with the vorticity
+    as a mixed proble, as described in Bendall and Wimmer (2022).
+
+    Note that this is most effective with implicit time discretisations. The
+    residual-based SUPG option provides a dissipation method.
+
+    Args:
+        domain (:class:`Domain`): The domain object.
+        V_vel (:class:`FunctionSpace`): The velocity function space.
+        V_vort (:class:`FunctionSpace`): The vorticity function space.
+        transpose_commutator (bool, optional): Whether to include the commutator
+            of the transpose gradient terms. This is necessary for solving the
+            general vector transport equation, but is not necessary when the
+            transporting and transported fields are the same. Defaults to True.
+        supg (bool, optional): Whether to include dissipation through a
+            residual-based SUPG scheme. Defaults to False.
     """
 
-    ### An argument to time discretisation or spatial method??
-    # TODO: this all needs to be generalised
-
-    def __init__(self, domain, V_vel, V_vort, transpose_commutator=True,
-                 supg=False, min_dx=None):
+    def __init__(
+            self, domain, V_vel, V_vort, transpose_commutator=True, supg=False
+    ):
 
         self.fs = MixedFunctionSpace((V_vel, V_vort))
         self.X = Function(self.fs)
@@ -86,13 +130,18 @@ class VorticityTransport(Augmentation):
         # Add the vorticity residual to the transported vorticity,
         # which damps enstrophy
         if supg:
-            if min_dx is not None:
-                lamda = Constant(0.5)
-                #TODO: decide on expression here
-                # tau = 0.5 / (lamda/domain.dt + sqrt(dot(u, u))/Constant(min_dx))
-                tau = 0.5*domain.dt*(1.0 + sqrt(dot(u, u))*domain.dt/Constant(min_dx))
-            else:
-                tau = 0.5*domain.dt
+
+            # Determine SUPG coefficient ---------------------------------------
+            tau = 0.5*domain.dt
+
+            # Find mean grid spacing to determine a Courant number
+            DG0 = FunctionSpace(domain.mesh, 'DG', 0)
+            ones = Function(DG0).interpolate(Constant(1.0))
+            area = assemble(ones*dx)
+            mean_dx = (area/DG0.dof_count)**(1/domain.mesh.geometric_dimension())
+
+            # Divide by approximately (1 + c)
+            tau /= (1.0 + sqrt(dot(u, u))*domain.dt/Constant(mean_dx))
 
             dxqp = dx(degree=3)
 
@@ -117,6 +166,7 @@ class VorticityTransport(Augmentation):
                         tau*cross(curl(u_dot_nabla_F), u)
                     )*dxqp
 
+        # Assemble the residual ------------------------------------------------
         residual = (
             time_derivative(time_deriv_form)
             + transport(
@@ -147,13 +197,31 @@ class VorticityTransport(Augmentation):
         self.solver = LinearVariationalSolver(problem)
 
     def pre_apply(self, x_in):
+        """
+        Sets the velocity field for the local mixed function.
+
+        Args:
+            x_in (:class:`Function`): The input velocity field
+        """
         self.x_in.subfunctions[0].assign(x_in)
 
     def post_apply(self, x_out):
+        """
+        Sets the output velocity field from the local mixed function.
+
+        Args:
+            x_out (:class:`Function`): the output velocity field.
+        """
         x_out.assign(self.x_out.subfunctions[0])
 
     def update(self, x_in_mixed):
+        """
+        Performs the solve to determine the vorticity function.
+
+        Args:
+            x_in_mixed (:class:`Function`): The mixed function to update.
+        """
         self.x_in.subfunctions[0].assign(x_in_mixed.subfunctions[0])
-        logger.info('Vorticity solve')
+        logger.debug('Vorticity solve')
         self.solver.solve()
         self.x_in.subfunctions[1].assign(self.Z_in)
