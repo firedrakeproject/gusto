@@ -2,12 +2,14 @@
 
 
 from firedrake import (dx, TestFunction, TrialFunction, grad, inner, curl,
-                       LinearVariationalProblem, LinearVariationalSolver)
+                       LinearVariationalProblem, LinearVariationalSolver,
+                       conditional)
 from gusto.diagnostics.diagnostics import DiagnosticField, Energy
 
 __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
            "ShallowWaterPotentialEnstrophy", "PotentialVorticity",
-           "RelativeVorticity", "AbsoluteVorticity"]
+           "RelativeVorticity", "AbsoluteVorticity", "PartitionedVapour",
+           "PartitionedCloud"]
 
 
 class ShallowWaterKineticEnergy(Energy):
@@ -274,3 +276,88 @@ class RelativeVorticity(Vorticity):
             state_fields (:class:`StateFields`): the model's field container.
         """
         super().setup(domain, state_fields, vorticity_type="relative")
+
+
+class PartitionedVapour(DiagnosticField):
+    """
+    Diagnostic for computing the vapour in the equivalent buoyancy formulation
+    of the moist thermal shallow water equations.
+    """
+    name = "PartitionedVapour"
+
+    def __init__(self, equation, name='q_t', space=None,
+                 method='interpolate'):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            name (str, optional): name of the total moisture field to use to
+                compute the vapour from. Defaults to total moisture, q_t.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case the default space is the domain's DG space.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.fname = name
+        self.equation = equation
+        super().__init__(space=space, method=method, required_fields=(self.fname,))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        q_t = state_fields(self.fname)
+        q_sat_expr = self.equation.compute_saturation(state_fields.X(
+            self.equation.field_name))
+        self.expr = conditional(q_t < q_sat_expr, q_t, q_sat_expr)
+
+        space = domain.spaces("DG")
+        super().setup(domain, state_fields, space=space)
+
+
+class PartitionedCloud(DiagnosticField):
+    """
+    Diagnostic for computing the cloud in the equivalent buoyancy formulation
+    of the moist thermal shallow water equations.
+    """
+    name = "PartitionedCloud"
+
+    def __init__(self, equation, name='q_t', space=None,
+                 method='interpolate'):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            name (str, optional): name of the total moisture field to use to
+                compute the vapour from. Defaults to total moisture, q_t.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case the default space is the domain's DG space.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.fname = name
+        self.equation = equation
+        super().__init__(space=space, method=method, required_fields=(self.fname,))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        q_t = state_fields(self.fname)
+        qsat_expr = self.equation.compute_saturation(state_fields.X(
+            self.equation.field_name))
+        vapour = conditional(q_t < qsat_expr, q_t, qsat_expr)
+        self.expr = q_t - vapour
+
+        space = domain.spaces("DG")
+        super().setup(domain, state_fields, space=space)
