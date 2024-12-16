@@ -370,6 +370,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         u_trial, D_trial, b_trial = split(self.trials)[0:3]
         n = FacetNormal(self.domain.mesh)
         topog = self.prescribed_fields('topography', self.domain.spaces('DG')).interpolate(topog_expr) if topog_expr else None
+        self.topog = topog
         if self.equivalent_buoyancy:
             gamma_qt = self.tests[3]
             qt = split(self.X)[3]
@@ -389,7 +390,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         # provide linearisation
         if self.equivalent_buoyancy:
             beta2 = self.parameters.beta2
-            qsat_expr = self.compute_saturation(self.X, topog)
+            qsat_expr = self.compute_saturation(self.X)
             qv = conditional(qt < qsat_expr, qt, qsat_expr)
             qvbar = conditional(qtbar < qsat_expr, qtbar, qsat_expr)
             source_form = pressure_gradient(subject(prognostic(
@@ -473,16 +474,17 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
 
         self.residual = residual
 
-    def compute_saturation(self, X, topog=None):
+    def compute_saturation(self, X):
         # Returns the saturation expression as a function of the
         # parameters specified in self.parameters and the input
-        # functions X and topog. The latter are left as inputs to the
+        # functions X. The latter are left as inputs to the
         # function so that it can also be used for initialisation
         q0 = self.parameters.q0
         nu = self.parameters.nu
         g = self.parameters.g
         H = self.parameters.H
         D, b = split(X)[1:3]
+        topog = self.topog
         if topog is None:
             sat_expr = q0*H/(D) * exp(nu*(1-b/g))
         else:

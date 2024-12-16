@@ -658,18 +658,13 @@ class ThermalSWSolver(TimesteppingSolver):
 
         if equivalent_buoyancy:
             # compute q_v using q_sat to partition q_t into q_v and q_c
-            # check for topography
-            if hasattr(equation.prescribed_fields, "topography"):
-                topog = equation.prescribed_fields("topography")
-            else:
-                topog = None
             self.q_sat_func = Function(VD)
             self.qvbar = Function(VD)
             qtbar = split(equation.X_ref)[3]
 
             # set up interpolators that use the X_ref values for D and b_e
             self.q_sat_expr_interpolator = Interpolator(
-                equation.compute_saturation(equation.X_ref, topog), self.q_sat_func)
+                equation.compute_saturation(equation.X_ref), self.q_sat_func)
             self.q_v_interpolator = Interpolator(
                 conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
                 self.qvbar)
