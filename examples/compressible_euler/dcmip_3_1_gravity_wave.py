@@ -17,6 +17,7 @@ from gusto import (
     TrapeziumRule, SUPGOptions, lonlatr_from_xyz, CompressibleParameters,
     CompressibleEulerEquations, CompressibleSolver, ZonalComponent,
     compressible_hydrostatic_balance, Perturbation, GeneralCubedSphereMesh,
+    SubcyclingOptions
 )
 
 dcmip_3_1_gravity_wave_defaults = {
@@ -96,10 +97,14 @@ def dcmip_3_1_gravity_wave(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
+    subcycling_options = SubcyclingOptions(fixed_subcycles=2)
     transported_fields = [
         TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "rho", fixed_subcycles=2),
-        SSPRK3(domain, "theta", options=SUPGOptions(), fixed_subcycles=2)
+        SSPRK3(domain, "rho", subcycling_options=subcycling_options),
+        SSPRK3(
+            domain, "theta", options=SUPGOptions(),
+            subcycling_options=subcycling_options
+        ),
     ]
     transport_methods = [
         DGUpwind(eqns, field) for field in ["u", "rho", "theta"]
