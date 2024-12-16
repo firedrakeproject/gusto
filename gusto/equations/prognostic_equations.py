@@ -25,7 +25,7 @@ __all__ = ["PrognosticEquation", "PrognosticEquationSet"]
 class PrognosticEquation(object, metaclass=ABCMeta):
     """Base class for prognostic equations."""
 
-    def __init__(self, domain, function_space, field_name):
+    def __init__(self, domain, function_space, field_name, max_quad_deg=5):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -33,12 +33,15 @@ class PrognosticEquation(object, metaclass=ABCMeta):
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
             field_name (str): name of the prognostic field.
+            max_quad_deg (int): maximum quadrature degree for any form. Defaults
+                to 5.
         """
 
         self.domain = domain
         self.function_space = function_space
         self.X = Function(function_space)
         self.field_name = field_name
+        self.max_quad_deg = max_quad_deg
         self.bcs = {}
         self.prescribed_fields = PrescribedFields()
 
@@ -77,7 +80,7 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
     def __init__(self, field_names, domain, space_names,
                  linearisation_map=None, no_normal_flow_bc_ids=None,
-                 active_tracers=None):
+                 active_tracers=None, max_quad_deg=5):
         """
         Args:
             field_names (list): a list of strings for names of the prognostic
@@ -95,12 +98,15 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations.. Defaults to None.
+            max_quad_deg (int): maximum quadrature degree for any form. Defaults
+                to 5.
         """
 
         self.field_names = field_names
         self.space_names = space_names
         self.active_tracers = active_tracers
         self.linearisation_map = lambda t: False if linearisation_map is None else linearisation_map(t)
+        self.max_quad_deg = max_quad_deg
 
         # Build finite element spaces
         self.spaces = [domain.spaces(space_name) for space_name in

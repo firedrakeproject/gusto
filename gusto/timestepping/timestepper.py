@@ -2,7 +2,7 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, Projector, split
-from firedrake.fml import drop, Term, LabelledForm
+from firedrake.fml import drop, Term, all_terms, LabelledForm
 from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
 from gusto.core import TimeLevelFields, StateFields
@@ -12,6 +12,7 @@ from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.spatial_methods.transport_methods import TransportMethod
 import ufl
+
 
 __all__ = ["BaseTimestepper", "Timestepper", "PrescribedTransport"]
 
@@ -109,6 +110,39 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         if self.spatial_methods is not None:
             for method in self.spatial_methods:
                 method.replace_form(equation)
+
+        # -------------------------------------------------------------------- #
+        # Ensure the quadrature degree is not excessive for any integrals
+        # -------------------------------------------------------------------- #
+        def update_quadrature_degree(t):
+            # This function takes in a term and returns a new term
+            # with the same form and labels, the only difference being
+            # that any integrals in the form with no quadrature_degree
+            # set will have their quadrature degree set to max_quad_deg
+
+            # This list will hold the updated integrals
+            new_itgs = []
+
+            # Loop over integrals in this term's form
+            for itg in t.form._integrals:
+                # check if the quadrature degree is not set
+                if 'quadrature_degree' not in itg._metadata.keys():
+                    # create new integral with updated quadrature degree
+                    new_itg = itg.reconstruct(
+                        metadata={'quadrature_degree': equation.max_quad_deg})
+                    new_itgs.append(new_itg)
+                else:
+                    # if quadrature degree was already set, just keep
+                    # this integral
+                    new_itgs.append(itg)
+
+            new_form = ufl.form.Form(new_itgs)
+
+            return Term(new_form, t.labels)
+
+        equation.residual = equation.residual.label_map(
+            all_terms,
+            lambda t: update_quadrature_degree(t))
 
     def setup_transporting_velocity(self, scheme):
         """

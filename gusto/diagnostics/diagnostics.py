@@ -6,9 +6,10 @@ from firedrake import (assemble, dot, dx, Function, sqrt, TestFunction,
                        LinearVariationalProblem, LinearVariationalSolver,
                        ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, pi,
                        TensorFunctionSpace, SpatialCoordinate, as_vector,
-                       Projector, Interpolator, FunctionSpace, FiniteElement,
+                       Projector, FunctionSpace, FiniteElement,
                        TensorProductElement)
 from firedrake.assign import Assigner
+from firedrake.__future__ import Interpolator
 from ufl.domain import extract_unique_domain
 
 from abc import ABCMeta, abstractmethod, abstractproperty
