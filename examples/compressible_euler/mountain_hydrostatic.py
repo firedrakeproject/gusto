@@ -18,7 +18,7 @@ from gusto import (
     TrapeziumRule, SUPGOptions, ZComponent, Perturbation,
     CompressibleParameters, HydrostaticCompressibleEulerEquations,
     CompressibleSolver, compressible_hydrostatic_balance, HydrostaticImbalance,
-    SpongeLayerParameters, MinKernel, MaxKernel, remove_initial_w, logger
+    SpongeLayerParameters, MinKernel, MaxKernel, logger
 )
 
 mountain_hydrostatic_defaults = {
@@ -243,8 +243,7 @@ def mountain_hydrostatic(
 
     theta0.assign(theta_b)
     rho0.assign(rho_b)
-    u0.project(as_vector([initial_wind, 0.0]))
-    remove_initial_w(u0)
+    u0.project(as_vector([initial_wind, 0.0]), bcs=eqns.bcs['u'])
 
     stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
