@@ -29,7 +29,7 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as
     # part of the jobs
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install checkedout Gusto
         run: |
           . /home/firedrake/firedrake/bin/activate
@@ -50,7 +50,7 @@ jobs:
           cd docs
           make html
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           name: github-pages
           path: /__w/gusto/gusto/docs/build/html

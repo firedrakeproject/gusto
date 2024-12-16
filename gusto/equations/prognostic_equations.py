@@ -10,7 +10,8 @@ from firedrake.fml import (
     replace_subject, replace_trial_function
 )
 from gusto.core import PrescribedFields
-from gusto.core.labels import time_derivative, prognostic, linearisation, mass_weighted
+from gusto.core.labels import (nonlinear_time_derivative, time_derivative,
+                               prognostic, linearisation, mass_weighted)
 from gusto.equations.common_forms import (
     advection_form, continuity_form, tracer_conservative_form
 )
@@ -163,8 +164,8 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                         ref_density_idx = self.field_names.index(self.active_tracers[j].density_name)
                         ref_density = split(self.X)[ref_density_idx]
                         q = prog*ref_density
-                        mass_weighted_form = time_derivative(subject(prognostic(inner(q, test)*dx,
-                                                             field_name), self.X))
+                        mass_weighted_form = nonlinear_time_derivative(time_derivative(
+                            subject(prognostic(inner(q, test)*dx, field_name), self.X)))
 
                         mass = mass_weighted(standard_mass_form, mass_weighted_form)
             if i == 0:
@@ -303,6 +304,18 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             ValueError: the equation set already contains a variable with the
                 name of the active tracer.
         """
+
+        # If there are any conservatively transported tracers, ensure
+        # that the reference density, if it is also an active tracer,
+        # is indexed earlier.
+        for i in range(len(active_tracers) - 1):
+            tracer = active_tracers[i]
+            if tracer.transport_eqn == TransportEquationType.tracer_conservative:
+                ref_density = next((x for x in active_tracers if x.name == tracer.density_name), tracer)
+                j = active_tracers.index(ref_density)
+                if j > i:
+                    # Swap the indices of the tracer and the reference density
+                    active_tracers[i], active_tracers[j] = active_tracers[j], active_tracers[i]
 
         # Loop through tracer fields and add field names and spaces
         for tracer in active_tracers:

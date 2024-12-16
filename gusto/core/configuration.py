@@ -8,7 +8,8 @@ __all__ = [
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
     "BoussinesqParameters", "CompressibleParameters",
     "ShallowWaterParameters",
-    "EmbeddedDGOptions", "RecoveryOptions", "SUPGOptions", "MixedFSOptions",
+    "EmbeddedDGOptions", "ConservativeEmbeddedDGOptions", "RecoveryOptions",
+    "ConservativeRecoveryOptions", "SUPGOptions", "MixedFSOptions",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
 ]
 
@@ -168,6 +169,14 @@ class EmbeddedDGOptions(WrapperOptions):
     embedding_space = None
 
 
+class ConservativeEmbeddedDGOptions(EmbeddedDGOptions):
+    """Specifies options for a conservative embedded DG method."""
+
+    project_back_method = 'conservative_project'
+    rho_name = None
+    orig_rho_space = None
+
+
 class RecoveryOptions(WrapperOptions):
     """Specifies options for a recovery wrapper method."""
 
@@ -181,6 +190,15 @@ class RecoveryOptions(WrapperOptions):
     broken_method = 'interpolate'
 
 
+class ConservativeRecoveryOptions(RecoveryOptions):
+    """Specifies options for a conservative recovery wrapper method."""
+
+    rho_name = None
+    orig_rho_space = None
+    project_high_method = 'conservative_project'
+    project_low_method = 'conservative_project'
+
+
 class SUPGOptions(WrapperOptions):
     """Specifies options for an SUPG scheme."""
 
@@ -189,6 +207,12 @@ class SUPGOptions(WrapperOptions):
     default = 1/sqrt(15)
     ibp = IntegrateByParts.TWICE
 
+    # Dictionary containing keys field_name and values term_labels
+    # field_name (str): name of the field for SUPG to be applied to
+    # term_label (list): labels of terms for test function to be altered
+    #                    by SUPG
+    suboptions = None
+
 
 class MixedFSOptions(WrapperOptions):
     """Specifies options for a mixed finite element formulation
@@ -196,7 +220,12 @@ class MixedFSOptions(WrapperOptions):
     prognostic variables."""
 
     name = "mixed_options"
-    suboptions = {}
+
+    # Dictionary containing keys field_name and values suboption
+    # field_name (str): name of the field for suboption to be applied to
+    # suboption (:class:`WrapperOptions`): Wrapper options to be applied
+    #                                      to the provided field
+    suboptions = None
 
 
 class SpongeLayerParameters(Configuration):
