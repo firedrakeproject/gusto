@@ -3,13 +3,13 @@ A module defining objects for temporarily augmenting an equation with another.
 """
 
 
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 from firedrake import (
     MixedFunctionSpace, Function, TestFunctions, split, inner, dx, grad,
     LinearVariationalProblem, LinearVariationalSolver, lhs, rhs, dot,
     ds_b, ds_v, ds_t, ds, FacetNormal, TestFunction, TrialFunction,
     transpose, nabla_grad, outer, dS, dS_h, dS_v, sign, jump, div,
-    Constant, sqrt, cross, curl, FunctionSpace, assemble
+    Constant, sqrt, cross, curl, FunctionSpace, assemble, DirichletBC
 )
 from firedrake.fml import subject
 from gusto import (
@@ -60,8 +60,7 @@ class VorticityTransport(Augmentation):
 
     Args:
         domain (:class:`Domain`): The domain object.
-        V_vel (:class:`FunctionSpace`): The velocity function space.
-        V_vort (:class:`FunctionSpace`): The vorticity function space.
+        eqns (:class:`PrognosticEquationSet`): The overarching equation set.
         transpose_commutator (bool, optional): Whether to include the commutator
             of the transpose gradient terms. This is necessary for solving the
             general vector transport equation, but is not necessary when the
@@ -71,8 +70,11 @@ class VorticityTransport(Augmentation):
     """
 
     def __init__(
-            self, domain, V_vel, V_vort, transpose_commutator=True, supg=False
+            self, domain, eqns, transpose_commutator=True, supg=False
     ):
+
+        V_vel = domain.spaces('HDiv')
+        V_vort = domain.spaces('H1')
 
         self.fs = MixedFunctionSpace((V_vel, V_vort))
         self.X = Function(self.fs)
@@ -89,6 +91,15 @@ class VorticityTransport(Augmentation):
             self.ds = ds
             self.dS = dS
 
+        # Add boundary conditions
+        self.bcs = []
+        if 'u' in eqns.bcs.keys():
+            for bc in eqns.bcs['u']:
+                self.bcs.append(
+                    DirichletBC(self.fs.sub(0), bc.function_arg, bc.sub_domain)
+                )
+
+        # Set up test function and the vorticity term
         n = FacetNormal(domain.mesh)
         sign_u = 0.5*(sign(dot(u, n)) + 1)
         upw = lambda f: (sign_u('+')*f('+') + sign_u('-')*f('-'))

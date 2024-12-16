@@ -47,9 +47,6 @@ def test_vorticity_transport_setup(tmpdir, supg):
     x, y = SpatialCoordinate(mesh)
 
     Vu = domain.spaces("HDiv")
-    CG = domain.spaces("H1")
-
-    augmentation = VorticityTransport(domain, Vu, CG, supg=True)
 
     # Equation
     eqn = AdvectionEquation(domain, Vu, "f")
@@ -61,10 +58,9 @@ def test_vorticity_transport_setup(tmpdir, supg):
     )
     io = IO(domain, output)
 
-    augmentation = VorticityTransport(domain, Vu, CG, supg=supg)
+    augmentation = VorticityTransport(domain, eqn, supg=supg)
 
     # Make equation
-    eqn = AdvectionEquation(domain, Vu, "f")
     if supg:
         transport_scheme = SSPRK3(
             domain, augmentation=augmentation,

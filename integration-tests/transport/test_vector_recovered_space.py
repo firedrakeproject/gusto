@@ -14,6 +14,7 @@ def run(timestepper, tmax, f_end):
 
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
+
 # NB: The default vector transport test is not valid on the sphere as it is
 # designed for a 3-component vector function space, and not the space of tangent
 # vectors on the sphere

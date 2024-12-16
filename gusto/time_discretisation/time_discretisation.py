@@ -171,8 +171,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.residual = self.augmentation.residual
             self.idx = None
 
-        bcs = equation.bcs[self.field_name]
-
         if len(active_labels) > 0:
             if isinstance(self.field_name, list):
                 # Multiple fields are being solved for simultaneously.
@@ -193,6 +191,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         map_if_false=drop)
 
                 self.residual = residual
+
             else:
                 self.residual = self.residual.label_map(
                     lambda t: any(t.has_label(time_derivative, *active_labels)),
@@ -202,7 +201,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         if isinstance(self.field_name, list):
             self.field_name = equation.field_name
 
-        bcs = equation.bcs[self.field_name]
+        if self.augmentation is not None:
+            # Transfer BCs from appropriate function space
+            bcs = self.augmentation.bcs if hasattr(self.augmentation, "bcs") else None
+        else:
+            bcs = equation.bcs[self.field_name]
 
         self.evaluate_source = []
         self.physics_names = []

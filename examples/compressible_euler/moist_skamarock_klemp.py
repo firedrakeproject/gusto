@@ -17,19 +17,17 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from petsc4py import PETSc
 PETSc.Sys.popErrorHandler()
-import itertools
 from firedrake import (
     as_vector, SpatialCoordinate, PeriodicIntervalMesh, ExtrudedMesh, exp, sin,
     Function, pi, errornorm, TestFunction, dx, BrokenElement, FunctionSpace,
     NonlinearVariationalProblem, NonlinearVariationalSolver
 )
-import numpy as np
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     VorticityTransport, Perturbation, thermodynamics, CompressibleParameters,
-    CompressibleEulerEquations, HydrosaticCompressibleEulerEquations,
-    compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
+    CompressibleEulerEquations, RungeKuttaFormulation, CompressibleSolver,
     WaterVapour, CloudWater, Theta_e, Recoverer, saturated_hydrostatic_balance,
+    EmbeddedDGOptions, ForwardEuler, SaturationAdjustment
 )
 
 moist_skamarock_klemp_defaults = {
@@ -98,10 +96,10 @@ def moist_skamarock_klemp(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    vorticity_form = VorticityTransport(
-        domain, domain.spaces("HDiv"), domain.spaces("H1"), supg=True
+    vorticity_form = VorticityTransport(domain, eqns, supg=True)
+    Vt_brok = FunctionSpace(
+        mesh, BrokenElement(domain.spaces("theta").ufl_element())
     )
-    Vt_brok = FunctionSpace(mesh, BrokenElement(V_theta.ufl_element()))
     embedded_dg = EmbeddedDGOptions(embedding_space=Vt_brok)
 
     transported_fields = [
@@ -113,12 +111,14 @@ def moist_skamarock_klemp(
             domain, "rho", subcycle_by_courant=0.25,
             rk_formulation=RungeKuttaFormulation.linear
         ),
-        SSPRK3(domain, "theta", subcycle_by_courant=0.25, opts=embedded_dg),
+        SSPRK3(domain, "theta", subcycle_by_courant=0.25, options=embedded_dg),
         SSPRK3(
-            domain, "water_vapour", subcycle_by_courant=0.25, opts=embedded_dg
+            domain, "water_vapour",
+            subcycle_by_courant=0.25, options=embedded_dg
         ),
         SSPRK3(
-            domain, "cloud_water", subcycle_by_courant=0.25, opts=embedded_dg
+            domain, "cloud_water",
+            subcycle_by_courant=0.25, options=embedded_dg
         )
     ]
     transport_methods = [
@@ -133,11 +133,16 @@ def moist_skamarock_klemp(
     tau_values = {'rho': 1.0, 'theta': 1.0}
     linear_solver = CompressibleSolver(eqns, alpha=alpha, tau_values=tau_values)
 
+    # Physics schemes
+    physics_schemes = [
+        (SaturationAdjustment(eqns), ForwardEuler(domain))
+    ]
+
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, alpha=alpha, reference_update_freq=1,
-        accelerator=True
+        linear_solver=linear_solver, physics_schemes=physics_schemes,
+        alpha=alpha, reference_update_freq=1, accelerator=True
     )
 
     # ------------------------------------------------------------------------ #
@@ -165,6 +170,7 @@ def moist_skamarock_klemp(
     # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
     theta_e = Function(Vt).interpolate(Tsurf*exp(N**2*z/g))
     water_t = Function(Vt).assign(total_water)
+    u0.project(as_vector([wind_initial, 0.0]))
 
     # Calculate hydrostatic fields
     saturated_hydrostatic_balance(eqns, stepper.fields, theta_e, water_t)
@@ -176,21 +182,28 @@ def moist_skamarock_klemp(
     )
     theta_e.interpolate(theta_e + theta_e_pert)
 
-    # Find perturbed water_v and theta_vd --------------------------------------
+    # Find perturbed rho, water_v and theta_vd ---------------------------------
     # expressions for finding theta0 and water_v0 from theta_e and water_t
     rho_averaged = Function(Vt)
     rho_recoverer = Recoverer(rho0, rho_averaged)
 
-    w_h = Function(Vt)
+    # make expressions to evaluate residual
+    exner_expr = thermodynamics.exner_pressure(eqns.parameters, rho_averaged, theta0)
+    p_expr = thermodynamics.p(eqns.parameters, exner_expr)
+    T_expr = thermodynamics.T(eqns.parameters, theta0, exner_expr, water_v0)
+    theta_e_expr = thermodynamics.theta_e(eqns.parameters, T_expr, p_expr, water_v0, water_t)
+    msat_expr = thermodynamics.r_sat(eqns.parameters, T_expr, p_expr)
+
+    # Create temporary functions for iterating towards correct initial conditions
+    water_v_h = Function(Vt)
     theta_h = Function(Vt)
     theta_e_test = Function(Vt)
-    pie = thermodynamics.pi(state.parameters, rho_averaged, theta0)
-    p = thermodynamics.p(state.parameters, pie)
-    T = thermodynamics.T(state.parameters, theta0, pie, water_v0)
-    r_v_expr = thermodynamics.r_sat(state.parameters, T, p)
-    theta_e_expr = thermodynamics.theta_e(state.parameters, T, p, water_v0, water_t)
     rho_h = Function(Vr)
     zeta = TestFunction(Vr)
+
+    # Set existing ref variables (which define the pressure which is unchanged)
+    rho_b = Function(Vr).assign(rho0)
+    theta_b = Function(Vt).assign(theta0)
 
     rho_form = zeta * rho_h * theta0 * dxp - zeta * rho_b * theta_b * dxp
     rho_prob = NonlinearVariationalProblem(rho_form, rho_h)
@@ -201,37 +214,35 @@ def moist_skamarock_klemp(
     max_inner_solve_count = 5
     delta = 0.8
 
-    for i in range(max_outer_solve_count):
+    # We have to simultaneously solve for the initial rho, theta_vd and water_v
+    # This is done by nested fixed point iterations
+    for _ in range(max_outer_solve_count):
 
         rho_solver.solve()
         rho0.assign(rho0 * (1 - delta) + delta * rho_h)
         rho_recoverer.project()
 
-        theta_e_test.assign(theta_e_expr)
+        theta_e_test.interpolate(theta_e_expr)
         if errornorm(theta_e_test, theta_e) < 1e-6:
             break
 
-        for j in range(max_theta_solve_count):
+        for _ in range(max_theta_solve_count):
             theta_h.interpolate(theta_e / theta_e_expr * theta0)
             theta0.assign(theta0 * (1 - delta) + delta * theta_h)
 
             # break when close enough
             if errornorm(theta_e_test, theta_e) < 1e-6:
                 break
-            for k in range(max_inner_solve_count):
-                w_h.interpolate(r_v_expr)
-                water_v0.assign(water_v0 * (1 - delta) + delta * w_h)
+            for _ in range(max_inner_solve_count):
+                water_v_h.interpolate(msat_expr)
+                water_v0.assign(water_v0 * (1 - delta) + delta * water_v_h)
 
                 # break when close enough
-                theta_e_test.assign(theta_e_expr)
+                theta_e_test.interpolate(theta_e_expr)
                 if errornorm(theta_e_test, theta_e) < 1e-6:
                     break
 
     water_c0.assign(water_t - water_v0)
-
-    theta_e.interpolate(theta_e + theta_pert)
-    rho0.assign(rho_b)
-    u0.project(as_vector([wind_initial, 0.0]))
 
     # ------------------------------------------------------------------------ #
     # Run
