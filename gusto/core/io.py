@@ -29,7 +29,7 @@ TimeData = namedtuple(
 )
 
 
-def pick_up_mesh(output, mesh_name):
+def pick_up_mesh(output, mesh_name, comm=COMM_WORLD):
     """
     Picks up a checkpointed mesh. This must be the first step of any model being
     picked up from a checkpointing run.
@@ -52,7 +52,7 @@ def pick_up_mesh(output, mesh_name):
     else:
         dumpdir = path.join("results", output.dirname)
         chkfile = path.join(dumpdir, "chkpt.h5")
-    with CheckpointFile(chkfile, 'r') as chk:
+    with CheckpointFile(chkfile, 'r', comm=comm) as chk:
         mesh = chk.load_mesh(mesh_name)
 
     if dumpdir:
