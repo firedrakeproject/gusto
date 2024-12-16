@@ -11,7 +11,8 @@ from gusto import (
     Domain, IO, OutputParameters, DGUpwind, ShallowWaterParameters,
     ThermalShallowWaterEquations, lonlatr_from_xyz,
     GeneralIcosahedralSphereMesh,
-    RelativeVorticity, RungeKuttaFormulation, SSPRK3, ThermalSWSolver,
+    RelativeVorticity, PotentialVorticity, PartitionedVapour,
+    PartitionedCloud, RungeKuttaFormulation, SSPRK3, ThermalSWSolver,
     SemiImplicitQuasiNewton, xyz_vector_from_lonlatr
 )
 
@@ -73,7 +74,8 @@ def moist_thermal_gw(
     output = OutputParameters(
         dirname=dirname, dumpfreq=dumpfreq, dump_nc=False, dump_vtus=True
     )
-    diagnostic_fields = [RelativeVorticity()]
+    diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
+                         PartitionedVapour(eqns), PartitionedCloud(eqns)]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     transport_methods = [
