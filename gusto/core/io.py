@@ -816,6 +816,7 @@ class IO(object):
 
             nc_field_file.close()
 
+    # NOT PARALLEL SAFE!
     def write_nc_dump(self, t):
 
         comm = self.mesh.comm
