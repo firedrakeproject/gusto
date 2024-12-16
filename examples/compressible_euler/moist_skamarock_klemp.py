@@ -26,7 +26,7 @@ from firedrake import (
 import numpy as np
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    VorticityTransport, Perturbation, CompressibleParameters,
+    VorticityTransport, Perturbation, thermodynamics, CompressibleParameters,
     CompressibleEulerEquations, HydrosaticCompressibleEulerEquations,
     compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
     WaterVapour, CloudWater, Theta_e, Recoverer, saturated_hydrostatic_balance,
@@ -38,8 +38,7 @@ moist_skamarock_klemp_defaults = {
     'dt': 6.0,
     'tmax': 3000.,
     'dumpfreq': 250,
-    'dirname': 'moist_skamarock_klemp',
-    'hydrostatic': False
+    'dirname': 'moist_skamarock_klemp'
 }
 
 
@@ -170,14 +169,14 @@ def moist_skamarock_klemp(
     # Calculate hydrostatic fields
     saturated_hydrostatic_balance(eqns, stepper.fields, theta_e, water_t)
 
-    # Add perturbation to theta_e
+    # Add perturbation to theta_e ----------------------------------------------
     theta_e_pert = (
         deltaTheta * sin(pi*z/domain_height)
         / (1 + (x - domain_width/2)**2 / pert_width**2)
     )
     theta_e.interpolate(theta_e + theta_e_pert)
 
-    # find perturbed water_v and theta_vd
+    # Find perturbed water_v and theta_vd --------------------------------------
     # expressions for finding theta0 and water_v0 from theta_e and water_t
     rho_averaged = Function(Vt)
     rho_recoverer = Recoverer(rho0, rho_averaged)
