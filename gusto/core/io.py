@@ -40,6 +40,8 @@ def pick_up_mesh(output, mesh_name, comm=COMM_WORLD):
         mesh_name (str): the name of the mesh to be picked up. The default names
             used by Firedrake are "firedrake_default" for non-extruded meshes,
             or "firedrake_default_extruded" for extruded meshes.
+        comm: MPI communicator over which the mesh should be defined after being
+            "picked-up".
 
     Returns:
         :class:`Mesh`: the mesh to be used by the model.
