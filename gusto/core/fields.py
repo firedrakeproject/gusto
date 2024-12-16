@@ -114,6 +114,7 @@ class StateFields(Fields):
         self.to_pick_up = []
         self._field_types = []
         self._field_names = []
+        self.X = prognostic_fields.np1
 
         # Add pointers to prognostic fields
         for field in prognostic_fields.np1.fields:
