@@ -7,13 +7,15 @@ n = 30
 mesh = PeriodicUnitSquareMesh(n, n)
 output = OutputParameters(dirname="adjoint_diffusion")
 dt = 0.01
-domain = Domain(mesh, dt, family="BDM", degree=1)
+domain = Domain(mesh, 10*dt, family="BDM", degree=1)
 io = IO(domain, output)
 
 V = VectorFunctionSpace(mesh, "CG", 2)
 domain.spaces.add_space("vecCG", V)
 
-nu = Constant(0.0001, domain=mesh)
+R = FunctionSpace(mesh, "R", 0)
+# We need to define nu as a function in order to have a control variable.
+nu = Function(R, val=0.0001)
 diffusion_params = DiffusionParameters(kappa=nu)
 eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
 
@@ -35,7 +37,7 @@ J = assemble(inner(u, u)*dx)
 nu_is_control = True
 if nu_is_control:
     my_control = Control(nu)
-    h = Constant(0.0001)  # the direction of the perturbation
+    h = Function(R, val=0.0001)  # the direction of the perturbation
 else:
     my_control = Control(u)
     h = Function(V).interpolate(fexpr)  # the direction of the perturbation

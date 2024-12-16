@@ -61,11 +61,6 @@ stepper.run(0., 10*dt)
 
 J = assemble(0.5*inner(u0, u0)*dx + 0.5*g*D0**2*dx)
 
-my_control = Control(D0)
-h = Function(D0.function_space()).interpolate(Dexpr)  # the direction of the perturbation
+Jhat = ReducedFunctional(J, Control(D0))
 
-# dJdnu = compute_gradient(J, my_control)
-
-Jhat = ReducedFunctional(J, my_control)
-
-conv_rate = taylor_test(Jhat, D0, h)
+conv_rate = taylor_test(Jhat, D0, Function(D0.function_space()).assign(Dexpr))

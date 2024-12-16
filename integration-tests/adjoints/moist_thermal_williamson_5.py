@@ -14,8 +14,8 @@ equations involves an active buoyancy field.
 The example here uses the icosahedral sphere mesh and degree 1 spaces. An
 explicit RK4 timestepper is used.
 """
-
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+import pytest
+import numpy as np
 from firedrake import (
     SpatialCoordinate, as_vector, pi, sqrt, min_value, exp, cos, sin, assemble, dx, inner, Function
 )
@@ -27,6 +27,26 @@ from gusto import (
     CloudWater, Rain, GeneralIcosahedralSphereMesh, RelativeVorticity,
     ZonalComponent, MeridionalComponent
 )
+
+
+@pytest.fixture(autouse=True)
+def handle_taping():
+    yield
+    tape = get_working_tape()
+    tape.clear_tape()
+
+
+@pytest.fixture(autouse=True, scope="module")
+def handle_annotation():
+    from firedrake.adjoint import annotate_tape, continue_annotation
+    if not annotate_tape():
+        continue_annotation()
+    yield
+    # Ensure annotation is paused when we finish.
+    annotate = annotate_tape()
+    if annotate:
+        pause_annotation()
+
 
 moist_thermal_williamson_5_defaults = {
     'ncells_per_edge': 8,     # number of cells per icosahedron edge
@@ -193,57 +213,12 @@ def moist_thermal_williamson_5(
     # ----------------------------------------------------------------- #
     # Run
     # ----------------------------------------------------------------- #
-
-    continue_annotation()
     stepper.run(t=0, tmax=dt)
 
     J = assemble(0.5*inner(u0, u0)*dx + 0.5*g*D0**2*dx)
 
     Jhat = ReducedFunctional(J, Control(D0))
 
-    conv_rate = taylor_test(Jhat, D0, h = Function(D0.function_space()).interpolate(Dexpr))
+    assert np.allclose(Jhat(D0), J)
 
-# ---------------------------------------------------------------------------- #
-# MAIN
-# ---------------------------------------------------------------------------- #
-
-
-if __name__ == "__main__":
-
-    parser = ArgumentParser(
-        description=__doc__,
-        formatter_class=ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument(
-        '--ncells_per_edge',
-        help="The number of cells per edge of icosahedron",
-        type=int,
-        default=moist_thermal_williamson_5_defaults['ncells_per_edge']
-    )
-    parser.add_argument(
-        '--dt',
-        help="The time step in seconds.",
-        type=float,
-        default=moist_thermal_williamson_5_defaults['dt']
-    )
-    parser.add_argument(
-        "--tmax",
-        help="The end time for the simulation in seconds.",
-        type=float,
-        default=moist_thermal_williamson_5_defaults['tmax']
-    )
-    parser.add_argument(
-        '--dumpfreq',
-        help="The frequency at which to dump field output.",
-        type=int,
-        default=moist_thermal_williamson_5_defaults['dumpfreq']
-    )
-    parser.add_argument(
-        '--dirname',
-        help="The name of the directory to write to.",
-        type=str,
-        default=moist_thermal_williamson_5_defaults['dirname']
-    )
-    args, unknown = parser.parse_known_args()
-
-    moist_thermal_williamson_5(**vars(args))
+    assert taylor_test(Jhat, D0, Function(D0.function_space()).interpolate(Dexpr)) > 1.95
