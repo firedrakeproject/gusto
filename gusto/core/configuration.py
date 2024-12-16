@@ -1,7 +1,7 @@
 """Some simple tools for configuring the model."""
 from abc import ABCMeta, abstractproperty
 from enum import Enum
-from firedrake import sqrt, Constant
+from firedrake import sqrt
 
 
 __all__ = [
@@ -82,7 +82,7 @@ class Configuration(object):
             # DO NOT MERGE
             # Adjoint is a bit twitchy with Constants so let's not make them
             # for now
-            #object.__setattr__(self, name, Constant(value))
+            # object.__setattr__(self, name, Constant(value))
         else:
             object.__setattr__(self, name, value)
 
