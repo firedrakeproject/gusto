@@ -5,9 +5,10 @@ and checks the example against a known good checkpointed answer.
 
 from os.path import join, abspath, dirname
 from gusto import *
-import gusto.thermodynamics as tde
+import gusto.equations.thermodynamics as tde
 from firedrake import (SpatialCoordinate, PeriodicIntervalMesh, exp,
-                       sqrt, ExtrudedMesh, norm, as_vector)
+                       sqrt, ExtrudedMesh, as_vector)
+import numpy as np
 
 
 def run_moist_compressible(tmpdir):
@@ -23,8 +24,9 @@ def run_moist_compressible(tmpdir):
     ncols = 10  # number of columns
     Lx = 1000.0
     Lz = 1000.0
+    mesh_name = 'moist_compressible_mesh'
     m = PeriodicIntervalMesh(ncols, Lx)
-    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Lz/nlayers)
+    mesh = ExtrudedMesh(m, layers=nlayers, layer_height=Lz/nlayers, name=mesh_name)
     domain = Domain(mesh, dt, "CG", 1)
 
     # Equation
@@ -34,20 +36,25 @@ def run_moist_compressible(tmpdir):
 
     # I/O
     output = OutputParameters(dirname=tmpdir+"/moist_compressible",
-                              dumpfreq=2, chkptfreq=2)
+                              dumpfreq=2, checkpoint=True, chkptfreq=2)
     io = IO(domain, output)
 
     # Transport schemes
-    transported_fields = [ImplicitMidpoint(domain, "u"),
+    transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "rho"),
                           SSPRK3(domain, "theta")]
+    transport_methods = [DGUpwind(eqn, "u"),
+                         DGUpwind(eqn, "rho"),
+                         DGUpwind(eqn, "theta")]
 
     # Linear solver
     linear_solver = CompressibleSolver(eqn)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
-                                      linear_solver=linear_solver)
+                                      transport_methods,
+                                      linear_solver=linear_solver,
+                                      num_outer=4, num_inner=1)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -90,15 +97,17 @@ def run_moist_compressible(tmpdir):
     stepper.run(t=0, tmax=tmax)
 
     # State for checking checkpoints
-    checkpoint_name = 'moist_compressible_chkpt'
+    checkpoint_name = 'moist_compressible_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
-    check_eqn = CompressibleEulerEquations(domain, parameters, active_tracers=tracers)
     check_output = OutputParameters(dirname=tmpdir+"/moist_compressible",
-                                    checkpoint_pickup_filename=new_path)
-    check_io = IO(domain, output=check_output)
-    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [])
-    check_stepper.set_reference_profiles([])
-    check_stepper.run(t=0, tmax=0, pickup=True)
+                                    checkpoint_pickup_filename=new_path,
+                                    checkpoint=True)
+    check_mesh = pick_up_mesh(check_output, mesh_name)
+    check_domain = Domain(check_mesh, dt, "CG", 1)
+    check_eqn = CompressibleEulerEquations(check_domain, parameters, active_tracers=tracers)
+    check_io = IO(check_domain, output=check_output)
+    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
+    check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
 
     return stepper, check_stepper
 
@@ -111,7 +120,8 @@ def test_moist_compressible(tmpdir):
     for variable in ['u', 'rho', 'theta', 'vapour_mixing_ratio']:
         new_variable = stepper.fields(variable)
         check_variable = check_stepper.fields(variable)
-        error = norm(new_variable - check_variable) / norm(check_variable)
+        diff_array = new_variable.dat.data - check_variable.dat.data
+        error = np.linalg.norm(diff_array) / np.linalg.norm(check_variable.dat.data)
 
         # Slack values chosen to be robust to different platforms
         assert error < 1e-10, f'Values for {variable} in ' + \

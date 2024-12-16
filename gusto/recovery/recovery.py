@@ -28,11 +28,11 @@ class BoundaryMethod(Enum):
 
     An enumerator object encoding methods for correcting boundary recovery:
     extruded: which corrects a scalar field on an extruded mesh at the top and
-              bottom boundaries.
+    bottom boundaries.                                                        \n
     hcurl: this corrects the recovery of a HDiv field into a HCurl space at the
-           top and bottom boundaries of an extruded mesh.
+    top and bottom boundaries of an extruded mesh.                            \n
     taylor: uses a Taylor expansion to correct the field at all the boundaries
-            of the domain. Should only be used in Cartesian domains.
+    of the domain. Should only be used in Cartesian domains.
     """
 
     extruded = 0
@@ -207,7 +207,7 @@ class Recoverer(object):
         if self.vector_function_space:
             # VectorElement has to be on the outside
             # so first need to get underlying finite element
-            brok_elt = VectorElement(BrokenElement(rec_elt.sub_elements()[0]))
+            brok_elt = VectorElement(BrokenElement(rec_elt.sub_elements[0]))
         else:
             # Otherwise we can immediately get broken element
             brok_elt = BrokenElement(rec_elt)
@@ -332,20 +332,20 @@ def find_eff_coords(V0):
     vec_DG1 = VectorFunctionSpace(mesh, DG1_element)
     x = SpatialCoordinate(mesh)
 
-    if V0.ufl_element().value_size() > 1:
+    if isinstance(V0.ufl_element(), VectorElement) or V0.value_size > 1:
         eff_coords_list = []
         V0_coords_list = []
 
         # treat this separately for each component
-        for i in range(V0.ufl_element().value_size()):
+        for i in range(V0.value_size):
             # fill an d-dimensional list with i-th coordinate
-            x_list = [x[i] for j in range(V0.ufl_element().value_size())]
+            x_list = [x[i] for j in range(V0.value_size)]
 
             # the i-th element in V0_coords_list is a vector with all components the i-th coord
             ith_V0_coords = Function(V0).project(as_vector(x_list))
             V0_coords_list.append(ith_V0_coords)
 
-        for i in range(V0.ufl_element().value_size()):
+        for i in range(V0.value_size):
             # slice through V0_coords_list to obtain the coords of the DOFs for that component
             x_list = [V0_coords[i] for V0_coords in V0_coords_list]
 
