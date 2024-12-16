@@ -1,10 +1,9 @@
 """
-A linearised form of the steady jet of Galewsky et al 2004:
-``An initial-value problem for testing numerical models of the global
-shallow-water equations'', Tellus A: Dynamic Meteorology and Oceanography.
+A linearised form of the steady thermal Galewsky jet. The initial conditions are
+taken from Hartney et al, 2024: ``A compatible finite element discretisation
+for moist shallow water equations'' (without the perturbation).
 
-This uses an icosahedral mesh of the sphere, and the linear shallow water
-equations.
+This uses an icosahedral mesh of the sphere.
 """
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
