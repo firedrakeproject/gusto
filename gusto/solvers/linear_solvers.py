@@ -738,8 +738,9 @@ class ThermalSWSolver(TimesteppingSolver):
         Updates the reference profiles.
         """
 
-        self.q_sat_expr_interpolator.interpolate()
-        self.q_v_interpolator.interpolate()
+        if self.equations.equivalent_buoyancy:
+            self.q_sat_expr_interpolator.interpolate()
+            self.q_v_interpolator.interpolate()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
