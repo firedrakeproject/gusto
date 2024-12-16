@@ -5,7 +5,9 @@ from firedrake import (Function, Constant, NonlinearVariationalProblem,
 from firedrake.fml import replace_subject, all_terms, drop
 from firedrake.utils import cached_property
 from gusto.core.labels import time_derivative, implicit, explicit
-from gusto.time_discretisation.time_discretisation import TimeDiscretisation
+from gusto.time_discretisation.time_discretisation import (
+    TimeDiscretisation, wrapper_apply
+)
 import numpy as np
 
 
@@ -58,7 +60,8 @@ class IMEXRungeKutta(TimeDiscretisation):
     # --------------------------------------------------------------------------
 
     def __init__(self, domain, butcher_imp, butcher_exp, field_name=None,
-                 solver_parameters=None, limiter=None, options=None):
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None,
+                 limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -71,19 +74,38 @@ class IMEXRungeKutta(TimeDiscretisation):
                 Runge Kutta time discretisation.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            solver_parameters (dict, optional): dictionary of parameters to
-                pass to the underlying solver. Defaults to None.
+            linear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying linear solver. Defaults to None.
+            nonlinear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying nonlinear solver. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
         """
         super().__init__(domain, field_name=field_name,
-                         solver_parameters=solver_parameters,
+                         solver_parameters=nonlinear_solver_parameters,
                          options=options)
         self.butcher_imp = butcher_imp
         self.butcher_exp = butcher_exp
         self.nStages = int(np.shape(self.butcher_imp)[1])
+
+        # Set default linear and nonlinear solver options if none passed in
+        if linear_solver_parameters is None:
+            self.linear_solver_parameters = {'snes_type': 'ksponly',
+                                             'ksp_type': 'cg',
+                                             'pc_type': 'bjacobi',
+                                             'sub_pc_type': 'ilu'}
+        else:
+            self.linear_solver_parameters = linear_solver_parameters
+
+        if nonlinear_solver_parameters is None:
+            self.nonlinear_solver_parameters = {'snes_type': 'newtonls',
+                                                'ksp_type': 'gmres',
+                                                'pc_type': 'bjacobi',
+                                                'sub_pc_type': 'ilu'}
+        else:
+            self.nonlinear_solver_parameters = nonlinear_solver_parameters
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -198,7 +220,7 @@ class IMEXRungeKutta(TimeDiscretisation):
             # setup solver using residual defined in derived class
             problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
-            solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name))
+            solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
         return solvers
 
     @cached_property
@@ -207,18 +229,30 @@ class IMEXRungeKutta(TimeDiscretisation):
         # setup solver using lhs and rhs defined in derived class
         problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters, options_prefix=solver_name)
+        return NonlinearVariationalSolver(problem, solver_parameters=self.linear_solver_parameters, options_prefix=solver_name)
 
+    @wrapper_apply
     def apply(self, x_out, x_in):
         self.x1.assign(x_in)
+        self.x_out.assign(x_in)
         solver_list = self.solvers
 
         for stage in range(self.nStages):
             self.solver = solver_list[stage]
+            # Set initial solver guess
+            if (stage > 0):
+                self.x_out.assign(self.xs[stage-1])
             self.solver.solve()
-            self.xs[stage].assign(self.x_out)
 
+            # Apply limiter
+            if self.limiter is not None:
+                self.limiter.apply(self.x_out)
+            self.xs[stage].assign(self.x_out)
         self.final_solver.solve()
+
+        # Apply limiter
+        if self.limiter is not None:
+            self.limiter.apply(self.x_out)
         x_out.assign(self.x_out)
 
 
@@ -233,7 +267,8 @@ class IMEX_Euler(IMEXRungeKutta):
     y_1 = y^n + dt*F[y_1] + dt*S[y_0]                                         \n
     y^(n+1) = y^n + dt*F[y_1] + dt*S[y_0]
     """
-    def __init__(self, domain, field_name=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None,
                  limiter=None, options=None):
         """
         Args:
@@ -241,8 +276,10 @@ class IMEX_Euler(IMEXRungeKutta):
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            solver_parameters (dict, optional): dictionary of parameters to
-                pass to the underlying solver. Defaults to None.
+            linear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying linear solver. Defaults to None.
+            nonlinear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying nonlinear solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
                 the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
@@ -253,7 +290,8 @@ class IMEX_Euler(IMEXRungeKutta):
         butcher_imp = np.array([[0., 0.], [0., 1.], [0., 1.]])
         butcher_exp = np.array([[0., 0.], [1., 0.], [1., 0.]])
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
-                         solver_parameters=solver_parameters,
+                         linear_solver_parameters=linear_solver_parameters,
+                         nonlinear_solver_parameters=nonlinear_solver_parameters,
                          limiter=limiter, options=options)
 
 
@@ -273,7 +311,8 @@ class IMEX_ARS3(IMEXRungeKutta):
     y^(n+1) = y^n + dt*(g*F[y_1]+(1-g)*F[y_2])                                \n
                   + dt*(0.5*S[y_1]+0.5*S[y_2])
     """
-    def __init__(self, domain, field_name=None, solver_parameters=None,
+    def __init__(self, domain, field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None,
                  limiter=None, options=None):
         """
         Args:
@@ -281,8 +320,10 @@ class IMEX_ARS3(IMEXRungeKutta):
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            solver_parameters (dict, optional): dictionary of parameters to
-                pass to the underlying solver. Defaults to None.
+            linear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying linear solver. Defaults to None.
+            nonlinear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying nonlinear solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
                 the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
@@ -295,7 +336,8 @@ class IMEX_ARS3(IMEXRungeKutta):
         butcher_exp = np.array([[0., 0., 0.], [g, 0., 0.], [g-1., 2.*(1.-g), 0.], [0., 0.5, 0.5]])
 
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
-                         solver_parameters=solver_parameters,
+                         linear_solver_parameters=linear_solver_parameters,
+                         nonlinear_solver_parameters=nonlinear_solver_parameters,
                          limiter=limiter, options=options)
 
 
@@ -315,15 +357,19 @@ class IMEX_ARK2(IMEXRungeKutta):
     y^(n+1) = y^n + dt*(d*F[y_0]+d*F[y_1]+g*F[y_2])                           \n
                   + dt*(d*S[y_0]+d*S[y_1]+g*S[y_2])
     """
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None):
+    def __init__(self, domain, field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None,
+                 limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            solver_parameters (dict, optional): dictionary of parameters to
-                pass to the underlying solver. Defaults to None.
+            linear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying linear solver. Defaults to None.
+            nonlinear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying nonlinear solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
                 the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
@@ -337,7 +383,8 @@ class IMEX_ARK2(IMEXRungeKutta):
         butcher_imp = np.array([[0., 0., 0.], [g, g, 0.], [d, d, g], [d, d, g]])
         butcher_exp = np.array([[0., 0., 0.], [2.*g, 0., 0.], [1.-a, a, 0.], [d, d, g]])
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
-                         solver_parameters=solver_parameters,
+                         linear_solver_parameters=linear_solver_parameters,
+                         nonlinear_solver_parameters=nonlinear_solver_parameters,
                          limiter=limiter, options=options)
 
 
@@ -355,15 +402,19 @@ class IMEX_SSP3(IMEXRungeKutta):
     y^(n+1) = y^n + dt*(1/6*F[y_1]+1/6*F[y_2]+2/3*F[y_3])                     \n
                   + dt*(1/6*S[y_1]+1/6*S[y_2]+2/3*S[y_3])
     """
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None):
+    def __init__(self, domain, field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None,
+                 limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            solver_parameters (dict, optional): dictionary of parameters to
-                pass to the underlying solver. Defaults to None.
+            linear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying linear solver. Defaults to None.
+            nonlinear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying nonlinear solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
                 the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
@@ -375,7 +426,8 @@ class IMEX_SSP3(IMEXRungeKutta):
         butcher_imp = np.array([[g, 0., 0.], [1-2.*g, g, 0.], [0.5-g, 0., g], [(1./6.), (1./6.), (2./3.)]])
         butcher_exp = np.array([[0., 0., 0.], [1., 0., 0.], [0.25, 0.25, 0.], [(1./6.), (1./6.), (2./3.)]])
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
-                         solver_parameters=solver_parameters,
+                         linear_solver_parameters=linear_solver_parameters,
+                         nonlinear_solver_parameters=nonlinear_solver_parameters,
                          limiter=limiter, options=options)
 
 
@@ -393,15 +445,19 @@ class IMEX_Trap2(IMEXRungeKutta):
     y_3 = y^n + dt*(0.5*F[y_0]+0.5*F[y_3]) + dt*(0.5*S[y_0]+0.5*S[y_2])        \n
     y^(n+1) = y^n + dt*(0.5*F[y_0]+0.5*F[y_3]) + dt*(0.5*S[y_0] + 0.5*S[y_2])  \n
     """
-    def __init__(self, domain, field_name=None, solver_parameters=None, limiter=None, options=None):
+    def __init__(self, domain, field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None,
+                 limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            solver_parameters (dict, optional): dictionary of parameters to
-                pass to the underlying solver. Defaults to None.
+            linear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying linear solver. Defaults to None.
+            nonlinear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying nonlinear solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
                 the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
@@ -413,5 +469,6 @@ class IMEX_Trap2(IMEXRungeKutta):
         butcher_imp = np.array([[0., 0., 0., 0.], [e, 0., 0., 0.], [0.5, 0., 0.5, 0.], [0.5, 0., 0., 0.5], [0.5, 0., 0., 0.5]])
         butcher_exp = np.array([[0., 0., 0., 0.], [1., 0., 0., 0.], [0.5, 0.5, 0., 0.], [0.5, 0., 0.5, 0.], [0.5, 0., 0.5, 0.]])
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
-                         solver_parameters=solver_parameters,
+                         linear_solver_parameters=linear_solver_parameters,
+                         nonlinear_solver_parameters=nonlinear_solver_parameters,
                          limiter=limiter, options=options)

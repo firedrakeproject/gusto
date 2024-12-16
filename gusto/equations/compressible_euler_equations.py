@@ -2,7 +2,7 @@
 
 from firedrake import (
     sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg, dS_v,
-    conditional, SpatialCoordinate, split, Constant
+    conditional, SpatialCoordinate, split, Constant, as_vector
 )
 from firedrake.fml import subject, replace_subject
 from gusto.core.labels import (
@@ -34,7 +34,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
     pressure.
     """
 
-    def __init__(self, domain, parameters, Omega=None, sponge_options=None,
+    def __init__(self, domain, parameters, sponge_options=None,
                  extra_terms=None, space_names=None,
                  linearisation_map='default',
                  u_transport_option="vector_invariant_form",
@@ -47,8 +47,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
-            Omega (:class:`ufl.Expr`, optional): an expression for the planet's
-                rotation vector. Defaults to None.
             sponge_options (:class:`SpongeLayerParameters`, optional): any
                 parameters for applying a sponge layer to the upper boundary.
                 Defaults to None.
@@ -216,10 +214,12 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Extra Terms (Coriolis, Sponge, Diffusion and others)
         # -------------------------------------------------------------------- #
-        if Omega is not None:
+        if parameters.Omega is not None:
             # TODO: add linearisation
-            residual += coriolis(subject(prognostic(
-                inner(w, cross(2*Omega, u))*dx, "u"), self.X))
+            Omega = as_vector((0, 0, parameters.Omega))
+            coriolis_form = coriolis(subject(prognostic(
+                inner(w, cross(2*Omega, u))*dx, 'u'), self.X))
+            residual += coriolis_form
 
         if sponge_options is not None:
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
@@ -279,7 +279,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
     equations.
     """
 
-    def __init__(self, domain, parameters, Omega=None, sponge=None,
+    def __init__(self, domain, parameters, sponge_options=None,
                  extra_terms=None, space_names=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
@@ -291,10 +291,9 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
-            Omega (:class:`ufl.Expr`, optional): an expression for the planet's
-                rotation vector. Defaults to None.
-            sponge (:class:`ufl.Expr`, optional): an expression for a sponge
-                layer. Defaults to None.
+            sponge_options (:class:`SpongeLayerParameters`, optional): any
+                parameters for applying a sponge layer to the upper boundary.
+                Defaults to None.
             extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
                 included in the equation set. Defaults to None.
             space_names (dict, optional): a dictionary of strings for names of
@@ -325,7 +324,7 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
             NotImplementedError: only mixing ratio tracers are implemented.
         """
 
-        super().__init__(domain, parameters, Omega=Omega, sponge=sponge,
+        super().__init__(domain, parameters, sponge_options=sponge_options,
                          extra_terms=extra_terms, space_names=space_names,
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
@@ -333,42 +332,49 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
+        # Replace
         self.residual = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=lambda t: hydrostatic(t, self.hydrostatic_projection(t))
+            map_if_true=lambda t: self.hydrostatic_projection(t, 'u')
         )
 
+        # Add an extra hydrostatic term
+        u_idx = self.field_names.index('u')
+        u = split(self.X)[u_idx]
         k = self.domain.k
-        u = split(self.X)[0]
         self.residual += hydrostatic(
             subject(
                 prognostic(
-                    -inner(k, self.tests[0]) * inner(k, u) * dx, "u"),
-                self.X))
+                    -inner(k, self.tests[u_idx]) * inner(k, u) * dx, "u"),
+                self.X
+            )
+        )
 
-    def hydrostatic_projection(self, t):
+    def hydrostatic_projection(self, term, field_name):
         """
         Performs the 'hydrostatic' projection.
 
         Takes a term involving a vector prognostic variable and replaces the
-        prognostic with only its horizontal components.
+        prognostic with only its horizontal components. It also adds the
+        'hydrostatic' label to that term.
 
         Args:
-            t (:class:`Term`): the term to perform the projection upon.
+            term (:class:`Term`): the term to perform the projection upon.
+            field_name (str): the prognostic field to make hydrostatic.
 
         Returns:
             :class:`LabelledForm`: the labelled form containing the new term.
-
-        Raises:
-            AssertionError: spherical geometry is not yet implemented.
         """
 
-        # TODO: make this more general, i.e. should work on the sphere
-        if self.domain.on_sphere:
-            raise NotImplementedError("The hydrostatic projection is not yet "
-                                      + "implemented for spherical geometry")
-        k = Constant((*self.domain.k, 0, 0))
-        X = t.get(subject)
+        f_idx = self.field_names.index(field_name)
+        k = self.domain.k
+        X = term.get(subject)
+        field = split(X)[f_idx]
 
-        new_subj = X - k * inner(X, k)
-        return replace_subject(new_subj)(t)
+        new_subj = field - inner(field, k) * k
+        # In one step:
+        # - set up the replace_subject routine (which returns a function)
+        # - call that function on the supplied `term` argument,
+        #   to replace the subject with the new hydrostatic subject
+        # - add the hydrostatic label
+        return replace_subject(new_subj, old_idx=f_idx)(term)

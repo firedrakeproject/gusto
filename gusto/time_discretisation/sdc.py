@@ -163,9 +163,9 @@ class SDC(object, metaclass=ABCMeta):
 
         # Get Q_delta matrices
         self.Qdelta_imp = genQDeltaCoeffs(qdelta_imp, form=formulation,
-                                          nodes=self.nodes, Q=self.Q)
+                                          nodes=self.nodes, Q=self.Q, nNodes=M, nodeType=node_type, quadType=quad_type)
         self.Qdelta_exp = genQDeltaCoeffs(qdelta_exp, form=formulation,
-                                          nodes=self.nodes, Q=self.Q)
+                                          nodes=self.nodes, Q=self.Q, nNodes=M, nodeType=node_type, quadType=quad_type)
 
         # Set default linear and nonlinear solver options if none passed in
         if linear_solver_parameters is None:
@@ -526,7 +526,11 @@ class SDC(object, metaclass=ABCMeta):
                     self.fUnodes[m-1].assign(self.Urhs)
                 self.compute_quad_final()
                 # Compute y_(n+1) = y_n + sum(j=1,M) q_j*F(y_j)
+                self.U_fin.assign(self.Unodes[-1])
                 self.solver_fin.solve()
+                # Apply limiter if required
+                if self.limiter is not None:
+                    self.limiter.apply(self.U_fin)
                 x_out.assign(self.U_fin)
             else:
                 # Take value at final quadrature node dtau_M

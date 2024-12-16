@@ -15,7 +15,7 @@ jobs:
   build:
     name: "Build Gusto"
     # The type of runner that the job will run on
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     # The docker container to use.
     container:
       image: firedrakeproject/firedrake-vanilla:latest
@@ -26,27 +26,27 @@ jobs:
         run: |
           cd ..
           rm -rf build
-      - name: Setup python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.8
       - name: Install Gusto
         run: |
           . /home/firedrake/firedrake/bin/activate
           python -m pip install -r requirements.txt
           python -m pip install -e .
           python -m pip install  \
-            pytest-cov pytest-timeout pytest-xdist
+            pytest-timeout pytest-xdist
       - name: Gusto tests
         run: |
           . /home/firedrake/firedrake/bin/activate
-          which firedrake-clean
+          firedrake-clean
+          export GUSTO_PARALLEL_LOG=FILE
+          export PYOP2_CFLAGS=-O0
           python -m pytest \
             -n 12 --dist worksteal \
             --durations=100 \
-            --cov gusto \
+            --timeout=3600 \
+            --timeout-method=thread \
+            -o faulthandler_timeout=3660 \
             -v unit-tests integration-tests examples
-        timeout-minutes: 60
+        timeout-minutes: 120
       - name: Prepare logs
         if: always()
         run: |
@@ -55,8 +55,8 @@ jobs:
           find . -name "*.log" -exec cp --parents {} /__w/gusto/gusto/logs/ \;
       - name: Upload artifact
         if: always()
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           name: log-files
           path: /__w/gusto/gusto/logs
-          retention-days: 1
+          retention-days: 5

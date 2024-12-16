@@ -51,7 +51,10 @@ def test_coupled_transport_scalar(tmpdir, geometry, equation_form1, equation_for
     transport_scheme = SSPRK3(domain)
     transport_method = [DGUpwind(eqn, 'f1'), DGUpwind(eqn, 'f2')]
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
+    time_varying_velocity = False
+    timestepper = PrescribedTransport(
+        eqn, transport_scheme, setup.io, time_varying_velocity, transport_method
+    )
 
     # Initial conditions
     timestepper.fields("f1").interpolate(setup.f_init)
@@ -95,13 +98,21 @@ def test_conservative_coupled_transport(tmpdir, m_X_space, tracer_setup):
                       'f2': EmbeddedDGOptions()}
         opts = MixedFSOptions(suboptions=suboptions)
 
-        transport_scheme = SSPRK3(domain, options=opts, increment_form=False)
+        transport_scheme = SSPRK3(
+            domain, options=opts,
+            rk_formulation=RungeKuttaFormulation.predictor
+        )
     else:
-        transport_scheme = SSPRK3(domain, increment_form=False)
+        transport_scheme = SSPRK3(
+            domain, rk_formulation=RungeKuttaFormulation.predictor
+        )
 
     transport_method = [DGUpwind(eqn, 'f1'), DGUpwind(eqn, 'f2')]
 
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io, transport_method)
+    time_varying_velocity = False
+    timestepper = PrescribedTransport(
+        eqn, transport_scheme, setup.io, time_varying_velocity, transport_method
+    )
 
     # Initial conditions
     timestepper.fields("f1").interpolate(setup.f_init)

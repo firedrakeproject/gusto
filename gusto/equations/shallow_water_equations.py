@@ -9,7 +9,7 @@ from gusto.equations.common_forms import (
     advection_form, advection_form_1d, continuity_form,
     continuity_form_1d, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form, diffusion_form_1d,
-    linear_continuity_form, linear_continuity_form_1d
+    linear_continuity_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
 
@@ -189,14 +189,15 @@ class ShallowWaterEquations(PrognosticEquationSet):
                                           self.X)
             residual += topography_form
 
-        # thermal source terms not involving topography
+        # thermal source terms not involving topography.
+        # label these as the equivalent pressure gradient term
         if self.thermal:
             n = FacetNormal(domain.mesh)
-            source_form = subject(prognostic(-D*div(b*w)*dx
-                                             - 0.5*b*div(D*w)*dx
-                                             + jump(b*w, n)*avg(D)*dS
-                                             + 0.5*jump(D*w, n)*avg(b)*dS,
-                                             'u'), self.X)
+            source_form = pressure_gradient(subject(prognostic(-D*div(b*w)*dx
+                                                    - 0.5*b*div(D*w)*dx
+                                                    + jump(b*w, n)*avg(D)*dS
+                                                    + 0.5*jump(D*w, n)*avg(b)*dS,
+                                                    'u'), self.X))
             residual += source_form
 
         # -------------------------------------------------------------------- #
@@ -360,7 +361,7 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
 
         # Transport term needs special linearisation
         if self.linearisation_map(D_adv.terms[0]):
-            linear_D_adv = linear_continuity_form_1d(phi, H, u_trial)
+            linear_D_adv = linear_continuity_form(phi, H, u_trial)
             # Add linearisation to D_adv
             D_adv = linearisation(D_adv, linear_D_adv)
 
