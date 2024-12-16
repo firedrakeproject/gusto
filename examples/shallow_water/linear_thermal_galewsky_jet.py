@@ -9,14 +9,15 @@ equations.
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (SpatialCoordinate, pi, assemble,
-                       dx, Constant, ge, le, exp, cos, conditional,
-                       interpolate, Function, VectorFunctionSpace,)
+                       dx, Constant, exp, conditional,
+                       Function)
 from gusto import (Domain, IO, OutputParameters, SemiImplicitQuasiNewton,
                    DefaultTransport, DGUpwind, ForwardEuler, SteadyStateError,
                    ShallowWaterParameters, LinearThermalShallowWaterEquations,
                    GeneralIcosahedralSphereMesh, ZonalComponent,
                    MeridionalComponent, RelativeVorticity, PotentialVorticity,
-                   ThermalSWSolver, lonlatr_from_xyz, xyz_vector_from_lonlatr
+                   ThermalSWSolver, lonlatr_from_xyz, xyz_vector_from_lonlatr,
+                   NumericalIntegral
                    )
 
 import numpy as np
@@ -24,7 +25,7 @@ import numpy as np
 linear_thermal_galewsky_jet_defaults = {
     'ncells_per_edge': 16,     # number of cells per icosahedron edge
     'dt': 900.0,               # 15 minutes
-    'tmax': 6.*24.*60.*60.,    # 5 days
+    'tmax': 6.*24.*60.*60.,    # 6 days
     'dumpfreq': 96,            # once per day with default options
     'dirname': 'linear_thermal_galewsky_jet'
 }
@@ -59,13 +60,13 @@ def linear_thermal_galewsky_jet(
 
     # Domain
     mesh = GeneralIcosahedralSphereMesh(R, ncells_per_edge, degree=2)
-    x = SpatialCoordinate(mesh)
+    xyz = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, 'BDM', element_order)
 
     # Equation
     parameters = ShallowWaterParameters(H=H)
     Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
+    fexpr = 2*Omega*xyz[2]/R
     eqns = LinearThermalShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # I/O
@@ -95,96 +96,72 @@ def linear_thermal_galewsky_jet(
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    g = Constant(parameters.g)
+    u0_field = stepper.fields("u")
+    D0_field = stepper.fields("D")
+    b0_field = stepper.fields("b")
 
-    D0 = stepper.fields("D")
-    b0 = stepper.fields("b")
+    # Parameters
+    g = parameters.g
+    Omega = parameters.Omega
+    e_n = np.exp(-4./((phi1-phi0)**2))
 
-    # get lat lon coordinates
-    lamda, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
+    lon, lat, _ = lonlatr_from_xyz(xyz[0], xyz[1], xyz[2])
+    lat_VD = Function(D0_field.function_space()).interpolate(lat)
 
-    # expressions for meridional and zonal velocity
-    en = np.exp(-4./((phi1-phi0)**2))
-    u_zonal_expr = (u_max/en)*exp(1/((phi - phi0)*(phi - phi1)))
-    u_zonal = conditional(ge(phi, phi0), conditional(le(phi, phi1), u_zonal_expr, 0.), 0.)
-    u_merid = 0.0
+    # ------------------------------------------------------------------------ #
+    # Obtain u and D (by integration of analytic expression)
+    # ------------------------------------------------------------------------ #
 
-    # get cartesian components of velocity
-    uexpr = xyz_vector_from_lonlatr(u_zonal, u_merid, 0, x)
+    # Wind -- UFL expression
+    u_zonal = conditional(
+        lat <= phi0, 0.0,
+        conditional(
+            lat >= phi1, 0.0,
+            u_max / e_n * exp(1.0 / ((lat - phi0) * (lat - phi1)))
+        )
+    )
+    uexpr = xyz_vector_from_lonlatr(u_zonal, Constant(0.0), Constant(0.0), xyz)
 
-    # expression for buoyancy
-    bexpr = g - cos(phi)
-    b0.interpolate(bexpr)
+    # Numpy function
+    def u_func(y):
+        u_array = np.where(
+            y <= phi0, 0.0,
+            np.where(
+                y >= phi1, 0.0,
+                u_max / e_n * np.exp(1.0 / ((y - phi0) * (y - phi1)))
+            )
+        )
+        return u_array
 
-    # Compute balanced initial depth
+    # Function for depth field in terms of u function
+    def h_func(y):
+        h_array = u_func(y)*R/g*(
+            2*Omega*np.sin(y)
+        )
 
-    def D_integrand(th):
-        # Initial D field is calculated by integrating D_integrand w.r.t. phi
-        # Assumes the input is between phi0 and phi1.
-        # Note that this function operates on vectorized input.
-        from numpy import exp, sin
-        f = 2.0*parameters.Omega*sin(th)
-        u_zon = (80.0/en)*exp(1.0/((th - phi0)*(th - phi1)))
-        return u_zon*f
+        return h_array
 
-    def Dval(X):
-        # Function to return value of D at X
-        from scipy import integrate
+    # Find h from numerical integral
+    D0_integral = Function(D0_field.function_space())
+    h_integral = NumericalIntegral(-pi/2, pi/2)
+    h_integral.tabulate(h_func)
+    D0_integral.dat.data[:] = h_integral.evaluate_at(lat_VD.dat.data[:])
+    Dexpr = H - D0_integral
 
-        # Preallocate output array
-        val = np.zeros(len(X))
+    # Obtain fields
+    u0_field.project(uexpr)
+    D0_field.interpolate(Dexpr)
 
-        angles = np.zeros(len(X))
-
-        # Minimize work by only calculating integrals for points with
-        # phi between phi_0 and phi_1.
-        # For phi <= phi_0, the integral is 0
-        # For phi >= phi_1, the integral is constant.
-
-        # Precalculate this constant:
-        poledepth, _ = integrate.fixed_quad(D_integrand, phi0, phi1, n=64)
-        poledepth *= -R/parameters.g
-
-        angles[:] = np.arcsin(X[:, 2]/R)
-
-        for ii in range(len(X)):
-            if angles[ii] <= phi0:
-                val[ii] = 0.0
-            elif angles[ii] >= phi1:
-                val[ii] = poledepth
-            else:
-                # Fixed quadrature with 64 points gives absolute errors below 1e-13
-                # for a quantity of order 1e-3.
-                v, _ = integrate.fixed_quad(D_integrand, phi0, angles[ii], n=64)
-                val[ii] = -(R/parameters.g)*v
-
-        return val
-
-    def initialise_fn():
-        u0 = stepper.fields("u")
-        D0 = stepper.fields("D")
-
-        u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 12})
-
-        # Get coordinates to pass to Dval function
-        W = VectorFunctionSpace(mesh, D0.ufl_element())
-
-        X = interpolate(mesh.coordinates, W)
-        D0.dat.data[:] = Dval(X.dat.data_ro)
-        D0.interpolate(D0 - (H/(2*g) * b0))
-
-        # Adjust mean value of initial D
-        C = Function(D0.function_space()).assign(Constant(1.0))
-        area = assemble(C*dx)
-        Dmean = assemble(D0*dx)/area
-        D0 -= Dmean
-        D0 += Constant(parameters.H)
-
-    initialise_fn()
+    # Adjust mean value of initial D
+    C = Function(D0_field.function_space()).assign(Constant(1.0))
+    area = assemble(C*dx)
+    Dmean = assemble(D0_field*dx)/area
+    D0_field -= Dmean
+    D0_field += Constant(H)
 
     # Set reference profiles
-    Dbar = Function(D0.function_space()).assign(H)
-    bbar = Function(b0.function_space()).interpolate(g)
+    Dbar = Function(D0_field.function_space()).assign(H)
+    bbar = Function(b0_field.function_space()).interpolate(g)
     stepper.set_reference_profiles([('D', Dbar), ('b', bbar)])
 
     # ----------------------------------------------------------------- #
