@@ -38,13 +38,11 @@ class BoussinesqEquations(PrognosticEquationSet):
     where k is the vertical unit vector and Ω is the planet's rotation vector.
     """
 
-    def __init__(self, domain, parameters,
-                 compressible=True,
-                 space_names=None,
-                 linearisation_map='default',
-                 u_transport_option="vector_invariant_form",
-                 no_normal_flow_bc_ids=None,
-                 active_tracers=None):
+    def __init__(
+            self, domain, parameters, compressible=True, space_names=None,
+            linearisation_map='default', u_transport_option="vector_invariant_form",
+            no_normal_flow_bc_ids=None, active_tracers=None, max_quad_deg=5
+    ):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -73,6 +71,8 @@ class BoussinesqEquations(PrognosticEquationSet):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations.. Defaults to None.
+            max_quad_deg (int, optional): maximum quadrature degree for any
+                form. Defaults to 5.
 
         Raises:
             NotImplementedError: active tracers are not implemented.
@@ -97,10 +97,12 @@ class BoussinesqEquations(PrognosticEquationSet):
                 and (t.has_label(time_derivative)
                      or (t.get(prognostic) not in ['u', 'p'] and t.has_label(transport)))
 
-        super().__init__(field_names, domain, space_names,
-                         linearisation_map=linearisation_map,
-                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
-                         active_tracers=active_tracers)
+        super().__init__(
+            field_names, domain, space_names,
+            linearisation_map=linearisation_map,
+            no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+            active_tracers=active_tracers, max_quad_deg=max_quad_deg
+        )
 
         self.parameters = parameters
         self.compressible = compressible

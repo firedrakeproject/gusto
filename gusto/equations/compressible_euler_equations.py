@@ -75,8 +75,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations.. Defaults to None.
-            max_quad_deg (int): maximum quadrature degree for any form. Defaults
-                to 5.
+            max_quad_deg (int, optional): maximum quadrature degree for any
+                form. Defaults to 5.
 
         Raises:
             NotImplementedError: only mixing ratio tracers are implemented.
@@ -323,8 +323,8 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
-            max_quad_deg (int): maximum quadrature degree for any form. Defaults
-                to 5.
+            max_quad_deg (int, optional): maximum quadrature degree for any
+                form. Defaults to 5.
 
         Raises:
             NotImplementedError: only mixing ratio tracers are implemented.

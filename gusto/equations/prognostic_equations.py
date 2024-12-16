@@ -9,7 +9,7 @@ from firedrake.fml import (
     Term, all_terms, keep, drop, Label, subject,
     replace_subject, replace_trial_function
 )
-from gusto.core import PrescribedFields
+from gusto.core import PrescribedFields, logger
 from gusto.core.labels import (nonlinear_time_derivative, time_derivative,
                                prognostic, linearisation, mass_weighted)
 from gusto.equations.common_forms import (
@@ -33,8 +33,8 @@ class PrognosticEquation(object, metaclass=ABCMeta):
             function_space (:class:`FunctionSpace`): the function space that the
                 equation's prognostic is defined on.
             field_name (str): name of the prognostic field.
-            max_quad_deg (int): maximum quadrature degree for any form. Defaults
-                to 5.
+            max_quad_deg (int, optional): maximum quadrature degree for any
+                form. Defaults to 5.
         """
 
         self.domain = domain
@@ -54,6 +54,8 @@ class PrognosticEquation(object, metaclass=ABCMeta):
             self.test = TestFunction(function_space)
 
         self.bcs[field_name] = []
+
+        logger.warning(f'Max quadrature degree set to {max_quad_deg}')
 
     def label_terms(self, term_filter, label):
         """
@@ -98,8 +100,8 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations.. Defaults to None.
-            max_quad_deg (int): maximum quadrature degree for any form. Defaults
-                to 5.
+            max_quad_deg (int, optional): maximum quadrature degree for any
+                form. Defaults to 5.
         """
 
         self.field_names = field_names
@@ -107,6 +109,8 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         self.active_tracers = active_tracers
         self.linearisation_map = lambda t: False if linearisation_map is None else linearisation_map(t)
         self.max_quad_deg = max_quad_deg
+
+        logger.warning(f'Max quadrature degree set to {max_quad_deg}')
 
         # Build finite element spaces
         self.spaces = [domain.spaces(space_name) for space_name in
