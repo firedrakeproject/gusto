@@ -33,9 +33,9 @@ from gusto import (
 moist_skamarock_klemp_defaults = {
     'ncolumns': 150,
     'nlayers': 10,
-    'dt': 6.0,
+    'dt': 60.0,
     'tmax': 3000.,
-    'dumpfreq': 250,
+    'dumpfreq': 25,
     'dirname': 'moist_skamarock_klemp'
 }
 
@@ -176,6 +176,9 @@ def moist_skamarock_klemp(
     saturated_hydrostatic_balance(eqns, stepper.fields, theta_e, water_t)
 
     # Add perturbation to theta_e ----------------------------------------------
+    # Need to store background state for theta_e
+    theta_e_b = stepper.fields("Theta_e_bar", space=Vt)
+    theta_e_b.assign(theta_e)
     theta_e_pert = (
         deltaTheta * sin(pi*z/domain_height)
         / (1 + (x - domain_width/2)**2 / pert_width**2)
