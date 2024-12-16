@@ -22,10 +22,9 @@ from firedrake import (
 from firedrake.adjoint import *
 from gusto import (
     Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
-    ShallowWaterParameters, ShallowWaterEquations, Sum,
-    lonlatr_from_xyz, InstantRain, SWSaturationAdjustment, WaterVapour,
-    CloudWater, Rain, GeneralIcosahedralSphereMesh, RelativeVorticity,
-    ZonalComponent, MeridionalComponent
+    ShallowWaterParameters, ShallowWaterEquations, lonlatr_from_xyz,
+    InstantRain, SWSaturationAdjustment, WaterVapour,
+    CloudWater, Rain, GeneralIcosahedralSphereMesh
 )
 
 moist_thermal_williamson_5_defaults = {
@@ -200,8 +199,8 @@ def moist_thermal_williamson_5(
     J = assemble(0.5*inner(u0, u0)*dx + 0.5*g*D0**2*dx)
 
     Jhat = ReducedFunctional(J, Control(D0))
-
-    conv_rate = taylor_test(Jhat, D0, h = Function(D0.function_space()).interpolate(Dexpr))
+    # Taylor test should return value closer to 2.0
+    taylor_test(Jhat, D0, Function(D0.function_space()).interpolate(Dexpr))
 
 # ---------------------------------------------------------------------------- #
 # MAIN
