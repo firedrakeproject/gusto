@@ -325,11 +325,16 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         if linearisation_map == 'default':
             # Default linearisation is time derivatives, pressure
             # gradient and transport terms from depth and buoyancy
-            # equations. Don't include active tracers
+            # equations. Include q_t if equivalent buoyancy. Don't include
+            # active tracers.
+            linear_transported = ['D', self.b_name]
+            if equivalent_buoyancy:
+                linear_transported.append('q_t')
             linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'D', self.b_name] \
-                and (any(t.has_label(time_derivative, pressure_gradient))
-                     or (t.get(prognostic) in ['D', self.b_name]
+                t.get(prognostic) in field_names \
+                and (any(t.has_label(time_derivative, pressure_gradient,
+                                     coriolis))
+                     or (t.get(prognostic) in linear_transported
                          and t.has_label(transport)))
 
         PrognosticEquationSet.__init__(
@@ -539,24 +544,6 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
         """
-
-        if equivalent_buoyancy:
-            if linearisation_map == 'default':
-                # Default linearisation is time derivatives, pressure gradient,
-                # Coriolis and transport term from depth and buoyancy equation
-                linearisation_map = lambda t: \
-                    (any(t.has_label(time_derivative, pressure_gradient, coriolis))
-                     or (t.get(prognostic) in ['D', self.b_name, 'q_t']
-                         and t.has_label(transport)))
-
-        else:
-            if linearisation_map == 'default':
-                # Default linearisation is time derivatives, pressure gradient,
-                # Coriolis and transport term from depth and buoyancy equation
-                linearisation_map = lambda t: \
-                    (any(t.has_label(time_derivative, pressure_gradient, coriolis))
-                     or (t.get(prognostic) in ['D', self.b_name]
-                         and t.has_label(transport)))
 
         super().__init__(domain, parameters,
                          equivalent_buoyancy=equivalent_buoyancy,
