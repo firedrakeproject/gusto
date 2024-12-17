@@ -199,7 +199,7 @@ def moist_thermal_williamson_5(
     J = assemble(0.5*inner(u0, u0)*dx + 0.5*g*D0**2*dx)
 
     Jhat = ReducedFunctional(J, Control(D0))
-    # Taylor test should return value closer to 2.0
+    # The convergence rate should be around 2.0.
     taylor_test(Jhat, D0, Function(D0.function_space()).interpolate(Dexpr))
 
 # ---------------------------------------------------------------------------- #

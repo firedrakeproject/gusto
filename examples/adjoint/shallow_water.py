@@ -62,5 +62,5 @@ stepper.run(0., 10*dt)
 J = assemble(0.5*inner(u0, u0)*dx + 0.5*g*D0**2*dx)
 
 Jhat = ReducedFunctional(J, Control(D0))
-
-conv_rate = taylor_test(Jhat, D0, Function(D0.function_space()).assign(Dexpr))
+# The convergence rate should be around 2.0.
+taylor_test(Jhat, D0, Function(D0.function_space()).interpolate(Dexpr))

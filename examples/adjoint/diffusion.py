@@ -47,6 +47,8 @@ else:
 Jhat = ReducedFunctional(J, my_control)  # the functional as a pure function of nu
 
 if nu_is_control:
-    conv_rate = taylor_test(Jhat, nu, h)
+    # The convergence rate should be around 2.0.
+    taylor_test(Jhat, nu, h)
 else:
-    conv_rate = taylor_test(Jhat, u, h)
+    # The convergence rate should be around 2.0.
+    taylor_test(Jhat, u, h)
