@@ -7,26 +7,26 @@ This uses an icosahedral mesh of the sphere.
 """
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from firedrake import (SpatialCoordinate, pi, assemble,
-                       dx, Constant, exp, conditional,
-                       Function)
-from gusto import (Domain, IO, OutputParameters, SemiImplicitQuasiNewton,
-                   DefaultTransport, DGUpwind, ForwardEuler, SteadyStateError,
-                   ShallowWaterParameters, LinearThermalShallowWaterEquations,
-                   GeneralIcosahedralSphereMesh, ZonalComponent,
-                   MeridionalComponent, RelativeVorticity, PotentialVorticity,
-                   ThermalSWSolver, lonlatr_from_xyz, xyz_vector_from_lonlatr,
-                   NumericalIntegral
-                   )
+from firedrake import (
+    SpatialCoordinate, pi, assemble, dx, Constant, exp, conditional, Function,
+    cos
+)
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, DefaultTransport,
+    DGUpwind, ForwardEuler, ShallowWaterParameters, NumericalIntegral,
+    LinearThermalShallowWaterEquations, GeneralIcosahedralSphereMesh,
+    ZonalComponent, ThermalSWSolver, lonlatr_from_xyz, xyz_vector_from_lonlatr,
+    RelativeVorticity, MeridionalComponent
+)
 
 import numpy as np
 
 linear_thermal_galewsky_jet_defaults = {
-    'ncells_per_edge': 16,     # number of cells per icosahedron edge
+    'ncells_per_edge': 12,     # number of cells per icosahedron edge
     'dt': 900.0,               # 15 minutes
     'tmax': 6.*24.*60.*60.,    # 6 days
     'dumpfreq': 96,            # once per day with default options
-    'dirname': 'linear_thermal_galewsky_jet'
+    'dirname': 'linear_thermal_galewsky'
 }
 
 
@@ -41,11 +41,12 @@ def linear_thermal_galewsky_jet(
     # Parameters for test case
     # ----------------------------------------------------------------- #
 
-    R = 6371220.  # planetary radius (m)
-    H = 10000.  # reference depth (m)
-    u_max = 80.0  # Max amplitude of the zonal wind (m/s)
-    phi0 = pi/7.  # latitude of the southern boundary of the jet (radians)
-    phi1 = pi/2. - phi0  # latitude of the northern boundary of the jet (radians)
+    R = 6371220.         # planetary radius (m)
+    H = 10000.           # reference depth (m)
+    u_max = 80.0         # Max amplitude of the zonal wind (m/s)
+    phi0 = pi/7.         # latitude of the southern boundary of the jet (rad)
+    phi1 = pi/2. - phi0  # latitude of the northern boundary of the jet (rad)
+    db = 1.0             # diff in buoyancy between equator and poles (m/s^2)
 
     # ------------------------------------------------------------------------ #
     # Our settings for this set up
@@ -70,12 +71,12 @@ def linear_thermal_galewsky_jet(
 
     # I/O
     output = OutputParameters(
-        dirname=dirname, dumpfreq=dumpfreq, dump_nc=False, dump_vtus=True
+        dirname=dirname, dumpfreq=dumpfreq, dump_nc=True, dump_vtus=False,
+        dumplist=['D', 'b']
     )
-    diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D'),
-                         SteadyStateError('b'), ZonalComponent('u'),
-                         MeridionalComponent('u'), RelativeVorticity(),
-                         PotentialVorticity()]
+    diagnostic_fields = [
+        ZonalComponent('u'), MeridionalComponent('u'), RelativeVorticity()
+    ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
@@ -104,12 +105,15 @@ def linear_thermal_galewsky_jet(
     Omega = parameters.Omega
     e_n = np.exp(-4./((phi1-phi0)**2))
 
-    lon, lat, _ = lonlatr_from_xyz(xyz[0], xyz[1], xyz[2])
+    _, lat, _ = lonlatr_from_xyz(xyz[0], xyz[1], xyz[2])
     lat_VD = Function(D0_field.function_space()).interpolate(lat)
 
     # ------------------------------------------------------------------------ #
     # Obtain u and D (by integration of analytic expression)
     # ------------------------------------------------------------------------ #
+
+    # Buoyancy
+    bexpr = g - db*cos(lat)
 
     # Wind -- UFL expression
     u_zonal = conditional(
@@ -157,6 +161,7 @@ def linear_thermal_galewsky_jet(
     Dmean = assemble(D0_field*dx)/area
     D0_field -= Dmean
     D0_field += Constant(H)
+    b0_field.interpolate(bexpr)
 
     # Set reference profiles
     Dbar = Function(D0_field.function_space()).assign(H)

@@ -1,9 +1,10 @@
 """Common diagnostic fields for the Shallow Water equations."""
 
 
-from firedrake import (dx, TestFunction, TrialFunction, grad, inner, curl,
-                       LinearVariationalProblem, LinearVariationalSolver,
-                       conditional)
+from firedrake import (
+    dx, TestFunction, TrialFunction, grad, inner, curl, Function, Interpolator,
+    LinearVariationalProblem, LinearVariationalSolver, conditional
+)
 from gusto.diagnostics.diagnostics import DiagnosticField, Energy
 
 __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
@@ -312,12 +313,20 @@ class PartitionedVapour(DiagnosticField):
             state_fields (:class:`StateFields`): the model's field container.
         """
         q_t = state_fields(self.fname)
-        q_sat_expr = self.equation.compute_saturation(state_fields.X(
-            self.equation.field_name))
-        self.expr = conditional(q_t < q_sat_expr, q_t, q_sat_expr)
-
         space = domain.spaces("DG")
+        self.qsat_func = Function(space)
+
+        qsat_expr = self.equation.compute_saturation(state_fields.X(
+            self.equation.field_name))
+        self.qsat_interpolator = Interpolator(qsat_expr, self.qsat_func)
+        self.expr = conditional(q_t < self.qsat_func, q_t, self.qsat_func)
+
         super().setup(domain, state_fields, space=space)
+
+    def compute(self):
+        """Performs the computation of the diagnostic field."""
+        self.qsat_interpolator.interpolate()
+        super().compute()
 
 
 class PartitionedCloud(DiagnosticField):
@@ -354,10 +363,18 @@ class PartitionedCloud(DiagnosticField):
             state_fields (:class:`StateFields`): the model's field container.
         """
         q_t = state_fields(self.fname)
+        space = domain.spaces("DG")
+        self.qsat_func = Function(space)
+
         qsat_expr = self.equation.compute_saturation(state_fields.X(
             self.equation.field_name))
-        vapour = conditional(q_t < qsat_expr, q_t, qsat_expr)
+        self.qsat_interpolator = Interpolator(qsat_expr, self.qsat_func)
+        vapour = conditional(q_t < self.qsat_func, q_t, self.qsat_func)
         self.expr = q_t - vapour
 
-        space = domain.spaces("DG")
         super().setup(domain, state_fields, space=space)
+
+    def compute(self):
+        """Performs the computation of the diagnostic field."""
+        self.qsat_interpolator.interpolate()
+        super().compute()

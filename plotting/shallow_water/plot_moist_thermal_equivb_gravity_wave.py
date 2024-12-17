@@ -17,8 +17,8 @@ from tomplot import (
 # When copying this example these paths need editing, which will usually involve
 # removing the abspath part to set directory paths relative to this file
 
-results_file_name = f'{abspath(dirname(__file__))}/../../results/moist_thermalequivb_gw/field_output.nc'
-plot_stem = f'{abspath(dirname(__file__))}/../../figures/thermal_shallow_water/moist_thermal_equivb_gw'
+results_file_name = f'{abspath(dirname(__file__))}/../../results/moist_thermal_equivb_gw/field_output.nc'
+plot_stem = f'{abspath(dirname(__file__))}/../../figures/shallow_water/moist_thermal_equivb_gw'
 
 beta2 = 9.80616*10
 

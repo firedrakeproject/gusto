@@ -9,15 +9,14 @@ from firedrake import (
 )
 from gusto import (
     Domain, IO, OutputParameters, DGUpwind, ShallowWaterParameters,
-    ThermalShallowWaterEquations, lonlatr_from_xyz,
-    GeneralIcosahedralSphereMesh, MeridionalComponent, ZonalComponent,
-    RelativeVorticity, PotentialVorticity, PartitionedVapour,
+    ThermalShallowWaterEquations, lonlatr_from_xyz, MeridionalComponent,
+    GeneralIcosahedralSphereMesh, SubcyclingOptions, ZonalComponent,
     PartitionedCloud, RungeKuttaFormulation, SSPRK3, ThermalSWSolver,
     SemiImplicitQuasiNewton, xyz_vector_from_lonlatr
 )
 
 moist_thermal_gw_defaults = {
-    'ncells_per_edge': 16,     # number of cells per icosahedron edge
+    'ncells_per_edge': 12,     # number of cells per icosahedron edge
     'dt': 900.0,               # 15 minutes
     'tmax': 5.*24.*60.*60.,    # 5 days
     'dumpfreq': 48,            # dump twice per day
@@ -72,11 +71,12 @@ def moist_thermal_gw(
 
     # IO
     output = OutputParameters(
-        dirname=dirname, dumpfreq=dumpfreq, dump_nc=True, dump_vtus=True
+        dirname=dirname, dumpfreq=dumpfreq, dump_nc=True, dump_vtus=False,
+        dumplist=['b_e', 'D']
     )
-    diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'),
-                         RelativeVorticity(), PotentialVorticity(),
-                         PartitionedVapour(eqns), PartitionedCloud(eqns)]
+    diagnostic_fields = [
+        ZonalComponent('u'), MeridionalComponent('u'), PartitionedCloud(eqns)
+    ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     transport_methods = [
@@ -89,14 +89,15 @@ def moist_thermal_gw(
     # Timestepper
     # ------------------------------------------------------------------------ #
 
+    subcycling_opts = SubcyclingOptions(subcycle_by_courant=0.25)
     transported_fields = [
-        SSPRK3(domain, "u", subcycle_by_courant=0.25),
+        SSPRK3(domain, "u", subcycling_options=subcycling_opts),
         SSPRK3(
-            domain, "D", subcycle_by_courant=0.25,
+            domain, "D", subcycling_options=subcycling_opts,
             rk_formulation=RungeKuttaFormulation.linear
         ),
-        SSPRK3(domain, "b_e", subcycle_by_courant=0.25),
-        SSPRK3(domain, "q_t", subcycle_by_courant=0.25),
+        SSPRK3(domain, "b_e", subcycling_options=subcycling_opts),
+        SSPRK3(domain, "q_t", subcycling_options=subcycling_opts),
     ]
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,

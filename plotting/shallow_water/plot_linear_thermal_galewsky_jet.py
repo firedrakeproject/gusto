@@ -18,7 +18,7 @@ from tomplot import (
 # removing the abspath part to set directory paths relative to this file
 
 results_file_name = f'{abspath(dirname(__file__))}/../../results/linear_thermal_galewsky/field_output.nc'
-plot_stem = f'{abspath(dirname(__file__))}/../../figures/thermal_shallow_water/linear_thermal_galewsky'
+plot_stem = f'{abspath(dirname(__file__))}/../../figures/shallow_water/linear_thermal_galewsky'
 
 # ---------------------------------------------------------------------------- #
 # Initial plot details
