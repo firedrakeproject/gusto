@@ -184,7 +184,6 @@ class CompressibleSolver(TimesteppingSolver):
         beta_u = dt*self.tau_values.get("u", self.alpha)
         beta_t = dt*self.tau_values.get("theta", self.alpha)
         beta_r = dt*self.tau_values.get("rho", self.alpha)
-        beta_u_cp = Constant(beta_u * cp)
 
         Vu = equations.domain.spaces("HDiv")
         Vu_broken = FunctionSpace(equations.domain.mesh, BrokenElement(Vu.ufl_element()))
@@ -293,16 +292,16 @@ class CompressibleSolver(TimesteppingSolver):
         eqn = (
             # momentum equation
             u_mass
-            - beta_u_cp*div(theta_w*V(w))*exnerbar*dxp
+            - beta_u*cp*div(theta_w*V(w))*exnerbar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
-            # + beta_cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_vp
-            + beta_u_cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_hp
-            + beta_u_cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tbp
-            - beta_u_cp*div(thetabar_w*w)*exner*dxp
+            # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_vp
+            + beta_u*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_hp
+            + beta_u*cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tbp
+            - beta_u*cp*div(thetabar_w*w)*exner*dxp
             # trace terms appearing after integrating momentum equation
-            + beta_u_cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
-            + beta_u_cp*dot(thetabar_w*w, n)*l0*(ds_tbp + ds_vp)
+            + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
+            + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tbp + ds_vp)
             # mass continuity equation
             + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
             + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
