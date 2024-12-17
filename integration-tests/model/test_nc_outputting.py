@@ -11,7 +11,7 @@ from gusto import (Domain, IO, PrescribedTransport, AdvectionEquation,
                    ForwardEuler, OutputParameters, XComponent, YComponent,
                    ZComponent, MeridionalComponent, ZonalComponent,
                    RadialComponent, DGUpwind)
-from netCDF4 import Dataset
+from netCDF4 import Dataset, chartostring
 import pytest
 
 
@@ -139,7 +139,7 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
     output_data = Dataset(f'{dirname}/field_output.nc', 'r')
     for metadata_key, metadata_value in mesh_details.items():
         # Convert None or booleans to strings
-        if type(metadata_value) in [type(None), type(True)]:
+        if metadata_value is None or isinstance(metadata_value, bool):
             output_value = str(metadata_value)
         else:
             output_value = metadata_value
@@ -148,4 +148,4 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
         if type(output_value) == float:
             assert output_data[metadata_key][0] - output_value < 1e-14, error_message
         else:
-            assert output_data[metadata_key][0] == output_value, error_message
+            assert str(chartostring(output_data[metadata_key][0])) == output_value, error_message

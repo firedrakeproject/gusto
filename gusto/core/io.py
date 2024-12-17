@@ -931,7 +931,11 @@ def make_nc_dataset(filename, access, comm):
 
     Returns:
         tuple: 2-tuple of :class:`netCDF4_netCDF4.Dataset` (or `None`) and `bool`
-            indicating whether the 
+            indicating whether netCDF supports parallel usage. If parallel is not
+            supported then the dataset will be `None` on all but rank 0.
+
+    A warning will be thrown if this function is called in parallel and a
+    non-parallel netCDF4 is used.
 
     """
     try:
@@ -958,7 +962,21 @@ def make_nc_dataset(filename, access, comm):
 
 
 def gather_field_data(field, field_index, domain):
-    """TODO."""
+    """Gather global field data into a single array on rank 0.
+
+    Args:
+        field (:class:`firedrake.Function`): The field to gather.
+        field_index (int): Index used to identify the field.
+        domain (:class:`Domain`): The domain.
+
+    Returns:
+        :class:`numpy.ndarray` that is the concatenation of all DoFs on
+        all ranks.
+
+    Note that this operation is *extremely inefficient* when run with large
+    amounts of parallelism. Avoid calling if at all possible.
+
+    """
     comm = domain.mesh.comm
 
     if comm.size == 1:
