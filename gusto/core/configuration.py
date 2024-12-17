@@ -10,7 +10,8 @@ __all__ = [
     "ShallowWaterParameters",
     "EmbeddedDGOptions", "ConservativeEmbeddedDGOptions", "RecoveryOptions",
     "ConservativeRecoveryOptions", "SUPGOptions", "MixedFSOptions",
-    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
+    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters",
+    "SubcyclingOptions"
 ]
 
 
@@ -212,6 +213,12 @@ class SUPGOptions(WrapperOptions):
     default = 1/sqrt(15)
     ibp = IntegrateByParts.TWICE
 
+    # Dictionary containing keys field_name and values term_labels
+    # field_name (str): name of the field for SUPG to be applied to
+    # term_label (list): labels of terms for test function to be altered
+    #                    by SUPG
+    suboptions = None
+
 
 class MixedFSOptions(WrapperOptions):
     """Specifies options for a mixed finite element formulation
@@ -219,7 +226,12 @@ class MixedFSOptions(WrapperOptions):
     prognostic variables."""
 
     name = "mixed_options"
-    suboptions = {}
+
+    # Dictionary containing keys field_name and values suboption
+    # field_name (str): name of the field for suboption to be applied to
+    # suboption (:class:`WrapperOptions`): Wrapper options to be applied
+    #                                      to the provided field
+    suboptions = None
 
 
 class SpongeLayerParameters(Configuration):
@@ -250,3 +262,31 @@ class BoundaryLayerParameters(Configuration):
     coeff_evap = 1.1e-3         # Dimensionless surface evaporation coefficient
     height_surface_layer = 75.  # Height (m) of surface level (usually lowest level)
     mu = 100.                   # Interior penalty coefficient for vertical diffusion
+
+
+class SubcyclingOptions(Configuration):
+    """
+    Describes the process of subcycling a time discretisation, by dividing the
+    time step into a number of smaller substeps.
+
+    NB: cannot provide both the fixed_subcycles and max_subcycles parameters,
+    which will raise an error.
+    """
+
+    # Either None, or an integer, giving the number of subcycles to take
+    fixed_subcycles = None
+
+    # If adaptive subcycling, the maximum number of subcycles to take
+    max_subcycles = 10
+
+    # Either None or a float, giving the maximum Courant number for one step
+    subcycle_by_courant = None
+
+    def check_options(self):
+        """Checks that the subcycling options are valid."""
+
+        if (self.fixed_subcycles is not None
+                and self.subcycle_by_courant is not None):
+            raise ValueError(
+                "Cannot provide both fixed_subcycles and subcycle_by_courant"
+                + "parameters.")

@@ -8,7 +8,6 @@ from firedrake.matrix_free.operators import ImplicitMatrixContext
 from firedrake.petsc import PETSc
 from gusto.recovery.recovery_kernels import AverageKernel, AverageWeightings
 from pyop2.profiling import timed_region, timed_function
-from pyop2.utils import as_tuple
 from functools import partial
 
 
@@ -72,7 +71,7 @@ class VerticalHybridizationPC(PCBase):
         for i, Vi in enumerate(V):
 
             # Vector-valued spaces will have a non-empty value_shape
-            if Vi.ufl_element().value_shape:
+            if Vi.value_shape:
                 self.vidx = i
             else:
                 self.pidx = i
@@ -144,7 +143,7 @@ class VerticalHybridizationPC(PCBase):
                 if isinstance(subdom, str):
                     neumann_subdomains |= set([subdom])
                 else:
-                    neumann_subdomains |= set(as_tuple(subdom, int))
+                    neumann_subdomains |= set(subdom)
 
             # separate out the top and bottom bcs
             extruded_neumann_subdomains = neumann_subdomains & {"top", "bottom"}

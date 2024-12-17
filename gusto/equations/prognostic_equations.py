@@ -305,12 +305,13 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                 name of the active tracer.
         """
 
-        # Check if there are any conservatively transported tracers.
-        # If so, ensure that the reference density is indexed before this tracer.
+        # If there are any conservatively transported tracers, ensure
+        # that the reference density, if it is also an active tracer,
+        # is indexed earlier.
         for i in range(len(active_tracers) - 1):
             tracer = active_tracers[i]
             if tracer.transport_eqn == TransportEquationType.tracer_conservative:
-                ref_density = next(x for x in active_tracers if x.name == tracer.density_name)
+                ref_density = next((x for x in active_tracers if x.name == tracer.density_name), tracer)
                 j = active_tracers.index(ref_density)
                 if j > i:
                     # Swap the indices of the tracer and the reference density

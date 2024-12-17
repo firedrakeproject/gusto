@@ -18,7 +18,8 @@ from gusto import (
     TrapeziumRule, ShallowWaterParameters, ThermalShallowWaterEquations,
     RelativeVorticity, PotentialVorticity, SteadyStateError,
     ZonalComponent, MeridionalComponent, ThermalSWSolver,
-    xyz_vector_from_lonlatr, lonlatr_from_xyz, GeneralIcosahedralSphereMesh
+    xyz_vector_from_lonlatr, lonlatr_from_xyz, GeneralIcosahedralSphereMesh,
+    SubcyclingOptions
 )
 
 thermal_williamson_2_defaults = {
@@ -88,10 +89,11 @@ def thermal_williamson_2(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
+    subcycling_options = SubcyclingOptions(fixed_subcycles=2)
     transported_fields = [
         TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "D", fixed_subcycles=2),
-        SSPRK3(domain, "b", fixed_subcycles=2)
+        SSPRK3(domain, "D", subcycling_options=subcycling_options),
+        SSPRK3(domain, "b", subcycling_options=subcycling_options)
     ]
     transport_methods = [
         DGUpwind(eqns, "u"),
