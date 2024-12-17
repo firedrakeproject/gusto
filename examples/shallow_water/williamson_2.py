@@ -16,7 +16,7 @@ from gusto import (
     ShallowWaterKineticEnergy, ShallowWaterPotentialEnergy,
     ShallowWaterPotentialEnstrophy, rotated_lonlatr_coords,
     ZonalComponent, MeridionalComponent, rotated_lonlatr_vectors,
-    GeneralIcosahedralSphereMesh
+    GeneralIcosahedralSphereMesh, SubcyclingOptions
 )
 
 williamson_2_defaults = {
@@ -87,9 +87,10 @@ def williamson_2(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
+    subcycling_options = SubcyclingOptions(fixed_subcycles=2)
     transported_fields = [
         TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "D", fixed_subcycles=2)]
+        SSPRK3(domain, "D", subcycling_options=subcycling_options)]
     transport_methods = [
         DGUpwind(eqns, "u"),
         DGUpwind(eqns, "D")

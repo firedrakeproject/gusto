@@ -177,24 +177,18 @@ class CompressibleSolver(TimesteppingSolver):
     def _setup_solver(self):
 
         equations = self.equations
+        cp = equations.parameters.cp
         dt = self.dt
         # Set relaxation parameters. If an alternative has not been given, set
         # to semi-implicit off-centering factor
-        beta_u_ = dt*self.tau_values.get("u", self.alpha)
-        beta_t_ = dt*self.tau_values.get("theta", self.alpha)
-        beta_r_ = dt*self.tau_values.get("rho", self.alpha)
+        beta_u = dt*self.tau_values.get("u", self.alpha)
+        beta_t = dt*self.tau_values.get("theta", self.alpha)
+        beta_r = dt*self.tau_values.get("rho", self.alpha)
 
-        cp = equations.parameters.cp
         Vu = equations.domain.spaces("HDiv")
         Vu_broken = FunctionSpace(equations.domain.mesh, BrokenElement(Vu.ufl_element()))
         Vtheta = equations.domain.spaces("theta")
         Vrho = equations.domain.spaces("DG")
-
-        # Store time-stepping coefficients as UFL Constants
-        beta_u = Constant(beta_u_)
-        beta_t = Constant(beta_t_)
-        beta_r = Constant(beta_r_)
-        beta_u_cp = Constant(beta_u * cp)
 
         h_deg = Vrho.ufl_element().degree()[0]
         v_deg = Vrho.ufl_element().degree()[1]
@@ -300,16 +294,16 @@ class CompressibleSolver(TimesteppingSolver):
         eqn = (
             # momentum equation
             u_mass
-            - beta_u_cp*div(theta_w*V(w))*exnerbar*dxp
+            - beta_u*cp*div(theta_w*V(w))*exnerbar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
-            # + beta_cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_vp
-            + beta_u_cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_hp
-            + beta_u_cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tbp
-            - beta_u_cp*div(thetabar_w*w)*exner*dxp
+            # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_vp
+            + beta_u*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_hp
+            + beta_u*cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tbp
+            - beta_u*cp*div(thetabar_w*w)*exner*dxp
             # trace terms appearing after integrating momentum equation
-            + beta_u_cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
-            + beta_u_cp*dot(thetabar_w*w, n)*l0*(ds_tbp + ds_vp)
+            + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
+            + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tbp + ds_vp)
             # mass continuity equation
             + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
             + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
@@ -476,17 +470,12 @@ class BoussinesqSolver(TimesteppingSolver):
         dt = self.dt
         # Set relaxation parameters. If an alternative has not been given, set
         # to semi-implicit off-centering factor
-        beta_u_ = dt*self.tau_values.get("u", self.alpha)
-        beta_p_ = dt*self.tau_values.get("p", self.alpha)
-        beta_b_ = dt*self.tau_values.get("b", self.alpha)
+        beta_u = dt*self.tau_values.get("u", self.alpha)
+        beta_p = dt*self.tau_values.get("p", self.alpha)
+        beta_b = dt*self.tau_values.get("b", self.alpha)
         Vu = equation.domain.spaces("HDiv")
         Vb = equation.domain.spaces("theta")
         Vp = equation.domain.spaces("DG")
-
-        # Store time-stepping coefficients as UFL Constants
-        beta_u = Constant(beta_u_)
-        beta_p = Constant(beta_p_)
-        beta_b = Constant(beta_b_)
 
         # Split up the rhs vector (symbolically)
         self.xrhs = Function(self.equations.function_space)
@@ -630,9 +619,9 @@ class ThermalSWSolver(TimesteppingSolver):
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
         dt = self.dt
-        beta_u_ = dt*self.tau_values.get("u", self.alpha)
-        beta_d_ = dt*self.tau_values.get("D", self.alpha)
-        beta_b_ = dt*self.tau_values.get("b", self.alpha)
+        beta_u = dt*self.tau_values.get("u", self.alpha)
+        beta_d = dt*self.tau_values.get("D", self.alpha)
+        beta_b = dt*self.tau_values.get("b", self.alpha)
         Vu = equation.domain.spaces("HDiv")
         VD = equation.domain.spaces("DG")
         Vb = equation.domain.spaces("DG")
@@ -640,11 +629,6 @@ class ThermalSWSolver(TimesteppingSolver):
         # Check that the third field is buoyancy
         if not equation.field_names[2] == 'b':
             raise NotImplementedError("Field 'b' must exist to use the thermal linear solver in the SIQN scheme")
-
-        # Store time-stepping coefficients as UFL Constants
-        beta_u = Constant(beta_u_)
-        beta_d = Constant(beta_d_)
-        beta_b = Constant(beta_b_)
 
         # Split up the rhs vector
         self.xrhs = Function(self.equations.function_space)
@@ -680,7 +664,7 @@ class ThermalSWSolver(TimesteppingSolver):
 
         if 'coriolis' in equation.prescribed_fields._field_names:
             f = equation.prescribed_fields('coriolis')
-            eqn += beta_u_ * f * inner(w, equation.domain.perp(u)) * dx
+            eqn += beta_u * f * inner(w, equation.domain.perp(u)) * dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
@@ -866,14 +850,10 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
         dt = self.dt
-        beta_u_ = dt*self.tau_values.get("u", self.alpha)
-        beta_d_ = dt*self.tau_values.get("D", self.alpha)
+        beta_u = dt*self.tau_values.get("u", self.alpha)
+        beta_d = dt*self.tau_values.get("D", self.alpha)
         Vu = equation.domain.spaces("HDiv")
         VD = equation.domain.spaces("DG")
-
-        # Store time-stepping coefficients as UFL Constants
-        beta_u = Constant(beta_u_)
-        beta_d = Constant(beta_d_)
 
         # Split up the rhs vector
         self.xrhs = Function(self.equations.function_space)
@@ -899,7 +879,7 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
 
         if 'coriolis' in equation.prescribed_fields._field_names:
             f = equation.prescribed_fields('coriolis')
-            eqn += beta_u_ * f * inner(w, equation.domain.perp(u)) * dx
+            eqn += beta_u * f * inner(w, equation.domain.perp(u)) * dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
