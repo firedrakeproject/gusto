@@ -49,7 +49,7 @@ def handle_annotation():
         pause_annotation()
 
 
-def test_moist_thermal_williamson_5(
+def test_moist_thermal_williamson_5_sensitivity(
         tmpdir, ncells_per_edge=8, dt=600, tmax=50.*24.*60.*60.,
         dumpfreq=2880
 ):

@@ -27,7 +27,7 @@ def handle_annotation():
 
 
 @pytest.mark.parametrize("nu_is_control", [True, False])
-def test_diffusion(nu_is_control, tmpdir):
+def test_diffusion_sensitivity(nu_is_control, tmpdir):
     assert get_working_tape()._blocks == []
     n = 30
     mesh = PeriodicUnitSquareMesh(n, n)
