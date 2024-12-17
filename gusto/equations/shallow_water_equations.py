@@ -74,7 +74,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
             # transport term from depth equation. Don't include active tracers
             linearisation_map = lambda t: \
                 t.get(prognostic) in ['u', 'D'] \
-                and (any(t.has_label(time_derivative, pressure_gradient))
+                and (any(t.has_label(time_derivative, coriolis, pressure_gradient))
                      or (t.get(prognostic) in ['D'] and t.has_label(transport)))
 
         field_names = ['u', 'D']
@@ -245,13 +245,6 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
         """
-
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure gradient,
-            # Coriolis and transport term from depth equation
-            linearisation_map = lambda t: \
-                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
-                 or (t.get(prognostic) in ['D', 'b'] and t.has_label(transport)))
 
         super().__init__(domain, parameters,
                          fexpr=fexpr, topog_expr=topog_expr,
@@ -757,13 +750,6 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
         """
-
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure gradient,
-            # Coriolis and transport term from depth equation
-            linearisation_map = lambda t: \
-                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
-                 or (t.get(prognostic) == 'D' and t.has_label(transport)))
 
         super().__init__(domain, parameters,
                          fexpr=fexpr, space_names=space_names,
