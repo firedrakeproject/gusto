@@ -54,7 +54,7 @@ jobs:
       - name: Gusto tests (old netcdf)
         run: |
           . /home/firedrake/firedrake/bin/activate
-          python -m pip uninstall netCDF4
+          python -m pip uninstall -y netCDF4
           python -m pip cache remove netCDF4
           python -m pip install --only-binary netCDF4 netCDF4
           firedrake-clean
