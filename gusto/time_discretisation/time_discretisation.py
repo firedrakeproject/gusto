@@ -50,8 +50,8 @@ def wrapper_apply(original_apply):
 class TimeDiscretisation(object, metaclass=ABCMeta):
     """Base class for time discretisation schemes."""
 
-    def __init__(self, domain, field_name=None, solver_parameters=None,
-                 limiter=None, options=None):
+    def __init__(self, domain, field_name=None, subcycling_options=None,
+                 solver_parameters=None, limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -78,6 +78,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.options = options
         self.limiter = limiter
         self.courant_max = None
+        self.subcycling_options = None
+
+        if self.subcycling_options is not None:
+            self.subcycling_options.check_options()
 
         if options is not None:
             self.wrapper_name = options.name
@@ -362,6 +366,31 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             solver.snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
         return solver
 
+    def update_subcycling(self):
+        """
+        Update the time step and number of substeps when adaptively subcycling.
+        """
+
+        if (self.subcycling_options is not None
+                and self.subcycling_options.subcycle_by_courant is not None):
+
+            subcycle_by_courant = self.subcycling_options.subcycle_by_courant
+            max_subcycles = self.subcycling_options.max_subcycles
+
+            # Set number of subcycles
+            self.ncycles = math.ceil(float(self.courant_max)/subcycle_by_courant)
+
+            # Cap number of subcycles
+            if max_subcycles is not None:
+                self.ncycles = min(self.ncycles, max_subcycles)
+                logger.warning(
+                    'Adaptive subcycling: capping number of subcycles at '
+                    f'{max_subcycles}'
+                )
+
+            logger.debug(f'Performing {self.ncycles} subcycles')
+            self.dt.assign(self.original_dt/self.ncycles)
+
     @abstractmethod
     def apply(self, x_out, x_in):
         """
@@ -377,24 +406,17 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 class ExplicitTimeDiscretisation(TimeDiscretisation):
     """Base class for explicit time discretisations."""
 
-    def __init__(self, domain, field_name=None, fixed_subcycles=None,
-                 subcycle_by_courant=None, solver_parameters=None, limiter=None,
-                 options=None):
+    def __init__(self, domain, field_name=None, subcycling_options=None,
+                 solver_parameters=None, limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            fixed_subcycles (int, optional): the fixed number of sub-steps to
-                perform. This option cannot be specified with the
-                `subcycle_by_courant` argument. Defaults to None.
-            subcycle_by_courant (float, optional): specifying this option will
-                make the scheme perform adaptive sub-cycling based on the
-                Courant number. The specified argument is the maximum Courant
-                for one sub-cycle. Defaults to None, in which case adaptive
-                sub-cycling is not used. This option cannot be specified with the
-                `fixed_subcycles` argument.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
+                Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
@@ -405,14 +427,9 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                 recovery method. Defaults to None.
         """
         super().__init__(domain, field_name,
+                         subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
-
-        if fixed_subcycles is not None and subcycle_by_courant is not None:
-            raise ValueError('Cannot specify both subcycle and subcycle_by '
-                             + 'arguments to a time discretisation')
-        self.fixed_subcycles = fixed_subcycles
-        self.subcycle_by_courant = subcycle_by_courant
 
         # get default solver options if none passed in
         if solver_parameters is None:
@@ -438,8 +455,10 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
         # if user has specified a number of fixed subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
-        if self.fixed_subcycles is not None:
-            self.dt.assign(self.dt/self.fixed_subcycles)
+        if (self.subcycling_options is not None
+                and self.subcycling_options.fixed_subcycles is not None):
+            fixed_subcycles = self.subcycling_options.fixed_subcycles
+            self.dt.assign(self.dt/fixed_subcycles)
             self.ncycles = self.fixed_subcycles
         else:
             self.dt = self.dt
@@ -499,10 +518,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field.
         """
-        # If doing adaptive subcycles, update dt and ncycles here
-        if self.subcycle_by_courant is not None:
-            self.ncycles = math.ceil(float(self.courant_max)/self.subcycle_by_courant)
-            self.dt.assign(self.original_dt/self.ncycles)
+        self.update_subcycling()
 
         self.x0.assign(x_in)
         for i in range(self.ncycles):
@@ -519,15 +535,16 @@ class BackwardEuler(TimeDiscretisation):
     The backward Euler method for operator F is the most simple implicit scheme: \n
     y^(n+1) = y^n + dt*F[y^(n+1)].                                               \n
     """
-    def __init__(self, domain, field_name=None, solver_parameters=None,
-                 limiter=None, options=None):
+    def __init__(self, domain, field_name=None, subcycling_options=None,
+                 solver_parameters=None, limiter=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            fixed_subcycles (int, optional): the number of sub-steps to perform.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
@@ -543,8 +560,33 @@ class BackwardEuler(TimeDiscretisation):
                                  'pc_type': 'bjacobi',
                                  'sub_pc_type': 'ilu'}
         super().__init__(domain=domain, field_name=field_name,
+                         subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options)
+
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        """
+        Set up the time discretisation based on the equation.
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            apply_bcs (bool, optional): whether boundary conditions are to be
+                applied. Defaults to True.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
+        super().setup(equation, apply_bcs, *active_labels)
+
+        # if user has specified a number of fixed subcycles, then save this
+        # and rescale dt accordingly; else perform just one cycle using dt
+        if (self.subcycling_options is not None
+                and self.subcycling_options.fixed_subcycles is not None):
+            self.dt.assign(self.dt/self.fixed_subcycles)
+            self.ncycles = self.fixed_subcycles
+        else:
+            self.dt = self.dt
+            self.ncycles = 1
+        self.x0 = Function(self.fs)
+        self.x1 = Function(self.fs)
 
     @property
     def lhs(self):
@@ -567,6 +609,24 @@ class BackwardEuler(TimeDiscretisation):
 
         return r.form
 
+    def apply_cycle(self, x_out, x_in):
+        """
+        Apply the time discretisation through a single sub-step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
+        """
+
+        for evaluate in self.evaluate_source:
+            evaluate(x_in, self.dt)
+
+        self.x1.assign(x_in)
+        # Set initial solver guess
+        self.x_out.assign(x_in)
+        self.solver.solve()
+        x_out.assign(self.x_out)
+
     @wrapper_apply
     def apply(self, x_out, x_in):
         """
@@ -576,18 +636,14 @@ class BackwardEuler(TimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field.
         """
-        for evaluate in self.evaluate_source:
-            evaluate(x_in, self.dt)
+        self.update_subcycling()
 
-        if len(self.evaluate_source) > 0:
-            # If we have physics, use x_in as first guess
-            self.x_out.assign(x_in)
-
-        self.x1.assign(x_in)
-        # Set initial solver guess
-        self.x_out.assign(x_in)
-        self.solver.solve()
-        x_out.assign(self.x_out)
+        self.x0.assign(x_in)
+        for i in range(self.ncycles):
+            self.subcycle_idx = i
+            self.apply_cycle(self.x1, self.x0)
+            self.x0.assign(self.x1)
+        x_out.assign(self.x1)
 
 
 class ThetaMethod(TimeDiscretisation):
@@ -601,7 +657,7 @@ class ThetaMethod(TimeDiscretisation):
     for off-centring parameter theta.
     """
 
-    def __init__(self, domain, theta, field_name=None,
+    def __init__(self, domain, theta, field_name=None, subcycling_options=None,
                  solver_parameters=None, options=None):
         """
         Args:
@@ -610,6 +666,9 @@ class ThetaMethod(TimeDiscretisation):
             theta (float): the off-centring parameter. theta = 1
                 corresponds to a backward Euler method. Defaults to None.
             field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
@@ -633,10 +692,35 @@ class ThetaMethod(TimeDiscretisation):
                                  'sub_pc_type': 'ilu'}
 
         super().__init__(domain, field_name,
+                         subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
                          options=options)
 
         self.theta = theta
+
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        """
+        Set up the time discretisation based on the equation.
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            apply_bcs (bool, optional): whether boundary conditions are to be
+                applied. Defaults to True.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
+        super().setup(equation, apply_bcs, *active_labels)
+
+        # if user has specified a number of fixed subcycles, then save this
+        # and rescale dt accordingly; else perform just one cycle using dt
+        if (self.subcycling_options is not None
+                and self.subcycling_options.fixed_subcycles is not None):
+            self.dt.assign(self.dt/self.fixed_subcycles)
+            self.ncycles = self.fixed_subcycles
+        else:
+            self.dt = self.dt
+            self.ncycles = 1
+        self.x0 = Function(self.fs)
+        self.x1 = Function(self.fs)
 
     @cached_property
     def lhs(self):
@@ -660,6 +744,23 @@ class ThetaMethod(TimeDiscretisation):
 
         return r.form
 
+    def apply_cycle(self, x_out, x_in):
+        """
+        Apply the time discretisation for a single substep.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
+        """
+        for evaluate in self.evaluate_source:
+            evaluate(x_in, self.dt)
+
+        self.x1.assign(x_in)
+        # Set initial solver guess
+        self.x_out.assign(x_in)
+        self.solver.solve()
+        x_out.assign(self.x_out)
+
     @wrapper_apply
     def apply(self, x_out, x_in):
         """
@@ -669,11 +770,14 @@ class ThetaMethod(TimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
             x_in (:class:`Function`): the input field.
         """
-        self.x1.assign(x_in)
-        # Set initial solver guess
-        self.x_out.assign(x_in)
-        self.solver.solve()
-        x_out.assign(self.x_out)
+        self.update_subcycling()
+
+        self.x0.assign(x_in)
+        for i in range(self.ncycles):
+            self.subcycle_idx = i
+            self.apply_cycle(self.x1, self.x0)
+            self.x0.assign(self.x1)
+        x_out.assign(self.x1)
 
 
 class TrapeziumRule(ThetaMethod):
@@ -686,8 +790,8 @@ class TrapeziumRule(ThetaMethod):
     It is equivalent to the "theta" method with theta = 1/2.                  \n
     """
 
-    def __init__(self, domain, field_name=None, solver_parameters=None,
-                 options=None):
+    def __init__(self, domain, field_name=None, subcycling_options=None,
+                 solver_parameters=None, options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -702,6 +806,7 @@ class TrapeziumRule(ThetaMethod):
                 recovery method. Defaults to None.
         """
         super().__init__(domain, 0.5, field_name,
+                         subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
                          options=options)
 
