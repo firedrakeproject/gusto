@@ -7,21 +7,29 @@ import sys
 import time
 from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.core.meshes import get_flat_latlon_mesh
-from firedrake import (Function, functionspaceimpl, Constant,
+from firedrake import (Function, functionspaceimpl, Constant, COMM_WORLD,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 from firedrake.output import VTKFile
 from pyop2.mpi import MPI
 import numpy as np
 from gusto.core.logging import logger, update_logfile_location
+from collections import namedtuple
 
-__all__ = ["pick_up_mesh", "IO"]
+__all__ = ["pick_up_mesh", "IO", "TimeData"]
 
 
 class GustoIOError(IOError):
     pass
 
 
-def pick_up_mesh(output, mesh_name):
+# A named tuple object encapsulating data about timing
+TimeData = namedtuple(
+    'TimeData',
+    ['t', 'step', 'initial_steps', 'last_ref_update_time']
+)
+
+
+def pick_up_mesh(output, mesh_name, comm=COMM_WORLD):
     """
     Picks up a checkpointed mesh. This must be the first step of any model being
     picked up from a checkpointing run.
@@ -32,6 +40,8 @@ def pick_up_mesh(output, mesh_name):
         mesh_name (str): the name of the mesh to be picked up. The default names
             used by Firedrake are "firedrake_default" for non-extruded meshes,
             or "firedrake_default_extruded" for extruded meshes.
+        comm: MPI communicator over which the mesh should be defined after being
+            "picked-up".
 
     Returns:
         :class:`Mesh`: the mesh to be used by the model.
@@ -44,7 +54,7 @@ def pick_up_mesh(output, mesh_name):
     else:
         dumpdir = path.join("results", output.dirname)
         chkfile = path.join(dumpdir, "chkpt.h5")
-    with CheckpointFile(chkfile, 'r') as chk:
+    with CheckpointFile(chkfile, 'r', comm=comm) as chk:
         mesh = chk.load_mesh(mesh_name)
 
     if dumpdir:
@@ -531,9 +541,16 @@ class IO(object):
 
         # dump initial fields
         if not pick_up:
-            self.dump(state_fields, t, step=1)
+            step = 1
+            last_ref_update_time = None
+            initial_steps = None
+            time_data = TimeData(
+                t=t, step=step, initial_steps=initial_steps,
+                last_ref_update_time=last_ref_update_time
+            )
+            self.dump(state_fields, time_data)
 
-    def pick_up_from_checkpoint(self, state_fields):
+    def pick_up_from_checkpoint(self, state_fields, comm=COMM_WORLD):
         """
         Picks up the model's variables from a checkpoint file.
 
@@ -541,7 +558,10 @@ class IO(object):
             state_fields (:class:`StateFields`): the model's field container.
 
         Returns:
-            float: the checkpointed model time.
+            tuple of (`time_data`, `reference_profiles`): where `time_data`
+                itself is a named tuple containing the timing data.
+                The `reference_profiles` are a list of (`field_name`, expr)
+                pairs describing the reference profile fields.
         """
 
         # -------------------------------------------------------------------- #
@@ -602,12 +622,19 @@ class IO(object):
                     except AttributeError:
                         initial_steps = None
 
+                    # Try to pick up number last_ref_update_time
+                    # Not compulsory so errors allowed
+                    try:
+                        last_ref_update_time = chk.read_attribute("/", "last_ref_update_time")
+                    except AttributeError:
+                        last_ref_update_time = None
+
                     # Finally pick up time and step number
                     t = chk.read_attribute("/", "time")
                     step = chk.read_attribute("/", "step")
 
             else:
-                with CheckpointFile(chkfile, 'r') as chk:
+                with CheckpointFile(chkfile, 'r', comm) as chk:
                     mesh = self.domain.mesh
                     # Recover compulsory fields from the checkpoint
                     for field_name in self.to_pick_up:
@@ -632,6 +659,13 @@ class IO(object):
                     else:
                         initial_steps = None
 
+                    # Try to pick up last reference profile update time
+                    # Not compulsory so errors allowed
+                    if chk.has_attr("/", "last_ref_update_time"):
+                        last_ref_update_time = chk.get_attr("/", "last_ref_update_time")
+                    else:
+                        last_ref_update_time = None
+
                     # Finally pick up time
                     t = chk.get_attr("/", "time")
                     step = chk.get_attr("/", "step")
@@ -647,9 +681,14 @@ class IO(object):
             if hasattr(diagnostic_field, "init_field_set"):
                 diagnostic_field.init_field_set = True
 
-        return t, reference_profiles, step, initial_steps
+        time_data = TimeData(
+            t=t, step=step, initial_steps=initial_steps,
+            last_ref_update_time=last_ref_update_time
+        )
 
-    def dump(self, state_fields, t, step, initial_steps=None):
+        return time_data, reference_profiles
+
+    def dump(self, state_fields, time_data):
         """
         Dumps all of the required model output.
 
@@ -659,12 +698,20 @@ class IO(object):
 
         Args:
             state_fields (:class:`StateFields`): the model's field container.
-            t (float): the simulation's current time.
-            step (int): the number of time steps.
-            initial_steps (int, optional): the number of initial time steps
-                completed by a multi-level time scheme. Defaults to None.
+            time_data (namedtuple): contains information relating to the time in
+                the simulation. The tuple is structured as follows:
+                - t: current time in s
+                - step: the index of the time step
+                - initial_steps: number of initial time steps completed by a
+                  multi-level time scheme (could be None)
+                - last_ref_update_time: the last time in s that the reference
+                  profiles were updated (could be None)
         """
         output = self.output
+        t = time_data.t
+        step = time_data.step
+        initial_steps = time_data.initial_steps
+        last_ref_update_time = time_data.last_ref_update_time
 
         # Diagnostics:
         # Compute diagnostic fields
@@ -688,6 +735,8 @@ class IO(object):
                 self.chkpt.write_attribute("/", "step", step)
                 if initial_steps is not None:
                     self.chkpt.write_attribute("/", "initial_steps", initial_steps)
+                if last_ref_update_time is not None:
+                    self.chkpt.write_attribute("/", "last_ref_update_time", last_ref_update_time)
             else:
                 with CheckpointFile(self.chkpt_path, 'w') as chk:
                     chk.save_mesh(self.domain.mesh)
@@ -697,6 +746,8 @@ class IO(object):
                     chk.set_attr("/", "step", step)
                     if initial_steps is not None:
                         chk.set_attr("/", "initial_steps", initial_steps)
+                    if last_ref_update_time is not None:
+                        chk.set_attr("/", "last_ref_update_time", last_ref_update_time)
 
         if (next(self.dumpcount) % output.dumpfreq) == 0:
             if output.dump_nc:

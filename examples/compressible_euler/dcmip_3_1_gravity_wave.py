@@ -17,9 +17,7 @@ from gusto import (
     TrapeziumRule, SUPGOptions, lonlatr_from_xyz, CompressibleParameters,
     CompressibleEulerEquations, CompressibleSolver, ZonalComponent,
     compressible_hydrostatic_balance, Perturbation, GeneralCubedSphereMesh,
-    Timestepper, IMEX_SSP3, split_continuity_form, explicit, implicit,
-    time_derivative, transport, IMEXRungeKutta, split_hv_advective_form,
-    horizontal, vertical, Split_DGUpwind
+    SubcyclingOptions
 )
 import numpy as np
 
@@ -89,22 +87,6 @@ def dcmip_3_1_gravity_wave(
     eqns = CompressibleEulerEquations(
         domain, parameters, u_transport_option=u_eqn_type
     )
-    print("Opt Cores:", eqns.X.function_space().dim()/50000.)
-    eqns = split_continuity_form(eqns)
-    eqns = split_hv_advective_form(eqns, "theta")
-    eqns = split_hv_advective_form(eqns, "rho")
-    eqns = split_hv_advective_form(eqns, "u")
-    # eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
-    # #eqns.label_terms(lambda t: not any(t.has_label(time_derivative, horizontal)), implicit)
-    # eqns.label_terms(lambda t: t.has_label(transport), explicit)
-    # eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(vertical), implicit)
-    # eqns.label_terms(lambda t: t.has_label(transport) and not any(t.has_label(horizontal, vertical)), explicit)
-
-    eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
-    #eqns.label_terms(lambda t: not any(t.has_label(time_derivative, horizontal)), implicit)
-    eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(horizontal), explicit)
-    eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(vertical), explicit)
-    eqns.label_terms(lambda t: t.has_label(transport) and not (t.has_label(horizontal) and  t.has_label(vertical)), explicit)
     # I/O
     output = OutputParameters(
         dirname=dirname, dumpfreq=dumpfreq, dump_vtus=False, dump_nc=True
@@ -115,61 +97,21 @@ def dcmip_3_1_gravity_wave(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    # transported_fields = [
-    #     TrapeziumRule(domain, "u"),
-    #     SSPRK3(domain, "rho", fixed_subcycles=2),    
-    #     SSPRK3(domain, "theta", options=SUPGOptions(), fixed_subcycles=2)
-    # ]
+    subcycling_options = SubcyclingOptions(fixed_subcycles=2)
+    transported_fields = [
+        TrapeziumRule(domain, "u"),
+        SSPRK3(domain, "rho", subcycling_options=subcycling_options),
+        SSPRK3(
+            domain, "theta", options=SUPGOptions(),
+            subcycling_options=subcycling_options
+        ),
+    ]
     transport_methods = [
-        Split_DGUpwind(eqns, "u"), Split_DGUpwind(eqns, "rho"), Split_DGUpwind(eqns, "theta")
+        DGUpwind(eqns, "u"), DGUpwind(eqns, "rho"), DGUpwind(eqns, "theta")
     ]
 
-    nl_solver_parameters = {
-    "snes_converged_reason": None,
-    "snes_lag_preconditioner_persists":None,
-    "snes_lag_preconditioner":-2,
-    "mat_type": "matfree",
-    "ksp_type": "gmres",
-    "ksp_converged_reason": None,
-    "ksp_atol": 1e-5,
-    "ksp_rtol": 1e-5,
-    "ksp_max_it": 400,
-    "pc_type": "python",
-    "pc_python_type": "firedrake.AssembledPC",
-    "assembled_pc_star_sub_sub_pc_type": "lu",
-    "assembled_pc_type": "python",
-    "assembled_pc_python_type": "firedrake.ASMStarPC",
-    "assembled_pc_star_construct_dim": 0,
-    "assembled_pc_star_sub_sub_pc_factor_mat_ordering_type": "rcm",
-    "assembled_pc_star_sub_sub_pc_factor_reuse_ordering": None,
-    "assembled_pc_star_sub_sub_pc_factor_reuse_fill": None,
-    "assembled_pc_star_sub_sub_pc_factor_fill": 1.2}
 
-    nl_solver_parameters = {
-    "mat_type": "matfree",
-    "ksp_type": "gmres",
-    "ksp_converged_reason": None,
-    "ksp_atol": 1e-5,
-    "ksp_rtol": 1e-5,
-    "ksp_max_it": 400,
-    "pc_type": "python",
-    "pc_python_type": "firedrake.AssembledPC",
-    "assembled_pc_star_sub_sub_pc_type": "lu",
-    "assembled_pc_type": "python",
-    "assembled_pc_python_type": "firedrake.ASMStarPC",
-    "assembled_pc_star_construct_dim": 0,
-    "assembled_pc_star_sub_sub_pc_factor_mat_ordering_type": "rcm",
-    "assembled_pc_star_sub_sub_pc_factor_reuse_ordering": None,
-    "assembled_pc_star_sub_sub_pc_factor_reuse_fill": None,
-    "assembled_pc_star_sub_sub_pc_factor_fill": 1.2}
-
-
-    # IMEX time stepper
-
-    butcher_imp = np.array([[0.0, 0.0], [0.0, 0.5], [0.0, 1.]])
-    butcher_exp = np.array([[0.0, 0.0], [0.5, 0.0], [0.0, 1.]])
-    scheme = IMEXRungeKutta(domain, butcher_imp, butcher_exp, nonlinear_solver_parameters=nl_solver_parameters)
-    stepper = Timestepper(eqns, scheme, io, spatial_methods=transport_methods)
+    stepper = SemiImplicitQuasiNewton(eqns, io, spatial_methods=transport_methods, transported_fields=transported_fields)
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #

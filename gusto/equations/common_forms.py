@@ -14,7 +14,6 @@ __all__ = ["advection_form", "advection_form_1d", "continuity_form",
            "kinetic_energy_form", "advection_equation_circulation_form",
            "diffusion_form", "diffusion_form_1d",
            "linear_advection_form", "linear_continuity_form",
-           "linear_continuity_form_1d",
            "split_continuity_form", "tracer_conservative_form", "split_hv_advective_form"]
 
 
@@ -134,26 +133,7 @@ def linear_continuity_form(test, qbar, ubar):
         :class:`LabelledForm`: a labelled transport form.
     """
 
-    L = qbar*test*div(ubar)*dx
-    form = transporting_velocity(L, ubar)
-
-    return transport(form, TransportEquationType.conservative)
-
-
-def linear_continuity_form_1d(test, qbar, ubar):
-    """
-    The form corresponding to the linearised continuity transport operator.
-
-    Args:
-        test (:class:`TestFunction`): the test function.
-        qbar (:class:`ufl.Expr`): the variable to be transported.
-        ubar (:class:`ufl.Expr`): the transporting velocity.
-
-    Returns:
-        :class:`LabelledForm`: a labelled transport form.
-    """
-
-    L = qbar*test*ubar.dx(0)*dx
+    L = test*div(qbar*ubar)*dx
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.conservative)
