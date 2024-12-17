@@ -87,7 +87,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
     # ---------------------------------------------------------------------------
 
     def __init__(self, domain, butcher_matrix, field_name=None,
-                 fixed_subcycles=None, subcycle_by_courant=None,
+                 subcycling_options=None,
                  rk_formulation=RungeKuttaFormulation.increment,
                  solver_parameters=None, limiter=None, options=None,
                  augmentation=None):
@@ -99,15 +99,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 of a butcher tableau defining a given Runge Kutta scheme.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            fixed_subcycles (int, optional): the fixed number of sub-steps to
-                perform. This option cannot be specified with the
-                `subcycle_by_courant` argument. Defaults to None.
-            subcycle_by_courant (float, optional): specifying this option will
-                make the scheme perform adaptive sub-cycling based on the
-                Courant number. The specified argument is the maximum Courant
-                for one sub-cycle. Defaults to None, in which case adaptive
-                sub-cycling is not used. This option cannot be specified with
-                the `fixed_subcycles` argument.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
+                Defaults to None.
             rk_formulation (:class:`RungeKuttaFormulation`, optional):
                 an enumerator object, describing the formulation of the Runge-
                 Kutta scheme. Defaults to the increment form.
@@ -119,10 +113,12 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         super().__init__(domain, field_name=field_name,
-                         fixed_subcycles=fixed_subcycles,
-                         subcycle_by_courant=subcycle_by_courant,
+                         subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options,
                          augmentation=augmentation)
@@ -494,10 +490,10 @@ class ForwardEuler(ExplicitRungeKutta):
     y^(n+1) = y^n + dt*k0                                                     \n
     """
     def __init__(
-            self, domain, field_name=None,
-            fixed_subcycles=None, subcycle_by_courant=None,
+            self, domain, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
-            solver_parameters=None, limiter=None, options=None
+            solver_parameters=None, limiter=None, options=None,
+            augmentation=None
     ):
         """
         Args:
@@ -505,15 +501,9 @@ class ForwardEuler(ExplicitRungeKutta):
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            fixed_subcycles (int, optional): the fixed number of sub-steps to
-                perform. This option cannot be specified with the
-                `subcycle_by_courant` argument. Defaults to None.
-            subcycle_by_courant (float, optional): specifying this option will
-                make the scheme perform adaptive sub-cycling based on the
-                Courant number. The specified argument is the maximum Courant
-                for one sub-cycle. Defaults to None, in which case adaptive
-                sub-cycling is not used. This option cannot be specified with
-                the `fixed_subcycles` argument.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
+                Defaults to None.
             rk_formulation (:class:`RungeKuttaFormulation`, optional):
                 an enumerator object, describing the formulation of the Runge-
                 Kutta scheme. Defaults to the increment form.
@@ -525,16 +515,19 @@ class ForwardEuler(ExplicitRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
 
         butcher_matrix = np.array([1.]).reshape(1, 1)
 
         super().__init__(domain, butcher_matrix, field_name=field_name,
-                         fixed_subcycles=fixed_subcycles,
-                         subcycle_by_courant=subcycle_by_courant,
+                         subcycling_options=subcycling_options,
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
 
 
 class SSPRK3(ExplicitRungeKutta):
@@ -548,8 +541,7 @@ class SSPRK3(ExplicitRungeKutta):
     y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + 4*k2)                                 \n
     """
     def __init__(
-            self, domain, field_name=None,
-            fixed_subcycles=None, subcycle_by_courant=None,
+            self, domain, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
             solver_parameters=None, limiter=None, options=None,
             augmentation=None
@@ -560,15 +552,9 @@ class SSPRK3(ExplicitRungeKutta):
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            fixed_subcycles (int, optional): the fixed number of sub-steps to
-                perform. This option cannot be specified with the
-                `subcycle_by_courant` argument. Defaults to None.
-            subcycle_by_courant (float, optional): specifying this option will
-                make the scheme perform adaptive sub-cycling based on the
-                Courant number. The specified argument is the maximum Courant
-                for one sub-cycle. Defaults to None, in which case adaptive
-                sub-cycling is not used. This option cannot be specified with
-                the `fixed_subcycles` argument.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
+                Defaults to None.
             rk_formulation (:class:`RungeKuttaFormulation`, optional):
                 an enumerator object, describing the formulation of the Runge-
                 Kutta scheme. Defaults to the increment form.
@@ -580,6 +566,9 @@ class SSPRK3(ExplicitRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
 
         butcher_matrix = np.array([
@@ -588,8 +577,7 @@ class SSPRK3(ExplicitRungeKutta):
             [1./6., 1./6., 2./3.]
         ])
         super().__init__(domain, butcher_matrix, field_name=field_name,
-                         fixed_subcycles=fixed_subcycles,
-                         subcycle_by_courant=subcycle_by_courant,
+                         subcycling_options=subcycling_options,
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options,
@@ -612,10 +600,10 @@ class RK4(ExplicitRungeKutta):
     where superscripts indicate the time-level.                               \n
     """
     def __init__(
-            self, domain, field_name=None,
-            fixed_subcycles=None, subcycle_by_courant=None,
+            self, domain, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
-            solver_parameters=None, limiter=None, options=None
+            solver_parameters=None, limiter=None, options=None,
+            augmentation=None
     ):
         """
         Args:
@@ -623,15 +611,9 @@ class RK4(ExplicitRungeKutta):
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            fixed_subcycles (int, optional): the fixed number of sub-steps to
-                perform. This option cannot be specified with the
-                `subcycle_by_courant` argument. Defaults to None.
-            subcycle_by_courant (float, optional): specifying this option will
-                make the scheme perform adaptive sub-cycling based on the
-                Courant number. The specified argument is the maximum Courant
-                for one sub-cycle. Defaults to None, in which case adaptive
-                sub-cycling is not used. This option cannot be specified with
-                the `fixed_subcycles` argument.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
+                Defaults to None.
             rk_formulation (:class:`RungeKuttaFormulation`, optional):
                 an enumerator object, describing the formulation of the Runge-
                 Kutta scheme. Defaults to the increment form.
@@ -643,6 +625,9 @@ class RK4(ExplicitRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         butcher_matrix = np.array([
             [0.5, 0., 0., 0.],
@@ -651,11 +636,11 @@ class RK4(ExplicitRungeKutta):
             [1./6., 1./3., 1./3., 1./6.]
         ])
         super().__init__(domain, butcher_matrix, field_name=field_name,
-                         fixed_subcycles=fixed_subcycles,
-                         subcycle_by_courant=subcycle_by_courant,
+                         subcycling_options=subcycling_options,
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
 
 
 class Heun(ExplicitRungeKutta):
@@ -672,10 +657,10 @@ class Heun(ExplicitRungeKutta):
     number.
     """
     def __init__(
-            self, domain, field_name=None,
-            fixed_subcycles=None, subcycle_by_courant=None,
+            self, domain, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
-            solver_parameters=None, limiter=None, options=None
+            solver_parameters=None, limiter=None, options=None,
+            augmentation=None
     ):
         """
         Args:
@@ -683,15 +668,9 @@ class Heun(ExplicitRungeKutta):
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
-            fixed_subcycles (int, optional): the fixed number of sub-steps to
-                perform. This option cannot be specified with the
-                `subcycle_by_courant` argument. Defaults to None.
-            subcycle_by_courant (float, optional): specifying this option will
-                make the scheme perform adaptive sub-cycling based on the
-                Courant number. The specified argument is the maximum Courant
-                for one sub-cycle. Defaults to None, in which case adaptive
-                sub-cycling is not used. This option cannot be specified with the
-                `fixed_subcycles` argument.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
+                Defaults to None.
             rk_formulation (:class:`RungeKuttaFormulation`, optional):
                 an enumerator object, describing the formulation of the Runge-
                 Kutta scheme. Defaults to the increment form.
@@ -703,6 +682,9 @@ class Heun(ExplicitRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
 
         butcher_matrix = np.array([
@@ -710,8 +692,8 @@ class Heun(ExplicitRungeKutta):
             [0.5, 0.5]
         ])
         super().__init__(domain, butcher_matrix, field_name=field_name,
-                         fixed_subcycles=fixed_subcycles,
-                         subcycle_by_courant=subcycle_by_courant,
+                         subcycling_options=subcycling_options,
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=None)
