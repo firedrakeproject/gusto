@@ -10,7 +10,7 @@ from firedrake import (
 from gusto import (
     Domain, IO, OutputParameters, DGUpwind, ShallowWaterParameters,
     ThermalShallowWaterEquations, lonlatr_from_xyz,
-    GeneralIcosahedralSphereMesh,
+    GeneralIcosahedralSphereMesh, MeridionalComponent, ZonalComponent,
     RelativeVorticity, PotentialVorticity, PartitionedVapour,
     PartitionedCloud, RungeKuttaFormulation, SSPRK3, ThermalSWSolver,
     SemiImplicitQuasiNewton, xyz_vector_from_lonlatr
@@ -72,9 +72,10 @@ def moist_thermal_gw(
 
     # IO
     output = OutputParameters(
-        dirname=dirname, dumpfreq=dumpfreq, dump_nc=False, dump_vtus=True
+        dirname=dirname, dumpfreq=dumpfreq, dump_nc=True, dump_vtus=True
     )
-    diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
+    diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'),
+                         RelativeVorticity(), PotentialVorticity(),
                          PartitionedVapour(eqns), PartitionedCloud(eqns)]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
