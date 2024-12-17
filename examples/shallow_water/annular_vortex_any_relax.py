@@ -55,7 +55,7 @@ restart = False
 restart_name = 'Free_run/annular_vortex_mars_60-70_free_A0-0-norel_len-30sols_tracer_tophat-80_ref-4'
 
 # length of this run, time to start from (only relevant if doing a restart)
-rundays = 30
+rundays = 300
 start_time = 0
 dt = (0.5)**(ref_lev-4) * 450.
 
@@ -65,7 +65,7 @@ tracer = True
 hat_edge = 80
 
 # any extra info to include in the directory name
-extra_name = '_continuity'
+extra_name = ''
 
 #####################################################################################
 

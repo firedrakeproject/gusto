@@ -29,7 +29,7 @@ def gaussian_lat_lon_grid(nlat, nlon):
 # Directory for results and plots
 # ---------------------------------------------------------------------------- #
 # When copying this example these should not be relative to this file
-filepath = 'Free_run/annular_vortex_mars_60-70_free_A0-0-norel_len-30sols_tracer_tophat-80_ref-5'
+filepath = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-30sols_tracer_tophat-80_ref-4_continuity'
 
 results_dir = f'/data/home/sh1293/results/{filepath}'
 # plot_dir = f'{results_dir}/plots'
@@ -42,14 +42,14 @@ times = np.array(data_file['time'])
 
 # lats, lons = gaussian_lat_lon_grid(40, 80)
 lats = np.arange(-90, 91, 1.5)
-lons = np.arange(-180, 181, 1.5)
+lons = np.arange(-180, 181, 3)
 X, Y = np.meshgrid(lons, lats)
 
 ds_list=[]
 for i in range(0, len(times)):
 # for i in [0, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1]:
     print(i)
-    for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity', 'tracer', 'rainsum', 'CO2cond_flag', 'CO2cond_flag_cumulative']:
+    for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity', 'tracer', 'CO2cond_flag', 'CO2cond_flag_cumulative']:
         try:
             field_data = extract_gusto_field(data_file, field_name, time_idx=i)
         except:
