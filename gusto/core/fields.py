@@ -28,6 +28,12 @@ class Fields(object):
                 variables. Defaults to None.
         """
 
+        if name == 'X':
+            raise ValueError(
+                'As "X" is used for the generic field state, it is not allowed '
+                + 'as the name of a field -- please choose a different name!'
+            )
+
         value = Function(space, name=name)
         setattr(self, name, value)
         self.fields.append(value)
@@ -35,6 +41,14 @@ class Fields(object):
         if len(space) > 1:
             assert len(space) == len(subfield_names)
             for field_name, field in zip(subfield_names, value.subfunctions):
+
+                if field_name == 'X':
+                    raise ValueError(
+                        'As "X" is used for the generic field state, it is not '
+                        + 'allowed as the name of a field -- please choose a '
+                        + 'different name!'
+                    )
+
                 setattr(self, field_name, field)
                 field.rename(field_name)
                 self.fields.append(field)
