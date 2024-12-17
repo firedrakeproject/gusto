@@ -25,7 +25,8 @@ def handle_annotation():
         pause_annotation()
 
 
-def test_diffusion(tmpdir):
+@pytest.mark.parametrize("nu_is_control", [True, False])
+def test_diffusion(nu_is_control, tmpdir):
     n = 30
     mesh = PeriodicUnitSquareMesh(n, n)
     output = OutputParameters(dirname=str(tmpdir))
@@ -56,8 +57,6 @@ def test_diffusion(tmpdir):
     u = timestepper.fields("f")
     J = assemble(inner(u, u)*dx)
 
-    # flag to switch between nu and u for control variable
-    nu_is_control = True
     if nu_is_control:
         control = Control(nu)
         h = Function(R, val=0.0001)  # the direction of the perturbation
@@ -67,8 +66,9 @@ def test_diffusion(tmpdir):
 
     Jhat = ReducedFunctional(J, control)  # the functional as a pure function of nu
 
-    assert np.allclose(J, Jhat(nu))
     if nu_is_control:
+        assert np.allclose(J, Jhat(nu))
         assert taylor_test(Jhat, nu, h) > 1.95
     else:
+        assert np.allclose(J, Jhat(u))
         assert taylor_test(Jhat, u, h) > 1.95
