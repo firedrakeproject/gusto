@@ -21,6 +21,7 @@ from firedrake import (
     SpatialCoordinate, as_vector, pi, sqrt, min_value, exp, cos, sin, assemble, dx, inner, Function
 )
 from firedrake.adjoint import *
+from pyadjoint import get_working_tape
 from gusto import (
     Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
     ShallowWaterParameters, ShallowWaterEquations, lonlatr_from_xyz,
@@ -52,7 +53,7 @@ def test_moist_thermal_williamson_5(
         tmpdir, ncells_per_edge=8, dt=600, tmax=50.*24.*60.*60.,
         dumpfreq=2880
 ):
-
+    assert get_working_tape()._blocks == []
     # ------------------------------------------------------------------------ #
     # Parameters for test case
     # ------------------------------------------------------------------------ #

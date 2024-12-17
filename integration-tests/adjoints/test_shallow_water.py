@@ -3,6 +3,7 @@ import numpy as np
 
 from firedrake import *
 from firedrake.adjoint import *
+from pyadjoint import get_working_tape
 from gusto import *
 
 
@@ -26,6 +27,7 @@ def handle_annotation():
 
 
 def test_shallow_water(tmpdir):
+    assert get_working_tape()._blocks == []
     # setup shallow water parameters
     R = 6371220.
     H = 5960.

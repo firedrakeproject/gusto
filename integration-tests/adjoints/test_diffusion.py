@@ -3,6 +3,7 @@ import numpy as np
 
 from firedrake import *
 from firedrake.adjoint import *
+from pyadjoint import get_working_tape
 from gusto import *
 
 
@@ -27,6 +28,7 @@ def handle_annotation():
 
 @pytest.mark.parametrize("nu_is_control", [True, False])
 def test_diffusion(nu_is_control, tmpdir):
+    assert get_working_tape()._blocks == []
     n = 30
     mesh = PeriodicUnitSquareMesh(n, n)
     output = OutputParameters(dirname=str(tmpdir))
