@@ -2,7 +2,7 @@
 
 from os import path, makedirs
 import itertools
-from netCDF4 import Dataset
+from netCDF4 import Dataset, stringtochar
 import sys
 import time
 from gusto.diagnostics import Diagnostics, CourantNumber
@@ -769,10 +769,10 @@ class IO(object):
         if nc_supports_parallel or comm.rank == 0:
             nc_field_file.createDimension('time', None)
             nc_field_file.createVariable('time', float, ('time',))
-            # https://unidata.github.io/netcdf4-python/#parallel-io
-            nc_field_file['time'].set_collective(True)
 
             # Add mesh metadata
+            nc_field_file.createDimension("dim_one", 1)
+            nc_field_file.createDimension("dim_string", 256)
             for metadata_key, metadata_value in self.domain.metadata.items():
                 # If the metadata is None or a Boolean, try converting to string
                 # This is because netCDF can't take these types as options
@@ -781,10 +781,15 @@ class IO(object):
                 else:
                     output_value = metadata_value
 
-                # Get the type from the metadata itself
-                nc_field_file.createDimension(metadata_key, 1)
-                nc_field_file.createVariable(metadata_key, type(output_value), (metadata_key,))
-                nc_field_file.variables[metadata_key] = output_value
+                # TODO: Add comment explaining things
+                if isinstance(output_value, str):
+                    nc_field_file.createVariable(metadata_key, 'S1', ('dim_one', 'dim_string'))
+                    nc_field_file[metadata_key].set_collective(True)
+                    output_char_array = np.array([output_value], dtype='S256')
+                    nc_field_file[metadata_key][:] = stringtochar(output_char_array)
+                else:
+                    nc_field_file.createVariable(metadata_key, type(output_value), ('dim_one',))
+                    nc_field_file[metadata_key][0] = output_value
 
         # Add coordinates if they are not already in the file
         for space_name in space_names:
@@ -804,13 +809,13 @@ class IO(object):
                     if nc_supports_parallel or comm.rank == 0:
                         nc_field_file.createVariable(f'{coord_name}_{space_name}', float, f'coords_{space_name}')
 
-                if nc_supports_parallel:
-                    start, stop = self.domain.coords.parallel_array_lims[space_name]
-                    nc_field_file.variables[f'{coord_name}_{space_name}'][start:stop] = coord_field.dat.data_ro
-                else:
-                    global_coord_fields = gather_field_data(coord_field, i, self.domain)
-                    if comm.rank == 0:
-                        nc_field_file.variables[f'{coord_name}_{space_name}'][...] = global_coord_field
+                    if nc_supports_parallel:
+                        start, stop = self.domain.coords.parallel_array_lims[space_name]
+                        nc_field_file.variables[f'{coord_name}_{space_name}'][start:stop] = coord_field.dat.data_ro
+                    else:
+                        global_coord_field = gather_field_data(coord_field, i, self.domain)
+                        if comm.rank == 0:
+                            nc_field_file.variables[f'{coord_name}_{space_name}'][...] = global_coord_field
 
         # Create variable for storing the field values
         for field in self.to_dump:
@@ -829,14 +834,20 @@ class IO(object):
                     nc_field_file[field_name].createVariable('field_values', float, (f'coords_{space_name}', 'time'))
         if nc_supports_parallel or comm.rank == 0:
             nc_field_file.close()
+        print("X", flush=True)
 
     def write_nc_dump(self, t):
         comm = self.mesh.comm
+        print(comm.rank, "AA", flush=True)
         nc_field_file, nc_supports_parallel = make_nc_dataset(self.nc_filename, 'a', comm)
 
-        # Open file to add time
-        if nc_supports_parallel or comm.rank == 0:
+        if nc_field_file and 'time' in nc_field_file.variables.keys():
+            # https://unidata.github.io/netcdf4-python/#parallel-io
+            if nc_supports_parallel:
+                nc_field_file['time'].set_collective(True)
             nc_field_file['time'][self.field_t_idx] = t
+
+        print(comm.rank, "A", flush=True)
 
         # Loop through output field data here
         for i, field in enumerate(self.to_dump):
@@ -853,18 +864,23 @@ class IO(object):
             # Scalar elements
             # -------------------------------------------------------- #
             else:
-                nc_field_file[field_name]['field_values'].set_collective(True)
-
+                print(comm.rank, "AB", flush=True)
                 if nc_supports_parallel:
+                    nc_field_file[field_name]['field_values'].set_collective(True)
                     start, stop = self.domain.coords.parallel_array_lims[space_name]
                     nc_field_file[field_name]['field_values'][start:stop, self.field_t_idx] = field.dat.data_ro
                 else:
+                    print("BA", flush=True)
                     global_field_data = gather_field_data(field, i, self.domain)
                     if comm.rank == 0:
+                        print("BB", flush=True)
                         nc_field_file[field_name]['field_values'][:, self.field_t_idx] = global_field_data
+                        print("BC", flush=True)
 
+        print("C", flush=True)
         if nc_supports_parallel or comm.rank == 0:
             nc_field_file.close()
+        print("D", flush=True)
 
         self.field_t_idx += 1
 
@@ -931,10 +947,6 @@ def make_nc_dataset(filename, access, comm):
     try:
         nc_field_file = Dataset(filename, access, parallel=True)
         nc_supports_parallel = True
-
-        # https://unidata.github.io/netcdf4-python/#parallel-io
-        if 'time' in nc_field_file.variables.keys():
-            nc_field_file['time'].set_collective(True)
     except ValueError:
         # parallel netCDF not available, use the serial version instead
         if comm.size > 1:
@@ -957,11 +969,12 @@ def make_nc_dataset(filename, access, comm):
 
 def gather_field_data(field, field_index, domain):
     """TODO."""
-    if domain.comm.size == 1:
+    comm = domain.mesh.comm
+
+    if comm.size == 1:
         return field.dat.data_ro
 
-    comm = domain.comm
-    space_name = field.function_space().name()
+    space_name = field.function_space().name
 
     if comm.rank == 0:
         # Set up array to store full data in
@@ -973,11 +986,13 @@ def gather_field_data(field, field_index, domain):
 
         # Receive data from other processors
         for rank in range(1, comm.size):
+            print("receiving on ",comm.size*field_index + rank)
             incoming_data = comm.recv(source=rank, tag=comm.size*field_index + rank)
             start, stop = stop, stop + incoming_data.size
             global_data[start:stop] = incoming_data
 
     else:
+        print("sending on ",comm.size*field_index + comm.rank)
         comm.send(field.dat.data_ro, dest=0, tag=comm.size*field_index + comm.rank)
         global_data = None
 

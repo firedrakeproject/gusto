@@ -39,7 +39,7 @@ jobs:
           firedrake-clean
           export GUSTO_PARALLEL_LOG=FILE
           export PYOP2_CFLAGS=-O0
-          python -m pip uninstall netCDF4
+          python -m pip uninstall -y netCDF4
           export HDF5_DIR=$PETSC_DIR/packages
           export NETCDF4_DIR=$PETSC_DIR/packages
           python -m pip install --no-binary netCDF4 --no-build-isolation netCDF4
