@@ -834,11 +834,9 @@ class IO(object):
                     nc_field_file[field_name].createVariable('field_values', float, (f'coords_{space_name}', 'time'))
         if nc_supports_parallel or comm.rank == 0:
             nc_field_file.close()
-        print("X", flush=True)
 
     def write_nc_dump(self, t):
         comm = self.mesh.comm
-        print(comm.rank, "AA", flush=True)
         nc_field_file, nc_supports_parallel = make_nc_dataset(self.nc_filename, 'a', comm)
 
         if nc_field_file and 'time' in nc_field_file.variables.keys():
@@ -846,8 +844,6 @@ class IO(object):
             if nc_supports_parallel:
                 nc_field_file['time'].set_collective(True)
             nc_field_file['time'][self.field_t_idx] = t
-
-        print(comm.rank, "A", flush=True)
 
         # Loop through output field data here
         for i, field in enumerate(self.to_dump):
@@ -864,23 +860,17 @@ class IO(object):
             # Scalar elements
             # -------------------------------------------------------- #
             else:
-                print(comm.rank, "AB", flush=True)
                 if nc_supports_parallel:
                     nc_field_file[field_name]['field_values'].set_collective(True)
                     start, stop = self.domain.coords.parallel_array_lims[space_name]
                     nc_field_file[field_name]['field_values'][start:stop, self.field_t_idx] = field.dat.data_ro
                 else:
-                    print("BA", flush=True)
                     global_field_data = gather_field_data(field, i, self.domain)
                     if comm.rank == 0:
-                        print("BB", flush=True)
                         nc_field_file[field_name]['field_values'][:, self.field_t_idx] = global_field_data
-                        print("BC", flush=True)
 
-        print("C", flush=True)
         if nc_supports_parallel or comm.rank == 0:
             nc_field_file.close()
-        print("D", flush=True)
 
         self.field_t_idx += 1
 
@@ -986,13 +976,11 @@ def gather_field_data(field, field_index, domain):
 
         # Receive data from other processors
         for rank in range(1, comm.size):
-            print("receiving on ",comm.size*field_index + rank)
             incoming_data = comm.recv(source=rank, tag=comm.size*field_index + rank)
             start, stop = stop, stop + incoming_data.size
             global_data[start:stop] = incoming_data
 
     else:
-        print("sending on ",comm.size*field_index + comm.rank)
         comm.send(field.dat.data_ro, dest=0, tag=comm.size*field_index + comm.rank)
         global_data = None
 

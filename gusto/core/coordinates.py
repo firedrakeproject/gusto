@@ -111,12 +111,9 @@ class Coordinates(object):
             self.chi_coords[space_name].append(Function(space).interpolate(self.coords[i]))
 
         # Determine the offsets of the local piece of data into the global array
-        # NOTE: Could come from a section?? getOffsetRange?
         nlocal_dofs = len(self.chi_coords[space_name][0].dat.data_ro)
-        sendbuf = np.asarray([nlocal_dofs], dtype=IntType)
-        comm.scan(sendbuf)
-        stop = sendbuf[0]
-        start = stop - nlocal_dofs
+        start = comm.exscan(nlocal_dofs) or 0
+        stop = start + nlocal_dofs
         self.parallel_array_lims[space_name] = (start, stop)
 
     def get_column_data(self, field, domain):
