@@ -99,6 +99,24 @@ class ShallowWaterEquations(PrognosticEquationSet):
             self.residual, self.linearisation_map)
 
     def _setup_residual(self, fexpr, topog_expr, u_transport_option):
+        """
+        Sets up the residual for the shallow water equations. This
+        is separate from the __init__ method because the thermal
+        shallow water equation class expands on this equation set by
+        adding additional fields that depend on the formulation. This
+        increases the size of the mixed function space and the
+        residual must be setup after this has happened.
+
+        Args:
+            fexpr (:class:`ufl.Expr`): an expression for the Coroilis
+                parameter.
+            topog_expr (:class:`ufl.Expr`): an expression for the
+                bottom surface of the fluid.
+            u_transport_option (str): specifies the transport term
+                used for the velocity equation. Supported options are:
+                'vector_invariant_form', 'vector_advection_form', and
+                'circulation_form'.
+        """
 
         g = self.parameters.g
 
@@ -337,6 +355,8 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                      or (t.get(prognostic) in linear_transported
                          and t.has_label(transport)))
 
+        # Bypass ShallowWaterEquations.__init__ to avoid having to
+        # define the field_names separately
         PrognosticEquationSet.__init__(
             self, field_names, domain, space_names,
             linearisation_map=linearisation_map,
@@ -357,7 +377,22 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             self.residual, self.linearisation_map)
 
     def _setup_residual(self, fexpr, topog_expr, u_transport_option):
+        """
+        Sets up the residual for the thermal shallow water
+        equations, first calling the shallow water equation
+        _setup_residual method to get the standard shallow water forms.
 
+        Args:
+            fexpr (:class:`ufl.Expr`): an expression for the Coroilis
+                parameter.
+            topog_expr (:class:`ufl.Expr`): an expression for the
+                bottom surface of the fluid.
+            u_transport_option (str): specifies the transport term
+                used for the velocity equation. Supported options are:
+                'vector_invariant_form', 'vector_advection_form', and
+                'circulation_form'.
+
+        """
         # don't pass topography to super class as we deal with those
         # terms here later
         super()._setup_residual(fexpr=fexpr, topog_expr=None,
