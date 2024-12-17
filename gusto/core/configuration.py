@@ -5,6 +5,7 @@ from firedrake import sqrt, Constant
 
 
 __all__ = [
+    "Configuration",
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
     "BoussinesqParameters", "CompressibleParameters",
     "ShallowWaterParameters",
