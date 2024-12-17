@@ -7,7 +7,7 @@ import sys
 import time
 from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.core.meshes import get_flat_latlon_mesh
-from firedrake import (Function, functionspaceimpl, Constant,
+from firedrake import (Function, functionspaceimpl, Constant, COMM_WORLD,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
 from firedrake.output import VTKFile
 from pyop2.mpi import MPI
@@ -29,7 +29,7 @@ TimeData = namedtuple(
 )
 
 
-def pick_up_mesh(output, mesh_name):
+def pick_up_mesh(output, mesh_name, comm=COMM_WORLD):
     """
     Picks up a checkpointed mesh. This must be the first step of any model being
     picked up from a checkpointing run.
@@ -40,6 +40,8 @@ def pick_up_mesh(output, mesh_name):
         mesh_name (str): the name of the mesh to be picked up. The default names
             used by Firedrake are "firedrake_default" for non-extruded meshes,
             or "firedrake_default_extruded" for extruded meshes.
+        comm: MPI communicator over which the mesh should be defined after being
+            "picked-up".
 
     Returns:
         :class:`Mesh`: the mesh to be used by the model.
@@ -52,7 +54,7 @@ def pick_up_mesh(output, mesh_name):
     else:
         dumpdir = path.join("results", output.dirname)
         chkfile = path.join(dumpdir, "chkpt.h5")
-    with CheckpointFile(chkfile, 'r') as chk:
+    with CheckpointFile(chkfile, 'r', comm=comm) as chk:
         mesh = chk.load_mesh(mesh_name)
 
     if dumpdir:
@@ -548,7 +550,7 @@ class IO(object):
             )
             self.dump(state_fields, time_data)
 
-    def pick_up_from_checkpoint(self, state_fields):
+    def pick_up_from_checkpoint(self, state_fields, comm=COMM_WORLD):
         """
         Picks up the model's variables from a checkpoint file.
 
@@ -632,7 +634,7 @@ class IO(object):
                     step = chk.read_attribute("/", "step")
 
             else:
-                with CheckpointFile(chkfile, 'r') as chk:
+                with CheckpointFile(chkfile, 'r', comm) as chk:
                     mesh = self.domain.mesh
                     # Recover compulsory fields from the checkpoint
                     for field_name in self.to_pick_up:
