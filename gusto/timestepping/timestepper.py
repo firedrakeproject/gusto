@@ -7,7 +7,7 @@ from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.io import TimeData
-from gusto.core.labels import transport, diffusion, prognostic, transporting_velocity
+from gusto.core.labels import transport, diffusion, prognostic, transporting_velocity, transporting_velocity
 from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.spatial_methods.transport_methods import TransportMethod
@@ -127,32 +127,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         else:
             uadv = self.transporting_velocity
 
-        scheme.residual = scheme.residual.label_map(
-            lambda t: t.has_label(transporting_velocity),
-            map_if_true=lambda t:
-            Term(ufl.replace(t.form, {t.get(transporting_velocity): uadv}), t.labels)
-        )
-
-        scheme.residual = transporting_velocity.update_value(scheme.residual, uadv)
-
-        # Now also replace transporting velocity in the terms that are
-        # contained in labels
-        for idx, t in enumerate(scheme.residual.terms):
-            if t.has_label(transporting_velocity):
-                for label in t.labels.keys():
-                    if type(t.labels[label]) is LabelledForm:
-                        t.labels[label] = t.labels[label].label_map(
-                            lambda s: s.has_label(transporting_velocity),
-                            map_if_true=lambda s:
-                            Term(ufl.replace(
-                                s.form,
-                                {s.get(transporting_velocity): uadv}),
-                                s.labels
-                            )
-                        )
-
-                        scheme.residual.terms[idx].labels[label] = \
-                            transporting_velocity.update_value(t.labels[label], uadv)
+        scheme.setup_transporting_velocity(uadv)
 
     def log_timestep(self):
         """
