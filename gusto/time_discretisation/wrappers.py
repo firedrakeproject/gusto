@@ -11,8 +11,9 @@ from firedrake import (
 )
 from firedrake.fml import Term
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
-from gusto.recovery import Recoverer, ReversibleRecoverer
+from gusto.recovery import Recoverer, ReversibleRecoverer, ConservativeRecoverer
 from gusto.core.labels import transporting_velocity
+from gusto.core.conservative_projection import ConservativeProjector
 import ufl
 
 __all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper", "MixedFSWrapper"]
@@ -34,6 +35,7 @@ class Wrapper(object, metaclass=ABCMeta):
         self.options = wrapper_options
         self.solver_parameters = None
         self.original_space = None
+        self.is_conservative = False
 
     @abstractmethod
     def setup(self, original_space):
@@ -46,8 +48,8 @@ class Wrapper(object, metaclass=ABCMeta):
 
         Args:
             original_space (:class:`FunctionSpace`): the space that the
-        prognostic variable is defined on. This is a subset space of
-        a mixed function space when using a MixedFSWrapper.
+                prognostic variable is defined on. This is a subset space of
+                a mixed function space when using a MixedFSWrapper.
         """
         self.original_space = original_space
 
@@ -85,8 +87,17 @@ class EmbeddedDGWrapper(Wrapper):
     the original space.
     """
 
-    def setup(self, original_space):
-        """Sets up function spaces and fields needed for this wrapper."""
+    def setup(self, original_space, post_apply_bcs):
+        """
+        Sets up function spaces and fields needed for this wrapper.
+
+        Args:
+            original_space (:class:`FunctionSpace`): the space that the
+                prognostic variable is defined on.
+            post_apply_bcs (list of :class:`DirichletBC`): list of Dirichlet
+                boundary condition objects to be passed to the projector used
+                in the post-apply step.
+        """
 
         assert isinstance(self.options, EmbeddedDGOptions), \
             'Embedded DG wrapper can only be used with Embedded DG Options'
@@ -114,6 +125,7 @@ class EmbeddedDGWrapper(Wrapper):
 
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
+        self.x_in_orig = Function(original_space)
 
         if self.time_discretisation.idx is None:
             self.x_projected = Function(self.original_space)
@@ -121,9 +133,23 @@ class EmbeddedDGWrapper(Wrapper):
             self.x_projected = Function(equation.spaces[self.time_discretisation.idx])
 
         if self.options.project_back_method == 'project':
-            self.x_out_projector = Projector(self.x_out, self.x_projected)
+            self.x_out_projector = Projector(self.x_out, self.x_projected,
+                                             bcs=post_apply_bcs)
         elif self.options.project_back_method == 'recover':
             self.x_out_projector = Recoverer(self.x_out, self.x_projected)
+        elif self.options.project_back_method == 'conservative_project':
+            self.is_conservative = True
+            self.rho_name = self.options.rho_name
+            self.rho_in_orig = Function(self.options.orig_rho_space)
+            self.rho_out_orig = Function(self.options.orig_rho_space)
+            self.rho_in_embedded = Function(self.function_space)
+            self.rho_out_embedded = Function(self.function_space)
+            self.x_in_projector = ConservativeProjector(
+                self.rho_in_orig, self.rho_in_embedded,
+                self.x_in_orig, self.x_in)
+            self.x_out_projector = ConservativeProjector(
+                self.rho_out_embedded, self.rho_out_orig,
+                self.x_out, self.x_projected, subtract_mean=True)
         else:
             raise NotImplementedError(
                 'EmbeddedDG Wrapper: project_back_method'
@@ -142,10 +168,15 @@ class EmbeddedDGWrapper(Wrapper):
             x_in (:class:`Function`): the original input field.
         """
 
-        try:
-            self.x_in.interpolate(x_in)
-        except NotImplementedError:
-            self.x_in.project(x_in)
+        self.x_in_orig.assign(x_in)
+
+        if self.is_conservative:
+            self.x_in_projector.project()
+        else:
+            try:
+                self.x_in.interpolate(x_in)
+            except NotImplementedError:
+                self.x_in.project(x_in)
 
     def post_apply(self, x_out):
         """
@@ -169,8 +200,17 @@ class RecoveryWrapper(Wrapper):
     field is then returned to the original space.
     """
 
-    def setup(self, original_space):
-        """Sets up function spaces and fields needed for this wrapper."""
+    def setup(self, original_space, post_apply_bcs):
+        """
+        Sets up function spaces and fields needed for this wrapper.
+
+        Args:
+            original_space (:class:`FunctionSpace`): the space that the
+                prognostic variable is defined on.
+            post_apply_bcs (list of :class:`DirichletBC`): list of Dirichlet
+                boundary condition objects to be passed to the projector used
+                in the post-apply step.
+        """
 
         assert isinstance(self.options, RecoveryOptions), \
             'Recovery wrapper can only be used with Recovery Options'
@@ -196,7 +236,7 @@ class RecoveryWrapper(Wrapper):
         # Internal variables to be used
         # -------------------------------------------------------------------- #
 
-        self.x_in_tmp = Function(self.original_space)
+        self.x_in_orig = Function(self.original_space)
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
 
@@ -206,17 +246,34 @@ class RecoveryWrapper(Wrapper):
             self.x_projected = Function(equation.spaces[self.time_discretisation.idx])
 
         # Operator to recover to higher discontinuous space
-        self.x_recoverer = ReversibleRecoverer(self.x_in_tmp, self.x_in, self.options)
+        if self.options.project_low_method == 'conservative_project':
+            self.is_conservative = True
+            self.rho_name = self.options.rho_name
+            self.rho_in_orig = Function(self.options.orig_rho_space)
+            self.rho_out_orig = Function(self.options.orig_rho_space)
+            self.rho_in_embedded = Function(self.function_space)
+            self.rho_out_embedded = Function(self.function_space)
+            self.x_recoverer = ConservativeRecoverer(self.x_in_orig, self.x_in,
+                                                     self.rho_in_orig,
+                                                     self.rho_in_embedded,
+                                                     self.options)
+        else:
+            self.x_recoverer = ReversibleRecoverer(self.x_in_orig, self.x_in, self.options)
 
         # Operators for projecting back
         self.interp_back = (self.options.project_low_method == 'interpolate')
         if self.options.project_low_method == 'interpolate':
             self.x_out_projector = Interpolator(self.x_out, self.x_projected)
         elif self.options.project_low_method == 'project':
-            self.x_out_projector = Projector(self.x_out, self.x_projected)
+            self.x_out_projector = Projector(self.x_out, self.x_projected,
+                                             bcs=post_apply_bcs)
         elif self.options.project_low_method == 'recover':
             self.x_out_projector = Recoverer(self.x_out, self.x_projected,
                                              method=self.options.broken_method)
+        elif self.options.project_low_method == 'conservative_project':
+            self.x_out_projector = ConservativeProjector(
+                self.rho_out_embedded, self.rho_out_orig,
+                self.x_out, self.x_projected, subtract_mean=True)
         else:
             raise NotImplementedError(
                 'Recovery Wrapper: project_back_method'
@@ -231,7 +288,7 @@ class RecoveryWrapper(Wrapper):
             x_in (:class:`Function`): the original input field.
         """
 
-        self.x_in_tmp.assign(x_in)
+        self.x_in_orig.assign(x_in)
         self.x_recoverer.project()
 
     def post_apply(self, x_out):
@@ -396,6 +453,7 @@ class MixedFSWrapper(object):
         self.function_space = MixedFunctionSpace(self.wrapper_spaces)
         self.x_in = Function(self.function_space)
         self.x_out = Function(self.function_space)
+        self.is_conservative = any([subwrapper.is_conservative for subwrapper in self.subwrappers.values()])
 
     def pre_apply(self, x_in):
         """
@@ -410,6 +468,8 @@ class MixedFSWrapper(object):
 
             if field_name in self.subwrappers:
                 subwrapper = self.subwrappers[field_name]
+                if subwrapper.is_conservative:
+                    self.pre_update_rho(subwrapper)
                 subwrapper.pre_apply(field)
                 x_in_sub.assign(subwrapper.x_in)
             else:
@@ -429,6 +489,34 @@ class MixedFSWrapper(object):
             if field_name in self.subwrappers:
                 subwrapper = self.subwrappers[field_name]
                 subwrapper.x_out.assign(field)
+                if subwrapper.is_conservative:
+                    self.post_update_rho(subwrapper)
                 subwrapper.post_apply(x_out_sub)
             else:
                 x_out_sub.assign(field)
+
+    def pre_update_rho(self, subwrapper):
+        """
+        Updates the stored density field for the pre-apply for the subwrapper.
+
+        Args:
+            subwrapper (:class:`Wrapper`): the original input field.
+        """
+
+        rho_subwrapper = self.subwrappers[subwrapper.rho_name]
+
+        subwrapper.rho_in_orig.assign(rho_subwrapper.x_in_orig)
+        subwrapper.rho_in_embedded.assign(rho_subwrapper.x_in)
+
+    def post_update_rho(self, subwrapper):
+        """
+        Updates the stored density field for the post-apply for the subwrapper.
+
+        Args:
+            subwrapper (:class:`Wrapper`): the original input field.
+        """
+
+        rho_subwrapper = self.subwrappers[subwrapper.rho_name]
+
+        subwrapper.rho_out_orig.assign(rho_subwrapper.x_projected)
+        subwrapper.rho_out_embedded.assign(rho_subwrapper.x_out)

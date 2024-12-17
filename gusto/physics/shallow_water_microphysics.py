@@ -233,8 +233,6 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         # Check for the correct fields
         assert vapour_name in equation.field_names, f"Field {vapour_name} does not exist in the equation set"
         assert cloud_name in equation.field_names, f"Field {cloud_name} does not exist in the equation set"
-        self.Vv_idx = equation.field_names.index(vapour_name)
-        self.Vc_idx = equation.field_names.index(cloud_name)
 
         if self.convective_feedback:
             assert "D" in equation.field_names, "Depth field must exist for convective feedback"
@@ -244,21 +242,21 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             assert "b" in equation.field_names, "Buoyancy field must exist for thermal feedback"
             assert beta2 is not None, "If thermal feedback is used, beta2 parameter must be specified"
 
-        # Obtain function spaces and functions
+        # Obtain function spaces
         W = equation.function_space
+        self.Vv_idx = equation.field_names.index(vapour_name)
+        self.Vc_idx = equation.field_names.index(cloud_name)
         Vv = W.sub(self.Vv_idx)
         Vc = W.sub(self.Vc_idx)
+        # order for V_idxs is vapour, cloud
         V_idxs = [self.Vv_idx, self.Vc_idx]
-
-        # Source functions for both vapour and cloud
-        self.water_v = Function(Vv)
-        self.cloud = Function(Vc)
 
         # depth needed if convective feedback
         if self.convective_feedback:
             self.VD_idx = equation.field_names.index("D")
             VD = W.sub(self.VD_idx)
             self.D = Function(VD)
+            # order for V_idxs is now vapour, cloud, depth
             V_idxs.append(self.VD_idx)
 
         # buoyancy needed if thermal feedback
@@ -266,6 +264,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             self.Vb_idx = equation.field_names.index("b")
             Vb = W.sub(self.Vb_idx)
             self.b = Function(Vb)
+            # order for V_idxs is now vapour, cloud, depth, buoyancy
             V_idxs.append(self.Vb_idx)
 
         # tau is the timescale for condensation/evaporation (may or may not be the timestep)
@@ -289,6 +288,8 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             self.saturation_curve = saturation_curve
 
         # Saturation adjustment expression, adjusted to stop negative values
+        self.water_v = Function(Vv)
+        self.cloud = Function(Vc)
         sat_adj_expr = (self.water_v - self.saturation_curve) / self.tau
         sat_adj_expr = conditional(sat_adj_expr < 0,
                                    max_value(sat_adj_expr,
@@ -309,17 +310,22 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             self.gamma_v = gamma_v
 
         # Factors for multiplying source for different variables
+        # the order matches the order in V_idx (vapour, cloud, depth, buoyancy)
         factors = [self.gamma_v, -self.gamma_v]
         if convective_feedback:
             factors.append(self.gamma_v*beta1)
         if thermal_feedback:
-            factors.append(parameters.g*self.gamma_v*beta2)
+            factors.append(self.gamma_v*beta2)
 
         # Add terms to equations and make interpolators
+        # sources have the same order as V_idxs and factors
         self.source = [Function(Vc) for factor in factors]
         self.source_interpolators = [Interpolator(sat_adj_expr*factor, source)
                                      for factor, source in zip(factors, self.source)]
 
+        # test functions have the same order as factors and sources (vapour,
+        # cloud, depth, buoyancy) so that the correct test function multiplies
+        # each source term
         tests = [equation.tests[idx] for idx in V_idxs]
 
         # Add source terms to residual
