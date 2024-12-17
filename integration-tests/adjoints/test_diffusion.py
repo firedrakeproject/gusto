@@ -25,10 +25,10 @@ def handle_annotation():
         pause_annotation()
 
 
-def test_diffusion():
+def test_diffusion(tmpdir):
     n = 30
     mesh = PeriodicUnitSquareMesh(n, n)
-    output = OutputParameters(dirname="adjoint_diffusion")
+    output = OutputParameters(dirname=str(tmpdir))
     dt = 0.01
     domain = Domain(mesh, 10*dt, family="BDM", degree=1)
     io = IO(domain, output)
@@ -67,7 +67,7 @@ def test_diffusion():
 
     Jhat = ReducedFunctional(J, control)  # the functional as a pure function of nu
 
-    assert np.allclose(Jhat(control), Jhat(nu))
+    assert np.allclose(J, Jhat(nu))
     if nu_is_control:
         assert taylor_test(Jhat, nu, h) > 1.95
     else:

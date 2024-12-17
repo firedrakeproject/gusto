@@ -16,16 +16,16 @@ explicit RK4 timestepper is used.
 """
 import pytest
 import numpy as np
+
 from firedrake import (
     SpatialCoordinate, as_vector, pi, sqrt, min_value, exp, cos, sin, assemble, dx, inner, Function
 )
 from firedrake.adjoint import *
 from gusto import (
     Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
-    ShallowWaterParameters, ShallowWaterEquations, Sum,
-    lonlatr_from_xyz, InstantRain, SWSaturationAdjustment, WaterVapour,
-    CloudWater, Rain, GeneralIcosahedralSphereMesh, RelativeVorticity,
-    ZonalComponent, MeridionalComponent
+    ShallowWaterParameters, ShallowWaterEquations, lonlatr_from_xyz,
+    InstantRain, SWSaturationAdjustment, WaterVapour, CloudWater,
+    Rain, GeneralIcosahedralSphereMesh
 )
 
 
@@ -48,27 +48,14 @@ def handle_annotation():
         pause_annotation()
 
 
-moist_thermal_williamson_5_defaults = {
-    'ncells_per_edge': 8,     # number of cells per icosahedron edge
-    'dt': 600.0,               # 5 minutes
-    'tmax': 50.*24.*60.*60.,   # 50 days
-    'dumpfreq': 2880,          # once per 10 days with default options
-    'dirname': 'moist_thermal_williamson_5'
-}
-
-
-def moist_thermal_williamson_5(
-        ncells_per_edge=moist_thermal_williamson_5_defaults['ncells_per_edge'],
-        dt=moist_thermal_williamson_5_defaults['dt'],
-        tmax=moist_thermal_williamson_5_defaults['tmax'],
-        dumpfreq=moist_thermal_williamson_5_defaults['dumpfreq'],
-        dirname=moist_thermal_williamson_5_defaults['dirname']
+def test_moist_thermal_williamson_5(
+        tmpdir, ncells_per_edge=8, dt=600, tmax=50.*24.*60.*60.,
+        dumpfreq=2880
 ):
 
     # ------------------------------------------------------------------------ #
     # Parameters for test case
     # ------------------------------------------------------------------------ #
-
     radius = 6371220.           # planetary radius (m)
     mean_depth = 5960           # reference depth (m)
     g = 9.80616                 # acceleration due to gravity (m/s^2)
@@ -127,7 +114,7 @@ def moist_thermal_williamson_5(
 
     # I/O
     output = OutputParameters(
-        dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq,
+        dirname=str(tmpdir), dumplist_latlon=['D'], dumpfreq=dumpfreq,
         dump_vtus=True, dump_nc=False, log_courant=False,
         dumplist=['D', 'b', 'water_vapour', 'cloud_water']
     )
@@ -140,14 +127,14 @@ def moist_thermal_williamson_5(
 
     # Function to pass to physics (takes mixed function as argument)
     def phys_sat_func(x_in):
-        D = x_in.split()[1]
-        b = x_in.split()[2]
+        D = x_in.sub(1)
+        b = x_in.sub(2)
         return q_sat(b, D)
 
     # Feedback proportionality is dependent on D and b
     def gamma_v(x_in):
-        D = x_in.split()[1]
-        b = x_in.split()[2]
+        D = x_in.sub(1)
+        b = x_in.sub(2)
         return 1.0 / (1.0 + nu*beta2/g*q_sat(b, D))
 
     SWSaturationAdjustment(

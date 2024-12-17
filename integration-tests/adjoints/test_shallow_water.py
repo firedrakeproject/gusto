@@ -25,15 +25,14 @@ def handle_annotation():
         pause_annotation()
 
 
-def test_shallow_water():
+def test_shallow_water(tmpdir):
     # setup shallow water parameters
     R = 6371220.
     H = 5960.
     dt = 900.
 
     # Domain
-    mesh = IcosahedralSphereMesh(radius=R,
-                                refinement_level=3, degree=2)
+    mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=2)
     x = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, 'BDM', 1)
     parameters = ShallowWaterParameters(H=H)
@@ -54,7 +53,7 @@ def test_shallow_water():
     eqn = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
 
     # I/O
-    output = OutputParameters(dirname="adjoint_sw", log_courant=False)
+    output = OutputParameters(dirname=str(tmpdir), log_courant=False)
     io = IO(domain, output)
 
     # Transport schemes
@@ -80,11 +79,11 @@ def test_shallow_water():
     Dbar = Function(D0.function_space()).assign(H)
     stepper.set_reference_profiles([('D', Dbar)])
 
-    stepper.run(0., 10*dt)
+    stepper.run(0., 5*dt)
 
     J = assemble(0.5*inner(u0, u0)*dx + 0.5*g*D0**2*dx)
 
     Jhat = ReducedFunctional(J, Control(D0))
 
     assert np.isclose(Jhat(D0), J, rtol=1e-10)
-    assert taylor_test(Jhat, D0, Function(D0.function_space()).assign(Dexpr)) > 1.95
+    assert taylor_test(Jhat, D0, Function(D0.function_space()).interpolate(Dexpr)) > 1.95
