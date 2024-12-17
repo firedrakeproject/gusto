@@ -43,3 +43,13 @@ parallel_example:
 notebook_test: clean_cache
 	@echo "    Running all Jupyter notebooks"
 	@python3 -m pytest --nbval-lax -v jupyter_notebooks $(PYTEST_ARGS)
+
+reset_notebooks:
+	jupyter-nbconvert --clear-output ./jupyter_notebooks/*.ipynb
+	env OMP_NUM_THREADS=1 jupyter-nbconvert \
+		--execute \
+		--ClearMetadataPreprocessor.enabled=True \
+		--allow-errors \
+		--to notebook \
+		--inplace \
+		./jupyter_notebooks/*.ipynb
