@@ -45,8 +45,8 @@ notebook_test: clean_cache
 	@python3 -m pytest --nbval-lax -v jupyter_notebooks $(PYTEST_ARGS)
 
 reset_notebooks:
-	jupyter-nbconvert --clear-output ./jupyter_notebooks/*.ipynb
-	env OMP_NUM_THREADS=1 jupyter-nbconvert \
+	@jupyter-nbconvert --clear-output ./jupyter_notebooks/*.ipynb
+	@env OMP_NUM_THREADS=1 jupyter-nbconvert \
 		--execute \
 		--ClearMetadataPreprocessor.enabled=True \
 		--allow-errors \
