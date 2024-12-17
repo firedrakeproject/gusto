@@ -498,12 +498,11 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         # and rescale dt accordingly; else perform just one cycle using dt
         if (self.subcycling_options is not None
                 and self.subcycling_options.fixed_subcycles is not None):
-            fixed_subcycles = self.subcycling_options.fixed_subcycles
-            self.dt.assign(self.dt/fixed_subcycles)
-            self.ncycles = self.fixed_subcycles
+            self.ncycles = self.subcycling_options.fixed_subcycles
+            self.dt.assign(self.dt/self.ncycles)
         else:
-            self.dt = self.dt
             self.ncycles = 1
+            self.dt = self.dt
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
 
