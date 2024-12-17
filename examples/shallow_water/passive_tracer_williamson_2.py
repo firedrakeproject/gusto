@@ -84,7 +84,7 @@ def williamson_2(
     fexpr = 2*Omega*sin(lat)
     eqns = ShallowWaterEquations(
         domain, parameters, fexpr=fexpr, u_transport_option=u_eqn_type)
-    tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
+    tracer_eqn = ContinuityEquation(domain, domain.spaces("DG"), "tracer")
 
     logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 

@@ -65,7 +65,7 @@ tracer = True
 hat_edge = 80
 
 # any extra info to include in the directory name
-extra_name = '_uniform'
+extra_name = '_continuity'
 
 #####################################################################################
 
@@ -316,7 +316,7 @@ if not restart:
     lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
     bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
-    tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
+    tracer_eqn = ContinuityEquation(domain, domain.spaces("DG"), "tracer")
 
     # estimate core count for Pileus
     logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
@@ -472,15 +472,15 @@ if not restart:
 
 
 
-    # VT = T0.function_space()
-    # Tmesh = VT.mesh()
-    # WT = VectorFunctionSpace(Tmesh, VT.ufl_element())
-    # XT = interpolate(Tmesh.coordinates, WT)
-    # T0.dat.data[:] = initial_T(XT.dat.data_ro, Tini)
+    VT = T0.function_space()
+    Tmesh = VT.mesh()
+    WT = VectorFunctionSpace(Tmesh, VT.ufl_element())
+    XT = interpolate(Tmesh.coordinates, WT)
+    T0.dat.data[:] = initial_T(XT.dat.data_ro, Tini)
 
     # f_init = exp(-(x[1]/1e6)**2-(x[0]/1e6)**2)
-    f_init = 1
-    T0.interpolate(f_init)
+    # f_init = 1
+    # T0.interpolate(f_init)
 
 
     VD = D0.function_space()
