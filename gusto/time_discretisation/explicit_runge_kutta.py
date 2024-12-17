@@ -696,4 +696,4 @@ class Heun(ExplicitRungeKutta):
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options,
-                         augmentation=None)
+                         augmentation=augmentation)

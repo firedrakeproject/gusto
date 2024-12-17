@@ -96,7 +96,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.limiter = limiter
         self.courant_max = None
         self.augmentation = augmentation
-        self.subcycling_options = self.subcycling_options
+        self.subcycling_options = subcycling_options
 
         if self.subcycling_options is not None:
             self.subcycling_options.check_options()
