@@ -4,7 +4,7 @@ compressible Euler equations.
 """
 
 from firedrake import (
-   conditional, Function, dx, min_value, max_value, Constant, pi,
+    conditional, Function, dx, min_value, max_value, Constant, pi,
     Projector, assemble
 )
 from firedrake.__future__ import interpolate
