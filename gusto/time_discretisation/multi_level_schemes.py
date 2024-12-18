@@ -63,58 +63,57 @@ class BDF2(MultilevelTimeDiscretisation):
         return 2
 
     @property
-    def lhs0(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        l = self.residual.label_map(
+    def res0(self):
+        """Set up the discretisation's residual for initial BDF step."""
+        residual = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: self.dt*t)
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx)
+        )
+        residual = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: self.dt * t
+        )
 
-        return l.form
-
-    @property
-    def rhs0(self):
-        """Set up the time discretisation's right hand side for inital BDF step."""
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.x1, old_idx=self.idx),
-            map_if_false=drop)
+            map_if_false=drop
+        )
+        residual -= r
 
-        return r.form
+        return residual.form
 
     @property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        l = self.residual.label_map(
+    def res(self):
+        """Set up the discretisation's residual."""
+        residual = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: (2/3)*self.dt*t)
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx)
+        )
+        residual = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: (2 / 3) * self.dt * t
+        )
 
-        return l.form
-
-    @property
-    def rhs(self):
-        """Set up the time discretisation's right hand side for BDF2 steps."""
         xn = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.x1, old_idx=self.idx),
-            map_if_false=drop)
+            map_if_false=drop
+        )
         xnm1 = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.xnm1, old_idx=self.idx),
-            map_if_false=drop)
+            map_if_false=drop
+        )
 
-        r = (4/3.) * xn - (1/3.) * xnm1
-
-        return r.form
+        residual -= (4 / 3) * xn - (1 / 3) * xnm1
+        return residual.form
 
     @property
     def solver0(self):
         """Set up the problem and the solver for initial BDF step."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs0-self.rhs0, self.x_out, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
@@ -122,8 +121,8 @@ class BDF2(MultilevelTimeDiscretisation):
     @property
     def solver(self):
         """Set up the problem and the solver for BDF2 steps."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
@@ -162,38 +161,53 @@ class Leapfrog(MultilevelTimeDiscretisation):
         return 2
 
     @property
-    def rhs0(self):
-        """Set up the discretisation's right hand side for initial forward euler step."""
+    def res0(self):
+        """Set up the discretisation's residual for initial forward euler step."""
+        residual = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+            map_if_false=drop
+        )
+
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x1, old_idx=self.idx))
-        r = r.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: -self.dt*t)
+            map_if_true=replace_subject(self.x1, old_idx=self.idx)
+        )
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -self.dt * t
+        )
 
-        return r.form
-
-    @property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        return super(Leapfrog, self).lhs
+        residual -= r
+        return residual.form
 
     @property
     def rhs(self):
-        """Set up the discretisation's right hand side for leapfrog steps."""
+        """Set up the discretisation's residual for leapfrog steps."""
+        residual = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+            map_if_false=drop
+        )
+
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_false=replace_subject(self.x1, old_idx=self.idx))
-        r = r.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_true=replace_subject(self.xnm1, old_idx=self.idx),
-                        map_if_false=lambda t: -2.0*self.dt*t)
+            map_if_false=replace_subject(self.x1, old_idx=self.idx)
+        )
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.xnm1, old_idx=self.idx),
+            map_if_false=lambda t: -2.0 * self.dt * t
+        )
 
-        return r.form
+        residual -= r
+        return residual.form
 
     @property
     def solver0(self):
         """Set up the problem and the solver for initial forward euler step."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs0, self.x_out, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
@@ -201,8 +215,8 @@ class Leapfrog(MultilevelTimeDiscretisation):
     @property
     def solver(self):
         """Set up the problem and the solver for leapfrog steps."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
@@ -291,42 +305,59 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
         return self.order
 
     @property
-    def rhs0(self):
-        """Set up the discretisation's right hand side for initial forward euler step."""
+    def res0(self):
+        """Set up the discretisation's residual for initial forward euler step."""
+        residual = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+            map_if_false=drop
+        )
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x[-1], old_idx=self.idx))
-        r = r.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: -self.dt*t)
+            map_if_true=replace_subject(self.x[-1], old_idx=self.idx)
+        )
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -self.dt * t
+        )
 
-        return r.form
+        residual -= r
+        return residual.form
 
     @property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        return super(AdamsBashforth, self).lhs
-
-    @property
-    def rhs(self):
-        """Set up the discretisation's right hand side for Adams Bashforth steps."""
-        r = self.residual.label_map(all_terms,
-                                    map_if_true=replace_subject(self.x[-1], old_idx=self.idx))
-        r = r.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: -self.b[-1]*self.dt*t)
-        for n in range(self.nlevels-1):
-            rtemp = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                            map_if_true=drop,
-                                            map_if_false=replace_subject(self.x[n], old_idx=self.idx))
-            rtemp = rtemp.label_map(lambda t: t.has_label(time_derivative),
-                                    map_if_false=lambda t: -self.dt*self.b[n]*t)
-            r += rtemp
-        return r.form
+    def res(self):
+        """Set up the discretisation's residual for Adams Bashforth steps."""
+        residual = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+            map_if_false=drop
+        )
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x[-1], old_idx=self.idx)
+        )
+        residual -= r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -self.b[-1] * self.dt * t
+        )
+        for n in range(self.nlevels - 1):
+            rtemp = self.residual.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=drop,
+                map_if_false=replace_subject(self.x[n], old_idx=self.idx)
+            )
+            rtemp = rtemp.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: -self.dt * self.b[n] * t
+            )
+            residual -= rtemp
+        return residual.form
 
     @property
     def solver0(self):
         """Set up the problem and the solverfor initial forward euler step."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs0, self.x_out, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
@@ -334,8 +365,8 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
     @property
     def solver(self):
         """Set up the problem and the solver for Adams Bashforth steps."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
@@ -427,63 +458,67 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
         return self.order
 
     @property
-    def rhs0(self):
+    def res0(self):
         """
-        Set up the discretisation's right hand side for initial trapezoidal
-        step.
+        Set up the discretisation's residual for initial trapezoidal step.
         """
+        residual = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx)
+        )
+        residual = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: 0.5 * self.dt * t
+        )
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x[-1], old_idx=self.idx))
-        r = r.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: -0.5*self.dt*t)
+            map_if_true=replace_subject(self.x[-1], old_idx=self.idx)
+        )
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -0.5 * self.dt * t
+        )
 
-        return r.form
+        residual -= r
+        return residual.form
 
     @property
-    def lhs0(self):
-        """
-        Set up the time discretisation's right hand side for initial
-        trapezoidal step.
-        """
-        l = self.residual.label_map(
+    def res(self):
+        """Set up the time discretisation's residual for Adams Moulton steps."""
+        residual = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: 0.5*self.dt*t)
-        return l.form
-
-    @property
-    def lhs(self):
-        """Set up the time discretisation's right hand side for Adams Moulton steps."""
-        l = self.residual.label_map(
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx)
+        )
+        residual = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: self.bl * self.dt * t
+        )
+        r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: self.bl*self.dt*t)
-        return l.form
-
-    @property
-    def rhs(self):
-        """Set up the discretisation's right hand side for Adams Moulton steps."""
-        r = self.residual.label_map(all_terms,
-                                    map_if_true=replace_subject(self.x[-1], old_idx=self.idx))
-        r = r.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: -self.br[-1]*self.dt*t)
-        for n in range(self.nlevels-1):
-            rtemp = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                            map_if_true=drop,
-                                            map_if_false=replace_subject(self.x[n], old_idx=self.idx))
-            rtemp = rtemp.label_map(lambda t: t.has_label(time_derivative),
-                                    map_if_false=lambda t: -self.dt*self.br[n]*t)
-            r += rtemp
-        return r.form
+            map_if_true=replace_subject(self.x[-1], old_idx=self.idx)
+        )
+        residual -= r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -self.br[-1] * self.dt * t
+        )
+        for n in range(self.nlevels - 1):
+            rtemp = self.residual.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_true=drop,
+                map_if_false=replace_subject(self.x[n], old_idx=self.idx)
+            )
+            rtemp = rtemp.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: -self.dt * self.br[n] * t
+            )
+            residual -= rtemp
+        return residual.form
 
     @property
     def solver0(self):
         """Set up the problem and the solver for initial trapezoidal step."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs0-self.rhs0, self.x_out, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res0, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"0"
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
@@ -491,8 +526,8 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
     @property
     def solver(self):
         """Set up the problem and the solver for Adams Moulton steps."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
