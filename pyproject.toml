@@ -27,12 +27,14 @@ Repository = "https://github.com/firedrakeproject/gusto.git"
 [tool.setuptools]
 packages = [
   "gusto",
+  "gusto.complex_proxy",
   "gusto.core",
   "gusto.diagnostics",
   "gusto.equations",
   "gusto.initialisation",
   "gusto.physics",
   "gusto.recovery",
+  "gusto.rexi",
   "gusto.solvers",
   "gusto.spatial_methods",
   "gusto.time_discretisation",
