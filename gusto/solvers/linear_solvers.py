@@ -141,8 +141,7 @@ class CompressibleSolver(TimesteppingSolver):
                                                            'sub_pc_type': 'ilu'}}}
 
     def __init__(self, equations, alpha=0.5, tau_values=None,
-                 quadrature_degree=None, solver_parameters=None,
-                 overwrite_solver_parameters=False):
+                 solver_parameters=None, overwrite_solver_parameters=False):
         """
         Args:
             equations (:class:`PrognosticEquation`): the model's equation.
@@ -150,9 +149,6 @@ class CompressibleSolver(TimesteppingSolver):
                 Defaults to 0.5. A value of 1 is fully-implicit.
             tau_values (dict, optional): contains the semi-implicit relaxation
                 parameters. Defaults to None, in which case the value of alpha is used.
-            quadrature_degree (tuple, optional): a tuple (q_h, q_v) where q_h is
-                the required quadrature degree in the horizontal direction and
-                q_v is that in the vertical direction. Defaults to None.
             solver_parameters (dict, optional): contains the options to be
                 passed to the underlying :class:`LinearVariationalSolver`.
                 Defaults to None.
@@ -162,14 +158,7 @@ class CompressibleSolver(TimesteppingSolver):
                 passed in. Defaults to False.
         """
         self.equations = equations
-
-        if quadrature_degree is not None:
-            self.quadrature_degree = quadrature_degree
-        else:
-            dgspace = equations.domain.spaces("DG")
-            if any(deg > 2 for deg in dgspace.ufl_element().degree()):
-                logger.warning("default quadrature degree most likely not sufficient for this degree element")
-            self.quadrature_degree = (5, 5)
+        self.quadrature_degree = equations.domain.max_quad_degree
 
         super().__init__(equations, alpha, tau_values, solver_parameters,
                          overwrite_solver_parameters)
@@ -231,12 +220,12 @@ class CompressibleSolver(TimesteppingSolver):
         h_project = lambda u: u - k*inner(u, k)
 
         # Specify degree for some terms as estimated degree is too large
-        dxp = dx(degree=(self.quadrature_degree))
-        dS_vp = dS_v(degree=(self.quadrature_degree))
-        dS_hp = dS_h(degree=(self.quadrature_degree))
-        ds_vp = ds_v(degree=(self.quadrature_degree))
-        ds_tbp = (ds_t(degree=(self.quadrature_degree))
-                  + ds_b(degree=(self.quadrature_degree)))
+        dx_qp = dx(degree=(equations.domain.max_quad_degree))
+        dS_v_qp = dS_v(degree=(equations.domain.max_quad_degree))
+        dS_h_qp = dS_h(degree=(equations.domain.max_quad_degree))
+        ds_v_qp = ds_v(degree=(equations.domain.max_quad_degree))
+        ds_tb_qp = (ds_t(degree=(equations.domain.max_quad_degree))
+                    + ds_b(degree=(equations.domain.max_quad_degree)))
 
         # Add effect of density of water upon theta, using moisture reference profiles
         # TODO: Explore if this is the right thing to do for the linear problem
@@ -259,10 +248,10 @@ class CompressibleSolver(TimesteppingSolver):
 
         _l0 = TrialFunction(Vtrace)
         _dl = TestFunction(Vtrace)
-        a_tr = _dl('+')*_l0('+')*(dS_vp + dS_hp) + _dl*_l0*ds_vp + _dl*_l0*ds_tbp
+        a_tr = _dl('+')*_l0('+')*(dS_v_qp + dS_h_qp) + _dl*_l0*ds_v_qp + _dl*_l0*ds_tb_qp
 
         def L_tr(f):
-            return _dl('+')*avg(f)*(dS_vp + dS_hp) + _dl*f*ds_vp + _dl*f*ds_tbp
+            return _dl('+')*avg(f)*(dS_v_qp + dS_h_qp) + _dl*f*ds_v_qp + _dl*f*ds_tb_qp
 
         cg_ilu_parameters = {'ksp_type': 'cg',
                              'pc_type': 'bjacobi',
@@ -293,16 +282,16 @@ class CompressibleSolver(TimesteppingSolver):
         eqn = (
             # momentum equation
             u_mass
-            - beta_u*cp*div(theta_w*V(w))*exnerbar*dxp
+            - beta_u*cp*div(theta_w*V(w))*exnerbar*dx_qp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
-            # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_vp
-            + beta_u*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_hp
-            + beta_u*cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tbp
-            - beta_u*cp*div(thetabar_w*w)*exner*dxp
+            # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
+            + beta_u*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_h_qp
+            + beta_u*cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tb_qp
+            - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
             # trace terms appearing after integrating momentum equation
-            + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
-            + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tbp + ds_vp)
+            + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_v_qp + dS_h_qp)
+            + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tb_qp + ds_v_qp)
             # mass continuity equation
             + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
             + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
@@ -311,13 +300,13 @@ class CompressibleSolver(TimesteppingSolver):
             # constraint equation to enforce continuity of the velocity
             # through the interior facets and weakly impose the no-slip
             # condition
-            + dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
-            + dl*dot(u, n)*(ds_tbp + ds_vp)
+            + dl('+')*jump(u, n=n)*(dS_v + dS_h)
+            + dl*dot(u, n)*(ds_t + ds_b + ds_v)
         )
         # TODO: can we get this term using FML?
         # contribution of the sponge term
         if hasattr(self.equations, "mu"):
-            eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
+            eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx_qp
 
         if equations.parameters.Omega is not None:
             Omega = as_vector([0, 0, equations.parameters.Omega])
