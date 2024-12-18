@@ -130,16 +130,6 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
 
-    @cached_property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        return super(IMEXRungeKutta, self).lhs
-
-    @cached_property
-    def rhs(self):
-        """Set up the discretisation's right hand side (the time derivative)."""
-        return super(IMEXRungeKutta, self).rhs
-
     def res(self, stage):
         """Set up the discretisation's residual for a given stage."""
         # Add time derivative terms  y_s - y^n for stage s
@@ -229,7 +219,7 @@ class IMEXRungeKutta(TimeDiscretisation):
     @cached_property
     def final_solver(self):
         """Set up a solver for the final solve to evaluate time level n+1."""
-        # setup solver using lhs and rhs defined in derived class
+        # setup solver using residual (res) defined in derived class
         problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.linear_solver_parameters, options_prefix=solver_name)
