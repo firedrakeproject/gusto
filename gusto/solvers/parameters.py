@@ -42,8 +42,9 @@ def mass_parameters(V, spaces=None, ignore_vertical=True):
     extruded = hasattr(V.mesh, "_base_mesh")
 
     continuous_fields = set()
-    for i, Vsub in V.subfunctions:
-        field = Vsub.name or str(i)
+    for i, Vsub in enumerate(V.subfunctions):
+        # field = Vsub.name or str(i)
+        field = str(i)
 
         if spaces is not None:
             continuous = spaces.continuity.get(field, is_cg(Vsub))
@@ -62,17 +63,25 @@ def mass_parameters(V, spaces=None, ignore_vertical=True):
         if continuous:
             continuous_fields.add(field)
 
-    parameters = {
-        'ksp_type': 'preonly',
-        'pc_type': 'fieldsplit',
-        'pc_fieldsplit_type': 'additive',
-        'pc_fieldsplit_0_fields': ','.join(continuous_fields),
-        'fieldsplit': {
-            'ksp_type': 'preonly',
+    if len(V.subfunctions) == 1:
+        parameters = {
+            'ksp_type': 'cg' if all(continuous_fields) else 'preonly',
             'pc_type': 'bjacobi',
-            'sub_pc_type': 'ilu'
-        },
-        'fieldsplit_0_ksp_type': 'cg',
-    }
+            'sub_pc_type': 'ilu',
+        }
+    else:
+
+        parameters = {
+            'ksp_type': 'preonly',
+            'pc_type': 'fieldsplit',
+            'pc_fieldsplit_type': 'additive',
+            'pc_fieldsplit_0_fields': ','.join(continuous_fields),
+            'fieldsplit': {
+                'ksp_type': 'preonly',
+                'pc_type': 'bjacobi',
+                'sub_pc_type': 'ilu'
+            },
+            'fieldsplit_0_ksp_type': 'cg',
+        }
 
     return parameters
