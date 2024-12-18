@@ -766,7 +766,7 @@ class IO(object):
         comm = self.mesh.comm
         nc_field_file, nc_supports_parallel = make_nc_dataset(filename, 'w', comm)
 
-        if nc_supports_parallel or comm.rank == 0:
+        if nc_field_file:
             nc_field_file.createDimension('time', None)
             nc_field_file.createVariable('time', float, ('time',))
 
@@ -781,10 +781,10 @@ class IO(object):
                 else:
                     output_value = metadata_value
 
-                # TODO: Add comment explaining things
+                # At present parallel netCDF crashes when saving strings. To get around this
+                # we instead save string metadata as char arrays of fixed length.
                 if isinstance(output_value, str):
                     nc_field_file.createVariable(metadata_key, 'S1', ('dim_one', 'dim_string'))
-                    nc_field_file[metadata_key].set_collective(True)
                     output_char_array = np.array([output_value], dtype='S256')
                     nc_field_file[metadata_key][:] = stringtochar(output_char_array)
                 else:
@@ -802,11 +802,11 @@ class IO(object):
                 coord_fields = self.domain.coords.chi_coords[space_name]
                 ndofs = coord_fields[0].function_space().dim()
 
-                if nc_supports_parallel or comm.rank == 0:
+                if nc_field_file:
                     nc_field_file.createDimension(f'coords_{space_name}', ndofs)
 
                 for i, (coord_name, coord_field) in enumerate(zip(self.domain.coords.coords_name, coord_fields)):
-                    if nc_supports_parallel or comm.rank == 0:
+                    if nc_field_file:
                         nc_field_file.createVariable(f'{coord_name}_{space_name}', float, f'coords_{space_name}')
 
                     if nc_supports_parallel:
@@ -829,10 +829,10 @@ class IO(object):
                                + 'not yet implemented, so unable to output '
                                + f'{field_name} field')
             else:
-                if nc_supports_parallel or comm.rank == 0:
+                if nc_field_file:
                     nc_field_file.createGroup(field_name)
                     nc_field_file[field_name].createVariable('field_values', float, (f'coords_{space_name}', 'time'))
-        if nc_supports_parallel or comm.rank == 0:
+        if nc_field_file:
             nc_field_file.close()
 
     def write_nc_dump(self, t):
@@ -840,7 +840,8 @@ class IO(object):
         nc_field_file, nc_supports_parallel = make_nc_dataset(self.nc_filename, 'a', comm)
 
         if nc_field_file and 'time' in nc_field_file.variables.keys():
-            # https://unidata.github.io/netcdf4-python/#parallel-io
+            # Unbounded variables need to be accessed collectively
+            # (https://unidata.github.io/netcdf4-python/#parallel-io)
             if nc_supports_parallel:
                 nc_field_file['time'].set_collective(True)
             nc_field_file['time'][self.field_t_idx] = t
@@ -869,7 +870,7 @@ class IO(object):
                     if comm.rank == 0:
                         nc_field_file[field_name]['field_values'][:, self.field_t_idx] = global_field_data
 
-        if nc_supports_parallel or comm.rank == 0:
+        if nc_field_file:
             nc_field_file.close()
 
         self.field_t_idx += 1
@@ -935,7 +936,7 @@ def make_nc_dataset(filename, access, comm):
             supported then the dataset will be `None` on all but rank 0.
 
     A warning will be thrown if this function is called in parallel and a
-    non-parallel netCDF4 is used.
+    non-parallel netCDF4 is installed.
 
     """
     try:
