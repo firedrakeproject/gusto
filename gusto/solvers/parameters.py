@@ -11,6 +11,13 @@ def mass_parameters(V, spaces=None, ignore_vertical=True):
     """
     PETSc solver parameters for mass matrices.
 
+    Currently this sets to a monolithic CG+ILU.
+
+    TODO: implement field-by-field parameters that choose
+          preonly for discontinuous fields and CG for continuous
+          fields - see docstring below.
+
+    ================= FUTURE DOCSTRING =================
     Any fields which are discontinuous will have block diagonal
     mass matrices, so are solved directly using:
         'ksp_type': 'preonly'
@@ -38,6 +45,11 @@ def mass_parameters(V, spaces=None, ignore_vertical=True):
             continuity will be considered, e.g. the standard theta space will
             be treated as discontinuous.
     """
+    return {
+        'ksp_type': 'cg',
+        'pc_type': 'bjacobi',
+        'sub_pc_type': 'ilu'
+    }
 
     extruded = hasattr(V.mesh, "_base_mesh")
 
