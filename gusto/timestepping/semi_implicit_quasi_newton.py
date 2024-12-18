@@ -13,7 +13,7 @@ from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (transport, diffusion, time_derivative,
                                linearisation, prognostic, hydrostatic,
                                physics_label, sponge, incompressible)
-from gusto.solvers import LinearTimesteppingSolver
+from gusto.solvers import LinearTimesteppingSolver, mass_parameters
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
@@ -586,13 +586,17 @@ class Forcing(object):
             constant_jacobian=True
         )
 
+        self.solver_parameters = mass_parameters(W, equation.domain.spaces)
+
         self.solvers = {}
         self.solvers["explicit"] = LinearVariationalSolver(
             explicit_forcing_problem,
+            solver_parameters=self.solver_parameters,
             options_prefix="ExplicitForcingSolver"
         )
         self.solvers["implicit"] = LinearVariationalSolver(
             implicit_forcing_problem,
+            solver_parameters=self.solver_parameters,
             options_prefix="ImplicitForcingSolver"
         )
 

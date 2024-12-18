@@ -514,7 +514,8 @@ class Gradient(DiagnosticField):
             L = -inner(div(test), f)*dx
             if space.extruded:
                 L += dot(dot(test, n), f)*(ds_t + ds_b)
-            prob = LinearVariationalProblem(a, L, self.field)
+            prob = LinearVariationalProblem(a, L, self.field,
+                                            constant_jacobian=True)
             self.evaluator = LinearVariationalSolver(prob)
 
 
