@@ -26,7 +26,7 @@ class Domain(object):
     """
     def __init__(self, mesh, dt, family, degree=None,
                  horizontal_degree=None, vertical_degree=None,
-                 rotated_pole=None):
+                 rotated_pole=None, max_quad_degree=None):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
@@ -47,6 +47,11 @@ class Domain(object):
                 system. These are expressed in the original coordinate system.
                 The longitude and latitude must be expressed in radians.
                 Defaults to None. This is unused for non-spherical domains.
+            max_quad_degree (int, optional): the maximum quadrature degree to
+                use in certain non-linear terms (e.g. when using an expression
+                for the Exner pressure). Defaults to None, in which case this
+                will be set to the 2*p+3, where p is the maximum polynomial
+                degree for the DG space.
 
         Raises:
             ValueError: if incompatible degrees are specified (e.g. specifying
@@ -78,6 +83,12 @@ class Domain(object):
         # Get degrees
         self.horizontal_degree = degree if horizontal_degree is None else horizontal_degree
         self.vertical_degree = degree if vertical_degree is None else vertical_degree
+
+        if max_quad_degree is None:
+            max_degree = max(self.horizontal_degree, self.vertical_degree)
+            self.max_quad_degree = 2*max_degree + 3
+        else:
+            self.max_quad_degree = max_quad_degree
 
         self.mesh = mesh
         self.family = family

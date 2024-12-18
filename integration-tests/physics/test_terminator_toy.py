@@ -32,15 +32,15 @@ def run_terminator_toy(dirname):
     domain = Domain(mesh, dt, 'BDM', 1)
 
     # Define the interacting species
-    X = ActiveTracer(name='X', space='DG',
+    Y = ActiveTracer(name='Y', space='DG',
                      variable_type=TracerVariableType.mixing_ratio,
                      transport_eqn=TransportEquationType.advective)
 
-    X2 = ActiveTracer(name='X2', space='DG',
+    Y2 = ActiveTracer(name='Y2', space='DG',
                       variable_type=TracerVariableType.mixing_ratio,
                       transport_eqn=TransportEquationType.advective)
 
-    tracers = [X, X2]
+    tracers = [Y, Y2]
 
     # Equation
     V = domain.spaces("HDiv")
@@ -57,11 +57,11 @@ def run_terminator_toy(dirname):
     k1 = max_value(0, sin(theta)*sin(theta_c) + cos(theta)*cos(theta_c)*cos(lamda-lamda_c))
     k2 = 1
 
-    physics_schemes = [(TerminatorToy(eqn, k1=k1, k2=k2, species1_name='X',
-                        species2_name='X2'), BackwardEuler(domain))]
+    physics_schemes = [(TerminatorToy(eqn, k1=k1, k2=k2, species1_name='Y',
+                        species2_name='Y2'), BackwardEuler(domain))]
 
     transport_scheme = SSPRK3(domain)
-    transport_method = [DGUpwind(eqn, 'X'), DGUpwind(eqn, 'X2')]
+    transport_method = [DGUpwind(eqn, 'Y'), DGUpwind(eqn, 'Y2')]
 
     time_varying_velocity = True
     stepper = SplitPrescribedTransport(
@@ -75,39 +75,39 @@ def run_terminator_toy(dirname):
 
     stepper.setup_prescribed_expr(u_t)
 
-    X_T_0 = 4e-6
-    X_0 = X_T_0 + 0*lamda
-    X2_0 = 0*lamda
+    Y_T_0 = 4e-6
+    Y_0 = Y_T_0 + 0*lamda
+    Y2_0 = 0*lamda
 
-    stepper.fields("X").interpolate(X_0)
-    stepper.fields("X2").interpolate(X2_0)
+    stepper.fields("Y").interpolate(Y_0)
+    stepper.fields("Y2").interpolate(Y2_0)
 
     stepper.run(t=0, tmax=10*dt)
 
     # Compute the steady state solution to compare to
     steady_space = domain.spaces('DG')
-    X_steady = Function(steady_space)
-    X2_steady = Function(steady_space)
+    Y_steady = Function(steady_space)
+    Y2_steady = Function(steady_space)
 
     r = k1/(4*k2)
-    D_val = sqrt(r**2 + 2*X_T_0*r)
+    D_val = sqrt(r**2 + 2*Y_T_0*r)
 
-    X_steady.interpolate(D_val - r)
-    X2_steady.interpolate(0.5*(X_T_0 - D_val + r))
+    Y_steady.interpolate(D_val - r)
+    Y2_steady.interpolate(0.5*(Y_T_0 - D_val + r))
 
-    return stepper, X_steady, X2_steady
+    return stepper, Y_steady, Y2_steady
 
 
 def test_terminator_toy_setup(tmpdir):
     dirname = str(tmpdir)
-    stepper, X_steady, X2_steady = run_terminator_toy(dirname)
-    X_field = stepper.fields("X")
-    X2_field = stepper.fields("X2")
+    stepper, Y_steady, Y2_steady = run_terminator_toy(dirname)
+    Y_field = stepper.fields("Y")
+    Y2_field = stepper.fields("Y2")
 
-    print(errornorm(X_field, X_steady)/norm(X_steady))
-    print(errornorm(X2_field, X2_steady)/norm(X2_steady))
+    print(errornorm(Y_field, Y_steady)/norm(Y_steady))
+    print(errornorm(Y2_field, Y2_steady)/norm(Y2_steady))
 
     # Assert that the physics scheme has sufficiently moved
     # the species fields near their steady state solutions
-    assert errornorm(X_field, X_steady)/norm(X_steady) < 0.4, "The X field is not sufficiently close to the steady state profile"
-    assert errornorm(X2_field, X2_steady)/norm(X2_steady) < 0.4, "The X2 field is not sufficiently close to the steady state profile"
+    assert errornorm(Y_field, Y_steady)/norm(Y_steady) < 0.4, "The Y field is not sufficiently close to the steady state profile"
+    assert errornorm(Y2_field, Y2_steady)/norm(Y2_steady) < 0.4, "The Y2 field is not sufficiently close to the steady state profile"

@@ -8,7 +8,6 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
     FunctionSpace, errornorm, zero
 from gusto import thermodynamics
-from gusto.core import logger
 from gusto.recovery import Recoverer, BoundaryMethod
 
 
@@ -144,8 +143,16 @@ def compressible_hydrostatic_balance(equation, theta0, rho0, exner0=None,
     dv, dexner = TestFunctions(W)
 
     n = FacetNormal(equation.domain.mesh)
-
     cp = parameters.cp
+
+    # measures
+    dx_qp = dx(degree=domain.max_quad_degree)
+    if top:
+        bmeasure = ds_t(degree=domain.max_quad_degree)
+        bstring = "bottom"
+    else:
+        bmeasure = ds_b(degree=domain.max_quad_degree)
+        bstring = "top"
 
     # add effect of density of water upon theta
     theta = theta0
@@ -154,16 +161,9 @@ def compressible_hydrostatic_balance(equation, theta0, rho0, exner0=None,
         theta = theta0 / (1 + mr_t)
 
     alhs = (
-        (cp*inner(v, dv) - cp*div(dv*theta)*exner)*dx
-        + dexner*div(theta*v)*dx
+        (cp*inner(v, dv) - cp*div(dv*theta)*exner)*dx_qp
+        + dexner*div(theta*v)*dx_qp
     )
-
-    if top:
-        bmeasure = ds_t
-        bstring = "bottom"
-    else:
-        bmeasure = ds_b
-        bstring = "top"
 
     arhs = -cp*inner(dv, n)*theta*exner_boundary*bmeasure
 
@@ -205,8 +205,8 @@ def compressible_hydrostatic_balance(equation, theta0, rho0, exner0=None,
         dv, dexner = TestFunctions(W)
         exner = thermodynamics.exner_pressure(parameters, rho, theta0)
         F = (
-            (cp*inner(v, dv) - cp*div(dv*theta)*exner)*dx
-            + dexner*div(theta0*v)*dx
+            (cp*inner(v, dv) - cp*div(dv*theta)*exner)*dx_qp
+            + dexner*div(theta0*v)*dx_qp
             + cp*inner(dv, n)*theta*exner_boundary*bmeasure
         )
         F += g*inner(dv, equation.domain.k)*dx
@@ -274,14 +274,9 @@ def saturated_hydrostatic_balance(equation, state_fields, theta_e, mr_t,
     mr_v0 = state_fields('water_vapour')
 
     # Calculate hydrostatic exner pressure
-    domain = equation.domain
     parameters = equation.parameters
     Vt = theta0.function_space()
     Vr = rho0.function_space()
-
-    VDG = domain.spaces("DG")
-    if any(deg > 2 for deg in VDG.ufl_element().degree()):
-        logger.warning("default quadrature degree most likely not sufficient for this degree element")
 
     theta0.interpolate(theta_e)
     mr_v0.interpolate(mr_t)
@@ -402,17 +397,12 @@ def unsaturated_hydrostatic_balance(equation, state_fields, theta_d, H,
     mr_v0 = state_fields('water_vapour')
 
     # Calculate hydrostatic exner pressure
-    domain = equation.domain
     parameters = equation.parameters
     Vt = theta0.function_space()
     Vr = rho0.function_space()
     R_d = parameters.R_d
     R_v = parameters.R_v
     epsilon = R_d / R_v
-
-    VDG = domain.spaces("DG")
-    if any(deg > 2 for deg in VDG.ufl_element().degree()):
-        logger.warning("default quadrature degree most likely not sufficient for this degree element")
 
     # apply first guesses
     theta0.assign(theta_d * 1.01)

@@ -99,9 +99,9 @@ def run_boussinesq(tmpdir, compressible):
 
     # State for checking checkpoints
     if compressible:
-        checkpoint_name = 'compressible_boussinesq_chkpt.h5'
+        checkpoint_name = 'boussinesq_compressible_chkpt.h5'
     else:
-        checkpoint_name = 'incompressible_boussinesq_chkpt.h5'
+        checkpoint_name = 'boussinesq_incompressible_chkpt.h5'
     new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
     check_output = OutputParameters(dirname=output_dirname,
                                     checkpoint_pickup_filename=new_path,
