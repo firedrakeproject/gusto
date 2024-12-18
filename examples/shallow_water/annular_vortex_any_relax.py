@@ -512,8 +512,14 @@ stepper.set_reference_profiles([('D', Dbar)])
 # else:
 #     print('Confirmation not given')
 
-logger.info(f'Directory name is {dirname}')
-stepper.run(t=0, tmax=tmax)
+
+if not restart:
+    logger.info(f'Directory name is {dirname}')
+    stepper.run(t=0, tmax=tmax)
+elif restart:
+    logger.info(f'Restart from {dirnameold}')
+    logger.info(f'Directory name is {dirname}')
+    stepper.run(t=start_time*day, tmax=tmax, pick_up=True)
 
 # results_file_name = f'{dirname}/field_output.nc'
 # output_file_name = f'{dirname}/regrid_output.nc'
