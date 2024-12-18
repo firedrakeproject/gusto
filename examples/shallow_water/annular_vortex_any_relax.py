@@ -7,6 +7,8 @@ from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        pi, cos, interpolate, PCG64, RandomGenerator)
 import numpy as np
 from netCDF4 import Dataset
+import os
+import shutil
 
 # ---------------------------------------------------------------------------- #
 # Test case parameters
@@ -57,7 +59,7 @@ tracer = True
 hat_edge = 80
 
 # any extra info to include in the directory name
-extra_name = ''
+extra_name = '_trial'
 
 #####################################################################################
 
@@ -244,10 +246,10 @@ def initial_profiles(omega, radius, phiss, phinn, annulus, **kwargs):
     return rlat, uini, thini
 
 
-def new_groups(input_file, output_file, names):
+def new_groups(input_file, output_file, names, base):
     with Dataset(input_file, 'r') as src:
         with Dataset(output_file, 'a') as dst:
-            PV_group = src.groups['PotentialVorticity']
+            PV_group = src.groups[base]
             for name in names:
                 if name not in dst.groups:
                     new_group = dst.createGroup(f'{name}')
@@ -285,7 +287,7 @@ if not restart:
     fexpr = 2*Omega*x[2]/R
     lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
     bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, topog_expr=bexpr)
     tracer_eqn = ContinuityEquation(domain, domain.spaces("DG"), "tracer")
 
     # estimate core count for Pileus
@@ -296,6 +298,9 @@ if not restart:
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography'), SWCO2cond_flag('D', h_th), CumulativeSum('CO2cond_flag')]
 dumplist = ['D', 'topography', 'tracer']
 groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'D_plus_topography', 'CO2cond_flag', 'CO2cond_flag_cumulative']
+if tracer and restart:
+    dumplist.append('tracer_rs')
+    groups.append('tracer_rs')
 
 # I/O (input/output)
 homepath = '/data/home/sh1293/results'
@@ -303,15 +308,16 @@ dirnameold = f'{homepath}/{restart_name}'
 dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{toponame}_{lenname}_{tracername}_{refname}{extra_name}'
 # print(f'directory name is {dirname}')
 dirpath = f'{homepath}/{dirname}'
-# if restart:
-#     if not os.path.exists(f'{dirpath}/'):
-#         os.makedirs(f'{dirpath}')
-#     shutil.copy(f'{dirnameold}/field_output.nc', f'{dirpath}/field_output.nc')
-#     # Paths to the original and target files
-#     input_file = f'{dirnameold}/field_output.nc'
-#     output_file = f'{dirpath}/field_output.nc'
 
-#     new_groups(input_file, output_file, groups)
+if restart:
+    if not os.path.exists(f'{dirpath}/'):
+        os.makedirs(f'{dirpath}')
+    shutil.copy(f'{dirnameold}/field_output.nc', f'{dirpath}/field_output.nc')
+    # Paths to the original and target files
+    input_file = f'{dirnameold}/field_output.nc'
+    output_file = f'{dirpath}/field_output.nc'
+
+    new_groups(input_file, output_file, groups, 'D')
 
 if not restart:
     output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, dumplist=dumplist)
@@ -332,7 +338,7 @@ elif restart:
     fexpr = 2*Omega*x[2]/R
     lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
     bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, topog_expr=bexpr)
     tracer_eqn = ContinuityEquation(domain, domain.spaces("DG"), "tracer")
     rs_tracer_eqn = ContinuityEquation(domain, domain.spaces("DG"), "tracer_rs")
     # estimate core count for Pileus
