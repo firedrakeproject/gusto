@@ -48,6 +48,7 @@ notebook_test: clean_cache
 
 reset_notebooks:
 	@jupyter-nbconvert --clear-output ./jupyter_notebooks/*.ipynb
+	@rm -rf ./jupyter_notebooks/results
 	@env OMP_NUM_THREADS=1 jupyter-nbconvert \
 		--execute \
 		--ClearMetadataPreprocessor.enabled=True \
