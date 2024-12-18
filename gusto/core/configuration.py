@@ -282,7 +282,7 @@ class Held_Suarez_Parameters(Configuration):
     tau_d = 40 * d    # 40 day time scale
     tau_u = 4 * d     # 4 day timescale
 
-    
+
 class SubcyclingOptions(Configuration):
     """
     Describes the process of subcycling a time discretisation, by dividing the
