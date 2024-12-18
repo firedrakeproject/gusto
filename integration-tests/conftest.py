@@ -25,7 +25,7 @@ def tracer_sphere(tmpdir, degree, small_dt):
     # Parameters chosen so that dt != 1
     # Gaussian is translated from (lon=pi/2, lat=0) to (lon=0, lat=0)
     # to demonstrate that transport is working correctly
-    if (small_dt):
+    if small_dt:
         dt = pi/3. * 0.005
     else:
         dt = pi/3. * 0.02
@@ -47,7 +47,7 @@ def tracer_sphere(tmpdir, degree, small_dt):
                        uexpr, umax, radius, tol)
 
 
-def tracer_slice(tmpdir, degree):
+def tracer_slice(tmpdir, degree, small_dt):
     n = 30 if degree == 0 else 15
     m = PeriodicIntervalMesh(n, 1.)
     mesh = ExtrudedMesh(m, layers=n, layer_height=1./n)
@@ -56,7 +56,10 @@ def tracer_slice(tmpdir, degree):
     # Gaussian is translated by 1.5 times width of domain to demonstrate
     # that transport is working correctly
 
-    dt = 0.01
+    if small_dt:
+        dt = 0.002
+    else:
+        dt = 0.01
     tmax = 0.75
     output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
     domain = Domain(mesh, dt, family="CG", degree=degree)
@@ -80,8 +83,11 @@ def tracer_slice(tmpdir, degree):
     return TracerSetup(domain, tmax, io, f_init, f_end, degree, uexpr, tol=tol)
 
 
-def tracer_blob_slice(tmpdir, degree):
-    dt = 0.01
+def tracer_blob_slice(tmpdir, degree, small_dt):
+    if small_dt:
+        dt = 0.002
+    else:
+        dt = 0.01
     L = 10.
     m = PeriodicIntervalMesh(10, L)
     mesh = ExtrudedMesh(m, layers=10, layer_height=1.)
@@ -105,10 +111,9 @@ def tracer_setup():
             assert not blob
             return tracer_sphere(tmpdir, degree, small_dt)
         elif geometry == "slice":
-            assert not small_dt
             if blob:
-                return tracer_blob_slice(tmpdir, degree)
+                return tracer_blob_slice(tmpdir, degree, small_dt)
             else:
-                return tracer_slice(tmpdir, degree)
+                return tracer_slice(tmpdir, degree, small_dt)
 
     return _tracer_setup
