@@ -4,23 +4,15 @@ Set up Martian annular vortex experiment!
 
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       as_vector, pi, sqrt, min_value, sin, cos,
-                       interpolate, PCG64, RandomGenerator,
-                       conditional, exp)
+                       pi, cos, interpolate, PCG64, RandomGenerator)
 import numpy as np
 from netCDF4 import Dataset
-# import netCDF4 as nc
-import os
-import shutil
-# import pdb
-#import matplotlib.pyplot as plt
-#import xarray as xr
 
 # ---------------------------------------------------------------------------- #
 # Test case parameters
 # ---------------------------------------------------------------------------- #
 
-# set inner and outer latitude limits of annulus   
+# set inner and outer latitude limits of annulus
 phis = 60
 phin = 70
 phimp = phis
@@ -81,18 +73,18 @@ if tracer and not restart:
 elif tracer and restart:
     tracername = f'tracer_tophat-{hat_edge}'
 elif not tracer:
-    tracername = f''
+    tracername = ''
 
 toponame = f'A0-{A0scal}-norel'
 
-### max runtime currently 1 day
+# ## max runtime currently 1 day
 if restart:
     tmax = (rundays + start_time) * day
     lenname = f'len-{start_time}-{start_time+rundays}sols'
 else:
     tmax = rundays * day
     lenname = f'len-{rundays}sols'
-### timestep
+# ## timestep
 
 refname = f'ref-{ref_lev}'
 
@@ -128,11 +120,12 @@ H = 17000.      # Will's Mars value
 Omega = 2*np.pi/88774.
 g = 3.71
 
-### setup shallow water parameters - can also change g and Omega as required
+# ## setup shallow water parameters - can also change g and Omega as required
 parameters = ShallowWaterParameters(g=g, H=H, Omega=Omega)
 # ------------------------------------------------------------------------ #
 # Set up model objects
 # ------------------------------------------------------------------------ #
+
 
 def initial_profiles(omega, radius, phiss, phinn, annulus, **kwargs):
 
@@ -148,7 +141,6 @@ def initial_profiles(omega, radius, phiss, phinn, annulus, **kwargs):
     hbart = 1
     phibar = 17000
 
-
     # set up latitude array, and sin and cos of lat
     rlat = np.linspace(-np.pi/2, np.pi/2, num=ny)[1:-1]
     sinlat = np.sin(rlat)
@@ -157,7 +149,7 @@ def initial_profiles(omega, radius, phiss, phinn, annulus, **kwargs):
     hn = np.ones(len(rlat))
     f = 2 * omega * sinlat
 
-    #setup different initial PV profiles
+    # setup different initial PV profiles
     smoothing = True
     rlat1 = np.radians(phiss)
     rlat2 = np.radians(phinn)
@@ -170,7 +162,7 @@ def initial_profiles(omega, radius, phiss, phinn, annulus, **kwargs):
     qt = np.where(rlat > rlat1, pvmax * qp, qt)
     if annulus:
         qt = np.where(rlat > rlat2, pvpole * qp, qt)
-    
+
     if smoothing:
         # annulus smoothing - linearly for +-1.5deg around each boundary
         def lat_in_rlat(val, rlat):
@@ -203,8 +195,8 @@ def initial_profiles(omega, radius, phiss, phinn, annulus, **kwargs):
             qt = np.where((rlat2l <= rlat) & (rlat <= rlat2u), q_smooth2, qt)
 
     # Scott Liu setup
-    #qt = np.where(rlat > 0., 0.3*qp, qt)
-    #qt = np.where(rlat > 60 * np.pi/180, 2.3*qp, qt)
+    # qt = np.where(rlat > 0., 0.3*qp, qt)
+    # qt = np.where(rlat > 60 * np.pi/180, 2.3*qp, qt)
 
     count = 0
     error = 1
@@ -246,33 +238,11 @@ def initial_profiles(omega, radius, phiss, phinn, annulus, **kwargs):
 
     # final values and constants corrected
     thini = (hn - hbart) * phibar
-    vorini = zn + f
+    # vorini = zn + f
     uini = un
 
-
-    # make random noise
-    #sd = 1.5e-3 * H
-    #noise = np.random.normal(loc=0, scale=sd, size=np.size(sd))
-    #thini += noise
-
-
-    #fig, axs = plt.subplots(3, 1, sharex=True, figsize = (6,9))
-    #axs[0].plot(rlat, qt0, '--', color = 'black', alpha = 0.5)
-    #axs[0].plot(rlat, qt, color = 'blue', label = 'target')
-    #axs[0].plot(rlat, qn, '--', color='red', label = 'numerical')
-    #axs[0].set_ylabel('q')
-    #axs[1].plot(rlat, [0]*len(rlat), '--', color = 'black', alpha = 0.5)
-    #axs[0].legend()
-    #axs[1].plot(rlat, thini/phibar, color = 'blue')
-    #axs[1].set_ylabel('h/H-1')
-    #axs[2].plot(rlat, [0]*len(rlat), '--', color = 'black', alpha = 0.5)
-    #axs[2].plot(rlat, un, color = 'blue')
-    #axs[2].set_ylabel('u')
-    #fig.tight_layout()
-    #plt.show()
-    #plt.savefig('/data/home/sh1293/firedrake-real-opt/src/gusto/examples/shallow_water/results/%s.pdf' %(dirname))
-
     return rlat, uini, thini
+
 
 def new_groups(input_file, output_file, names):
     with Dataset(input_file, 'r') as src:
@@ -288,14 +258,15 @@ def new_groups(input_file, output_file, names):
                         for attr in variable.ncattrs():
                             new_var.setncattr(attr, variable.getncattr(attr))
 
+
 rlat, uini, hini = initial_profiles(Omega, R, phis, phin, annulus=True, pvpole=pvpole, pvmax=pvmax)
 rlat_mp, uini_mp, hini_mp = initial_profiles(Omega, R, phimp, phin, annulus=False)
 h_th = min(hini)*beta+H
 
 if tracer and not restart:
-    Tini = np.where(rlat>=hat_edge*pi/180, 1, 0)
+    Tini = np.where(rlat >= hat_edge*pi/180, 1, 0)
 elif tracer and restart:
-    Tini_rs = np.where(rlat>=hat_edge*pi/180, 1, 0)
+    Tini_rs = np.where(rlat >= hat_edge*pi/180, 1, 0)
 elif not tracer:
     Tini = 0
     Tini_rs = 0
@@ -306,8 +277,7 @@ if monopolar:
 
 if not restart:
     # Domain
-    mesh = IcosahedralSphereMesh(radius=R,
-                                refinement_level=ref_lev, degree=2)
+    mesh = IcosahedralSphereMesh(radius=R, refinement_level=ref_lev, degree=2)
     x = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, 'BDM', degree=1)
 
@@ -343,14 +313,10 @@ dirpath = f'{homepath}/{dirname}'
 
 #     new_groups(input_file, output_file, groups)
 
-
-
-
 if not restart:
     output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, dumplist=dumplist)
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"),
-                        SSPRK3(domain, "D")]
+    transported_fields = [TrapeziumRule(domain, "u"), SSPRK3(domain, "D")]
     tracer_transport = [(tracer_eqn, SSPRK3(domain))]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer")]
 elif restart:
@@ -373,14 +339,11 @@ elif restart:
     logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"),
-                        SSPRK3(domain, "D")]
+    transported_fields = [TrapeziumRule(domain, "u"), SSPRK3(domain, "D")]
     tracer_transport = [(tracer_eqn, SSPRK3(domain)), (rs_tracer_eqn, SSPRK3(domain))]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer"), DGUpwind(rs_tracer_eqn, "tracer_rs")]
 
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-
-
 
 H_rel = Function(domain.spaces('L2'))
 height_relax = SWHeightRelax(eqns, H_rel, tau_r=tau_r)
@@ -389,8 +352,7 @@ height_relax = SWHeightRelax(eqns, H_rel, tau_r=tau_r)
 co2_cond = SWCO2cond(eqns, h_th=h_th, tau_c=tau_c)
 
 if rel_sch == 'both':
-    physics_schemes = [(height_relax, ForwardEuler(domain)),
-                        (co2_cond, ForwardEuler(domain))]
+    physics_schemes = [(height_relax, ForwardEuler(domain)), (co2_cond, ForwardEuler(domain))]
     if include_co2 == 'no':
         physics_schemes = [(height_relax, ForwardEuler(domain))]
 elif rel_sch == 'co2':
@@ -401,13 +363,14 @@ elif rel_sch == 'none':
     physics_schemes = []
 
 # Time stepper
-stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods, physics_schemes=physics_schemes, 
-                                    auxiliary_equations_and_schemes=tracer_transport,
-                                    num_outer=2, num_inner=2)
+stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_methods, physics_schemes=physics_schemes,
+                                  auxiliary_equations_and_schemes=tracer_transport,
+                                  num_outer=2, num_inner=2)
 
 # ------------------------------------------------------------------------ #
 # Initial conditions - these need changing!
 # ------------------------------------------------------------------------ #
+
 
 def initial_u(X):
     lats = []
@@ -417,6 +380,7 @@ def initial_u(X):
         lats.append(lat)
     return np.interp(np.array(lats), rlat, uini)
 
+
 def initial_D(X, h):
     lats = []
     for X0 in X:
@@ -424,6 +388,7 @@ def initial_D(X, h):
         _, lat, _ = lonlatr_from_xyz(x, y, z)
         lats.append(lat)
     return np.interp(np.array(lats), rlat, h)
+
 
 def initial_T(X, Tini):
     lats = []
@@ -442,13 +407,8 @@ if not restart:
     D0 = stepper.fields('D')
     T0 = stepper.fields('tracer')
 
-
-
-#ic = xr.Dataset(data_vars=dict(u=(['rlat'], uini), h=(['rlat'], hini)), coords=dict(lat=rlat))
-#ic.to_netcdf('/data/home/sh1293/firedrake-real-opt/src/gusto/examples/shallow_water/results/%s.nc' %(dirname))
-
-
-
+# ic = xr.Dataset(data_vars=dict(u=(['rlat'], uini), h=(['rlat'], hini)), coords=dict(lat=rlat))
+# ic.to_netcdf('/data/home/sh1293/firedrake-real-opt/src/gusto/examples/shallow_water/results/%s.nc' %(dirname))
 
     Vu = FunctionSpace(mesh, "DG", 2)
     uzonal = Function(Vu)
@@ -462,15 +422,12 @@ if not restart:
 # uspace = u0.function_space()
 # pcg = PCG64()
 # rg = RandomGenerator(pcg)
-#f_normal = rg.normal(uspace, 0.0, 1.5)
-#u0 += f_normal
-
+# f_normal = rg.normal(uspace, 0.0, 1.5)
+# u0 += f_normal
 
 # # tracer_profile = sin(theta) + 1
 # tracer_profile = conditional(theta > 80*pi/180, 1, 0)
 # tracer0.interpolate(tracer_profile)
-
-
 
     VT = T0.function_space()
     Tmesh = VT.mesh()
@@ -481,7 +438,6 @@ if not restart:
     # f_init = exp(-(x[1]/1e6)**2-(x[0]/1e6)**2)
     # f_init = 1
     # T0.interpolate(f_init)
-
 
     VD = D0.function_space()
     Dmesh = VD.mesh()
@@ -508,15 +464,15 @@ D0_mp += H
 D0_an.dat.data[:] = initial_D(XD.dat.data_ro, hini)
 D0_an += H
 
-# from firedrake import File
+# from firedrake import File
 # mp_ic = File("mp_ic.pvd")
 # mp_ic.write(D0_mp)
 
 
-#hinit = Function(D0.function_space()).interpolate(D0/H -1)
-#from firedrake import File
-#of = File(f'{dirname}_H/out.pvd')
-#of.write(hinit)
+# hinit = Function(D0.function_space()).interpolate(D0/H -1)
+# from firedrake import File
+# of = File(f'{dirname}_H/out.pvd')
+# of.write(hinit)
 if not restart:
     pcg = PCG64()
     rg = RandomGenerator(pcg)
@@ -529,14 +485,11 @@ elif rel_sch == 'rad':
     H_rel.assign(D0_an)
     # H_rel.assign(H)
 
-
-
-#print(max(f_normal.dat.data))
-#print(min(f_normal.dat.data))
+# print(max(f_normal.dat.data))
+# print(min(f_normal.dat.data))
 
 Dbar = Function(D0_mp.function_space()).assign(H)
 stepper.set_reference_profiles([('D', Dbar)])
-
 
 # # confirm the dirname is correct
 # if not restart:
@@ -551,7 +504,7 @@ stepper.set_reference_profiles([('D', Dbar)])
 # # ------------------------------------------------------------------------ #
 
 # if confirm == 'y':
-#     if not restart: 
+#     if not restart:
 #         stepper.run(t=0, tmax=tmax)
 #     elif restart:
 #         print('restart')
