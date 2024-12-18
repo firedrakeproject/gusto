@@ -124,7 +124,8 @@ def schaer_mountain(
             subcycling_options=subcycling_opts
         ),
         SSPRK3(
-            domain, "theta", options=theta_opts, subcycling_options=subcycling_opts
+            domain, "theta", options=theta_opts,
+            subcycling_options=subcycling_opts
         )
     ]
     transport_methods = [
