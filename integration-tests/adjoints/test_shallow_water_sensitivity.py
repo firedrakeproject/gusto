@@ -52,7 +52,7 @@ def test_shallow_water(tmpdir):
     rsq = min_value(R0sq, lsq+thsq)
     r = sqrt(rsq)
     bexpr = 2000 * (1 - r/R0)
-    eqn = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
+    eqn = ShallowWaterEquations(domain, parameters, fexpr=fexpr, topog_expr=bexpr)
 
     # I/O
     output = OutputParameters(dirname=str(tmpdir), log_courant=False)

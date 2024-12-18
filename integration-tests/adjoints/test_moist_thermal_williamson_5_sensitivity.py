@@ -24,7 +24,7 @@ from firedrake.adjoint import *
 from pyadjoint import get_working_tape
 from gusto import (
     Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
-    ShallowWaterParameters, ShallowWaterEquations, lonlatr_from_xyz,
+    ShallowWaterParameters, ThermalShallowWaterEquations, lonlatr_from_xyz,
     InstantRain, SWSaturationAdjustment, WaterVapour, CloudWater,
     Rain, GeneralIcosahedralSphereMesh
 )
@@ -108,8 +108,8 @@ def test_moist_thermal_williamson_5_sensitivity(
     tracers = [
         WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')
     ]
-    eqns = ShallowWaterEquations(
-        domain, parameters, fexpr=fexpr, bexpr=tpexpr, thermal=True,
+    eqns = ThermalShallowWaterEquations(
+        domain, parameters, fexpr=fexpr, topog_expr=tpexpr,
         active_tracers=tracers, u_transport_option=u_eqn_type
     )
 
