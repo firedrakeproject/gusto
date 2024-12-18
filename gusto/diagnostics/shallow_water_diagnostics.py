@@ -1,27 +1,17 @@
 """Common diagnostic fields for the Shallow Water equations."""
 
 
-<<<<<<< HEAD
-from firedrake import (dx, TestFunction, TrialFunction, grad, inner, curl,
-                       LinearVariationalProblem, LinearVariationalSolver,
-                       conditional)
-=======
 from firedrake import (
     dx, TestFunction, TrialFunction, grad, inner, curl, Function, Interpolator,
     LinearVariationalProblem, LinearVariationalSolver, conditional
 )
->>>>>>> ba96cef5c2bdb5b51243a87ae62531400a9025de
 from gusto.diagnostics.diagnostics import DiagnosticField, Energy
 
 __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
            "ShallowWaterPotentialEnstrophy", "PotentialVorticity",
-<<<<<<< HEAD
            "RelativeVorticity", "AbsoluteVorticity",
-           "SWCO2cond_flag"]
-=======
-           "RelativeVorticity", "AbsoluteVorticity", "PartitionedVapour",
+           "SWCO2cond_flag", "PartitionedVapour",
            "PartitionedCloud"]
->>>>>>> ba96cef5c2bdb5b51243a87ae62531400a9025de
 
 
 class ShallowWaterKineticEnergy(Energy):
