@@ -49,9 +49,10 @@ def run_sw_cond_evap(dirname, process):
 
     tracers = [WaterVapour(space='DG'), CloudWater(space='DG')]
 
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
-                                 u_transport_option='vector_advection_form',
-                                 thermal=True, active_tracers=tracers)
+    eqns = ThermalShallowWaterEquations(
+        domain, parameters, fexpr=fexpr,
+        u_transport_option='vector_advection_form',
+        active_tracers=tracers)
 
     # I/O
     output = OutputParameters(dirname=dirname+"/sw_cond_evap",
