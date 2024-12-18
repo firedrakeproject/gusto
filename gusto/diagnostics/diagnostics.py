@@ -1052,7 +1052,7 @@ class CumulativeSum(DiagnosticField):
         """
         self.field_name = name
         self.integral_name = name+"_cumulative"
-        DiagnosticField.__init__(self, method='assign', required_fields=(self.field_name,))
+        super().__init__(self, method='assign', required_fields=(self.field_name,))
 
     def setup(self, domain, state_fields):
         """
