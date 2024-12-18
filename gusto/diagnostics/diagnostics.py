@@ -134,8 +134,6 @@ class DiagnosticField(object, metaclass=ABCMeta):
 
         assert method in ['interpolate', 'project', 'solve', 'assign'], \
             f'Invalid evaluation method {self.method} for diagnostic {self.name}'
-        
-        
 
         self._initialised = False
         self.required_fields = required_fields
@@ -1140,7 +1138,7 @@ class Time_integral_1(Sum):
 
 
 class CumulativeSum(DiagnosticField):
-    """Base diagnostic for cumulatively summing a field."""
+    """Base diagnostic for cumulatively summing a field in time."""
     def __init__(self, name):
         """
         Args:
@@ -1159,14 +1157,13 @@ class CumulativeSum(DiagnosticField):
             state_fields (:class:`StateFields`): the model's field container.
         """
 
-        # Gather fields
+        # Gather the field to be summed
         self.integrand = state_fields(self.field_name)
-
-        # space
         self.space = self.integrand.function_space()
 
+        # Create a new field to store the cumulative sum
         self.field = state_fields(self.integral_name, space=self.space, dump=True, pick_up=True)
-        # Initialise field to zero, if picking up this will be overridden
+        # Initialise the new field to zero, if picking up from a checkpoint the original cumulative field will load and not be overwritten.
         self.field.assign(0.0)
 
     def compute(self):
