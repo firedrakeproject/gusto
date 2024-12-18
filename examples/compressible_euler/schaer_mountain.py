@@ -19,7 +19,7 @@ from gusto import (
     OutputParameters, IO, SSPRK3, DGUpwind, SemiImplicitQuasiNewton,
     compressible_hydrostatic_balance, SpongeLayerParameters, Exner, ZComponent,
     Perturbation, SUPGOptions, TrapeziumRule, MaxKernel, MinKernel,
-    CompressibleEulerEquations
+    CompressibleEulerEquations, SubcyclingOptions, RungeKuttaFormulation
 )
 
 schaer_mountain_defaults = {
@@ -64,6 +64,8 @@ def schaer_mountain(
     # ------------------------------------------------------------------------ #
     # Our settings for this set up
     # ------------------------------------------------------------------------ #
+
+    alpha = 0.55
     element_order = 1
     u_eqn_type = 'vector_invariant_form'
 
@@ -113,25 +115,32 @@ def schaer_mountain(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
+    subcycling_opts = SubcyclingOptions(subcycle_by_courant=0.25)
     theta_opts = SUPGOptions()
     transported_fields = [
-        TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "rho"),
-        SSPRK3(domain, "theta", options=theta_opts)
+        TrapeziumRule(domain, "u", subcycling_options=subcycling_opts),
+        SSPRK3(
+            domain, "rho", rk_formulation=RungeKuttaFormulation.predictor,
+            subcycling_options=subcycling_opts
+        ),
+        SSPRK3(
+            domain, "theta", options=theta_opts, subcycling_options=subcycling_opts
+        )
     ]
     transport_methods = [
         DGUpwind(eqns, "u"),
-        DGUpwind(eqns, "rho"),
+        DGUpwind(eqns, "rho", advective_then_flux=True),
         DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
     ]
 
     # Linear solver
-    linear_solver = CompressibleSolver(eqns)
+    tau_values = {'rho': 1.0, 'theta': 1.0}
+    linear_solver = CompressibleSolver(eqns, alpha, tau_values=tau_values)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, spinup_steps=5
+        linear_solver=linear_solver, alpha=alpha, spinup_steps=5
     )
 
     # ------------------------------------------------------------------------ #
