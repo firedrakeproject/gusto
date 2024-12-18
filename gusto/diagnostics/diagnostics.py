@@ -1163,7 +1163,7 @@ class CumulativeSum(DiagnosticField):
 
         # Create a new field to store the cumulative sum
         self.field = state_fields(self.integral_name, space=self.space, dump=True, pick_up=True)
-        # Initialise the new field to zero, if picking up from a checkpoint the original cumulative field will load and not be overwritten.
+        # Initialise the new field to zero, if picking up from a checkpoint file the original cumulative field will load and not be overwritten.
         self.field.assign(0.0)
 
     def compute(self):
