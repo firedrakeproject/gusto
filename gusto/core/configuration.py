@@ -79,7 +79,11 @@ class Configuration(object):
 
         # Almost all parameters should be Constants -- but there are some
         # specific exceptions which should be kept as integers
-        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq']:
+        non_constants = [
+            'dumpfreq', 'pddumpfreq', 'chkptfreq',
+            'fixed_subcycles', 'max_subcycles', 'subcycle_by_courant'
+        ]
+        if type(value) in [float, int] and name not in non_constants:
             object.__setattr__(self, name, Constant(value))
         else:
             object.__setattr__(self, name, value)

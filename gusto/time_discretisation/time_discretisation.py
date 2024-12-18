@@ -30,7 +30,17 @@ def wrapper_apply(original_apply):
     """Decorator to add steps for using a wrapper around the apply method."""
     def get_apply(self, x_out, x_in):
 
-        if self.wrapper is not None:
+        if self.augmentation is not None:
+
+            def new_apply(self, x_out, x_in):
+
+                self.augmentation.pre_apply(x_in)
+                original_apply(self, self.augmentation.x_out, self.augmentation.x_in)
+                self.augmentation.post_apply(x_out)
+
+            return new_apply(self, x_out, x_in)
+
+        elif self.wrapper is not None:
 
             def new_apply(self, x_out, x_in):
 
@@ -51,12 +61,16 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
     """Base class for time discretisation schemes."""
 
     def __init__(self, domain, field_name=None, subcycling_options=None,
-                 solver_parameters=None, limiter=None, options=None):
+                 solver_parameters=None, limiter=None, options=None,
+                 augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
@@ -66,6 +80,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         self.domain = domain
         self.field_name = field_name
@@ -78,7 +95,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.options = options
         self.limiter = limiter
         self.courant_max = None
-        self.subcycling_options = None
+        self.augmentation = augmentation
+        self.subcycling_options = subcycling_options
 
         if self.subcycling_options is not None:
             self.subcycling_options.check_options()
@@ -159,6 +177,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.fs = equation.function_space
             self.idx = None
 
+        if self.augmentation is not None:
+            self.fs = self.augmentation.fs
+            self.residual = self.augmentation.residual
+            self.idx = None
+
         if len(active_labels) > 0:
             if isinstance(self.field_name, list):
                 # Multiple fields are being solved for simultaneously.
@@ -179,6 +202,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         map_if_false=drop)
 
                 self.residual = residual
+
             else:
                 self.residual = self.residual.label_map(
                     lambda t: any(t.has_label(time_derivative, *active_labels)),
@@ -188,7 +212,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         if isinstance(self.field_name, list):
             self.field_name = equation.field_name
 
-        bcs = equation.bcs[self.field_name]
+        if self.augmentation is not None:
+            # Transfer BCs from appropriate function space
+            bcs = self.augmentation.bcs if hasattr(self.augmentation, "bcs") else None
+        else:
+            bcs = equation.bcs[self.field_name]
 
         self.evaluate_source = []
         self.physics_names = []
@@ -204,8 +232,16 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             for field in equation.field_names:
 
                 # Check if the mass term for this prognostic is mass-weighted
-                if len(self.residual.label_map(lambda t: t.get(prognostic) == field and t.has_label(time_derivative) and t.has_label(mass_weighted), map_if_false=drop)) == 1:
-                    field_terms = self.residual.label_map(lambda t: t.get(prognostic) == field and not t.has_label(time_derivative), map_if_false=drop)
+                if len(self.residual.label_map((
+                    lambda t: t.get(prognostic) == field
+                    and t.has_label(time_derivative)
+                    and t.has_label(mass_weighted)
+                ), map_if_false=drop)) == 1:
+
+                    field_terms = self.residual.label_map(
+                        lambda t: t.get(prognostic) == field and not t.has_label(time_derivative),
+                        map_if_false=drop
+                    )
 
                     # Check that the equation for this prognostic does not involve
                     # both mass-weighted and non-mass-weighted terms; if so, a split
@@ -407,7 +443,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
     """Base class for explicit time discretisations."""
 
     def __init__(self, domain, field_name=None, subcycling_options=None,
-                 solver_parameters=None, limiter=None, options=None):
+                 solver_parameters=None, limiter=None, options=None,
+                 augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -425,11 +462,15 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         super().__init__(domain, field_name,
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
 
         # get default solver options if none passed in
         if solver_parameters is None:
@@ -457,12 +498,11 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         # and rescale dt accordingly; else perform just one cycle using dt
         if (self.subcycling_options is not None
                 and self.subcycling_options.fixed_subcycles is not None):
-            fixed_subcycles = self.subcycling_options.fixed_subcycles
-            self.dt.assign(self.dt/fixed_subcycles)
-            self.ncycles = self.fixed_subcycles
+            self.ncycles = self.subcycling_options.fixed_subcycles
+            self.dt.assign(self.dt/self.ncycles)
         else:
-            self.dt = self.dt
             self.ncycles = 1
+            self.dt = self.dt
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
 
@@ -536,7 +576,8 @@ class BackwardEuler(TimeDiscretisation):
     y^(n+1) = y^n + dt*F[y^(n+1)].                                               \n
     """
     def __init__(self, domain, field_name=None, subcycling_options=None,
-                 solver_parameters=None, limiter=None, options=None):
+                 solver_parameters=None, limiter=None, options=None,
+                 augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -553,7 +594,10 @@ class BackwardEuler(TimeDiscretisation):
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods. Defaults to None.
-        """
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
+            """
         if not solver_parameters:
             # default solver parameters
             solver_parameters = {'ksp_type': 'gmres',
@@ -562,7 +606,8 @@ class BackwardEuler(TimeDiscretisation):
         super().__init__(domain=domain, field_name=field_name,
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -658,7 +703,7 @@ class ThetaMethod(TimeDiscretisation):
     """
 
     def __init__(self, domain, theta, field_name=None, subcycling_options=None,
-                 solver_parameters=None, options=None):
+                 solver_parameters=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -676,6 +721,9 @@ class ThetaMethod(TimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
 
         Raises:
             ValueError: if theta is not provided.
@@ -694,7 +742,8 @@ class ThetaMethod(TimeDiscretisation):
         super().__init__(domain, field_name,
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
-                         options=options)
+                         options=options,
+                         augmentation=augmentation)
 
         self.theta = theta
 
@@ -771,6 +820,8 @@ class ThetaMethod(TimeDiscretisation):
             x_in (:class:`Function`): the input field.
         """
         self.update_subcycling()
+        if self.augmentation is not None:
+            self.augmentation.update(x_in)
 
         self.x0.assign(x_in)
         for i in range(self.ncycles):
@@ -791,7 +842,7 @@ class TrapeziumRule(ThetaMethod):
     """
 
     def __init__(self, domain, field_name=None, subcycling_options=None,
-                 solver_parameters=None, options=None):
+                 solver_parameters=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -804,11 +855,14 @@ class TrapeziumRule(ThetaMethod):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         super().__init__(domain, 0.5, field_name,
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
-                         options=options)
+                         options=options, augmentation=augmentation)
 
 
 class TR_BDF2(TimeDiscretisation):
