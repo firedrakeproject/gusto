@@ -6,9 +6,10 @@ called.
 
 from abc import ABCMeta, abstractmethod
 from firedrake import (
-    FunctionSpace, Function, BrokenElement, Projector, Interpolator,
-    VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace
+    FunctionSpace, Function, BrokenElement, Projector, VectorElement, Constant,
+    as_ufl, dot, grad, TestFunction, MixedFunctionSpace, assemble
 )
+from firedrake.__future__ import interpolate
 from firedrake.fml import Term
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
 from gusto.recovery import Recoverer, ReversibleRecoverer, ConservativeRecoverer
@@ -263,7 +264,7 @@ class RecoveryWrapper(Wrapper):
         # Operators for projecting back
         self.interp_back = (self.options.project_low_method == 'interpolate')
         if self.options.project_low_method == 'interpolate':
-            self.x_out_projector = Interpolator(self.x_out, self.x_projected)
+            self.x_out_projector = interpolate(self.x_out, self.original_space)
         elif self.options.project_low_method == 'project':
             self.x_out_projector = Projector(self.x_out, self.x_projected,
                                              bcs=post_apply_bcs)
@@ -301,7 +302,7 @@ class RecoveryWrapper(Wrapper):
         """
 
         if self.interp_back:
-            self.x_out_projector.interpolate()
+            self.x_projected.assign(self.x_out_projector)
         else:
             self.x_out_projector.project()
         x_out.assign(self.x_projected)

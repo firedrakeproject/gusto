@@ -3,10 +3,11 @@ Objects to describe physics parametrisations for the boundary layer, such as
 drag and turbulence."""
 
 from firedrake import (
-    Interpolator, conditional, Function, dx, sqrt, dot, Constant, grad,
-    TestFunctions, split, inner, Projector, exp, avg, outer, FacetNormal,
-    SpatialCoordinate, dS_v
+    conditional, Function, dx, sqrt, dot, Constant, grad, TestFunctions,
+    split, inner, Projector, exp, avg, outer, FacetNormal, SpatialCoordinate,
+    dS_v, assemble
 )
+from firedrake.__future__ import interpolate
 from firedrake.fml import subject
 from gusto.core.configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
@@ -123,7 +124,7 @@ class SurfaceFluxes(PhysicsParametrisation):
         # Implicit formulation ----------------------------------------------- #
         # For use with ForwardEuler only, as implicit solution is hand-written
         if implicit_formulation:
-            self.source_interpolators = []
+            self.source_interpolate = []
 
             # First specify T_np1 expression
             Vtheta = equation.spaces[T_idx]
@@ -139,7 +140,7 @@ class SurfaceFluxes(PhysicsParametrisation):
                 dmv_expr = surface_expr * (mv_np1_expr - m_v) / self.dt
                 source_mv_expr = test_m_v * source_mv * dx
 
-                self.source_interpolators.append(Interpolator(dmv_expr, source_mv))
+                self.source_interpolate.append(interpolate(dmv_expr, Vtheta))
                 equation.residual -= self.label(subject(prognostic(source_mv_expr, vapour_name),
                                                         X), self.evaluate)
 
@@ -155,7 +156,7 @@ class SurfaceFluxes(PhysicsParametrisation):
             source_theta_vd = Function(Vtheta)
             dtheta_vd_expr = surface_expr * (theta_np1_expr - theta_vd) / self.dt
             source_theta_expr = test_theta * source_theta_vd * dx
-            self.source_interpolators.append(Interpolator(dtheta_vd_expr, source_theta_vd))
+            self.source_interpolate.append(interpolate(dtheta_vd_expr, Vtheta))
             equation.residual -= self.label(subject(prognostic(source_theta_expr, 'theta'),
                                                     X), self.evaluate)
 
@@ -203,8 +204,8 @@ class SurfaceFluxes(PhysicsParametrisation):
             self.X.assign(x_in)
             self.dt.assign(dt)
             self.rho_recoverer.project()
-            for source_interpolator in self.source_interpolators:
-                source_interpolator.interpolate()
+            for source_interpolator in self.source_interpolate:
+                assemble(source_interpolator)
 
 
 class WindDrag(PhysicsParametrisation):
