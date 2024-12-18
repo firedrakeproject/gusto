@@ -39,8 +39,10 @@ def setup_advective_then_flux(dirname, desirable_property):
     io = IO(domain, output)
 
     # Transport method
+    subcycling_options = SubcyclingOptions(fixed_subcycles=3)
     transport_scheme = SSPRK3(
-        domain, rk_formulation=RungeKuttaFormulation.linear, fixed_subcycles=3
+        domain, rk_formulation=RungeKuttaFormulation.linear,
+        subcycling_options=subcycling_options
     )
     transport_method = DGUpwind(eqn, "rho", advective_then_flux=True)
 
