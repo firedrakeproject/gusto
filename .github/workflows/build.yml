@@ -52,7 +52,7 @@ jobs:
           . /home/firedrake/firedrake/bin/activate
           export GUSTO_PARALLEL_LOG=FILE
           python -m pytest \
-            -n 4 --dist worksteal \
+            -n 4 --dist loadscope \
             --timeout=1200 \
             --timeout-method=thread \
             -o faulthandler_timeout=1260 \
