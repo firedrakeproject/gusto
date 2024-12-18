@@ -1146,7 +1146,7 @@ class CumulativeSum(DiagnosticField):
         """
         self.field_name = name
         self.integral_name = name+"_cumulative"
-        DiagnosticField.__init__(self, method='assign', required_fields=(self.field_name,))
+        super().__init__(self, method='assign', required_fields=(self.field_name,))
 
     def setup(self, domain, state_fields):
         """
@@ -1163,7 +1163,8 @@ class CumulativeSum(DiagnosticField):
 
         # Create a new field to store the cumulative sum
         self.field = state_fields(self.integral_name, space=self.space, dump=True, pick_up=True)
-        # Initialise the new field to zero, if picking up from a checkpoint file the original cumulative field will load and not be overwritten.
+        # Initialise the new field to zero, if picking up from a checkpoint
+        # file the original cumulative field will load and not be overwritten.
         self.field.assign(0.0)
 
     def compute(self):
