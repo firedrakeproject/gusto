@@ -7,7 +7,8 @@ from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
 from gusto.core.labels import prognostic
 from gusto.equations import thermodynamics
-from gusto.core.configuration import Held_Suarez_Parameters
+from gusto.core.configuration import HeldSuarezParameters
+from gusto.core import logger
 
 
 class Relaxation(PhysicsParametrisation):
@@ -15,15 +16,19 @@ class Relaxation(PhysicsParametrisation):
     Relaxation term for Held Suarez
     """
 
-    def __init__(self, equation, variable_name, parameters=None):
+    def __init__(self, equation, variable_name, hs_parameters=None):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
             variable_name (str): the name of the variable
+            hs_parameters (:class'Configuration'): contains the parameters for the Held-suariez test case
 
         """
         label_name = f'relaxation_{variable_name}'
-        super().__init__(equation, label_name, parameters=None)
+        if hs_parameters is None:
+            hs_parameters = HeldSuarezParameters()
+            logger.warning('Using default Held-Suarez parameters')
+        super().__init__(equation, label_name, hs_parameters)
 
         if equation.domain.on_sphere:
             x, y, z = SpatialCoordinate(equation.domain.mesh)
@@ -51,14 +56,22 @@ class Relaxation(PhysicsParametrisation):
                                           self.rho_averaged, self.theta), self.exner)
         self.sigma = Function(Vt)
         self.kappa = equation.parameters.kappa
-        HS_params = Held_Suarez_Parameters
 
-        theta_condition = (HS_params.T0surf - HS_params.T0horiz * sin(lat)**2 - (HS_params.T0vert * ln(self.exner) * cos(lat)**2)/self.kappa)
-        Theta_eq = conditional(HS_params.T0stra/self.exner >= theta_condition, HS_params.T0stra/self.exner, theta_condition)
+        T0surf = hs_parameters.T0surf
+        T0horiz = hs_parameters.T0horiz
+        T0vert = hs_parameters.T0vert
+        T0stra = hs_parameters.T0stra
+
+        sigma_b = hs_parameters.sigmab
+        tau_d = hs_parameters.tau_d
+        tau_u = hs_parameters.tau_u
+
+        theta_condition = (T0surf - T0horiz * sin(lat)**2 - (T0vert * ln(self.exner) * cos(lat)**2)/self.kappa)
+        Theta_eq = conditional(T0stra/self.exner >= theta_condition, T0stra/self.exner, theta_condition)
 
         # timescale of temperature forcing
-        tau_cond = (self.sigma**(1/self.kappa) - HS_params.sigmab) / (1 - HS_params.sigmab)
-        newton_freq = 1 / HS_params.tau_d + (1/HS_params.tau_u - 1/HS_params.tau_d) * conditional(0 >= tau_cond, 0, tau_cond) * cos(lat)**4
+        tau_cond = (self.sigma**(1/self.kappa) - sigma_b) / (1 - sigma_b)
+        newton_freq = 1 / tau_d + (1/tau_u - 1/tau_d) * conditional(0 >= tau_cond, 0, tau_cond) * cos(lat)**4
         forcing_expr = newton_freq * (self.theta - Theta_eq)
 
         # Create source for forcing
@@ -100,16 +113,18 @@ class RayleighFriction(PhysicsParametrisation):
     F_u = -u / a,
     where a is some friction factor
     """
-    def __init__(self, equation, parameters=None):
+    def __init__(self, equation, hs_parameters=None):
         """
          Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
-            forcing_coeff (:class:`unsure what to put here`): the coefficient
-            determining rate of friction
+            hs_parameters (:class'Configuration'): contains the parameters for the Held-suariez test case
         """
         label_name = 'rayleigh_friction'
-        super().__init__(equation, label_name, parameters=parameters)
-        self.parameters = equation.parameters
+        if hs_parameters is None:
+            hs_parameters = HeldSuarezParameters()
+            logger.warning('Using default Held-Suarez parameters')
+        super().__init__(equation, label_name, hs_parameters)
+
         self.domain = equation.domain
         self.X = Function(equation.X.function_space())
         X = self.X
@@ -133,8 +148,8 @@ class RayleighFriction(PhysicsParametrisation):
                                           self.rho_averaged, self.theta), self.exner)
 
         self.sigma = Function(Vt)
-        sigmab = Held_Suarez_Parameters.sigmab
-        self.kappa = self.parameters.kappa
+        sigmab = hs_parameters.sigmab
+        self.kappa = equation.parameters.kappa
         tau_fric = 24 * 60 * 60
 
         tau_cond = (self.sigma**(1/self.kappa) - sigmab) / (1 - sigmab)
