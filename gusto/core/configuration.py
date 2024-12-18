@@ -149,6 +149,15 @@ class ShallowWaterParameters(Configuration):
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
+    # Factor that multiplies the vapour in the equivalent buoyancy
+    # formulation of the thermal shallow water equations
+    beta2 = None
+    # Scaling factor for the saturation function in the equivalent buoyancy
+    # formulation of the thermal shallow water equations
+    nu = None
+    # Scaling factor for the saturation function in the equivalent buoyancy
+    # formulation of the thermal shallow water equations
+    q0 = None
 
 
 class WrapperOptions(Configuration, metaclass=ABCMeta):
