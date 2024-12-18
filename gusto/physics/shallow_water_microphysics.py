@@ -360,5 +360,6 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         self.cloud.assign(x_in.subfunctions[self.Vc_idx])
         if self.time_varying_gamma_v:
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
-        for interpolator in self.source_interpolate:
-            self.source.assign(assemble(interpolator))
+        for interpolator, src in zip(self.source_interpolate, self.source):
+            src.assign(assemble(interpolator))
+
