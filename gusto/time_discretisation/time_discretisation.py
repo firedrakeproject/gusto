@@ -473,14 +473,6 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                          limiter=limiter, options=options,
                          augmentation=augmentation)
 
-        # get default solver options if none passed in
-        if solver_parameters is None:
-            self.solver_parameters = mass_parameters(
-                equation.function_space, equation.domain.spaces)
-            self.solver_parameters['snes_type'] = 'ksponly'
-        else:
-            self.solver_parameters = solver_parameters
-
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
@@ -493,6 +485,14 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                 the equation to include.
         """
         super().setup(equation, apply_bcs, *active_labels)
+
+        # get default solver options if none passed in
+        if solver_parameters is None:
+            self.solver_parameters = mass_parameters(
+                equation.function_space, equation.domain.spaces)
+            self.solver_parameters['snes_type'] = 'ksponly'
+        else:
+            self.solver_parameters = solver_parameters
 
         # if user has specified a number of fixed subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
