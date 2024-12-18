@@ -157,7 +157,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
                                        map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.x1, old_idx=self.idx))
-        # Loop through stages up to s-1 and calcualte/sum
+        # Loop through stages up to s-1 and calculate/sum
         # dt*(b_1*F(y_1) + b_2*F(y_2) + .... + b_s*F(y_s))
         for i in range(self.nStages):
             r_imp = self.residual.label_map(
