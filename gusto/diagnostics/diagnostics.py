@@ -22,7 +22,8 @@ __all__ = ["Diagnostics", "DiagnosticField", "CourantNumber", "Gradient",
            "XComponent", "YComponent", "ZComponent", "MeridionalComponent",
            "ZonalComponent", "RadialComponent", "Energy", "KineticEnergy",
            "Sum", "Difference", "SteadyStateError", "Perturbation",
-           "Divergence", "TracerDensity", "IterativeDiagnosticField"]
+           "Divergence", "TracerDensity", "IterativeDiagnosticField",
+           "CumulativeSum"]
 
 
 class Diagnostics(object):
@@ -1041,3 +1042,43 @@ class TracerDensity(DiagnosticField):
 
         else:
             super().setup(domain, state_fields)
+
+
+class CumulativeSum(DiagnosticField):
+    """Base diagnostic for cumulatively summing a field in time."""
+    def __init__(self, name):
+        """
+        Args:
+            name (str): name of the field to take the cumulative sum of.
+        """
+        self.field_name = name
+        self.integral_name = name+"_cumulative"
+        super().__init__(self, method='assign', required_fields=(self.field_name,))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+
+        # Gather the field to be summed
+        self.integrand = state_fields(self.field_name)
+        self.space = self.integrand.function_space()
+
+        # Create a new field to store the cumulative sum
+        self.field = state_fields(self.integral_name, space=self.space, dump=True, pick_up=True)
+        # Initialise the new field to zero, if picking up from a checkpoint
+        # file the original cumulative field will load and not be overwritten.
+        self.field.assign(0.0)
+
+    def compute(self):
+        """Increment the cumulative sum diagnostic."""
+        self.field.assign(self.field + self.integrand)
+
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return self.integral_name
