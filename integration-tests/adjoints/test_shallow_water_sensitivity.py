@@ -88,7 +88,7 @@ def test_shallow_water(tmpdir):
 
     J = assemble(0.5*inner(u_tf, u_tf)*dx + 0.5*g*D_tf**2*dx)
 
-    control = [Control(D0), Control(u0)] # Control variables
+    control = [Control(D0), Control(u0)]  # Control variables
     J_hat = ReducedFunctional(J, control)
     assert np.isclose(J_hat([D0, u0]), J, rtol=1e-10)
     with stop_annotating():
@@ -98,4 +98,3 @@ def test_shallow_water(tmpdir):
         h0.assign(D0 * np.random.rand())
         h1.assign(u0 * np.random.rand())
         assert taylor_test(J_hat, [D0, u0], [h0, h1]) > 1.95
-

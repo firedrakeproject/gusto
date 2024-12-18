@@ -216,4 +216,3 @@ def test_moist_thermal_williamson_5_sensitivity(
         h0 = Function(D0.function_space())
         h0.assign(D0 * np.random.rand())
         assert taylor_test(Jhat, D0, h0) > 1.95
-
