@@ -119,6 +119,9 @@ class SDC(object, metaclass=ABCMeta):
         self.formulation = formulation
         self.limiter = limiter
 
+        # TODO: this is to avoid an error in the underlying wrapper_apply decorator
+        self.augmentation = None
+
         # Initialise wrappers
         if options is not None:
             self.wrapper_name = options.name
@@ -135,7 +138,7 @@ class SDC(object, metaclass=ABCMeta):
                             'SDC: suboption SUPG is currently not implemented within MixedOptions')
                     else:
                         raise RuntimeError(
-                            f'SDC: suboption wrapper {wrapper_name} not implemented')
+                            f'SDC: suboption wrapper {self.wrapper_name} not implemented')
             elif self.wrapper_name == "embedded_dg":
                 self.wrapper = EmbeddedDGWrapper(self, options)
             elif self.wrapper_name == "recovered":
@@ -234,7 +237,7 @@ class SDC(object, metaclass=ABCMeta):
                         raise ValueError(f"The option defined for {field} is for a field that does not exist in the equation set")
 
                     field_idx = equation.field_names.index(field)
-                    subwrapper.setup(equation.spaces[Wrappersfield_idx])
+                    subwrapper.setup(equation.spaces[field_idx])
 
                     # Update the function space to that needed by the wrapper
                     self.wrapper.wrapper_spaces[field_idx] = subwrapper.function_space
