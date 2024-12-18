@@ -11,6 +11,22 @@ def mass_parameters(V, spaces=None, ignore_vertical=True):
     """
     PETSc solver parameters for mass matrices.
 
+    Any fields which are discontinuous will have block diagonal
+    mass matrices, so are solved directly using:
+        'ksp_type': 'preonly'
+        'pc_type': 'ilu'
+
+    All continuous fields are solved with CG, with the preconditioner
+    being ILU independently on each field. By solving all continuous fields
+    "monolithically", the total number of inner products is minimised, which
+    is beneficial for scaling to large core counts because it minimises the
+    total number of MPI_Allreduce calls.
+        'ksp_type': 'cg'
+        'pc_type': 'fieldsplit'
+        'pc_fieldsplit_type': 'additive'
+        'fieldsplit_ksp_type': 'preonly'
+        'fieldsplit_pc_type': 'ilu'
+
     Args:
         spaces: Optional `Spaces` object. If present, any subspace
             of V that came from the `Spaces` object will use the
@@ -36,12 +52,12 @@ def mass_parameters(V, spaces=None, ignore_vertical=True):
 
         # For extruded meshes the continuity is recorded
         # separately for the horizontal and vertical directions.
-        if extruded:
+        if extruded and spaces is not None:
             if ignore_vertical:
                 continuous = continuous['horizontal']
             else:
                 continuous = (continuous['horizontal']
-                              and continuous['vertical'])
+                              or continuous['vertical'])
 
         if continuous:
             continuous_fields.add(field)
