@@ -283,7 +283,7 @@ def equation_setup(restart, domain, mesh, parameters, Omega, R, A0scal, H):
     else:
         rs_tracer_eqn = None
     logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
-    
+
     return eqns, tracer_eqn, rs_tracer_eqn
 
 
@@ -294,7 +294,7 @@ def transport_setup(restart, domain, eqns, tracer_eqn, rs_tracer_eqn):
     if restart:
         tracer_transport.append((rs_tracer_eqn, SSPRK3(domain)))
         transport_methods.append(DGUpwind(rs_tracer_eqn, "tracer_rs"))
-    
+
     return transported_fields, tracer_transport, transport_methods
 
 
