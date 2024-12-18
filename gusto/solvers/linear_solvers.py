@@ -387,8 +387,12 @@ class CompressibleSolver(TimesteppingSolver):
             logger.info('Compressible linear solver: Exner average solve')
             self.exner_avg_solver.solve()
 
+        # Because the left hand side of the hybridised problem depends
+        # on the reference profile, the Jacobian matrix should change
+        # when the reference profiles are updated. This call will tell
+        # the hybridized_solver to reassemble the Jacobian next time
+        # `solve` is called.
         self.hybridized_solver.invalidate_jacobian()
-        self.theta_solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
