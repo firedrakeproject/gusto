@@ -6,7 +6,7 @@ from gusto import *
 import gusto.equations.thermodynamics as td
 from gusto.core.labels import physics_label
 from firedrake import (Constant, PeriodicIntervalMesh, as_vector, norm,
-                       SpatialCoordinate, ExtrudedMesh, Function, dot)
+                       ExtrudedMesh, Function, dot)
 from firedrake.fml import identity, drop
 
 
@@ -14,7 +14,8 @@ def run_apply_rayleigh_friction(dirname):
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
-    dt = 100.0
+
+    dt = 3600.0
 
     # declare grid shape, with length L and height H
     L = 500.
@@ -27,23 +28,23 @@ def run_apply_rayleigh_friction(dirname):
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
     domain = Domain(mesh, dt, "CG", 0)
 
-    _, z = SpatialCoordinate(mesh)
-
     # Set up equation
-
     parameters = CompressibleParameters()
     eqn = CompressibleEulerEquations(domain, parameters)
 
     # I/O
-    output = OutputParameters(dirname=dirname+"Rayleigh_friction",
+    output = OutputParameters(dirname=dirname+"/held_suarez_friction",
                               dumpfreq=1,
                               dumplist=['u'])
-    io = IO(domain, output, diagnostic_fields=[XComponent('u')])
+    io = IO(domain, output)
+
+    # Physics scheme
+    physics_parametrisation = RayleighFriction(eqn)
 
     time_discretisation = BackwardEuler(domain)
-    physics_parameterisation = RayleighFriction(eqn, parameters)
 
-    physics_scheme = [(physics_parameterisation, time_discretisation)]
+    # time_discretisation = ForwardEuler(domain)
+    physics_schemes = [(physics_parametrisation, time_discretisation)]
 
     # Only want time derivatives and physics terms in equation, so drop the rest
     eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
@@ -52,17 +53,22 @@ def run_apply_rayleigh_friction(dirname):
     # Time stepper
     scheme = ForwardEuler(domain)
     stepper = SplitPhysicsTimestepper(eqn, scheme, io,
-                                      physics_schemes=physics_scheme)
+                                      physics_schemes=physics_schemes)
+
+    # ------------------------------------------------------------------------ #
+    # Initial conditions
+    # ------------------------------------------------------------------------ #
 
     Vu = domain.spaces("HDiv")
     Vt = domain.spaces("theta")
     Vr = domain.spaces("DG")
 
+    # Declare prognostic fields
     u0 = stepper.fields("u")
     rho0 = stepper.fields("rho")
     theta0 = stepper.fields("theta")
 
-    # Set prognostic variables -- there is initially some horizontal wind
+    # Set a background state with constant pressure and temperature
     pressure = Function(Vr).interpolate(Constant(100000.))
     temperature = Function(Vt).interpolate(Constant(295.))
     theta_d = td.theta(parameters, temperature, pressure)
@@ -70,12 +76,12 @@ def run_apply_rayleigh_friction(dirname):
     theta0.project(theta_d)
     rho0.interpolate(pressure / (temperature*parameters.R_d))
 
-    u0.project(as_vector([864.0, 0]))
+    # Constant horizontal wind
+    u0.project(as_vector([864, 0.0]))
 
-    # Answer: Winds will be slowed by a factor of u/1day so
-    day = 24*60*60
+    # Answer: slower winds than initially
     u_true = Function(Vu)
-    u_true.project(as_vector([(864 - 864/day), 0]))
+    u_true.project(as_vector([(864 - 864/86400), 0.0]))
 
     # ------------------------------------------------------------------------ #
     # Run

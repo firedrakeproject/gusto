@@ -241,3 +241,17 @@ class BoundaryLayerParameters(Configuration):
     coeff_evap = 1.1e-3         # Dimensionless surface evaporation coefficient
     height_surface_layer = 75.  # Height (m) of surface level (usually lowest level)
     mu = 100.                   # Interior penalty coefficient for vertical diffusion
+
+
+class Held_Suarez_Parameters(Configuration):
+    """
+    Parameters used in the default configuration for the Held Suarez test case.
+    """
+    T0stra = 200      # Stratosphere temp
+    T0surf = 315      # Surface temperature at equator
+    T0horiz = 60      # Equator to pole temperature difference
+    T0vert = 10       # Stability parameter
+    sigmab = 0.7      # Height of the boundary layer
+    d = 24 * 60 * 60  # seconds in a day
+    tau_d = 40 * d    # 40 day time scale
+    tau_u = 4 * d     # 4 day timescale
