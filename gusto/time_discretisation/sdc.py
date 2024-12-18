@@ -46,14 +46,12 @@ Key choices in our SDC method are:
 from abc import ABCMeta
 import numpy as np
 from firedrake import (
-    Function, NonlinearVariationalProblem, TestFunction, TestFunctions,
-    NonlinearVariationalSolver, Constant
+    Function, NonlinearVariationalProblem, NonlinearVariationalSolver, Constant
 )
 from firedrake.fml import (
-    replace_subject, replace_test_function, all_terms, drop
+    replace_subject, all_terms, drop
 )
 from firedrake.utils import cached_property
-from gusto.time_discretisation.wrappers import *
 from gusto.time_discretisation.time_discretisation import wrapper_apply
 from gusto.core.labels import (time_derivative, implicit, explicit)
 
@@ -410,7 +408,7 @@ class SDC(object, metaclass=ABCMeta):
                     nNodes=self.M,
                     nodeType=self.node_type,
                     quadType=self.quad_type,
-                    k = k
+                    k=k
                 )
 
             # Compute for N2N: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
