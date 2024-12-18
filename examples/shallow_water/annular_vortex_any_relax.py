@@ -46,7 +46,7 @@ ref_lev = 4
 
 # do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
 restart = True
-restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-1sols_tracer_tophat-80_ref-4'
+restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-1sols_tracer_tophat-80_ref-4_rearranged'
 
 # length of this run, time to start from (only relevant if doing a restart)
 rundays = 1
@@ -59,7 +59,7 @@ tracer = True
 hat_edge = 80
 
 # any extra info to include in the directory name
-extra_name = '_trial'
+extra_name = '_rearranged'
 
 #####################################################################################
 
@@ -261,6 +261,43 @@ def new_groups(input_file, output_file, names, base):
                             new_var.setncattr(attr, variable.getncattr(attr))
 
 
+def create_restart_nc(dirpath, dirnameold, groups):
+    if not os.path.exists(f'{dirpath}/'):
+        os.makedirs(f'{dirpath}')
+    shutil.copy(f'{dirnameold}/field_output.nc', f'{dirpath}/field_output.nc')
+    # Paths to the original and target files
+    input_file = f'{dirnameold}/field_output.nc'
+    output_file = f'{dirpath}/field_output.nc'
+    new_groups(input_file, output_file, groups, 'D')
+
+
+def equation_setup(restart, domain, mesh, parameters, Omega, R, A0scal, H):
+    x = SpatialCoordinate(mesh)
+    fexpr = 2*Omega*x[2]/R
+    lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
+    bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, topog_expr=bexpr)
+    tracer_eqn = ContinuityEquation(domain, domain.spaces("DG"), "tracer")
+    if restart:
+        rs_tracer_eqn = ContinuityEquation(domain, domain.spaces("DG"), "tracer_rs")
+    else:
+        rs_tracer_eqn = None
+    logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
+    
+    return eqns, tracer_eqn, rs_tracer_eqn
+
+
+def transport_setup(restart, domain, eqns, tracer_eqn, rs_tracer_eqn):
+    transported_fields = [TrapeziumRule(domain, "u"), SSPRK3(domain, "D")]
+    tracer_transport = [(tracer_eqn, SSPRK3(domain))]
+    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer")]
+    if restart:
+        tracer_transport.append((rs_tracer_eqn, SSPRK3(domain)))
+        transport_methods.append(DGUpwind(rs_tracer_eqn, "tracer_rs"))
+    
+    return transported_fields, tracer_transport, transport_methods
+
+
 rlat, uini, hini = initial_profiles(Omega, R, phis, phin, annulus=True, pvpole=pvpole, pvmax=pvmax)
 rlat_mp, uini_mp, hini_mp = initial_profiles(Omega, R, phimp, phin, annulus=False)
 h_th = min(hini)*beta+H
@@ -277,30 +314,17 @@ if monopolar:
     rlat, uini, hini = rlat_mp, uini_mp, hini_mp
     phin = 90
 
-if not restart:
-    # Domain
-    mesh = IcosahedralSphereMesh(radius=R, refinement_level=ref_lev, degree=2)
-    x = SpatialCoordinate(mesh)
-    domain = Domain(mesh, dt, 'BDM', degree=1)
+# if not restart:
+#     # Domain
+#     mesh = IcosahedralSphereMesh(radius=R, refinement_level=ref_lev, degree=2)
+#     domain = Domain(mesh, dt, 'BDM', degree=1)
 
-    # Equation, including mountain given by bexpr
-    fexpr = 2*Omega*x[2]/R
-    lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
-    bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, topog_expr=bexpr)
-    tracer_eqn = ContinuityEquation(domain, domain.spaces("DG"), "tracer")
-
-    # estimate core count for Pileus
-    logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
-
-    # H_rel = Function(domain.spaces('L2'))
+#     # Equation, including mountain given by bexpr
+#     equation_setup(restart=False)
 
 diagnostic_fields = [PotentialVorticity(), ZonalComponent('u'), MeridionalComponent('u'), Heaviside_flag_less('D', h_th), Sum('D', 'topography'), SWCO2cond_flag('D', h_th), CumulativeSum('CO2cond_flag')]
 dumplist = ['D', 'topography', 'tracer']
 groups = ['PotentialVorticity', 'u_zonal', 'u_meridional', 'D_minus_H_rel_flag_less', 'tracer', 'D', 'topography', 'D_plus_topography', 'CO2cond_flag', 'CO2cond_flag_cumulative']
-if tracer and restart:
-    dumplist.append('tracer_rs')
-    groups.append('tracer_rs')
 
 # I/O (input/output)
 homepath = '/data/home/sh1293/results'
@@ -309,45 +333,33 @@ dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{t
 # print(f'directory name is {dirname}')
 dirpath = f'{homepath}/{dirname}'
 
-if restart:
-    if not os.path.exists(f'{dirpath}/'):
-        os.makedirs(f'{dirpath}')
-    shutil.copy(f'{dirnameold}/field_output.nc', f'{dirpath}/field_output.nc')
-    # Paths to the original and target files
-    input_file = f'{dirnameold}/field_output.nc'
-    output_file = f'{dirpath}/field_output.nc'
-
-    new_groups(input_file, output_file, groups, 'D')
-
 if not restart:
+    mesh = IcosahedralSphereMesh(radius=R, refinement_level=ref_lev, degree=2)
+    domain = Domain(mesh, dt, 'BDM', degree=1)
+
+    # Equation, including mountain given by bexpr
+    eqns, tracer_eqn, rs_tracer_eqn = equation_setup(restart=False, domain=domain, mesh=mesh, parameters=parameters, Omega=Omega, R=R, A0scal=A0scal, H=H)
+
     output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, dumplist=dumplist)
+
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"), SSPRK3(domain, "D")]
-    tracer_transport = [(tracer_eqn, SSPRK3(domain))]
-    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer")]
+    transported_fields, tracer_transport, transport_methods = transport_setup(restart=False, domain=domain, eqns=eqns, tracer_eqn=tracer_eqn, rs_tracer_eqn=rs_tracer_eqn)
 elif restart:
+    if tracer:
+        dumplist.append('tracer_rs')
+        groups.append('tracer_rs')
+    create_restart_nc(dirpath=dirpath, dirnameold=dirnameold, groups=groups)
     output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5', dumplist=dumplist)
 
     chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
     mesh = chkpt_mesh
     domain = Domain(mesh, dt, 'BDM', degree=1)
 
-    x = SpatialCoordinate(mesh)
-
     # Equation, including mountain given by bexpr
-    fexpr = 2*Omega*x[2]/R
-    lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
-    bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, topog_expr=bexpr)
-    tracer_eqn = ContinuityEquation(domain, domain.spaces("DG"), "tracer")
-    rs_tracer_eqn = ContinuityEquation(domain, domain.spaces("DG"), "tracer_rs")
-    # estimate core count for Pileus
-    logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
+    eqns, tracer_eqn, rs_tracer_eqn = equation_setup(restart=True, domain=domain, mesh=mesh, parameters=parameters, Omega=Omega, R=R, A0scal=A0scal, H=H)
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"), SSPRK3(domain, "D")]
-    tracer_transport = [(tracer_eqn, SSPRK3(domain)), (rs_tracer_eqn, SSPRK3(domain))]
-    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D"), DGUpwind(tracer_eqn, "tracer"), DGUpwind(rs_tracer_eqn, "tracer_rs")]
+    transported_fields, tracer_transport, transport_methods = transport_setup(restart=True, domain=domain, eqns=eqns, tracer_eqn=tracer_eqn, rs_tracer_eqn=rs_tracer_eqn)
 
 io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
@@ -413,9 +425,6 @@ if not restart:
     D0 = stepper.fields('D')
     T0 = stepper.fields('tracer')
 
-# ic = xr.Dataset(data_vars=dict(u=(['rlat'], uini), h=(['rlat'], hini)), coords=dict(lat=rlat))
-# ic.to_netcdf('/data/home/sh1293/firedrake-real-opt/src/gusto/examples/shallow_water/results/%s.nc' %(dirname))
-
     Vu = FunctionSpace(mesh, "DG", 2)
     uzonal = Function(Vu)
     umesh = Vu.mesh()
@@ -424,16 +433,6 @@ if not restart:
     uzonal.dat.data[:] = initial_u(Xu.dat.data_ro)
     X = SpatialCoordinate(mesh)
     u0.project(xyz_vector_from_lonlatr(uzonal, Constant(0), Constant(0), X))
-
-# uspace = u0.function_space()
-# pcg = PCG64()
-# rg = RandomGenerator(pcg)
-# f_normal = rg.normal(uspace, 0.0, 1.5)
-# u0 += f_normal
-
-# # tracer_profile = sin(theta) + 1
-# tracer_profile = conditional(theta > 80*pi/180, 1, 0)
-# tracer0.interpolate(tracer_profile)
 
     VT = T0.function_space()
     Tmesh = VT.mesh()
@@ -526,30 +525,6 @@ elif restart:
     logger.info(f'Restart from {dirnameold}')
     logger.info(f'Directory name is {dirname}')
     stepper.run(t=start_time*day, tmax=tmax, pick_up=True)
-
-# results_file_name = f'{dirname}/field_output.nc'
-# output_file_name = f'{dirname}/regrid_output.nc'
-# data_file = Dataset(results_file_name, 'r')
-# for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity']:
-#     field_data = extract_gusto_field(data_file, field_name)
-#     coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
-#     times = np.arange(np.shape(field_data)[1])
-#     lats = np.arange(-90, 91, 3)
-#     lons = np.arange(-180, 181, 3)
-#     X, Y = np.meshgrid(lons, lats)
-#     new_data = regrid_horizontal_slice(X, Y,
-#                                         coords_X, coords_Y, field_data)
-#     da = xr.DataArray(data=new_data.astype('float32'),
-#                     dims=['lat', 'lon', 'time'],
-#                     coords=dict(lat=lats.astype('float32'), lon=lons.astype('float32'), time=times.astype('float32')),
-#                     name=field_name)
-#     ds1 = da.to_dataset()
-#     if field_name == 'D':
-#         ds = ds1
-#     else:
-#         ds = xr.merge([ds, ds1])
-
-# ds.to_netcdf(output_file_name)
 
 
 print(f'directory name is {dirname}')
