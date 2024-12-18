@@ -22,7 +22,7 @@ from gusto import (
     SUPGOptions, CourantNumber, Perturbation, Gradient,
     CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
     compressible_hydrostatic_balance, logger, RichardsonNumber,
-    RungeKuttaFormulation
+    RungeKuttaFormulation, SubcyclingOptions
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -106,10 +106,17 @@ def skamarock_klemp_nonhydrostatic(
 
     # Transport schemes
     theta_opts = SUPGOptions()
+    subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
     transported_fields = [
-        SSPRK3(domain, "u", subcycle_by_courant=0.25),
-        SSPRK3(domain, "rho", subcycle_by_courant=0.25, rk_formulation=RungeKuttaFormulation.linear),
-        SSPRK3(domain, "theta", subcycle_by_courant=0.25, options=theta_opts)
+        SSPRK3(domain, "u", subcycling_options=subcycling_options),
+        SSPRK3(
+            domain, "rho", subcycling_options=subcycling_options,
+            rk_formulation=RungeKuttaFormulation.linear
+        ),
+        SSPRK3(
+            domain, "theta", subcycling_options=subcycling_options,
+            options=theta_opts
+        )
     ]
     transport_methods = [
         DGUpwind(eqns, "u"),

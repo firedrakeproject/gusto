@@ -216,16 +216,11 @@ def unsaturated_bubble(
     R_v = eqns.parameters.R_v
     epsilon = R_d / R_v
 
-    # make expressions for determining water_v0
-    exner = thermodynamics.exner_pressure(eqns.parameters, rho_averaged, theta0)
-    p = thermodynamics.p(eqns.parameters, exner)
-    T = thermodynamics.T(eqns.parameters, theta0, exner, water_v0)
-    r_v_expr = thermodynamics.r_v(eqns.parameters, rel_hum, T, p)
-
     # make expressions to evaluate residual
     exner_expr = thermodynamics.exner_pressure(eqns.parameters, rho_averaged, theta0)
     p_expr = thermodynamics.p(eqns.parameters, exner_expr)
     T_expr = thermodynamics.T(eqns.parameters, theta0, exner_expr, water_v0)
+    water_v_expr = thermodynamics.r_v(eqns.parameters, rel_hum, T_expr, p_expr)
     rel_hum_expr = thermodynamics.RH(eqns.parameters, water_v0, T_expr, p_expr)
     rel_hum_eval = Function(Vt)
 
@@ -247,7 +242,7 @@ def unsaturated_bubble(
 
         # first solve for r_v
         for _ in range(max_inner_solve_count):
-            water_v_eval.interpolate(r_v_expr)
+            water_v_eval.interpolate(water_v_expr)
             water_v0.assign(water_v0 * (1 - delta) + delta * water_v_eval)
 
             # compute theta_vd

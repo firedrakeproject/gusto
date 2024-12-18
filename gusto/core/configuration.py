@@ -5,12 +5,14 @@ from firedrake import sqrt, Constant
 
 
 __all__ = [
+    "Configuration",
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
     "BoussinesqParameters", "CompressibleParameters",
     "ShallowWaterParameters",
     "EmbeddedDGOptions", "ConservativeEmbeddedDGOptions", "RecoveryOptions",
     "ConservativeRecoveryOptions", "SUPGOptions", "MixedFSOptions",
-    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
+    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters",
+    "SubcyclingOptions"
 ]
 
 
@@ -77,7 +79,11 @@ class Configuration(object):
 
         # Almost all parameters should be Constants -- but there are some
         # specific exceptions which should be kept as integers
-        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq']:
+        non_constants = [
+            'dumpfreq', 'pddumpfreq', 'chkptfreq',
+            'fixed_subcycles', 'max_subcycles', 'subcycle_by_courant'
+        ]
+        if type(value) in [float, int] and name not in non_constants:
             object.__setattr__(self, name, Constant(value))
         else:
             object.__setattr__(self, name, value)
@@ -147,6 +153,15 @@ class ShallowWaterParameters(Configuration):
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
+    # Factor that multiplies the vapour in the equivalent buoyancy
+    # formulation of the thermal shallow water equations
+    beta2 = None
+    # Scaling factor for the saturation function in the equivalent buoyancy
+    # formulation of the thermal shallow water equations
+    nu = None
+    # Scaling factor for the saturation function in the equivalent buoyancy
+    # formulation of the thermal shallow water equations
+    q0 = None
 
 
 class WrapperOptions(Configuration, metaclass=ABCMeta):
@@ -203,6 +218,12 @@ class SUPGOptions(WrapperOptions):
     default = 1/sqrt(15)
     ibp = IntegrateByParts.TWICE
 
+    # Dictionary containing keys field_name and values term_labels
+    # field_name (str): name of the field for SUPG to be applied to
+    # term_label (list): labels of terms for test function to be altered
+    #                    by SUPG
+    suboptions = None
+
 
 class MixedFSOptions(WrapperOptions):
     """Specifies options for a mixed finite element formulation
@@ -210,7 +231,12 @@ class MixedFSOptions(WrapperOptions):
     prognostic variables."""
 
     name = "mixed_options"
-    suboptions = {}
+
+    # Dictionary containing keys field_name and values suboption
+    # field_name (str): name of the field for suboption to be applied to
+    # suboption (:class:`WrapperOptions`): Wrapper options to be applied
+    #                                      to the provided field
+    suboptions = None
 
 
 class SpongeLayerParameters(Configuration):
@@ -255,3 +281,31 @@ class Held_Suarez_Parameters(Configuration):
     d = 24 * 60 * 60  # seconds in a day
     tau_d = 40 * d    # 40 day time scale
     tau_u = 4 * d     # 4 day timescale
+
+    
+class SubcyclingOptions(Configuration):
+    """
+    Describes the process of subcycling a time discretisation, by dividing the
+    time step into a number of smaller substeps.
+
+    NB: cannot provide both the fixed_subcycles and max_subcycles parameters,
+    which will raise an error.
+    """
+
+    # Either None, or an integer, giving the number of subcycles to take
+    fixed_subcycles = None
+
+    # If adaptive subcycling, the maximum number of subcycles to take
+    max_subcycles = 10
+
+    # Either None or a float, giving the maximum Courant number for one step
+    subcycle_by_courant = None
+
+    def check_options(self):
+        """Checks that the subcycling options are valid."""
+
+        if (self.fixed_subcycles is not None
+                and self.subcycle_by_courant is not None):
+            raise ValueError(
+                "Cannot provide both fixed_subcycles and subcycle_by_courant"
+                + "parameters.")
