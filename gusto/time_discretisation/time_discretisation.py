@@ -21,6 +21,7 @@ from gusto.core.labels import (time_derivative, prognostic, physics_label,
                                mass_weighted, nonlinear_time_derivative)
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
+from gusto.solvers import mass_parameters
 
 __all__ = ["TimeDiscretisation", "ExplicitTimeDiscretisation", "BackwardEuler",
            "ThetaMethod", "TrapeziumRule", "TR_BDF2"]
@@ -433,10 +434,9 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
         # get default solver options if none passed in
         if solver_parameters is None:
-            self.solver_parameters = {'snes_type': 'ksponly',
-                                      'ksp_type': 'cg',
-                                      'pc_type': 'bjacobi',
-                                      'sub_pc_type': 'ilu'}
+            self.solver_parameters = mass_parameters(
+                equation.function_space, equation.domain.spaces)
+            self.solver_parameters['snes_type'] = 'ksponly'
         else:
             self.solver_parameters = solver_parameters
 
@@ -479,40 +479,11 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                        + ' as the time derivative term is nonlinear')
             logger.warning(message)
             self.solver_parameters['snes_type'] = 'newtonls'
-
-            # TODO: move this outside the if-else and just set the fieldsplit_type here
-            if len(self.x0.subfunctions) > 1:
-                self.solver_parameters.update({
-                    'ksp_type': 'preonly',
-                    'pc_type': 'fieldsplit',
-                    'pc_fieldsplit_type': 'multiplicative',
-                    'fieldsplit': {
-                        'ksp_type': 'preonly',
-                        'pc_type': 'bjacobi',
-                        'sub_pc_type': 'ilu'
-                    },
-                    'fieldsplit_HDiv_ksp_type': 'cg'
-                })
         else:
             self.solver_parameters.setdefault('snes_lag_jacobian', -2)
             self.solver_parameters.setdefault('snes_lag_jacobian_persists', None)
             self.solver_parameters.setdefault('snes_lag_preconditioner', -2)
             self.solver_parameters.setdefault('snes_lag_preconditioner_persists', None)
-
-            # The time derivatives for each field are independent if all time
-            # time derivatives are linear, so we solve each one independently.
-            if len(self.x0.subfunctions) > 1:
-                self.solver_parameters.update({
-                    'ksp_type': 'preonly',
-                    'pc_type': 'fieldsplit',
-                    'pc_fieldsplit_type': 'additive',
-                    'fieldsplit': {
-                        'ksp_type': 'preonly',
-                        'pc_type': 'bjacobi',
-                        'sub_pc_type': 'ilu'
-                    },
-                    'fieldsplit_HDiv_ksp_type': 'cg'
-                })
 
     @cached_property
     def lhs(self):
