@@ -550,13 +550,7 @@ class SSPRK3(ExplicitRungeKutta):
     k3 = F[y^n + (1/6)*dt*(k0+k1+k2)]                                         \n
     y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + k2 + 3*k3)                            \n
 
-    The 5-stage method can be written as:                                     \n
-
-    k0 = F[y^n]                                                               \n
-    k1 = F[y^n + (1/2)*dt*k1]                                                 \n
-    k2 = F[y^n + (1/2)*dt*(k0+k1)]                                            \n
-    k3 = F[y^n + (1/6)*dt*(k0+k1+k2)]                                         \n
-    y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + k2 + 3*k3)                            \n
+    The 5-stage method has numerically optimised coefficients.                \n
     """
     def __init__(
             self, domain, field_name=None, subcycling_options=None,
