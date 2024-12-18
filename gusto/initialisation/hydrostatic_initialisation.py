@@ -8,7 +8,6 @@ from firedrake import MixedFunctionSpace, TrialFunctions, TestFunctions, \
     NonlinearVariationalProblem, NonlinearVariationalSolver, split, solve, \
     FunctionSpace, errornorm, zero
 from gusto import thermodynamics
-from gusto.core import logger
 from gusto.recovery import Recoverer, BoundaryMethod
 
 
@@ -275,7 +274,6 @@ def saturated_hydrostatic_balance(equation, state_fields, theta_e, mr_t,
     mr_v0 = state_fields('water_vapour')
 
     # Calculate hydrostatic exner pressure
-    domain = equation.domain
     parameters = equation.parameters
     Vt = theta0.function_space()
     Vr = rho0.function_space()
@@ -399,7 +397,6 @@ def unsaturated_hydrostatic_balance(equation, state_fields, theta_d, H,
     mr_v0 = state_fields('water_vapour')
 
     # Calculate hydrostatic exner pressure
-    domain = equation.domain
     parameters = equation.parameters
     Vt = theta0.function_space()
     Vr = rho0.function_space()
