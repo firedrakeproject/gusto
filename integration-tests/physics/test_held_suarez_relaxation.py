@@ -4,9 +4,9 @@ This tests the Held-Suarez physics routine to apply Rayleigh friction.
 from gusto import *
 import gusto.equations.thermodynamics as td
 from gusto.core.labels import physics_label
-from firedrake import (Constant, PeriodicIntervalMesh, as_vector, drop,
+from firedrake import (Constant, PeriodicIntervalMesh, as_vector,
                        ExtrudedMesh, Function)
-from firedrake.fml import identity
+from firedrake.fml import identity, drop
 import pytest
 
 

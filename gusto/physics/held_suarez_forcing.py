@@ -16,7 +16,7 @@ class Relaxation(PhysicsParametrisation):
     Relaxation term for Held Suarez
     """
 
-    def __init__(self, equation, variable_name, hs_parameters=None):
+    def __init__(self, equation, variable_name, parameters, hs_parameters=None):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation.
