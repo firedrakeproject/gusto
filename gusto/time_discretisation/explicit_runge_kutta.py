@@ -89,7 +89,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
     def __init__(self, domain, butcher_matrix, field_name=None,
                  subcycling_options=None,
                  rk_formulation=RungeKuttaFormulation.increment,
-                 solver_parameters=None, limiter=None, options=None):
+                 solver_parameters=None, limiter=None, options=None,
+                 augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -112,11 +113,15 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         super().__init__(domain, field_name=field_name,
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
         self.butcher_matrix = butcher_matrix
         self.nStages = int(np.shape(self.butcher_matrix)[0])
         self.rk_formulation = rk_formulation
@@ -199,7 +204,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         if self.rk_formulation == RungeKuttaFormulation.increment:
             residual = self.residual.label_map(
                 lambda t: t.has_label(time_derivative),
-                map_if_true=replace_subject(self.x_out, self.idx),
+                map_if_true=replace_subject(self.x_out, old_idx=self.idx),
                 map_if_false=drop)
             r = self.residual.label_map(
                 all_terms,
@@ -430,6 +435,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             x_out (:class:`Function`): the output field to be computed.
         """
 
+        if self.augmentation is not None:
+            self.augmentation.update(x_in)
+
         # TODO: is this limiter application necessary?
         if self.limiter is not None:
             self.limiter.apply(x_in)
@@ -453,7 +461,8 @@ class ForwardEuler(ExplicitRungeKutta):
     def __init__(
             self, domain, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
-            solver_parameters=None, limiter=None, options=None
+            solver_parameters=None, limiter=None, options=None,
+            augmentation=None
     ):
         """
         Args:
@@ -475,6 +484,9 @@ class ForwardEuler(ExplicitRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
 
         butcher_matrix = np.array([1.]).reshape(1, 1)
@@ -483,7 +495,8 @@ class ForwardEuler(ExplicitRungeKutta):
                          subcycling_options=subcycling_options,
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
 
 
 class SSPRK3(ExplicitRungeKutta):
@@ -499,7 +512,8 @@ class SSPRK3(ExplicitRungeKutta):
     def __init__(
             self, domain, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
-            solver_parameters=None, limiter=None, options=None
+            solver_parameters=None, limiter=None, options=None,
+            augmentation=None
     ):
         """
         Args:
@@ -521,6 +535,9 @@ class SSPRK3(ExplicitRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
 
         butcher_matrix = np.array([
@@ -532,7 +549,8 @@ class SSPRK3(ExplicitRungeKutta):
                          subcycling_options=subcycling_options,
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
 
 
 class RK4(ExplicitRungeKutta):
@@ -553,7 +571,8 @@ class RK4(ExplicitRungeKutta):
     def __init__(
             self, domain, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
-            solver_parameters=None, limiter=None, options=None
+            solver_parameters=None, limiter=None, options=None,
+            augmentation=None
     ):
         """
         Args:
@@ -575,6 +594,9 @@ class RK4(ExplicitRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         butcher_matrix = np.array([
             [0.5, 0., 0., 0.],
@@ -586,7 +608,8 @@ class RK4(ExplicitRungeKutta):
                          subcycling_options=subcycling_options,
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
 
 
 class Heun(ExplicitRungeKutta):
@@ -605,7 +628,8 @@ class Heun(ExplicitRungeKutta):
     def __init__(
             self, domain, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
-            solver_parameters=None, limiter=None, options=None
+            solver_parameters=None, limiter=None, options=None,
+            augmentation=None
     ):
         """
         Args:
@@ -627,6 +651,9 @@ class Heun(ExplicitRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
 
         butcher_matrix = np.array([
@@ -637,4 +664,5 @@ class Heun(ExplicitRungeKutta):
                          subcycling_options=subcycling_options,
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
