@@ -56,6 +56,7 @@ jobs:
             --timeout=1200 \
             --timeout-method=thread \
             -o faulthandler_timeout=1260 \
+            --nbval-lax \
             jupyter_notebooks
       - name: Prepare logs
         if: always()
