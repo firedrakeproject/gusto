@@ -4,7 +4,8 @@ import numpy as np
 
 from enum import Enum
 from firedrake import (Function, Constant, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver)
+                       NonlinearVariationalSolver, LinearVariationalProblem,
+                       LinearVariationalSolver, TrialFunction)
 from firedrake.fml import replace_subject, all_terms, drop, keep, Term
 from firedrake.utils import cached_property
 from firedrake.formmanipulation import split_form
@@ -41,6 +42,7 @@ class RungeKuttaFormulation(Enum):
 
     increment = 1595712
     predictor = 8234900
+    predictor_lin_solve = 1386823
     linear = 269207
 
 
@@ -141,6 +143,11 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
         if self.rk_formulation == RungeKuttaFormulation.predictor:
             self.field_i = [Function(self.fs) for _ in range(self.nStages+1)]
+        elif self.rk_formulation == RungeKuttaFormulation.predictor_lin_solve:
+            self.field_i = [Function(self.fs) for _ in range(self.nStages+1)]
+            # self.field_i_inc = [Function(self.fs) for _ in range(self.nStages+1)]
+            self.df_trial = TrialFunction(self.fs)
+            self.df = Function(self.fs)
         elif self.rk_formulation == RungeKuttaFormulation.increment:
             self.k = [Function(self.fs) for _ in range(self.nStages)]
         elif self.rk_formulation == RungeKuttaFormulation.linear:
@@ -166,6 +173,22 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 )
                 solver_name = self.field_name+self.__class__.__name__+str(stage)
                 solver = NonlinearVariationalSolver(
+                    problem, solver_parameters=self.solver_parameters,
+                    options_prefix=solver_name
+                )
+                solver_list.append(solver)
+            return solver_list
+        elif self.rk_formulation == RungeKuttaFormulation.predictor_lin_solve:
+            solver_list = []
+
+            for stage in range(self.nStages):
+                # setup linear solver using lhs and rhs defined in derived class
+                problem = LinearVariationalProblem(
+                    self.lhs[stage].form, self.rhs[stage].form,
+                    self.df, bcs=self.bcs
+                )
+                solver_name = self.field_name+self.__class__.__name__+str(stage)
+                solver = LinearVariationalSolver(
                     problem, solver_parameters=self.solver_parameters,
                     options_prefix=solver_name
                 )
@@ -217,6 +240,17 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 l = self.residual.label_map(
                     lambda t: t.has_label(time_derivative),
                     map_if_true=replace_subject(self.field_i[stage+1], self.idx),
+                    map_if_false=drop)
+                lhs_list.append(l)
+
+            return lhs_list
+
+        elif self.rk_formulation == RungeKuttaFormulation.predictor_lin_solve:
+            lhs_list = []
+            for stage in range(self.nStages):
+                l = self.residual.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    map_if_true=replace_subject(self.df_trial, self.idx),
                     map_if_false=drop)
                 lhs_list.append(l)
 
@@ -274,6 +308,32 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 r = r.label_map(
                     lambda t: t.has_label(time_derivative),
                     map_if_true=keep,
+                    map_if_false=lambda t: -self.butcher_matrix[stage, 0]*self.dt*t)
+
+                for i in range(1, stage+1):
+                    r_i = self.residual.label_map(
+                        lambda t: t.has_label(time_derivative),
+                        map_if_true=drop,
+                        map_if_false=replace_subject(self.field_i[i], old_idx=self.idx)
+                    )
+
+                    r -= self.butcher_matrix[stage, i]*self.dt*r_i
+
+                rhs_list.append(r)
+
+            return rhs_list
+
+        elif self.rk_formulation == RungeKuttaFormulation.predictor_lin_solve:
+            rhs_list = []
+
+            for stage in range(self.nStages):
+                r = self.residual.label_map(
+                    all_terms,
+                    map_if_true=replace_subject(self.field_i[0], old_idx=self.idx))
+
+                r = r.label_map(
+                    lambda t: t.has_label(time_derivative),
+                    map_if_true=drop,
                     map_if_false=lambda t: -self.butcher_matrix[stage, 0]*self.dt*t)
 
                 for i in range(1, stage+1):
@@ -385,6 +445,34 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             # Obtain field_ip1 = field_n - dt* sum_m{a_im*F[field_m]}
             self.solver[stage].solve()
+
+            if (stage == self.nStages - 1):
+                self.x1.assign(self.field_i[stage+1])
+                if self.limiter is not None:
+                    self.limiter.apply(self.x1)
+
+        elif self.rk_formulation == RungeKuttaFormulation.predictor_lin_solve:
+            # Set initial field
+            if stage == 0:
+                self.field_i[0].assign(x0)
+
+            # Use previous stage value as a first guess (otherwise may not converge)
+            self.field_i[stage+1].assign(self.field_i[stage])
+
+            # Update field_i for physics / limiters
+            for evaluate in self.evaluate_source:
+                # TODO: not implemented! Here we need to evaluate the m-th term
+                # in the i-th RHS with field_m
+                raise NotImplementedError(
+                    'Physics not implemented with RK schemes that use the '
+                    + 'predictor form')
+            if self.limiter is not None:
+                self.limiter.apply(self.field_i[stage])
+
+            # Obtain field_ip1 = field_n - dt* sum_m{a_im*F[field_m]}
+            self.solver[stage].solve()
+
+            self.field_i[stage+1].assign(self.field_i[0] + self.df)
 
             if (stage == self.nStages - 1):
                 self.x1.assign(self.field_i[stage+1])
