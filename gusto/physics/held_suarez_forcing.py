@@ -55,7 +55,7 @@ class Relaxation(PhysicsParametrisation):
             thermodynamics.exner_pressure(equation.parameters,
                                           self.rho_averaged, self.theta), self.exner)
         self.sigma = Function(Vt)
-        self.kappa = equation.parameters.kappa
+        kappa = equation.parameters.kappa
 
         T0surf = hs_parameters.T0surf
         T0horiz = hs_parameters.T0horiz
@@ -66,11 +66,11 @@ class Relaxation(PhysicsParametrisation):
         tau_d = hs_parameters.tau_d
         tau_u = hs_parameters.tau_u
 
-        theta_condition = (T0surf - T0horiz * sin(lat)**2 - (T0vert * ln(self.exner) * cos(lat)**2)/self.kappa)
+        theta_condition = (T0surf - T0horiz * sin(lat)**2 - (T0vert * ln(self.exner) * cos(lat)**2)/kappa)
         Theta_eq = conditional(T0stra/self.exner >= theta_condition, T0stra/self.exner, theta_condition)
 
         # timescale of temperature forcing
-        tau_cond = (self.sigma**(1/self.kappa) - sigma_b) / (1 - sigma_b)
+        tau_cond = (self.sigma**(1/kappa) - sigma_b) / (1 - sigma_b)
         newton_freq = 1 / tau_d + (1/tau_u - 1/tau_d) * conditional(0 >= tau_cond, 0, tau_cond) * cos(lat)**4
         forcing_expr = newton_freq * (self.theta - Theta_eq)
 
@@ -80,7 +80,7 @@ class Relaxation(PhysicsParametrisation):
 
         # Add relaxation term to residual
         test = equation.tests[theta_idx]
-        dx_reduced = dx(degree=4)
+        dx_reduced = dx(degree=equation.domain.max_quad_degree)
         forcing_form = test * self.source_relaxation * dx_reduced
         equation.residual += self.label(subject(prognostic(forcing_form, 'theta'), X), self.evaluate)
 
@@ -149,10 +149,10 @@ class RayleighFriction(PhysicsParametrisation):
 
         self.sigma = Function(Vt)
         sigmab = hs_parameters.sigmab
-        self.kappa = equation.parameters.kappa
+        kappa = equation.parameters.kappa
         tau_fric = 24 * 60 * 60
 
-        tau_cond = (self.sigma**(1/self.kappa) - sigmab) / (1 - sigmab)
+        tau_cond = (self.sigma**(1/kappa) - sigmab) / (1 - sigmab)
         wind_timescale = conditional(ge(0, tau_cond), 0, tau_cond) / tau_fric
         forcing_expr = u_hori * wind_timescale
 
@@ -161,7 +161,7 @@ class RayleighFriction(PhysicsParametrisation):
 
         tests = equation.tests
         test = tests[u_idx]
-        dx_reduced = dx(degree=4)
+        dx_reduced = dx(degree=equation.domain.max_quad_degree)
         source_form = inner(test, self.source_friction) * dx_reduced
         equation.residual += self.label(subject(prognostic(source_form, 'u'), X), self.evaluate)
 
@@ -177,7 +177,7 @@ class RayleighFriction(PhysicsParametrisation):
         """
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        self.exner_interpolator.interpolate
+        self.exner_interpolator.interpolate()
         # Determine sigma:= exner / exner_surf
         exner_columnwise, index_data = self.domain.coords.get_column_data(self.exner, self.domain)
         sigma_columnwise = np.zeros_like(exner_columnwise)

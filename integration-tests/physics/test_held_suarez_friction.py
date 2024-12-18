@@ -81,7 +81,7 @@ def run_apply_rayleigh_friction(dirname):
 
     # Answer: slower winds than initially
     u_true = Function(Vu)
-    u_true.project(as_vector([(864 - 864/86400), 0.0]))
+    u_true.project(as_vector([828, 0.0]))
 
     # ------------------------------------------------------------------------ #
     # Run
@@ -110,5 +110,5 @@ def test_rayleigh_friction(tmpdir):
     u_z_true = Function(DG0).project(dot(u_true, e_z))
 
     denom = norm(u_x_true)
-    assert norm(u_x_final - u_x_true) / denom < 0.01, 'Final horizontal wind is incorrect'
+    assert norm(u_x_final - u_x_true) / denom < 0.0001, 'Final horizontal wind is incorrect'
     assert norm(u_z_final - u_z_true) < 1e-12, 'Final vertical wind is incorrect'
