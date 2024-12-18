@@ -295,7 +295,7 @@ class IterativeDiagnosticField(DiagnosticField):
 
             # Solve method must be declared in diagnostic's own setup routine
             if self.method == 'interpolate':
-                self.evaluator = assemble(interpolate(self.expr, self.space))
+                self.evaluator = interpolate(self.expr, self.space)
             elif self.method == 'project':
                 self.evaluator = Projector(self.expr, self.field)
             elif self.method == 'assign':
