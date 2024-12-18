@@ -1,13 +1,12 @@
 """Common diagnostic fields."""
 
-
 from firedrake import (assemble, dot, dx, Function, sqrt, TestFunction,
                        TrialFunction, Constant, grad, inner, FacetNormal,
                        LinearVariationalProblem, LinearVariationalSolver,
                        ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, pi,
                        TensorFunctionSpace, SpatialCoordinate, as_vector,
                        Projector, Interpolator, FunctionSpace, FiniteElement,
-                       TensorProductElement)
+                       TensorProductElement, conditional)
 from firedrake.assign import Assigner
 from ufl.domain import extract_unique_domain
 
@@ -21,7 +20,8 @@ __all__ = ["Diagnostics", "DiagnosticField", "CourantNumber", "Gradient",
            "XComponent", "YComponent", "ZComponent", "MeridionalComponent",
            "ZonalComponent", "RadialComponent", "Energy", "KineticEnergy",
            "Sum", "Difference", "SteadyStateError", "Perturbation",
-           "Divergence", "TracerDensity", "IterativeDiagnosticField"]
+           "Divergence", "TracerDensity", "IterativeDiagnosticField",
+           "Heaviside_flag_less", "CumulativeSum", "Time_integral_1"]
 
 
 class Diagnostics(object):
@@ -134,6 +134,8 @@ class DiagnosticField(object, metaclass=ABCMeta):
 
         assert method in ['interpolate', 'project', 'solve', 'assign'], \
             f'Invalid evaluation method {self.method} for diagnostic {self.name}'
+        
+        
 
         self._initialised = False
         self.required_fields = required_fields
@@ -1040,3 +1042,138 @@ class TracerDensity(DiagnosticField):
 
         else:
             super().setup(domain, state_fields)
+
+
+class Heaviside_flag_less(DiagnosticField):
+    """Base diagnostic for calculating the difference between one field and a constant"""
+    def __init__(self, field_name, constant):
+        """
+        Args:
+            field_name (str): the name of the field to be subtracted from.
+            constant (Functionspace?): the constant to be subtracted.
+        """
+        super().__init__(method='interpolate', required_fields=(field_name,))
+        self.field_name = field_name
+        self.constant = constant
+
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return self.field_name+"_minus_H_rel_flag_less"
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+
+        field = state_fields(self.field_name)
+        constant = self.constant
+        heaviside = field - constant
+        condit_expr = conditional(heaviside < 0, 1, 0)
+        self.expr = condit_expr
+        space = field.function_space()
+        super().setup(domain, state_fields, space=space)
+
+
+class Time_integral_1(Sum):
+    """Base diagnostic for computing the time integral of a field."""
+    def __init__(self, name):
+        """
+        Args:
+            name (str): name of the field to take the time integral of.
+        """
+        self.field_name1 = name
+        self.field_name2 = name+'_time_integral_1'
+        DiagnosticField.__init__(self, method='assign', required_fields=(name,))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        # Check if initial field already exists -- otherwise needs creating
+        if not hasattr(state_fields, self.field_name2):
+            field1 = state_fields(self.field_name1)
+            field2 = state_fields(self.field_name2, space=field1.function_space(),
+                                  pick_up=True, dump=False)
+            # Attach state fields to self so that we can pick it up in compute
+            self.state_fields = state_fields
+            # The initial value for fields may not have already been set yet so we
+            # postpone setting it until the compute method is called
+            self.init_field_set = False
+        else:
+            field1 = state_fields(self.field_name1)
+            field2 = state_fields(self.field_name2, space=field1.function_space(),
+                                  pick_up=True, dump=False)
+            # By default set this new field to the current value
+            # This may be overwritten if picking up from a checkpoint
+            field2.assign(field1)
+            self.state_fields = state_fields
+            self.init_field_set = True
+
+        super().setup(domain, state_fields)
+
+    def compute(self):
+        # The first time the compute method is called we set the initial field.
+        # We do not want to do this if picking up from a checkpoint
+        if not self.init_field_set:
+            # Set initial field
+            full_field = self.state_fields(self.field_name1)
+            init_field = self.state_fields(self.field_name2)
+            init_field.assign(full_field)
+
+            self.init_field_set = True
+
+        super().compute()
+
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return self.field_name2
+
+
+class CumulativeSum(DiagnosticField):
+    """Base diagnostic for cumulatively summing a field."""
+    def __init__(self, name):
+        """
+        Args:
+            name (str): name of the field to take the cumulative sum of.
+        """
+        self.field_name = name
+        self.integral_name = name+"_cumulative"
+        DiagnosticField.__init__(self, method='assign', required_fields=(self.field_name,))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+
+        # Gather fields
+        self.integrand = state_fields(self.field_name)
+
+        # space
+        self.space = self.integrand.function_space()
+
+        self.field = state_fields(self.integral_name, space=self.space, dump=True, pick_up=True)
+        # Initialise field to zero, if picking up this will be overridden
+        self.field.assign(0.0)
+
+    def compute(self):
+        """Increment the cumulative sum diagnostic."""
+        self.field.assign(self.field + self.integrand)
+
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return self.integral_name
