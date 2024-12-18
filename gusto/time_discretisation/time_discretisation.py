@@ -488,7 +488,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
         # get default solver options if none passed in
         self.solver_parameters.update(mass_parameters(
-            equation.function_space, equation.domain.spaces))
+            self.fs, equation.domain.spaces))
         self.solver_parameters['snes_type'] = 'ksponly'
 
         # if user has specified a number of fixed subcycles, then save this
