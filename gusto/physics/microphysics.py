@@ -5,7 +5,7 @@ compressible Euler equations.
 
 from firedrake import (
     Interpolator, conditional, Function, dx, min_value, max_value, Constant, pi,
-    inner, TestFunction, NonlinearVariationalProblem, NonlinearVariationalSolver
+    Projector
 )
 from firedrake.fml import identity, Term, subject, drop
 from gusto.equations import Phases, TracerVariableType
@@ -341,12 +341,10 @@ class Fallout(PhysicsParametrisation):
                 + 'AdvectedMoments.M0 and AdvectedMoments.M3')
 
         if moments != AdvectedMoments.M0:
-            # TODO: introduce reduced projector
-            test = TestFunction(Vu)
-            dx_reduced = dx(degree=4)
-            proj_eqn = inner(test, self.v + v_expression*domain.k)*dx_reduced
-            proj_prob = NonlinearVariationalProblem(proj_eqn, self.v)
-            self.determine_v = NonlinearVariationalSolver(proj_prob)
+            self.determine_v = Projector(
+                -v_expression*domain.k, v,
+                quadrature_degree=domain.max_quad_degree
+            )
 
 
     def evaluate(self, x_out, x_in, dt):
@@ -360,8 +358,8 @@ class Fallout(PhysicsParametrisation):
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
         self.X.assign(x_in)
         if self.moments != AdvectedMoments.M0:
-            self.determine_v.solve()
-        x_out.assign(self.v)
+            self.determine_v.project()
+            x_out.assign(self.v)
 
 
 class Coalescence(PhysicsParametrisation):

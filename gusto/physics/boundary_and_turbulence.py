@@ -4,9 +4,8 @@ drag and turbulence."""
 
 from firedrake import (
     Interpolator, conditional, Function, dx, sqrt, dot, Constant, grad,
-    TestFunctions, split, inner, TestFunction, exp, avg, outer, FacetNormal,
-    SpatialCoordinate, dS_v, NonlinearVariationalProblem,
-    NonlinearVariationalSolver
+    TestFunctions, split, inner, Projector, exp, avg, outer, FacetNormal,
+    SpatialCoordinate, dS_v
 )
 from firedrake.fml import subject, drop
 from gusto.core.configuration import BoundaryLayerParameters
@@ -291,12 +290,10 @@ class WindDrag(PhysicsParametrisation):
 
             du_expr = surface_expr * (u_np1_expr - u_hori) / self.dt
 
-            # TODO: introduce reduced projector
-            test_Vu = TestFunction(Vu)
-            dx_reduced = dx(degree=4)
-            proj_eqn = inner(test_Vu, source_u - du_expr)*dx_reduced
-            proj_prob = NonlinearVariationalProblem(proj_eqn, source_u)
-            self.source_projector = NonlinearVariationalSolver(proj_prob)
+            self.source_projector = Projector(
+                du_expr, source_u,
+                quadrature_degree=equation.domain.max_quad_degree
+            )
 
             source_expr = inner(test, source_u - k*dot(source_u, k)) * dx
             equation.residual -= source(self.label(subject(prognostic(source_expr, 'u'),
@@ -328,7 +325,7 @@ class WindDrag(PhysicsParametrisation):
         if self.implicit_formulation:
             self.X.assign(x_in)
             self.dt.assign(dt)
-            self.source_projector.solve()
+            self.source_projector.project()
             x_out.subfunctions[self.u_idx].assign(self.source_u)
         else:
             x_out.assign(self.X)
