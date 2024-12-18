@@ -532,19 +532,37 @@ class ForwardEuler(ExplicitRungeKutta):
 
 class SSPRK3(ExplicitRungeKutta):
     u"""
-    Implements the 3-stage Strong-Stability-Preserving Runge-Kutta method
-    for solving ∂y/∂t = F(y). It can be written as:                           \n
+    Implements 3rd order Strong-Stability-Preserving Runge-Kutta methods
+    for solving ∂y/∂t = F(y).                                                 \n
+
+    The 3-stage method can be written as:                                     \n
 
     k0 = F[y^n]                                                               \n
     k1 = F[y^n + dt*k1]                                                       \n
     k2 = F[y^n + (1/4)*dt*(k0+k1)]                                            \n
     y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + 4*k2)                                 \n
+
+    The 4-stage method can be written as:                                     \n
+
+    k0 = F[y^n]                                                               \n
+    k1 = F[y^n + (1/2)*dt*k1]                                                 \n
+    k2 = F[y^n + (1/2)*dt*(k0+k1)]                                            \n
+    k3 = F[y^n + (1/6)*dt*(k0+k1+k2)]                                         \n
+    y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + k2 + 3*k3)                            \n
+
+    The 5-stage method can be written as:                                     \n
+
+    k0 = F[y^n]                                                               \n
+    k1 = F[y^n + (1/2)*dt*k1]                                                 \n
+    k2 = F[y^n + (1/2)*dt*(k0+k1)]                                            \n
+    k3 = F[y^n + (1/6)*dt*(k0+k1+k2)]                                         \n
+    y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + k2 + 3*k3)                            \n
     """
     def __init__(
             self, domain, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
             solver_parameters=None, limiter=None, options=None,
-            augmentation=None
+            augmentation=None, stages=3
     ):
         """
         Args:
@@ -569,13 +587,36 @@ class SSPRK3(ExplicitRungeKutta):
             augmentation (:class:`Augmentation`): allows the equation solved in
                 this time discretisation to be augmented, for instances with
                 extra terms of another auxiliary variable. Defaults to None.
+            stages (int, optional): number of stages: (3, 4, 5). Defaults to 3.
         """
 
-        butcher_matrix = np.array([
-            [1., 0., 0.],
-            [1./4., 1./4., 0.],
-            [1./6., 1./6., 2./3.]
-        ])
+        if stages == 3:
+            butcher_matrix = np.array([
+                [1., 0., 0.],
+                [1./4., 1./4., 0.],
+                [1./6., 1./6., 2./3.]
+            ])
+            self.cfl_limit = 1
+        elif stages == 4:
+            butcher_matrix = np.array([
+                [1./2., 0., 0., 0.],
+                [1./2., 1./2., 0., 0.],
+                [1./6., 1./6., 1./6., 0.],
+                [1./6., 1./6., 1./6., 1./2.]
+            ])
+            self.cfl_limit = 2
+        elif stages == 5:
+            self.cfl_limit = 2.65062919294483
+            butcher_matrix = np.array([
+                [0.37726891511710, 0., 0., 0., 0.],
+                [0.37726891511710, 0.37726891511710, 0., 0., 0.],
+                [0.16352294089771, 0.16352294089771, 0.16352294089771, 0., 0.],
+                [0.14904059394856, 0.14831273384724, 0.14831273384724, 0.34217696850008, 0.],
+                [0.19707596384481, 0.11780316509765, 0.11709725193772, 0.27015874934251, 0.29786487010104]
+            ])
+        else:
+            raise ValueError(f"{stages} stage 3rd order SSPRK not implemented")
+
         super().__init__(domain, butcher_matrix, field_name=field_name,
                          subcycling_options=subcycling_options,
                          rk_formulation=rk_formulation,
