@@ -418,9 +418,11 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         # provide linearisation
         if self.equivalent_buoyancy:
             beta2 = self.parameters.beta2
-            qsat_expr = self.compute_saturation(self.X)
-            qv = conditional(qt < qsat_expr, qt, qsat_expr)
-            qvbar = conditional(qtbar < qsat_expr, qtbar, qsat_expr)
+            # qsat_expr = self.compute_saturation(self.X)
+            # qv = conditional(qt < qsat_expr, qt, qsat_expr)
+            # qvbar = conditional(qtbar < qsat_expr, qtbar, qsat_expr)
+            qv = qt
+            qvbar = qtbar
             source_form = pressure_gradient(subject(prognostic(
                 -D * div(b*w) * dx - 0.5 * b * div(D*w) * dx
                 + jump(b*w, n) * avg(D) * dS + 0.5 * jump(D*w, n) * avg(b) * dS
