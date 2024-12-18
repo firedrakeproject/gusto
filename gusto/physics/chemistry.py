@@ -2,7 +2,7 @@
 
 from firedrake import dx, split, Function
 from firedrake.fml import subject
-from gusto.core.labels import prognostic
+from gusto.core.labels import prognostic, source
 from gusto.core.logging import logger
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
 
@@ -66,10 +66,11 @@ class TerminatorToy(PhysicsParametrisation):
         source1_expr = test_1 * 2*Kx * dx
         source2_expr = test_2 * -Kx * dx
 
-        equation.residual -= self.label(subject(prognostic(source1_expr, 'X'), Xq), self.evaluate)
-        equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate)
+        equation.residual -= source(self.label(subject(prognostic(source1_expr, 'X'), Xq), self.evaluate))
+        equation.residual -= source(self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate))
 
-    def evaluate(self, x_in, dt):
+
+    def evaluate(self, x_out, x_in, dt):
         """
         Evaluates the source/sink for the coalescence process.
 
@@ -79,5 +80,7 @@ class TerminatorToy(PhysicsParametrisation):
         """
 
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
+
+        x_out.assign(self.Xq)
 
         pass
