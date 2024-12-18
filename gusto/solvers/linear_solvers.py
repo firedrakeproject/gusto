@@ -85,6 +85,17 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
+    def update_reference_profiles(self):
+        """
+        Update the solver when the reference profiles have changed.
+
+        This typically includes forcing any Jacobians that depend on
+        the reference profiles to be reassembled, and recalculating
+        any values derived from the reference values.
+        """
+        pass
+
+    @abstractmethod
     def solve(self):
         pass
 
@@ -376,10 +387,6 @@ class CompressibleSolver(TimesteppingSolver):
 
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
-        """
-        Updates the reference profiles.
-        """
-
         with timed_region("Gusto:HybridProjectRhobar"):
             logger.info('Compressible linear solver: rho average solve')
             self.rho_avg_solver.solve()
@@ -564,6 +571,10 @@ class BoussinesqSolver(TimesteppingSolver):
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.up_solver.snes.ksp)
 
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        self.up_solver.invalidate_jacobian()
+
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
         """
@@ -728,10 +739,6 @@ class ThermalSWSolver(TimesteppingSolver):
 
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
-        """
-        Updates the reference profiles.
-        """
-
         if self.equations.equivalent_buoyancy:
             self.q_sat_expr_interpolator.interpolate()
             self.q_v_interpolator.interpolate()
@@ -798,13 +805,17 @@ class LinearTimesteppingSolver(object):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, equation, alpha):
+    def __init__(self, equation, alpha, reference_dependent=True):
         """
         Args:
             equation (:class:`PrognosticEquation`): the model's equation object.
             alpha (float): the semi-implicit off-centring factor. A value of 1
                 is fully-implicit.
+            reference_dependent: this indicates that the solver Jacobian should
+                be rebuilt if the reference profiles have been updated.
         """
+        self.reference_dependent = reference_dependent
+
         residual = equation.residual.label_map(
             lambda t: t.has_label(linearisation),
             lambda t: Term(t.get(linearisation).form, t.labels),
@@ -837,6 +848,11 @@ class LinearTimesteppingSolver(object):
         self.solver = LinearVariationalSolver(problem,
                                               solver_parameters=self.solver_parameters,
                                               options_prefix='linear_solver')
+
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        if self.reference_dependent:
+            self.solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -936,6 +952,10 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
 
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
+
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        self.uD_solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
