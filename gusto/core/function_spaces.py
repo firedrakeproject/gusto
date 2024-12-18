@@ -4,8 +4,8 @@ used by the model.
 """
 
 from gusto.core.logging import logger
-from firedrake import (HCurl, HDiv, FunctionSpace, FiniteElement,
-                       TensorProductElement, interval)
+from firedrake import (HCurl, HDiv, FunctionSpace, FiniteElement, VectorElement,
+                       TensorProductElement, BrokenElement, interval)
 
 __all__ = ["Spaces", "check_degree_args"]
 
@@ -116,7 +116,6 @@ class Spaces(object):
 
         # set the continuity of the space - for extruded meshes specify both directions
         if continuity is None:
-            from gusto.time_discretisation.wrappers import is_cg
             continuity = is_cg(space)
             if self.extruded_mesh:
                 self.continuity[name] = {
@@ -548,3 +547,24 @@ def check_degree_args(name, mesh, degree, horizontal_degree, vertical_degree):
         raise ValueError(f'Cannot pass both "degree" and "vertical_degree" to {name}')
     if not extruded_mesh and vertical_degree is not None:
         raise ValueError(f'Cannot pass "vertical_degree" to {name} if mesh is not extruded')
+
+
+def is_cg(V):
+    """
+    Checks if a :class:`FunctionSpace` is continuous.
+
+    Function to check if a given space, V, is CG. Broken elements are always
+    discontinuous; for vector elements we check the names of the Sobolev spaces
+    of the subelements and for all other elements we just check the Sobolev
+    space name.
+
+    Args:
+        V (:class:`FunctionSpace`): the space to check.
+    """
+    ele = V.ufl_element()
+    if isinstance(ele, BrokenElement):
+        return False
+    elif type(ele) == VectorElement:
+        return all([e.sobolev_space.name == "H1" for e in ele._sub_elements])
+    else:
+        return V.ufl_element().sobolev_space.name == "H1"

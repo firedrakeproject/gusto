@@ -2,7 +2,7 @@
 This module provides some parameters sets that are good defaults
 for particular kinds of system.
 """
-from gusto.time_discretisation.wrappers import is_cg
+from gusto.core.function_spaces import is_cg
 
 __all__ = ['mass_parameters']
 
