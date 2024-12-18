@@ -177,6 +177,7 @@ class CompressibleSolver(TimesteppingSolver):
     def _setup_solver(self):
 
         equations = self.equations
+        cp = equations.parameters.cp
         dt = self.dt
         # Set relaxation parameters. If an alternative has not been given, set
         # to semi-implicit off-centering factor
@@ -184,7 +185,6 @@ class CompressibleSolver(TimesteppingSolver):
         beta_t = dt*self.tau_values.get("theta", self.alpha)
         beta_r = dt*self.tau_values.get("rho", self.alpha)
 
-        cp = equations.parameters.cp
         Vu = equations.domain.spaces("HDiv")
         Vu_broken = FunctionSpace(equations.domain.mesh, BrokenElement(Vu.ufl_element()))
         Vtheta = equations.domain.spaces("theta")
@@ -295,7 +295,7 @@ class CompressibleSolver(TimesteppingSolver):
             - beta_u*cp*div(theta_w*V(w))*exnerbar*dxp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
-            # + beta_cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_vp
+            # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_vp
             + beta_u*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_hp
             + beta_u*cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tbp
             - beta_u*cp*div(thetabar_w*w)*exner*dxp
