@@ -15,7 +15,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import Function, SpatialCoordinate, sin, cos
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
+    TrapeziumRule, ShallowWaterParameters, ThermalShallowWaterEquations,
     RelativeVorticity, PotentialVorticity, SteadyStateError,
     ZonalComponent, MeridionalComponent, ThermalSWSolver,
     xyz_vector_from_lonlatr, lonlatr_from_xyz, GeneralIcosahedralSphereMesh,
@@ -71,8 +71,8 @@ def thermal_williamson_2(
     params = ShallowWaterParameters(H=mean_depth, g=g)
     Omega = params.Omega
     fexpr = 2*Omega*z/radius
-    eqns = ShallowWaterEquations(
-        domain, params, fexpr=fexpr, u_transport_option=u_eqn_type, thermal=True
+    eqns = ThermalShallowWaterEquations(
+        domain, params, fexpr=fexpr, u_transport_option=u_eqn_type
     )
 
     # IO

@@ -127,3 +127,37 @@ def test_williamson_5():
 @pytest.mark.parallel(nprocs=4)
 def test_williamson_5_parallel():
     test_williamson_5()
+
+
+def test_linear_thermal_galewsky_jet():
+    from linear_thermal_galewsky_jet import linear_thermal_galewsky_jet
+    test_name = 'linear_thermal_galewsky_jet'
+    linear_thermal_galewsky_jet(
+        ncells_per_edge=4,
+        dt=1800.,
+        tmax=18000.,
+        dumpfreq=10,
+        dirname=make_dirname(test_name)
+    )
+
+
+@pytest.mark.parallel(nprocs=4)
+def test_linear_thermal_galewsky_jet_parallel():
+    test_linear_thermal_galewsky_jet()
+
+
+def test_moist_thermal_eqiuvb_gw():
+    from moist_thermal_equivb_gw import moist_thermal_gw
+    test_name = 'moist_thermal_gw'
+    moist_thermal_gw(
+        ncells_per_edge=4,
+        dt=1800.,
+        tmax=18000.,
+        dumpfreq=10,
+        dirname=make_dirname(test_name)
+    )
+
+
+@pytest.mark.parallel(nprocs=4)
+def moist_thermal_eqiuvb_gw_parallel():
+    test_moist_thermal_eqiuvb_gw()

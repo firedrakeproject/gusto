@@ -1,15 +1,27 @@
 """Common diagnostic fields for the Shallow Water equations."""
 
 
+<<<<<<< HEAD
 from firedrake import (dx, TestFunction, TrialFunction, grad, inner, curl,
                        LinearVariationalProblem, LinearVariationalSolver,
                        conditional)
+=======
+from firedrake import (
+    dx, TestFunction, TrialFunction, grad, inner, curl, Function, Interpolator,
+    LinearVariationalProblem, LinearVariationalSolver, conditional
+)
+>>>>>>> ba96cef5c2bdb5b51243a87ae62531400a9025de
 from gusto.diagnostics.diagnostics import DiagnosticField, Energy
 
 __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
            "ShallowWaterPotentialEnstrophy", "PotentialVorticity",
+<<<<<<< HEAD
            "RelativeVorticity", "AbsoluteVorticity",
            "SWCO2cond_flag"]
+=======
+           "RelativeVorticity", "AbsoluteVorticity", "PartitionedVapour",
+           "PartitionedCloud"]
+>>>>>>> ba96cef5c2bdb5b51243a87ae62531400a9025de
 
 
 class ShallowWaterKineticEnergy(Energy):
@@ -298,12 +310,11 @@ class SWCO2cond_flag(DiagnosticField):
     def setup(self, domain, state_fields):
         """
         Sets up the :class:`Function` for the diagnostic field.
-
+        
         Args:
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-
         field = state_fields(self.field_name)
         constant = self.constant
         topo = state_fields('topography')
@@ -312,3 +323,105 @@ class SWCO2cond_flag(DiagnosticField):
         self.expr = condit_expr
         space = field.function_space()
         super().setup(domain, state_fields, space=space)
+
+
+class PartitionedVapour(DiagnosticField):
+    """
+    Diagnostic for computing the vapour in the equivalent buoyancy formulation
+    of the moist thermal shallow water equations.
+    """
+    name = "PartitionedVapour"
+
+    def __init__(self, equation, name='q_t', space=None,
+                 method='interpolate'):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            name (str, optional): name of the total moisture field to use to
+                compute the vapour from. Defaults to total moisture, q_t.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case the default space is the domain's DG space.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.fname = name
+        self.equation = equation
+        super().__init__(space=space, method=method, required_fields=(self.fname,))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        q_t = state_fields(self.fname)
+        space = domain.spaces("DG")
+        self.qsat_func = Function(space)
+
+        qsat_expr = self.equation.compute_saturation(state_fields.X(
+            self.equation.field_name))
+        self.qsat_interpolator = Interpolator(qsat_expr, self.qsat_func)
+        self.expr = conditional(q_t < self.qsat_func, q_t, self.qsat_func)
+
+        super().setup(domain, state_fields, space=space)
+
+    def compute(self):
+        """Performs the computation of the diagnostic field."""
+        self.qsat_interpolator.interpolate()
+        super().compute()
+
+
+class PartitionedCloud(DiagnosticField):
+    """
+    Diagnostic for computing the cloud in the equivalent buoyancy formulation
+    of the moist thermal shallow water equations.
+    """
+    name = "PartitionedCloud"
+
+    def __init__(self, equation, name='q_t', space=None,
+                 method='interpolate'):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            name (str, optional): name of the total moisture field to use to
+                compute the vapour from. Defaults to total moisture, q_t.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case the default space is the domain's DG space.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.fname = name
+        self.equation = equation
+        super().__init__(space=space, method=method, required_fields=(self.fname,))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        
+        q_t = state_fields(self.fname)
+        space = domain.spaces("DG")
+        self.qsat_func = Function(space)
+
+        qsat_expr = self.equation.compute_saturation(state_fields.X(
+            self.equation.field_name))
+        self.qsat_interpolator = Interpolator(qsat_expr, self.qsat_func)
+        vapour = conditional(q_t < self.qsat_func, q_t, self.qsat_func)
+        self.expr = q_t - vapour
+
+        super().setup(domain, state_fields, space=space)
+
+    def compute(self):
+        """Performs the computation of the diagnostic field."""
+        self.qsat_interpolator.interpolate()
+        super().compute()
