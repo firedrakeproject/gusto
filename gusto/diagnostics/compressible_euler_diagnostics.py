@@ -718,16 +718,19 @@ class HydrostaticImbalance(DiagnosticField):
         cp = Constant(self.parameters.cp)
         n = FacetNormal(domain.mesh)
 
+        dx_qp = dx(degree=domain.max_quad_degree)
+        dS_v_qp = dS_v(degree=domain.max_quad_degree)
+
         # TODO: not sure about this expression!
         # Gravity does not appear, and why are there reference profiles?
         F = TrialFunction(Vu)
         w = TestFunction(Vu)
         imbalance = Function(Vu)
         a = inner(w, F)*dx
-        L = (- cp*div((theta-thetabar)*w)*exnerbar*dx
-             + cp*jump((theta-thetabar)*w, n)*avg(exnerbar)*dS_v
-             - cp*div(thetabar*w)*(exner-exnerbar)*dx
-             + cp*jump(thetabar*w, n)*avg(exner-exnerbar)*dS_v)
+        L = (- cp*div((theta-thetabar)*w)*exnerbar*dx_qp
+             + cp*jump((theta-thetabar)*w, n)*avg(exnerbar)*dS_v_qp
+             - cp*div(thetabar*w)*(exner-exnerbar)*dx_qp
+             + cp*jump(thetabar*w, n)*avg(exner-exnerbar)*dS_v_qp)
 
         bcs = self.equations.bcs['u']
 

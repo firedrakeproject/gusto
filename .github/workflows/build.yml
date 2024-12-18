@@ -60,4 +60,3 @@ jobs:
           name: log-files
           path: /__w/gusto/gusto/logs
           retention-days: 5
-

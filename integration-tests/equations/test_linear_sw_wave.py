@@ -11,7 +11,7 @@ import numpy as np
 
 
 def run_linear_sw_wave(tmpdir):
-    # Paramerers
+    # Parameters
     dt = 0.001
     tmax = 30*dt
     H = 1
@@ -57,9 +57,11 @@ def run_linear_sw_wave(tmpdir):
 
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
+    Dbar = eqns.X_ref.subfunctions[1]
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
+    Dbar.interpolate(H)
 
     # --------------------------------------------------------------------- #
     # Run
