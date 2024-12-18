@@ -83,9 +83,19 @@ def test_shallow_water(tmpdir):
 
     stepper.run(0., 5*dt)
 
-    J = assemble(0.5*inner(u0, u0)*dx + 0.5*g*D0**2*dx)
+    u_tf = stepper.fields('u')  # Final velocity field
+    D_tf = stepper.fields('D')  # Final depth field
 
-    Jhat = ReducedFunctional(J, Control(D0))
+    J = assemble(0.5*inner(u_tf, u_tf)*dx + 0.5*g*D_tf**2*dx)
 
-    assert np.isclose(Jhat(D0), J, rtol=1e-10)
-    assert taylor_test(Jhat, D0, Function(D0.function_space()).interpolate(Dexpr)) > 1.95
+    control = [Control(D0), Control(u0)] # Control variables
+    J_hat = ReducedFunctional(J, control)
+    assert np.isclose(J_hat([D0, u0]), J, rtol=1e-10)
+    with stop_annotating():
+        # Stop annotation to perform the Taylor test
+        h0 = Function(D0.function_space())
+        h1 = Function(u0.function_space())
+        h0.assign(D0 * np.random.rand())
+        h1.assign(u0 * np.random.rand())
+        assert taylor_test(J_hat, [D0, u0], [h0, h1]) > 1.95
+

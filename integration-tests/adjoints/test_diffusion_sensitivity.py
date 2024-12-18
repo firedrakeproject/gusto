@@ -64,9 +64,11 @@ def test_diffusion_sensitivity(nu_is_control, tmpdir):
         h = Function(R, val=0.0001)  # the direction of the perturbation
     else:
         control = Control(u)
-        h = Function(V).interpolate(fexpr)  # the direction of the perturbation
+        # the direction of the perturbation
+        h = Function(V).interpolate(fexpr * np.random.rand())
 
-    Jhat = ReducedFunctional(J, control)  # the functional as a pure function of nu
+    # the functional as a pure function of nu
+    Jhat = ReducedFunctional(J, control)
 
     if nu_is_control:
         assert np.allclose(J, Jhat(nu))

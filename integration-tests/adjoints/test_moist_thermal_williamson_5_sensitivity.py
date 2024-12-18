@@ -203,10 +203,17 @@ def test_moist_thermal_williamson_5_sensitivity(
     # ----------------------------------------------------------------- #
     stepper.run(t=0, tmax=dt)
 
-    J = assemble(0.5*inner(u0, u0)*dx + 0.5*g*D0**2*dx)
+    u_tf = stepper.fields('u')  # Final velocity field
+    D_tf = stepper.fields('D')  # Final depth field
+
+    J = assemble(0.5*inner(u_tf, u_tf)*dx + 0.5*g*D_tf**2*dx)
 
     Jhat = ReducedFunctional(J, Control(D0))
 
     assert np.allclose(Jhat(D0), J)
+    with stop_annotating():
+        # Stop annotation to perform the Taylor test
+        h0 = Function(D0.function_space())
+        h0.assign(D0 * np.random.rand())
+        assert taylor_test(Jhat, D0, h0) > 1.95
 
-    assert taylor_test(Jhat, D0, Function(D0.function_space()).interpolate(Dexpr)) > 1.95
