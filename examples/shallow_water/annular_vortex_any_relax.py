@@ -51,12 +51,12 @@ include_co2 = 'yes'
 ref_lev = 4
 
 # do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
-restart = False
-restart_name = 'Free_run/annular_vortex_mars_60-70_free_A0-0-norel_len-30sols_tracer_tophat-80_ref-4'
+restart = True
+restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-1sols_tracer_tophat-80_ref-4'
 
 # length of this run, time to start from (only relevant if doing a restart)
-rundays = 300
-start_time = 0
+rundays = 1
+start_time = 1
 dt = (0.5)**(ref_lev-4) * 450.
 
 # do you want a tracer or not. Edge of tophat function for tracer, north of this the tracer is intialised as 1, south is 0
@@ -367,8 +367,8 @@ elif restart:
     lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
     bexpr = A0scal * H * (cos(theta))**2 * cos(2*lamda)
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr)
-    tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
-    rs_tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer_rs")
+    tracer_eqn = ContinuityEquation(domain, domain.spaces("DG"), "tracer")
+    rs_tracer_eqn = ContinuityEquation(domain, domain.spaces("DG"), "tracer_rs")
     # estimate core count for Pileus
     logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
