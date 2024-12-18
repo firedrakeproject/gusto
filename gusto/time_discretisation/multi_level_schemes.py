@@ -17,7 +17,7 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
     """Base class for multi-level timesteppers"""
 
     def __init__(self, domain, field_name=None, solver_parameters=None,
-                 limiter=None, options=None):
+                 limiter=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -32,12 +32,16 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         if isinstance(options, (EmbeddedDGOptions, RecoveryOptions)):
             raise NotImplementedError("Only SUPG advection options have been implemented for this time discretisation")
         super().__init__(domain=domain, field_name=field_name,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
         self.initial_timesteps = 0
 
     @abstractproperty
@@ -252,7 +256,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
     y^(n+1) = y^n + dt*(b_0*F[y^(n)] + b_1*F[y^(n-1)] + b_2*F[y^(n-2)] + b_3*F[y^(n-3)] + b_4*F[y^(n-4)])
     """
     def __init__(self, domain, order, field_name=None,
-                 solver_parameters=None, options=None):
+                 solver_parameters=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -266,6 +270,9 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
 
         Raises:
             ValueError: if order is not provided, or is in incorrect range.
@@ -278,7 +285,7 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
 
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
-                         options=options)
+                         options=options, augmentation=augmentation)
 
         self.order = order
 
@@ -402,7 +409,8 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
     y^(n+1) = y^n + dt*(b_0*F[y^(n+1)] + b_1*F[y^(n)] + b_2*F[y^(n-1)] + b_3*F[y^(n-2)])
     """
     def __init__(self, domain, order, field_name=None,
-                 solver_parameters=None, options=None):
+                 solver_parameters=None, options=None,
+                 augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -416,6 +424,9 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
 
         Raises:
             ValueError: if order is not provided, or is in incorrect range.
@@ -431,7 +442,7 @@ class AdamsMoulton(MultilevelTimeDiscretisation):
 
         super().__init__(domain, field_name,
                          solver_parameters=solver_parameters,
-                         options=options)
+                         options=options, augmentation=augmentation)
 
         self.order = order
 

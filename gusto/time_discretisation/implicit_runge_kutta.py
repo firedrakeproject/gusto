@@ -79,6 +79,9 @@ class ImplicitRungeKutta(TimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         super().__init__(domain, field_name=field_name,
                          solver_parameters=solver_parameters,
@@ -280,6 +283,9 @@ class ImplicitMidpoint(ImplicitRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         butcher_matrix = np.array([[0.5], [1.]])
         super().__init__(domain, butcher_matrix, field_name,
@@ -301,7 +307,7 @@ class QinZhang(ImplicitRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  rk_formulation=RungeKuttaFormulation.increment,
-                 solver_parameters=None, options=None):
+                 solver_parameters=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -317,9 +323,12 @@ class QinZhang(ImplicitRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         butcher_matrix = np.array([[0.25, 0], [0.5, 0.25], [0.5, 0.5]])
         super().__init__(domain, butcher_matrix, field_name,
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
-                         options=options)
+                         options=options, augmentation=augmentation)
