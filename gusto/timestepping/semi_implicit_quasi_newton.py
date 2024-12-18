@@ -38,7 +38,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  slow_physics_schemes=None, fast_physics_schemes=None,
                  alpha=Constant(0.5), off_centred_u=False,
                  num_outer=2, num_inner=2, accelerator=False,
-                 predictor=None, reference_update_freq=None):
+                 predictor=None, reference_update_freq=None,
+                 spinup_steps=0):
         """
         Args:
             equation_set (:class:`PrognosticEquationSet`): the prognostic
@@ -105,15 +106,20 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 time step. Setting it to None turns off the update, and
                 reference profiles will remain at their initial values.
                 Defaults to None.
+            spinup_steps (int, optional): the number of steps to run the model
+                in "spin-up" mode, where the alpha parameter is set to 1.0.
+                Defaults to 0, which corresponds to no spin-up.
         """
 
         self.num_outer = num_outer
         self.num_inner = num_inner
-        self.alpha = alpha
+        self.alpha = Constant(alpha)
+        self._alpha_original = Constant(alpha)
         self.predictor = predictor
         self.accelerator = accelerator
         self.reference_update_freq = reference_update_freq
         self.to_update_ref_profile = False
+        self.spinup_steps = spinup_steps
 
         # Flag for if we have simultaneous transport
         self.simult = False
@@ -376,6 +382,15 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # Update reference profiles --------------------------------------------
         self.update_reference_profiles()
 
+        # Are we in spin-up period? --------------------------------------------
+        if self.step < self.spinup_steps + 1:  # steps numbered from 1 onwards
+            self.alpha.assign(1.0)
+            self.linear_solver.alpha.assign(1.0)
+            logger.info('Spin-up step')
+        else:
+            self.alpha.assign(self._alpha_original)
+            self.linear_solver.alpha.assign(self._alpha_original)
+
         # Slow physics ---------------------------------------------------------
         x_after_slow(self.field_name).assign(xn(self.field_name))
         if len(self.slow_physics_schemes) > 0:
@@ -526,7 +541,7 @@ class Forcing(object):
                                map_if_false=drop)
 
         # the explicit forms are multiplied by (1-alpha) and moved to the rhs
-        L_explicit = -(1-alpha)*dt*residual.label_map(
+        L_explicit = -(Constant(1)-alpha)*dt*residual.label_map(
             lambda t:
                 any(t.has_label(time_derivative, hydrostatic, *implicit_terms,
                                 return_tuple=True)),

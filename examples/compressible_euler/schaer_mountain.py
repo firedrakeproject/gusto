@@ -1,60 +1,62 @@
 """
-The hydrostatic 1 metre high mountain test case from Melvin et al, 2010:
-``An inherently mass-conserving iterative semi-implicit semi-Lagrangian
-discretization of the non-hydrostatic vertical-slice equations.'', QJRMS.
+The Schär mountain test case of Schär et al, 2002:
+``A new terrain-following vertical coordinate formulation for atmospheric
+prediction models.'', MWR.
 
-This test describes a wave over a mountain in a hydrostatic atmosphere.
+This test describes a wave over a set of idealised mountains, testing how the
+discretisation handles orography.
 
 The setup used here uses the order 1 finite elements.
 """
-
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+
 from firedrake import (
     as_vector, VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh,
     SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, Constant
 )
 from gusto import (
-    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, SUPGOptions, ZComponent, Perturbation,
-    CompressibleParameters, HydrostaticCompressibleEulerEquations,
-    CompressibleSolver, compressible_hydrostatic_balance, HydrostaticImbalance,
-    SpongeLayerParameters, MinKernel, MaxKernel, logger
+    Domain, CompressibleParameters, CompressibleSolver, logger,
+    OutputParameters, IO, SSPRK3, DGUpwind, SemiImplicitQuasiNewton,
+    compressible_hydrostatic_balance, SpongeLayerParameters, Exner, ZComponent,
+    Perturbation, SUPGOptions, TrapeziumRule, MaxKernel, MinKernel,
+    CompressibleEulerEquations, SubcyclingOptions, RungeKuttaFormulation
 )
 
-mountain_hydrostatic_defaults = {
-    'ncolumns': 200,
-    'nlayers': 120,
-    'dt': 5.0,
-    'tmax': 15000.,
-    'dumpfreq': 1500,
-    'dirname': 'mountain_hydrostatic'
+schaer_mountain_defaults = {
+    'ncolumns': 60,
+    'nlayers': 30,
+    'dt': 8.0,
+    'tmax': 5*60*60.,   # 5 hours
+    'dumpfreq': 2250,   # dump at 5 hours with default settings
+    'dirname': 'schaer_mountain'
 }
 
 
-def mountain_hydrostatic(
-        ncolumns=mountain_hydrostatic_defaults['ncolumns'],
-        nlayers=mountain_hydrostatic_defaults['nlayers'],
-        dt=mountain_hydrostatic_defaults['dt'],
-        tmax=mountain_hydrostatic_defaults['tmax'],
-        dumpfreq=mountain_hydrostatic_defaults['dumpfreq'],
-        dirname=mountain_hydrostatic_defaults['dirname']
+def schaer_mountain(
+        ncolumns=schaer_mountain_defaults['ncolumns'],
+        nlayers=schaer_mountain_defaults['nlayers'],
+        dt=schaer_mountain_defaults['dt'],
+        tmax=schaer_mountain_defaults['tmax'],
+        dumpfreq=schaer_mountain_defaults['dumpfreq'],
+        dirname=schaer_mountain_defaults['dirname']
 ):
 
     # ------------------------------------------------------------------------ #
     # Parameters for test case
     # ------------------------------------------------------------------------ #
 
-    domain_width = 240000.   # width of domain in x direction, in m
-    domain_height = 50000.   # height of model top, in m
-    a = 10000.               # scale width of mountain, in m
-    hm = 1.                  # height of mountain, in m
+    domain_width = 100000.   # width of domain in x direction, in m
+    domain_height = 30000.   # height of model top, in m
+    a = 5000.                # scale width of mountain profile, in m
+    lamda = 4000.            # scale width of individual mountains, in m
+    hm = 250.                # height of mountain, in m
     zh = 5000.               # height at which mesh is no longer distorted, in m
-    Tsurf = 250.             # temperature of surface, in K
-    initial_wind = 20.0      # initial horizontal wind, in m/s
-    sponge_depth = 20000.0   # depth of sponge layer, in m
+    Tsurf = 288.             # temperature of surface, in K
+    initial_wind = 10.0      # initial horizontal wind, in m/s
+    sponge_depth = 10000.0   # depth of sponge layer, in m
     g = 9.80665              # acceleration due to gravity, in m/s^2
     cp = 1004.               # specific heat capacity at constant pressure
-    sponge_mu = 0.15         # parameter for strength of sponge layer, in J/kg/K
+    sponge_mu = 1.2          # strength of sponge layer
     exner_surf = 1.0         # maximum value of Exner pressure at surface
     max_iterations = 10      # maximum number of hydrostatic balance iterations
     tolerance = 1e-7         # tolerance for hydrostatic balance iteration
@@ -63,6 +65,7 @@ def mountain_hydrostatic(
     # Our settings for this set up
     # ------------------------------------------------------------------------ #
 
+    alpha = 0.55
     element_order = 1
     u_eqn_type = 'vector_invariant_form'
 
@@ -81,7 +84,7 @@ def mountain_hydrostatic(
     # Describe the mountain
     xc = domain_width/2.
     x, z = SpatialCoordinate(ext_mesh)
-    zs = hm * a**2 / ((x - xc)**2 + a**2)
+    zs = hm * exp(-((x - xc)/a)**2) * (cos(pi*(x - xc)/lamda))**2
     xexpr = as_vector(
         [x, conditional(z < zh, z + cos(0.5 * pi * z / zh)**6 * zs, z)]
     )
@@ -97,62 +100,48 @@ def mountain_hydrostatic(
     sponge = SpongeLayerParameters(
         H=domain_height, z_level=domain_height-sponge_depth, mubar=sponge_mu/dt
     )
-    eqns = HydrostaticCompressibleEulerEquations(
+    eqns = CompressibleEulerEquations(
         domain, parameters, sponge_options=sponge, u_transport_option=u_eqn_type
     )
 
     # I/O
     output = OutputParameters(
-        dirname=dirname, dumpfreq=dumpfreq, dump_vtus=True, dump_nc=False
+        dirname=dirname, dumpfreq=dumpfreq, dump_vtus=False, dump_nc=True
     )
     diagnostic_fields = [
-        ZComponent('u'), HydrostaticImbalance(eqns),
-        Perturbation('theta'), Perturbation('rho')
+        Exner(parameters), ZComponent('u'), Perturbation('theta'),
+        Perturbation('rho')
     ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
+    subcycling_opts = SubcyclingOptions(subcycle_by_courant=0.25)
     theta_opts = SUPGOptions()
     transported_fields = [
-        TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "rho"),
-        SSPRK3(domain, "theta", options=theta_opts)
+        TrapeziumRule(domain, "u", subcycling_options=subcycling_opts),
+        SSPRK3(
+            domain, "rho", rk_formulation=RungeKuttaFormulation.predictor,
+            subcycling_options=subcycling_opts
+        ),
+        SSPRK3(
+            domain, "theta", options=theta_opts,
+            subcycling_options=subcycling_opts
+        )
     ]
     transport_methods = [
         DGUpwind(eqns, "u"),
-        DGUpwind(eqns, "rho"),
+        DGUpwind(eqns, "rho", advective_then_flux=True),
         DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
     ]
 
     # Linear solver
-    params = {'mat_type': 'matfree',
-              'ksp_type': 'preonly',
-              'pc_type': 'python',
-              'pc_python_type': 'firedrake.SCPC',
-              # Velocity mass operator is singular in the hydrostatic case.
-              # So for reconstruction, we eliminate rho into u
-              'pc_sc_eliminate_fields': '1, 0',
-              'condensed_field': {'ksp_type': 'fgmres',
-                                  'ksp_rtol': 1.0e-8,
-                                  'ksp_atol': 1.0e-8,
-                                  'ksp_max_it': 100,
-                                  'pc_type': 'gamg',
-                                  'pc_gamg_sym_graph': True,
-                                  'mg_levels': {'ksp_type': 'gmres',
-                                                'ksp_max_it': 5,
-                                                'pc_type': 'bjacobi',
-                                                'sub_pc_type': 'ilu'}}}
-
-    alpha = 0.51  # off-centering parameter
-    linear_solver = CompressibleSolver(
-        eqns, alpha, solver_parameters=params,
-        overwrite_solver_parameters=True
-    )
+    tau_values = {'rho': 1.0, 'theta': 1.0}
+    linear_solver = CompressibleSolver(eqns, alpha, tau_values=tau_values)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, alpha=alpha
+        linear_solver=linear_solver, alpha=alpha, spinup_steps=5
     )
 
     # ------------------------------------------------------------------------ #
@@ -268,38 +257,38 @@ if __name__ == "__main__":
         '--ncolumns',
         help="The number of columns in the vertical slice mesh.",
         type=int,
-        default=mountain_hydrostatic_defaults['ncolumns']
+        default=schaer_mountain_defaults['ncolumns']
     )
     parser.add_argument(
         '--nlayers',
         help="The number of layers for the mesh.",
         type=int,
-        default=mountain_hydrostatic_defaults['nlayers']
+        default=schaer_mountain_defaults['nlayers']
     )
     parser.add_argument(
         '--dt',
         help="The time step in seconds.",
         type=float,
-        default=mountain_hydrostatic_defaults['dt']
+        default=schaer_mountain_defaults['dt']
     )
     parser.add_argument(
         "--tmax",
         help="The end time for the simulation in seconds.",
         type=float,
-        default=mountain_hydrostatic_defaults['tmax']
+        default=schaer_mountain_defaults['tmax']
     )
     parser.add_argument(
         '--dumpfreq',
         help="The frequency at which to dump field output.",
         type=int,
-        default=mountain_hydrostatic_defaults['dumpfreq']
+        default=schaer_mountain_defaults['dumpfreq']
     )
     parser.add_argument(
         '--dirname',
         help="The name of the directory to write to.",
         type=str,
-        default=mountain_hydrostatic_defaults['dirname']
+        default=schaer_mountain_defaults['dirname']
     )
     args, unknown = parser.parse_known_args()
 
-    mountain_hydrostatic(**vars(args))
+    schaer_mountain(**vars(args))
