@@ -276,7 +276,7 @@ class Recoverer(object):
                         self.boundary_recoverers.append(BoundaryRecoverer(x_out_scalars[i],
                                                                           method=BoundaryMethod.taylor,
                                                                           eff_coords=eff_coords[i]))
-                    self.interpolate_to_vector = interpolate(x_out_scalars, V_out)
+                    self.interpolate_to_vector = interpolate(as_vector(x_out_scalars), V_out)
 
     def project(self):
         """Perform the whole recovery step."""
