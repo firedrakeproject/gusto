@@ -6,8 +6,8 @@ called.
 
 from abc import ABCMeta, abstractmethod
 from firedrake import (
-    FunctionSpace, Function, BrokenElement, Projector, VectorElement, Constant,
-    as_ufl, dot, grad, TestFunction, MixedFunctionSpace
+    FunctionSpace, Function, BrokenElement, Projector, Constant, as_ufl, dot, grad,
+    TestFunction, MixedFunctionSpace
 )
 from firedrake.__future__ import interpolate
 from firedrake.fml import Term
@@ -15,6 +15,7 @@ from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOpt
 from gusto.recovery import Recoverer, ReversibleRecoverer, ConservativeRecoverer
 from gusto.core.labels import transporting_velocity
 from gusto.core.conservative_projection import ConservativeProjector
+from gusto.core.function_spaces import is_cg
 import ufl
 
 __all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper", "MixedFSWrapper"]
@@ -306,27 +307,6 @@ class RecoveryWrapper(Wrapper):
         else:
             self.x_out_projector.project()
         x_out.assign(self.x_projected)
-
-
-def is_cg(V):
-    """
-    Checks if a :class:`FunctionSpace` is continuous.
-
-    Function to check if a given space, V, is CG. Broken elements are always
-    discontinuous; for vector elements we check the names of the Sobolev spaces
-    of the subelements and for all other elements we just check the Sobolev
-    space name.
-
-    Args:
-        V (:class:`FunctionSpace`): the space to check.
-    """
-    ele = V.ufl_element()
-    if isinstance(ele, BrokenElement):
-        return False
-    elif type(ele) == VectorElement:
-        return all([e.sobolev_space.name == "H1" for e in ele._sub_elements])
-    else:
-        return V.ufl_element().sobolev_space.name == "H1"
 
 
 class SUPGWrapper(Wrapper):
