@@ -113,6 +113,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         exner = exner_pressure(parameters, rho, theta)
         n = FacetNormal(domain.mesh)
 
+        # Specify quadrature degree to use for pressure gradient term
+        dx_qp = dx(degree=(domain.max_quad_degree))
+        dS_v_qp = dS_v(degree=(domain.max_quad_degree))
+
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
         # -------------------------------------------------------------------- #
@@ -166,8 +170,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         theta_v = theta / (Constant(1.0) + tracer_mr_total)
 
         pressure_gradient_form = pressure_gradient(subject(prognostic(
-            cp*(-div(theta_v*w)*exner*dx
-                + jump(theta_v*w, n)*avg(exner)*dS_v), 'u'), self.X))
+            cp*(-div(theta_v*w)*exner*dx_qp
+                + jump(theta_v*w, n)*avg(exner)*dS_v_qp), 'u'), self.X))
 
         # -------------------------------------------------------------------- #
         # Gravitational Term
@@ -210,7 +214,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
             residual += subject(prognostic(
                 gamma * theta * div(u)
-                * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml))*dx, 'theta'), self.X)
+                * (R_m / c_vml - (R_d * c_pml) / (cp * c_vml))*dx_qp, 'theta'), self.X)
 
         # -------------------------------------------------------------------- #
         # Extra Terms (Coriolis, Sponge, Diffusion and others)
@@ -237,7 +241,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
 
             residual += sponge(subject(prognostic(
-                self.mu*inner(w, domain.k)*inner(u, domain.k)*dx, 'u'), self.X))
+                self.mu*inner(w, domain.k)*inner(u, domain.k)*dx_qp, 'u'), self.X))
 
         if diffusion_options is not None:
             for field, diffusion in diffusion_options:
@@ -357,6 +361,11 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
             Constant(-1.0)*inner(k, w)*inner(k, u)/domain.dt*dx, 'u'), self.X))
         )
 
+        # Add Euler-Poincare term
+        self.residual += hydrostatic(subject(prognostic(
+            Constant(0.5)*div(w)*inner(u_hori, u)*dx, 'u'), self.X)
+        )
+
         # -------------------------------------------------------------------- #
         # Only transport horizontal wind
         # -------------------------------------------------------------------- #
@@ -368,18 +377,22 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
             map_if_false=keep
         )
 
-        # Velocity transport term -- depends on formulation
-        if u_transport_option == "vector_invariant_form":
-            u_term = prognostic(vector_invariant_form(domain, w, u_hori, u), 'u')
-        elif u_transport_option == "vector_advection_form":
-            u_term = prognostic(advection_form(w, u_hori, u), 'u')
-        elif u_transport_option == "circulation_form":
-            circ_form = prognostic(
-                advection_equation_circulation_form(domain, w, u_hori, u), 'u'
-            )
-            ke_form = prognostic(kinetic_energy_form(w, u_hori, u), 'u')
-            u_term = ke_form + circ_form
-        else:
-            raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
+        u_term = prognostic(
+            advection_equation_circulation_form(domain, w, u_hori, u), 'u'
+        )
+
+        # # Velocity transport term -- depends on formulation
+        # if u_transport_option == "vector_invariant_form":
+        #     u_term = prognostic(vector_invariant_form(domain, w, u_hori, u), 'u')
+        # elif u_transport_option == "vector_advection_form":
+        #     u_term = prognostic(advection_form(w, u_hori, u), 'u')
+        # elif u_transport_option == "circulation_form":
+        #     circ_form = prognostic(
+        #         advection_equation_circulation_form(domain, w, u_hori, u), 'u'
+        #     )
+        #     ke_form = prognostic(kinetic_energy_form(w, u_hori, u), 'u')
+        #     u_term = ke_form + circ_form
+        # else:
+        #     raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
         self.residual += horizontal_prognostic(subject(u_term, self.X))

@@ -16,7 +16,7 @@ These compatible methods underpin the Met Office's next-generation model, [LFRic
 
 The best way to install Gusto is as an additional package when installing [Firedrake](http://firedrakeproject.org). Usually, for a Mac with Homebrew or an Ubuntu installation this is done by downloading the Firedrake install script and executing it:
 ```
-curl -0 https://raw.githubusercontent/com/firedrakeproject/firedrake/master/scripts/firedrake-install
+curl -0 https://raw.githubusercontent.com/firedrakeproject/firedrake/master/scripts/firedrake-install
 python3 firedrake-install --install gusto
 ```
 For an up-to-date installation guide, see the [firedrake installation instructions](http://firedrakeproject.org/download.html). Once installed, Gusto must be run from within the Firedrake virtual environment, which is activated via

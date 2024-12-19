@@ -25,7 +25,8 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     logger, SUPGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
-    compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver
+    compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
+    SubcyclingOptions, hydrostatic_parameters
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -114,13 +115,17 @@ def skamarock_klemp_nonhydrostatic(
 
     # Transport schemes
     theta_opts = SUPGOptions()
+    subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
     transported_fields = [
-        SSPRK3(domain, "u", subcycle_by_courant=0.25),
+        SSPRK3(domain, "u", subcycling_options=subcycling_options),
         SSPRK3(
-            domain, "rho", subcycle_by_courant=0.25,
+            domain, "rho", subcycling_options=subcycling_options,
             rk_formulation=RungeKuttaFormulation.linear
         ),
-        SSPRK3(domain, "theta", subcycle_by_courant=0.25, options=theta_opts)
+        SSPRK3(
+            domain, "theta", subcycling_options=subcycling_options,
+            options=theta_opts
+        )
     ]
     transport_methods = [
         DGUpwind(eqns, "u"),
@@ -129,7 +134,13 @@ def skamarock_klemp_nonhydrostatic(
     ]
 
     # Linear solver
-    linear_solver = CompressibleSolver(eqns)
+    if hydrostatic:
+        linear_solver = CompressibleSolver(
+            eqns, solver_parameters=hydrostatic_parameters,
+            overwrite_solver_parameters=True
+        )
+    else:
+        linear_solver = CompressibleSolver(eqns)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
