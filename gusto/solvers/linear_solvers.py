@@ -11,10 +11,11 @@ from firedrake import (
     rhs, FacetNormal, div, dx, jump, avg, dS, dS_v, dS_h, ds_v, ds_t, ds_b,
     ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis, cross,
     BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC, as_vector,
-    Interpolator, conditional
+    assemble, conditional
 )
 from firedrake.fml import Term, drop
 from firedrake.petsc import flatten_parameters
+from firedrake.__future__ import interpolate
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.equations.active_tracers import TracerVariableType
@@ -660,11 +661,11 @@ class ThermalSWSolver(TimesteppingSolver):
             qtbar = split(equation.X_ref)[3]
 
             # set up interpolators that use the X_ref values for D and b_e
-            self.q_sat_expr_interpolator = Interpolator(
-                equation.compute_saturation(equation.X_ref), self.q_sat_func)
-            self.q_v_interpolator = Interpolator(
+            self.q_sat_expr_interpolate = interpolate(
+                equation.compute_saturation(equation.X_ref), VD)
+            self.q_v_interpolate = interpolate(
                 conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
-                self.qvbar)
+                VD)
 
             # bbar was be_bar and here we correct to become bbar
             bbar += equation.parameters.beta2 * self.qvbar
@@ -729,8 +730,8 @@ class ThermalSWSolver(TimesteppingSolver):
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
         if self.equations.equivalent_buoyancy:
-            self.q_sat_expr_interpolator.interpolate()
-            self.q_v_interpolator.interpolate()
+            self.q_sat_func.assign(assemble(self.q_sat_expr_interpolate))
+            self.qvbar.assign(assemble(self.q_v_interpolate))
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):

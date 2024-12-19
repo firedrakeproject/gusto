@@ -2,9 +2,10 @@
 
 
 from firedrake import (
-    dx, TestFunction, TrialFunction, grad, inner, curl, Function, Interpolator,
+    dx, TestFunction, TrialFunction, grad, inner, curl, Function, assemble,
     LinearVariationalProblem, LinearVariationalSolver, conditional
 )
+from firedrake.__future__ import interpolate
 from gusto.diagnostics.diagnostics import DiagnosticField, Energy
 
 __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
@@ -321,14 +322,14 @@ class PartitionedVapour(DiagnosticField):
 
         qsat_expr = self.equation.compute_saturation(state_fields.X(
             self.equation.field_name))
-        self.qsat_interpolator = Interpolator(qsat_expr, self.qsat_func)
+        self.qsat_interpolate = interpolate(qsat_expr, space)
         self.expr = conditional(q_t < self.qsat_func, q_t, self.qsat_func)
 
         super().setup(domain, state_fields, space=space)
 
     def compute(self):
         """Performs the computation of the diagnostic field."""
-        self.qsat_interpolator.interpolate()
+        self.qsat_func.assign(assemble(self.qsat_interpolate))
         super().compute()
 
 
@@ -371,7 +372,7 @@ class PartitionedCloud(DiagnosticField):
 
         qsat_expr = self.equation.compute_saturation(state_fields.X(
             self.equation.field_name))
-        self.qsat_interpolator = Interpolator(qsat_expr, self.qsat_func)
+        self.qsat_interpolate = interpolate(qsat_expr, space)
         vapour = conditional(q_t < self.qsat_func, q_t, self.qsat_func)
         self.expr = q_t - vapour
 
@@ -379,5 +380,5 @@ class PartitionedCloud(DiagnosticField):
 
     def compute(self):
         """Performs the computation of the diagnostic field."""
-        self.qsat_interpolator.interpolate()
+        self.qsat_func.assign(assemble(self.qsat_interpolate))
         super().compute()
