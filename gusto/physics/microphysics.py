@@ -633,5 +633,5 @@ class EvaporationOfRain(PhysicsParametrisation):
         if isinstance(self.equation, CompressibleEulerEquations):
             self.rho_recoverer.project()
         # Evaluate the source
-        for interpolator in self.source_interpolate:
-            self.source.assign(assemble(interpolator))
+        for interpolator, src in zip(self.source_interpolate, self.source):
+            src.assign(assemble(interpolator))

@@ -156,7 +156,7 @@ class SurfaceFluxes(PhysicsParametrisation):
             source_theta_vd = Function(Vtheta)
             dtheta_vd_expr = surface_expr * (theta_np1_expr - theta_vd) / self.dt
             source_theta_expr = test_theta * source_theta_vd * dx
-            self.source_interpolate.append(interpolate(dtheta_vd_expr, Vtheta))
+            self.source_interpolators.append(Interpolator(dtheta_vd_expr, source_theta_vd))
             equation.residual -= self.label(subject(prognostic(source_theta_expr, 'theta'),
                                                     X), self.evaluate)
 
@@ -204,8 +204,8 @@ class SurfaceFluxes(PhysicsParametrisation):
             self.X.assign(x_in)
             self.dt.assign(dt)
             self.rho_recoverer.project()
-            for source_interpolator in self.source_interpolate:
-                assemble(source_interpolator)
+            for source_interpolator in self.source_interpolators:
+                source_interpolator.interpolate()
 
 
 class WindDrag(PhysicsParametrisation):
