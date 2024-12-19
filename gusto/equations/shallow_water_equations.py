@@ -12,6 +12,7 @@ from gusto.equations.common_forms import (
     linear_continuity_form, linear_advection_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
+from gusto.core.configuration import convert_parameters_to_real_space
 
 
 __all__ = ["ShallowWaterEquations", "LinearShallowWaterEquations",
@@ -87,6 +88,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         self.parameters = parameters
         self.domain = domain
+        # This function converts the ``float`` and ``firedrake.Constant`` parameters
+        # attributes to a function in real space.
+        # This is a preventive way to avoid adjoint issues when the parameters
+        # attribute are the control in the sensitivity computations.
+        convert_parameters_to_real_space(parameters, self.domain.mesh)
         self.active_tracers = active_tracers
 
         self._setup_residual(fexpr, topog_expr, u_transport_option)
@@ -417,7 +423,11 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         # label these as the equivalent pressure gradient term and
         # provide linearisation
         if self.equivalent_buoyancy:
-            beta2 = self.parameters.beta2
+            try:
+                beta2 = self.parameters.beta2
+            except ValueError:
+                print("Oi")
+
             qsat_expr = self.compute_saturation(self.X)
             qv = conditional(qt < qsat_expr, qt, qsat_expr)
             qvbar = conditional(qtbar < qsat_expr, qtbar, qsat_expr)
@@ -647,6 +657,10 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
+        # This function converts the parameters to real space.
+        # This is a preventive way to avoid adjoint issues when the parameters
+        # attribute are the control in the sensitivity computations.
+        convert_parameters_to_real_space(parameters, domain.mesh)
         g = parameters.g
         H = parameters.H
 

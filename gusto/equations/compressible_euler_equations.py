@@ -17,7 +17,7 @@ from gusto.equations.common_forms import (
 )
 from gusto.equations.active_tracers import Phases, TracerVariableType
 from gusto.equations.prognostic_equations import PrognosticEquationSet
-
+from gusto.core.configuration import convert_parameters_to_real_space
 __all__ = ["CompressibleEulerEquations", "HydrostaticCompressibleEulerEquations"]
 
 
@@ -45,7 +45,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            parameters (:class:`Configuration`, optional): an object containing
+            x (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
             sponge_options (:class:`SpongeLayerParameters`, optional): any
                 parameters for applying a sponge layer to the upper boundary.
@@ -101,6 +101,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
+        # This function converts the parameters to real space.
+        # This is a preventive way to avoid adjoint issues when the parameters
+        # attribute are the control in the sensitivity computations.
+        convert_parameters_to_real_space(parameters, domain.mesh)
         g = parameters.g
         cp = parameters.cp
 
@@ -109,6 +113,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         u_trial = split(self.trials)[0]
         _, rho_bar, theta_bar = split(self.X_ref)[0:3]
         zero_expr = Constant(0.0)*theta
+        # Check this for adjoints
         exner = exner_pressure(parameters, rho, theta)
         n = FacetNormal(domain.mesh)
 
