@@ -7,7 +7,7 @@ called.
 from abc import ABCMeta, abstractmethod
 from firedrake import (
     FunctionSpace, Function, BrokenElement, Projector, Constant, as_ufl, dot, grad,
-    TestFunction, MixedFunctionSpace
+    TestFunction, MixedFunctionSpace, assemble
 )
 from firedrake.__future__ import interpolate
 from firedrake.fml import Term
