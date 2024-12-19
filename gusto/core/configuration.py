@@ -1,5 +1,5 @@
 """Some simple tools for configuring the model."""
-from abc import ABCMeta, abstractproperty
+from abc import ABCMeta, abstractmethod
 from enum import Enum
 from firedrake import sqrt, Constant, Function, FunctionSpace
 
@@ -163,7 +163,7 @@ class ShallowWaterParameters(Configuration):
 class WrapperOptions(Configuration, metaclass=ABCMeta):
     """Base class for specifying options for a transport scheme."""
 
-    @abstractproperty
+    @abstractmethod
     def name(self):
         pass
 
