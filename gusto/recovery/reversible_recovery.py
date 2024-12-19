@@ -4,7 +4,8 @@ higher-order function space.
 """
 
 from gusto.core.conservative_projection import ConservativeProjector
-from firedrake import (Projector, Function, Interpolator)
+from firedrake import (Projector, Function, assemble)
+from firedrake.__future__ import interpolate
 from .recovery import Recoverer
 
 __all__ = ["ReversibleRecoverer", "ConservativeRecoverer"]
@@ -52,7 +53,7 @@ class ReversibleRecoverer(object):
         elif self.opts.project_high_method == 'project':
             self.projector_high = Projector(self.q_recovered, self.q_rec_high)
         elif self.opts.project_high_method == 'interpolate':
-            self.projector_high = Interpolator(self.q_recovered, self.q_rec_high)
+            self.projector_high = interpolate(self.q_recovered, target_field.function_space())
             self.interp_high = True
         else:
             raise ValueError(f'Method {self.opts.project_high_method} '
@@ -68,7 +69,7 @@ class ReversibleRecoverer(object):
         elif self.opts.project_low_method == 'project':
             self.projector_low = Projector(self.q_rec_high, self.q_corr_low)
         elif self.opts.project_low_method == 'interpolate':
-            self.projector_low = Interpolator(self.q_rec_high, self.q_corr_low)
+            self.projector_low = interpolate(self.q_rec_high, source_field.function_space())
             self.interp_low = True
         else:
             raise ValueError(f'Method {self.opts.project_low_method} '
@@ -84,17 +85,17 @@ class ReversibleRecoverer(object):
         elif self.opts.injection_method == 'project':
             self.injector = Projector(self.q_corr_low, self.q_corr_high)
         elif self.opts.injection_method == 'interpolate':
-            self.injector = Interpolator(self.q_corr_low, self.q_corr_high)
+            self.injector = interpolate(self.q_corr_low, target_field.function_space())
             self.interp_inj = True
         else:
             raise ValueError(f'Method {self.opts.injection_method} for injection not valid')
 
     def project(self):
         self.recoverer.project()
-        self.projector_high.interpolate() if self.interp_high else self.projector_high.project()
-        self.projector_low.interpolate() if self.interp_low else self.projector_low.project()
+        self.q_rec_high.assign(assemble(self.projector_high)) if self.interp_high else self.projector_high.project()
+        self.q_corr_low.assign(assemble(self.projector_low)) if self.interp_low else self.projector_low.project()
         self.q_corr_low.assign(self.q_low - self.q_corr_low)
-        self.injector.interpolate() if self.interp_inj else self.injector.project()
+        self.q_corr_high.assign(assemble(self.injector)) if self.interp_inj else self.injector.project()
         self.q_high.assign(self.q_corr_high + self.q_rec_high)
 
 

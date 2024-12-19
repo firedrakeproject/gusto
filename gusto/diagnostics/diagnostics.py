@@ -1,14 +1,15 @@
 """Common diagnostic fields."""
 
 
-from firedrake import (assemble, dot, dx, Function, sqrt, TestFunction,
+from firedrake import (dot, dx, Function, sqrt, TestFunction,
                        TrialFunction, Constant, grad, inner, FacetNormal,
                        LinearVariationalProblem, LinearVariationalSolver,
                        ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, pi,
                        TensorFunctionSpace, SpatialCoordinate, as_vector,
-                       Projector, Interpolator, FunctionSpace, FiniteElement,
+                       Projector, assemble, FunctionSpace, FiniteElement,
                        TensorProductElement)
 from firedrake.assign import Assigner
+from firedrake.__future__ import interpolate
 from ufl.domain import extract_unique_domain
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -193,7 +194,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
 
             # Solve method must be declared in diagnostic's own setup routine
             if self.method == 'interpolate':
-                self.evaluator = Interpolator(self.expr, self.field)
+                self.evaluator = interpolate(self.expr, self.space)
             elif self.method == 'project':
                 self.evaluator = Projector(self.expr, self.field)
             elif self.method == 'assign':
@@ -207,7 +208,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
         logger.debug(f'Computing diagnostic {self.name} with {self.method} method')
 
         if self.method == 'interpolate':
-            self.evaluator.interpolate()
+            self.field.assign(assemble(self.evaluator))
         elif self.method == 'assign':
             self.evaluator.assign()
         elif self.method == 'project':
@@ -294,7 +295,7 @@ class IterativeDiagnosticField(DiagnosticField):
 
             # Solve method must be declared in diagnostic's own setup routine
             if self.method == 'interpolate':
-                self.evaluator = Interpolator(self.expr, self.field)
+                self.evaluator = interpolate(self.expr, self.space)
             elif self.method == 'project':
                 self.evaluator = Projector(self.expr, self.field)
             elif self.method == 'assign':

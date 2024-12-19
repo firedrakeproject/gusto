@@ -13,7 +13,8 @@ from firedrake import (BrokenElement, Constant, DirichletBC, FiniteElement,
                        Function, FunctionSpace, Interpolator, Projector,
                        SpatialCoordinate, TensorProductElement,
                        VectorFunctionSpace, as_vector, function, interval,
-                       VectorElement)
+                       VectorElement, assemble)
+from firedrake.__future__ import interpolate
 from gusto.recovery import Averager
 from .recovery_kernels import (BoundaryRecoveryExtruded, BoundaryRecoveryHCurl,
                                BoundaryGaussianElimination)
@@ -144,14 +145,14 @@ class BoundaryRecoverer(object):
             V_broken = FunctionSpace(mesh, BrokenElement(V_inout.ufl_element()))
             self.x_DG1_wrong = Function(V_broken)
             self.x_DG1_correct = Function(V_broken)
-            self.interpolator = Interpolator(self.x_inout, self.x_DG1_wrong)
+            self.interpolate = interpolate(self.x_inout, V_broken)
             self.averager = Averager(self.x_DG1_correct, self.x_inout)
             self.kernel = BoundaryGaussianElimination(V_broken)
 
     def apply(self):
         """Applies the boundary recovery process."""
         if self.method == BoundaryMethod.taylor:
-            self.interpolator.interpolate()
+            self.x_DG1_wrong.assign(assemble(self.interpolate))
             self.kernel.apply(self.x_DG1_wrong, self.x_DG1_correct,
                               self.act_coords, self.eff_coords, self.num_ext)
             self.averager.project()
@@ -275,7 +276,7 @@ class Recoverer(object):
                         self.boundary_recoverers.append(BoundaryRecoverer(x_out_scalars[i],
                                                                           method=BoundaryMethod.taylor,
                                                                           eff_coords=eff_coords[i]))
-                    self.interpolate_to_vector = Interpolator(as_vector(x_out_scalars), self.x_out)
+                    self.interpolate_to_vector = interpolate(as_vector(x_out_scalars), V_out)
 
     def project(self):
         """Perform the whole recovery step."""
@@ -294,7 +295,7 @@ class Recoverer(object):
                     # Correct at boundaries
                     boundary_recoverer.apply()
                 # Combine the components to obtain the vector field
-                self.interpolate_to_vector.interpolate()
+                self.x_out.assign(assemble(self.interpolate_to_vector))
             else:
                 # Extrapolate at boundaries
                 self.boundary_recoverer.apply()

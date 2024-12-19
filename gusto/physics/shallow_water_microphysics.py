@@ -3,8 +3,9 @@ Defines microphysics routines to be used with the moist shallow water equations.
 """
 
 from firedrake import (
-    Interpolator, conditional, Function, dx, min_value, max_value, Constant
+    conditional, Function, dx, min_value, max_value, Constant, assemble
 )
+from firedrake.__future__ import interpolate
 from firedrake.fml import subject
 from gusto.core.logging import logger
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
@@ -134,7 +135,7 @@ class InstantRain(PhysicsParametrisation):
                                             self.evaluate)
 
         # interpolator does the conversion of vapour to rain
-        self.source_interpolator = Interpolator(conditional(
+        self.source_interpolate = interpolate(conditional(
             self.water_v > self.saturation_curve,
             (1/self.tau)*gamma_r*(self.water_v - self.saturation_curve),
             0), Vv)
@@ -159,7 +160,7 @@ class InstantRain(PhysicsParametrisation):
         if self.set_tau_to_dt:
             self.tau.assign(dt)
         self.water_v.assign(x_in.subfunctions[self.Vv_idx])
-        self.source.assign(self.source_interpolator.interpolate())
+        self.source.assign(assemble(self.source_interpolate))
 
 
 class SWSaturationAdjustment(PhysicsParametrisation):
@@ -321,8 +322,8 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         # Add terms to equations and make interpolators
         # sources have the same order as V_idxs and factors
         self.source = [Function(Vc) for factor in factors]
-        self.source_interpolators = [Interpolator(sat_adj_expr*factor, source)
-                                     for factor, source in zip(factors, self.source)]
+        self.source_interpolate = [interpolate(sat_adj_expr*factor, Vc)
+                                   for factor in factors]
 
         # test functions have the same order as factors and sources (vapour,
         # cloud, depth, buoyancy) so that the correct test function multiplies
@@ -359,5 +360,5 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         self.cloud.assign(x_in.subfunctions[self.Vc_idx])
         if self.time_varying_gamma_v:
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
-        for interpolator in self.source_interpolators:
-            interpolator.interpolate()
+        for interpolator, src in zip(self.source_interpolate, self.source):
+            src.assign(assemble(interpolator))
