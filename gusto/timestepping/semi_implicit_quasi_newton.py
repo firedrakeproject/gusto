@@ -4,10 +4,11 @@ and GungHo dynamical cores.
 """
 
 from firedrake import (
-    Function, Constant, TrialFunctions, DirichletBC, div, Interpolator,
+    Function, Constant, TrialFunctions, DirichletBC, div, assemble,
     LinearVariationalProblem, LinearVariationalSolver
 )
 from firedrake.fml import drop, replace_subject
+from firedrake.__future__ import interpolate
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (transport, diffusion, time_derivative,
@@ -244,9 +245,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             V_DG = equation_set.domain.spaces('DG')
             self.predictor_field_in = Function(V_DG)
             div_factor = Constant(1.0) - (Constant(1.0) - self.alpha)*self.dt*div(self.x.n('u'))
-            self.predictor_interpolator = Interpolator(
-                self.x.star(predictor)*div_factor, self.predictor_field_in
-            )
+            self.predictor_interpolate = interpolate(
+                self.x.star(predictor)*div_factor, V_DG)
 
     def _apply_bcs(self):
         """
@@ -344,7 +344,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     # Pre-multiply this variable by (1 - dt*beta*div(u))
                     V = xstar(name).function_space()
                     field_out = Function(V)
-                    self.predictor_interpolator.interpolate()
+                    self.predictor_field_in.assign(assemble(self.predictor_interpolate))
                     scheme.apply(field_out, self.predictor_field_in)
 
                     # xp is xstar plus the increment from the transported predictor

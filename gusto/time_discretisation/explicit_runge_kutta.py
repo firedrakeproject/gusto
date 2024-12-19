@@ -15,8 +15,8 @@ from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisa
 
 
 __all__ = [
-    "ForwardEuler", "ExplicitRungeKutta", "SSPRK3", "RK4", "Heun",
-    "RungeKuttaFormulation"
+    "ForwardEuler", "ExplicitRungeKutta", "SSPRK2", "SSPRK3", "SSPRK4",
+    "RK4", "Heun", "RungeKuttaFormulation"
 ]
 
 
@@ -530,21 +530,41 @@ class ForwardEuler(ExplicitRungeKutta):
                          augmentation=augmentation)
 
 
-class SSPRK3(ExplicitRungeKutta):
+class SSPRK2(ExplicitRungeKutta):
     u"""
-    Implements the 3-stage Strong-Stability-Preserving Runge-Kutta method
-    for solving ∂y/∂t = F(y). It can be written as:                           \n
+    Implements 2nd order Strong-Stability-Preserving Runge-Kutta methods
+    for solving ∂y/∂t = F(y).                                                 \n
+
+    Spiteri & Ruuth, 2002, SIAM J. Numer. Anal.                               \n
+    "A new class of optimal high-order strong-stability-preserving time       \n
+    discretisation methods".                                                  \n
+
+    The 2-stage method (Heun's method) can be written as:                     \n
 
     k0 = F[y^n]                                                               \n
-    k1 = F[y^n + dt*k1]                                                       \n
-    k2 = F[y^n + (1/4)*dt*(k0+k1)]                                            \n
-    y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + 4*k2)                                 \n
+    k1 = F{y^n + dt*k0]                                                       \n
+    y^(n+1) = y^n + (1/2)*dt*(k0+k1)                                          \n
+
+    The 3-stage method can be written as:                                     \n
+
+    k0 = F[y^n]                                                               \n
+    k1 = F[y^n + (1/2*dt*k0]                                                  \n
+    k2 = F[y^n + (1/2)*dt*(k0+k1)]                                            \n
+    y^(n+1) = y^n + (1/3)*dt*(k0 + k1 + k2)                                   \n
+
+    The 4-stage method can be written as:                                     \n
+
+    k0 = F[y^n]                                                               \n
+    k1 = F[y^n + (1/3)*dt*k1]                                                 \n
+    k2 = F[y^n + (1/3)*dt*(k0+k1)]                                            \n
+    k3 = F[y^n + (1/3)*dt*(k0+k1+k2)]                                         \n
+    y^(n+1) = y^n + (1/4)*dt*(k0 + k1 + k2 + k3)                              \n
     """
     def __init__(
             self, domain, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
             solver_parameters=None, limiter=None, options=None,
-            augmentation=None
+            augmentation=None, stages=2
     ):
         """
         Args:
@@ -569,13 +589,190 @@ class SSPRK3(ExplicitRungeKutta):
             augmentation (:class:`Augmentation`): allows the equation solved in
                 this time discretisation to be augmented, for instances with
                 extra terms of another auxiliary variable. Defaults to None.
+            stages (int, optional): number of stages: (2, 3, 4). Defaults to 2.
         """
 
-        butcher_matrix = np.array([
-            [1., 0., 0.],
-            [1./4., 1./4., 0.],
-            [1./6., 1./6., 2./3.]
-        ])
+        if stages == 2:
+            butcher_matrix = np.array([
+                [1., 0.],
+                [0.5, 0.5]
+            ])
+            self.cfl_limit = 1
+
+        elif stages == 3:
+            butcher_matrix = np.array([
+                [1./2., 0., 0.],
+                [1./2., 1./2., 0.],
+                [1./3., 1./3., 1./3.]
+            ])
+            self.cfl_limit = 2
+        elif stages == 4:
+            butcher_matrix = np.array([
+                [1./3., 0., 0., 0.],
+                [1./3., 1./3., 0., 0.],
+                [1./3., 1./3., 1./3., 0.],
+                [1./4., 1./4., 1./4., 1./4.]
+            ])
+            self.cfl_limit = 3
+        else:
+            raise ValueError(f"{stages} stage 2rd order SSPRK not implemented")
+
+        super().__init__(domain, butcher_matrix, field_name=field_name,
+                         subcycling_options=subcycling_options,
+                         rk_formulation=rk_formulation,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
+
+
+class SSPRK3(ExplicitRungeKutta):
+    u"""
+    Implements 3rd order Strong-Stability-Preserving Runge-Kutta methods
+    for solving ∂y/∂t = F(y).                                                 \n
+
+    Spiteri & Ruuth, 2002, SIAM J. Numer. Anal.                               \n
+    "A new class of optimal high-order strong-stability-preserving time       \n
+    discretisation methods".                                                  \n
+
+    The 3-stage method can be written as:                                     \n
+
+    k0 = F[y^n]                                                               \n
+    k1 = F[y^n + dt*k1]                                                       \n
+    k2 = F[y^n + (1/4)*dt*(k0+k1)]                                            \n
+    y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + 4*k2)                                 \n
+
+    The 4-stage method can be written as:                                     \n
+
+    k0 = F[y^n]                                                               \n
+    k1 = F[y^n + (1/2)*dt*k1]                                                 \n
+    k2 = F[y^n + (1/2)*dt*(k0+k1)]                                            \n
+    k3 = F[y^n + (1/6)*dt*(k0+k1+k2)]                                         \n
+    y^(n+1) = y^n + (1/6)*dt*(k0 + k1 + k2 + 3*k3)                            \n
+
+    The 5-stage method has numerically optimised coefficients.                \n
+    """
+    def __init__(
+            self, domain, field_name=None, subcycling_options=None,
+            rk_formulation=RungeKuttaFormulation.increment,
+            solver_parameters=None, limiter=None, options=None,
+            augmentation=None, stages=3
+    ):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
+                Defaults to None.
+            rk_formulation (:class:`RungeKuttaFormulation`, optional):
+                an enumerator object, describing the formulation of the Runge-
+                Kutta scheme. Defaults to the increment form.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
+            stages (int, optional): number of stages: (3, 4, 5). Defaults to 3.
+        """
+
+        if stages == 3:
+            butcher_matrix = np.array([
+                [1., 0., 0.],
+                [1./4., 1./4., 0.],
+                [1./6., 1./6., 2./3.]
+            ])
+            self.cfl_limit = 1
+        elif stages == 4:
+            butcher_matrix = np.array([
+                [1./2., 0., 0., 0.],
+                [1./2., 1./2., 0., 0.],
+                [1./6., 1./6., 1./6., 0.],
+                [1./6., 1./6., 1./6., 1./2.]
+            ])
+            self.cfl_limit = 2
+        elif stages == 5:
+            self.cfl_limit = 2.65062919294483
+            butcher_matrix = np.array([
+                [0.37726891511710, 0., 0., 0., 0.],
+                [0.37726891511710, 0.37726891511710, 0., 0., 0.],
+                [0.16352294089771, 0.16352294089771, 0.16352294089771, 0., 0.],
+                [0.14904059394856, 0.14831273384724, 0.14831273384724, 0.34217696850008, 0.],
+                [0.19707596384481, 0.11780316509765, 0.11709725193772, 0.27015874934251, 0.29786487010104]
+            ])
+        else:
+            raise ValueError(f"{stages} stage 3rd order SSPRK not implemented")
+
+        super().__init__(domain, butcher_matrix, field_name=field_name,
+                         subcycling_options=subcycling_options,
+                         rk_formulation=rk_formulation,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
+
+
+class SSPRK4(ExplicitRungeKutta):
+    u"""
+    Implements 4th order Strong-Stability-Preserving Runge-Kutta methods
+    for solving ∂y/∂t = F(y).                                                 \n
+
+    Spiteri & Ruuth, 2002, SIAM J. Numer. Anal.                               \n
+    "A new class of optimal high-order strong-stability-preserving time       \n
+    discretisation methods".                                                  \n
+
+    The 5-stage method has numerically optimised coefficients.                \n
+    """
+    def __init__(
+            self, domain, field_name=None, subcycling_options=None,
+            rk_formulation=RungeKuttaFormulation.increment,
+            solver_parameters=None, limiter=None, options=None,
+            augmentation=None, stages=5
+    ):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
+                Defaults to None.
+            rk_formulation (:class:`RungeKuttaFormulation`, optional):
+                an enumerator object, describing the formulation of the Runge-
+                Kutta scheme. Defaults to the increment form.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
+            stages (int, optional): number of stages: (5,). Defaults to 5.
+        """
+
+        if stages == 5:
+            self.cfl_limit = 1.50818004975927
+            butcher_matrix = np.array([
+                [0.39175222700392, 0., 0., 0., 0.],
+                [0.21766909633821, 0.36841059262959, 0., 0., 0.],
+                [0.08269208670950, 0.13995850206999, 0.25189177424738, 0., 0.],
+                [0.06796628370320, 0.11503469844438, 0.20703489864929, 0.54497475021237, 0.],
+                [0.14681187618661, 0.24848290924556, 0.10425883036650, 0.27443890091960, 0.22600748319395]
+            ])
+        else:
+            raise ValueError(f"{stages} stage 4rd order SSPRK not implemented")
+
         super().__init__(domain, butcher_matrix, field_name=field_name,
                          subcycling_options=subcycling_options,
                          rk_formulation=rk_formulation,
@@ -643,7 +840,10 @@ class RK4(ExplicitRungeKutta):
                          augmentation=augmentation)
 
 
-class Heun(ExplicitRungeKutta):
+def Heun(domain, field_name=None, subcycling_options=None,
+         rk_formulation=RungeKuttaFormulation.increment,
+         solver_parameters=None, limiter=None, options=None,
+         augmentation=None):
     u"""
     Implements Heun's method.
 
@@ -656,44 +856,6 @@ class Heun(ExplicitRungeKutta):
     where superscripts indicate the time-level and subscripts indicate the stage
     number.
     """
-    def __init__(
-            self, domain, field_name=None, subcycling_options=None,
-            rk_formulation=RungeKuttaFormulation.increment,
-            solver_parameters=None, limiter=None, options=None,
-            augmentation=None
-    ):
-        """
-        Args:
-            domain (:class:`Domain`): the model's domain object, containing the
-                mesh and the compatible function spaces.
-            field_name (str, optional): name of the field to be evolved.
-                Defaults to None.
-            subcycling_options(:class:`SubcyclingOptions`, optional): an object
-                containing options for subcycling the time discretisation.
-                Defaults to None.
-            rk_formulation (:class:`RungeKuttaFormulation`, optional):
-                an enumerator object, describing the formulation of the Runge-
-                Kutta scheme. Defaults to the increment form.
-            solver_parameters (dict, optional): dictionary of parameters to
-                pass to the underlying solver. Defaults to None.
-            limiter (:class:`Limiter` object, optional): a limiter to apply to
-                the evolving field to enforce monotonicity. Defaults to None.
-            options (:class:`AdvectionOptions`, optional): an object containing
-                options to either be passed to the spatial discretisation, or
-                to control the "wrapper" methods, such as Embedded DG or a
-                recovery method. Defaults to None.
-            augmentation (:class:`Augmentation`): allows the equation solved in
-                this time discretisation to be augmented, for instances with
-                extra terms of another auxiliary variable. Defaults to None.
-        """
-
-        butcher_matrix = np.array([
-            [1., 0.],
-            [0.5, 0.5]
-        ])
-        super().__init__(domain, butcher_matrix, field_name=field_name,
-                         subcycling_options=subcycling_options,
-                         rk_formulation=rk_formulation,
-                         solver_parameters=solver_parameters,
-                         limiter=limiter, options=options,
-                         augmentation=augmentation)
+    return SSPRK2(domain, field_name=field_name, subcycling_options=subcycling_options,
+                  rk_formulation=rk_formulation, solver_parameters=solver_parameters,
+                  limiter=limiter, options=options, augmentation=augmentation, stages=2)
