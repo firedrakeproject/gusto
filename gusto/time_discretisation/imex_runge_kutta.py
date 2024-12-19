@@ -61,7 +61,7 @@ class IMEXRungeKutta(TimeDiscretisation):
 
     def __init__(self, domain, butcher_imp, butcher_exp, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None):
+                 limiter=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -82,10 +82,13 @@ class IMEXRungeKutta(TimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         super().__init__(domain, field_name=field_name,
                          solver_parameters=nonlinear_solver_parameters,
-                         options=options)
+                         options=options, augmentation=augmentation)
         self.butcher_imp = butcher_imp
         self.butcher_exp = butcher_exp
         self.nStages = int(np.shape(self.butcher_imp)[1])
@@ -126,16 +129,6 @@ class IMEXRungeKutta(TimeDiscretisation):
                 raise NotImplementedError("Non time-derivative terms must be labeled as implicit or explicit")
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
-
-    @cached_property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        return super(IMEXRungeKutta, self).lhs
-
-    @cached_property
-    def rhs(self):
-        """Set up the discretisation's right hand side (the time derivative)."""
-        return super(IMEXRungeKutta, self).rhs
 
     def res(self, stage):
         """Set up the discretisation's residual for a given stage."""
@@ -226,7 +219,7 @@ class IMEXRungeKutta(TimeDiscretisation):
     @cached_property
     def final_solver(self):
         """Set up a solver for the final solve to evaluate time level n+1."""
-        # setup solver using lhs and rhs defined in derived class
+        # setup solver using residual (res) defined in derived class
         problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.linear_solver_parameters, options_prefix=solver_name)
@@ -269,7 +262,7 @@ class IMEX_Euler(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None):
+                 limiter=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -286,13 +279,16 @@ class IMEX_Euler(IMEXRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         butcher_imp = np.array([[0., 0.], [0., 1.], [0., 1.]])
         butcher_exp = np.array([[0., 0.], [1., 0.], [1., 0.]])
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options, augmentation=augmentation)
 
 
 class IMEX_ARS3(IMEXRungeKutta):
@@ -313,7 +309,7 @@ class IMEX_ARS3(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None):
+                 limiter=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -330,6 +326,9 @@ class IMEX_ARS3(IMEXRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         g = (3. + np.sqrt(3.))/6.
         butcher_imp = np.array([[0., 0., 0.], [0., g, 0.], [0., 1-2.*g, g], [0., 0.5, 0.5]])
@@ -338,7 +337,7 @@ class IMEX_ARS3(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options, augmentation=augmentation)
 
 
 class IMEX_ARK2(IMEXRungeKutta):
@@ -359,7 +358,7 @@ class IMEX_ARK2(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None):
+                 limiter=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -376,6 +375,9 @@ class IMEX_ARK2(IMEXRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         g = 1. - 1./np.sqrt(2.)
         d = 1./(2.*np.sqrt(2.))
@@ -385,7 +387,7 @@ class IMEX_ARK2(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options, augmentation=augmentation)
 
 
 class IMEX_SSP3(IMEXRungeKutta):
@@ -404,7 +406,7 @@ class IMEX_SSP3(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None):
+                 limiter=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -421,6 +423,9 @@ class IMEX_SSP3(IMEXRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         g = 1. - (1./np.sqrt(2.))
         butcher_imp = np.array([[g, 0., 0.], [1-2.*g, g, 0.], [0.5-g, 0., g], [(1./6.), (1./6.), (2./3.)]])
@@ -428,7 +433,7 @@ class IMEX_SSP3(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options, augmentation=augmentation)
 
 
 class IMEX_Trap2(IMEXRungeKutta):
@@ -447,7 +452,7 @@ class IMEX_Trap2(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None):
+                 limiter=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -464,6 +469,9 @@ class IMEX_Trap2(IMEXRungeKutta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         e = 0.
         butcher_imp = np.array([[0., 0., 0., 0.], [e, 0., 0., 0.], [0.5, 0., 0.5, 0.], [0.5, 0., 0., 0.5], [0.5, 0., 0., 0.5]])
@@ -471,4 +479,4 @@ class IMEX_Trap2(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options, augmentation=augmentation)
