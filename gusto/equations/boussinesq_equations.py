@@ -1,12 +1,12 @@
 """Defines the Boussinesq equations."""
 
-from firedrake import(
-    inner, dx, div, cross, split, as_vector, Function, FunctionSapce)
+from firedrake import inner, dx, div, cross, split, as_vector
 from firedrake.fml import subject
 from gusto.core.labels import (
     time_derivative, transport, prognostic, linearisation,
     pressure_gradient, coriolis, divergence, gravity, incompressible
 )
+from gusto.core.configuration import convert_parameters_to_real_space
 from gusto.equations.common_forms import (
     advection_form, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form,
@@ -106,7 +106,10 @@ class BoussinesqEquations(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
-        self.real_space = FunctionSapce(domain.mesh, 'R', 0)
+        # This function converts the parameters to real space.
+        # This is a preventive way to avoid adjoint issues when the parameters
+        # attribute are the control in the sensitivity computations.
+        convert_parameters_to_real_space(parameters, domain.mesh)
         self.compressible = compressible
 
         w, phi, gamma = self.tests[0:3]

@@ -1,7 +1,7 @@
 """Classes for defining variants of the shallow-water equations."""
 
 from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg,
-                       dS, split, conditional, exp, Function)
+                       dS, split, conditional, exp)
 from firedrake.fml import subject, drop
 from gusto.core.labels import (time_derivative, transport, prognostic,
                                linearisation, pressure_gradient, coriolis)
@@ -12,6 +12,7 @@ from gusto.equations.common_forms import (
     linear_continuity_form, linear_advection_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
+from gusto.core.configuration import convert_parameters_to_real_space
 
 
 __all__ = ["ShallowWaterEquations", "LinearShallowWaterEquations",
@@ -87,12 +88,12 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         self.parameters = parameters
         self.domain = domain
+        # This function converts the ``float`` and ``firedrake.Constant`` parameters
+        # attributes to a function in real space.
+        # This is a preventive way to avoid adjoint issues when the parameters
+        # attribute are the control in the sensitivity computations.
+        convert_parameters_to_real_space(parameters, self.domain.mesh)
         self.active_tracers = active_tracers
-        # Define the Real function space. This function space will be used
-        # to define the ``self.parameters`` attributes. Such API is considering
-        # the cases where the user computes adjoint-based sensitivity with the 
-        # control parameters being the ``self.parameters`` attributes.
-        self.real_space = FunctionSpace(self.domain.mesh, 'R', 0)
 
         self._setup_residual(fexpr, topog_expr, u_transport_option)
 
@@ -423,7 +424,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         # provide linearisation
         if self.equivalent_buoyancy:
             try:
-                beta2 = Function(self.real_space, val=float(self.parameters.beta2))
+                beta2 = self.parameters.beta2
             except ValueError:
                 print("Oi")
 
@@ -516,10 +517,10 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         # parameters specified in self.parameters and the input
         # functions X. The latter are left as inputs to the
         # function so that it can also be used for initialisation
-        q0 = Function(self.real_space, val=self.parameters.q0)
-        nu = Function(self.real_space, val=self.parameters.nu)
-        g = Function(self.real_space, val=self.parameters.g)
-        H = Function(self.real_space, val=self.parameters.H)
+        q0 = self.parameters.q0
+        nu = self.parameters.nu
+        g = self.parameters.g
+        H = self.parameters.H
         D, b = split(X)[1:3]
         topog = self.topog
         if topog is None:
@@ -656,9 +657,12 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
-        self.real_space = FunctionSpace(domain.mesh, 'R', 0)
-        g = Function(self.real_space, val=parameters.g)
-        H = Function(self.real_space, val=parameters.H)
+        # This function converts the parameters to real space.
+        # This is a preventive way to avoid adjoint issues when the parameters
+        # attribute are the control in the sensitivity computations.
+        convert_parameters_to_real_space(parameters, domain.mesh)
+        g = parameters.g
+        H = parameters.H
 
         w1, w2, phi = self.tests
         u, v, D = split(self.X)

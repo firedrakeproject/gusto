@@ -1,7 +1,7 @@
 """Some simple tools for configuring the model."""
 from abc import ABCMeta, abstractproperty
 from enum import Enum
-from firedrake import sqrt
+from firedrake import sqrt, Constant, Function, FunctionSpace
 
 
 __all__ = [
@@ -12,7 +12,7 @@ __all__ = [
     "EmbeddedDGOptions", "ConservativeEmbeddedDGOptions", "RecoveryOptions",
     "ConservativeRecoveryOptions", "SUPGOptions", "MixedFSOptions",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters",
-    "SubcyclingOptions"
+    "SubcyclingOptions", "convert_parameters_to_real_space"
 ]
 
 
@@ -79,12 +79,12 @@ class Configuration(object):
 
         # Almost all parameters should be Constants -- but there are some
         # specific exceptions which should be kept as integers
-        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq']:
-            object.__setattr__(self, name, value)
-            # DO NOT MERGE
-            # Adjoint is a bit twitchy with Constants so let's not make them
-            # for now
-            # object.__setattr__(self, name, Constant(value))
+        non_constants = [
+            'dumpfreq', 'pddumpfreq', 'chkptfreq',
+            'fixed_subcycles', 'max_subcycles', 'subcycle_by_courant'
+        ]
+        if type(value) in [float, int] and name not in non_constants:
+            object.__setattr__(self, name, Constant(value))
         else:
             object.__setattr__(self, name, value)
 
@@ -269,6 +269,19 @@ class BoundaryLayerParameters(Configuration):
     mu = 100.                   # Interior penalty coefficient for vertical diffusion
 
 
+class HeldSuarezParameters(Configuration):
+    """
+    Parameters used in the default configuration for the Held Suarez test case.
+    """
+    T0stra = 200               # Stratosphere temp
+    T0surf = 315               # Surface temperature at equator
+    T0horiz = 60               # Equator to pole temperature difference
+    T0vert = 10                # Stability parameter
+    sigmab = 0.7               # Height of the boundary layer
+    tau_d = 40 * 24 * 60 * 60  # 40 day time scale
+    tau_u = 4 * 24 * 60 * 60   # 4 day timescale
+
+
 class SubcyclingOptions(Configuration):
     """
     Describes the process of subcycling a time discretisation, by dividing the
@@ -295,3 +308,17 @@ class SubcyclingOptions(Configuration):
             raise ValueError(
                 "Cannot provide both fixed_subcycles and subcycle_by_courant"
                 + "parameters.")
+
+
+def convert_parameters_to_real_space(parameters, mesh):
+    """Convert the float type parameters attributes to real space.
+
+    Args:
+        parameters (:class:`Configuration`): the configuration object containing
+            the parameters to convert
+        mesh (:class:`firedrake.Mesh`): the mesh object to use for the real space.
+    """
+    R = FunctionSpace(mesh, 'R', 0)
+    for name, value in vars(parameters).items():
+        if isinstance(value, (float, Constant)):
+            setattr(parameters, name, Function(R, val=float(value)))
