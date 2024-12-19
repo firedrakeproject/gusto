@@ -1,6 +1,7 @@
 """Defines the Boussinesq equations."""
 
-from firedrake import inner, dx, div, cross, split, as_vector
+from firedrake import(
+    inner, dx, div, cross, split, as_vector, Function, FunctionSapce)
 from firedrake.fml import subject
 from gusto.core.labels import (
     time_derivative, transport, prognostic, linearisation,
@@ -105,6 +106,7 @@ class BoussinesqEquations(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
+        self.real_space = FunctionSapce(domain.mesh, 'R', 0)
         self.compressible = compressible
 
         w, phi, gamma = self.tests[0:3]

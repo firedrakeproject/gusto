@@ -18,7 +18,8 @@ def theta(parameters, T, p):
         p (:class:`ufl.Expr`): pressure in Pa.
     """
 
-    kappa = parameters.kappa
+    kappa = Function()
+    parameters.kappa
     p_0 = parameters.p_0
 
     return T * (p_0 / p) ** kappa

@@ -1,7 +1,7 @@
 """Classes for defining variants of the shallow-water equations."""
 
 from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg,
-                       dS, split, conditional, exp)
+                       dS, split, conditional, exp, Function)
 from firedrake.fml import subject, drop
 from gusto.core.labels import (time_derivative, transport, prognostic,
                                linearisation, pressure_gradient, coriolis)
@@ -88,6 +88,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
         self.parameters = parameters
         self.domain = domain
         self.active_tracers = active_tracers
+        # Define the Real function space. This function space will be used
+        # to define the ``self.parameters`` attributes. Such API is considering
+        # the cases where the user computes adjoint-based sensitivity with the 
+        # control parameters being the ``self.parameters`` attributes.
+        self.real_space = FunctionSpace(self.domain.mesh, 'R', 0)
 
         self._setup_residual(fexpr, topog_expr, u_transport_option)
 
@@ -417,7 +422,11 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         # label these as the equivalent pressure gradient term and
         # provide linearisation
         if self.equivalent_buoyancy:
-            beta2 = self.parameters.beta2
+            try:
+                beta2 = Function(self.real_space, val=float(self.parameters.beta2))
+            except ValueError:
+                print("Oi")
+
             qsat_expr = self.compute_saturation(self.X)
             qv = conditional(qt < qsat_expr, qt, qsat_expr)
             qvbar = conditional(qtbar < qsat_expr, qtbar, qsat_expr)
@@ -507,10 +516,10 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         # parameters specified in self.parameters and the input
         # functions X. The latter are left as inputs to the
         # function so that it can also be used for initialisation
-        q0 = self.parameters.q0
-        nu = self.parameters.nu
-        g = self.parameters.g
-        H = self.parameters.H
+        q0 = Function(self.real_space, val=self.parameters.q0)
+        nu = Function(self.real_space, val=self.parameters.nu)
+        g = Function(self.real_space, val=self.parameters.g)
+        H = Function(self.real_space, val=self.parameters.H)
         D, b = split(X)[1:3]
         topog = self.topog
         if topog is None:
@@ -647,8 +656,9 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
-        g = parameters.g
-        H = parameters.H
+        self.real_space = FunctionSpace(domain.mesh, 'R', 0)
+        g = Function(self.real_space, val=parameters.g)
+        H = Function(self.real_space, val=parameters.H)
 
         w1, w2, phi = self.tests
         u, v, D = split(self.X)

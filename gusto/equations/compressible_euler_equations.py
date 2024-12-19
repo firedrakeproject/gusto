@@ -2,7 +2,7 @@
 
 from firedrake import (
     sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg, dS_v,
-    conditional, SpatialCoordinate, split, Constant, as_vector
+    conditional, SpatialCoordinate, split, Constant, as_vector, Function
 )
 from firedrake.fml import subject, replace_subject
 from gusto.core.labels import (
@@ -45,7 +45,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            parameters (:class:`Configuration`, optional): an object containing
+            x (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
             sponge_options (:class:`SpongeLayerParameters`, optional): any
                 parameters for applying a sponge layer to the upper boundary.
@@ -101,6 +101,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
+        self._convert_parameters_to_real_space(domain)
         g = parameters.g
         cp = parameters.cp
 
@@ -109,6 +110,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         u_trial = split(self.trials)[0]
         _, rho_bar, theta_bar = split(self.X_ref)[0:3]
         zero_expr = Constant(0.0)*theta
+        # Check this for adjoints
         exner = exner_pressure(parameters, rho, theta)
         n = FacetNormal(domain.mesh)
 
@@ -185,12 +187,12 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Moist Thermodynamic Divergence Term
         # -------------------------------------------------------------------- #
         if len(active_tracers) > 0:
-            cv = parameters.cv
-            c_vv = parameters.c_vv
-            c_pv = parameters.c_pv
-            c_pl = parameters.c_pl
-            R_d = parameters.R_d
-            R_v = parameters.R_v
+            cv = Function(real_space, val=float(parameters.cv))
+            c_vv = Function(real_space, val=float(parameters.c_vv))
+            c_pv = Function(real_space, val=float(parameters.c_pv))
+            c_pl = Function(real_space, val=float(parameters.c_pl))
+            R_d = Function(real_space, val=float(parameters.R_d))
+            R_v = Function(real_space, val=float(parameters.R_v))
 
             # Get gas and liquid moisture mixing ratios
             mr_l = zero_expr
@@ -264,6 +266,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
+    def _convert_parameters_to_real_space(self, domain):
+        real_space = FunctionSpace(domain.mesh, 'R', 0)
+        self.parameters.g = Function(real_space, val=float(self.parameters.g))
+        self.parameters.cp = Function(real_space, val=float(self.parameters.cp))
 
 class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
     """
