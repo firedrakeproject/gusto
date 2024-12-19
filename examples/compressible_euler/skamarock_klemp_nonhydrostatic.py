@@ -26,7 +26,7 @@ from gusto import (
     logger, SUPGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
     compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
-    SubcyclingOptions
+    SubcyclingOptions, hydrostatic_parameters
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -134,7 +134,13 @@ def skamarock_klemp_nonhydrostatic(
     ]
 
     # Linear solver
-    linear_solver = CompressibleSolver(eqns)
+    if hydrostatic:
+        linear_solver = CompressibleSolver(
+            eqns, solver_parameters=hydrostatic_parameters,
+            overwrite_solver_parameters=True
+        )
+    else:
+        linear_solver = CompressibleSolver(eqns)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(

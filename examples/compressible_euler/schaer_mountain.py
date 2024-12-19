@@ -12,7 +12,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from firedrake import (
     as_vector, VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh,
-    SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, Constant
+    SpatialCoordinate, exp, pi, cos, Function, Mesh, Constant
 )
 from gusto import (
     Domain, CompressibleParameters, CompressibleSolver, logger,
@@ -23,11 +23,11 @@ from gusto import (
 )
 
 schaer_mountain_defaults = {
-    'ncolumns': 60,
-    'nlayers': 30,
+    'ncolumns': 100,
+    'nlayers': 50,
     'dt': 8.0,
     'tmax': 5*60*60.,   # 5 hours
-    'dumpfreq': 2250,   # dump at 5 hours with default settings
+    'dumpfreq': 2250,   # dump at end with default settings
     'dirname': 'schaer_mountain'
 }
 
@@ -50,22 +50,22 @@ def schaer_mountain(
     a = 5000.                # scale width of mountain profile, in m
     lamda = 4000.            # scale width of individual mountains, in m
     hm = 250.                # height of mountain, in m
-    zh = 5000.               # height at which mesh is no longer distorted, in m
     Tsurf = 288.             # temperature of surface, in K
     initial_wind = 10.0      # initial horizontal wind, in m/s
     sponge_depth = 10000.0   # depth of sponge layer, in m
-    g = 9.80665              # acceleration due to gravity, in m/s^2
-    cp = 1004.               # specific heat capacity at constant pressure
-    sponge_mu = 1.2          # strength of sponge layer
+    g = 9.810616             # acceleration due to gravity, in m/s^2
+    cp = 1004.5              # specific heat capacity at constant pressure
+    mu_dt = 1.2              # strength of sponge layer, no units
     exner_surf = 1.0         # maximum value of Exner pressure at surface
-    max_iterations = 10      # maximum number of hydrostatic balance iterations
-    tolerance = 1e-7         # tolerance for hydrostatic balance iteration
+    max_iterations = 100     # maximum number of hydrostatic balance iterations
+    tolerance = 1e-12        # tolerance for hydrostatic balance iteration
 
     # ------------------------------------------------------------------------ #
     # Our settings for this set up
     # ------------------------------------------------------------------------ #
 
-    alpha = 0.55
+    spinup_steps = 5  # Not necessary but helps balance initial conditions
+    alpha = 0.51      # Necessary to absorb grid scale waves
     element_order = 1
     u_eqn_type = 'vector_invariant_form'
 
@@ -86,7 +86,7 @@ def schaer_mountain(
     x, z = SpatialCoordinate(ext_mesh)
     zs = hm * exp(-((x - xc)/a)**2) * (cos(pi*(x - xc)/lamda))**2
     xexpr = as_vector(
-        [x, conditional(z < zh, z + cos(0.5 * pi * z / zh)**6 * zs, z)]
+        [x, z + ((domain_height - z) / domain_height) * zs]
     )
 
     # Make new mesh
@@ -98,7 +98,7 @@ def schaer_mountain(
     # Equation
     parameters = CompressibleParameters(g=g, cp=cp)
     sponge = SpongeLayerParameters(
-        H=domain_height, z_level=domain_height-sponge_depth, mubar=sponge_mu/dt
+        H=domain_height, z_level=domain_height-sponge_depth, mubar=mu_dt/dt
     )
     eqns = CompressibleEulerEquations(
         domain, parameters, sponge_options=sponge, u_transport_option=u_eqn_type
@@ -141,7 +141,7 @@ def schaer_mountain(
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, alpha=alpha, spinup_steps=5
+        linear_solver=linear_solver, alpha=alpha, spinup_steps=spinup_steps
     )
 
     # ------------------------------------------------------------------------ #
@@ -178,7 +178,8 @@ def schaer_mountain(
     bottom_boundary = Constant(exner_surf, domain=mesh)
     logger.info(f'Solving hydrostatic with bottom Exner of {exner_surf}')
     compressible_hydrostatic_balance(
-        eqns, theta_b, rho_b, exner, top=False, exner_boundary=bottom_boundary
+        eqns, theta_b, rho_b, exner, top=False, exner_boundary=bottom_boundary,
+        solve_for_rho=True
     )
 
     # Solve hydrostatic balance again, but now use minimum value from first
@@ -232,7 +233,7 @@ def schaer_mountain(
 
     theta0.assign(theta_b)
     rho0.assign(rho_b)
-    u0.project(as_vector([initial_wind, 0.0]), bcs=eqns.bcs['u'])
+    u0.project(as_vector([initial_wind, 0.0]))
 
     stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
