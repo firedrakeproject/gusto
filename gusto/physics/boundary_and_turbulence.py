@@ -3,11 +3,10 @@ Objects to describe physics parametrisations for the boundary layer, such as
 drag and turbulence."""
 
 from firedrake import (
-    conditional, Function, dx, sqrt, dot, Constant, grad, TestFunctions,
-    split, inner, Projector, exp, avg, outer, FacetNormal, SpatialCoordinate,
-    dS_v, assemble, Interpolator
+    Interpolator, conditional, Function, dx, sqrt, dot, Constant, grad,
+    TestFunctions, split, inner, Projector, exp, avg, outer, FacetNormal,
+    SpatialCoordinate, dS_v
 )
-from firedrake.__future__ import interpolate
 from firedrake.fml import subject
 from gusto.core.configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
@@ -124,7 +123,7 @@ class SurfaceFluxes(PhysicsParametrisation):
         # Implicit formulation ----------------------------------------------- #
         # For use with ForwardEuler only, as implicit solution is hand-written
         if implicit_formulation:
-            self.source_interpolate = []
+            self.source_interpolators = []
 
             # First specify T_np1 expression
             Vtheta = equation.spaces[T_idx]
@@ -140,7 +139,7 @@ class SurfaceFluxes(PhysicsParametrisation):
                 dmv_expr = surface_expr * (mv_np1_expr - m_v) / self.dt
                 source_mv_expr = test_m_v * source_mv * dx
 
-                self.source_interpolate.append(interpolate(dmv_expr, Vtheta))
+                self.source_interpolators.append(Interpolator(dmv_expr, source_mv))
                 equation.residual -= self.label(subject(prognostic(source_mv_expr, vapour_name),
                                                         X), self.evaluate)
 
@@ -373,10 +372,10 @@ class StaticAdjustment(PhysicsParametrisation):
             Rd = equation.parameters.R_d
             mv_idx = equation.field_names.index('water_vapour')
             mv = self.X.subfunctions[mv_idx]
-            self.get_theta_variable = interpolate(theta / (1 + mv*Rv/Rd), Vt)
+            self.get_theta_variable = Interpolator(theta / (1 + mv*Rv/Rd), self.theta_to_sort)
             self.set_theta_variable = Interpolator(self.theta_to_sort * (1 + mv*Rv/Rd), sorted_theta)
         else:
-            self.get_theta_variable = interpolate(theta, Vt)
+            self.get_theta_variable = Interpolator(theta, self.theta_to_sort)
             self.set_theta_variable = Interpolator(self.theta_to_sort, sorted_theta)
 
         # -------------------------------------------------------------------- #
@@ -416,7 +415,7 @@ class StaticAdjustment(PhysicsParametrisation):
         self.X.assign(x_in)
         self.dt.assign(dt)
 
-        self.theta_to_sort.assign(assemble(self.get_theta_variable))
+        self.get_theta_variable.interpolate()
         theta_column_data, index_data = self.get_column_data()
         for col in range(theta_column_data.shape[0]):
             theta_column_data[col].sort()
