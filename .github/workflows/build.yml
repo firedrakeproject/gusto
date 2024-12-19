@@ -39,7 +39,7 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -e .
           python -m pip install  \
-            pytest-timeout pytest-xdist
+            pytest-timeout pytest-xdist nbval ipympl
       - name: Gusto tests
         run: |
           . /home/firedrake/firedrake/bin/activate
