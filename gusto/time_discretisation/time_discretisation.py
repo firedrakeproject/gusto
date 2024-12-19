@@ -12,13 +12,14 @@ from firedrake import (Function, TestFunction, TestFunctions, DirichletBC,
                        Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import (replace_subject, replace_test_function, Term,
-                           all_terms, drop)
+                           all_terms, drop, LabelledForm)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.core.labels import (time_derivative, prognostic, physics_label,
-                               mass_weighted, nonlinear_time_derivative)
+                               mass_weighted, nonlinear_time_derivative,
+                               transporting_velocity)
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
 from gusto.solvers import mass_parameters
@@ -360,6 +361,34 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         self.x_out = Function(self.fs)
         self.x1 = Function(self.fs)
+
+    def setup_transporting_velocity(self, uadv):
+        self.residual = self.residual.label_map(
+            lambda t: t.has_label(transporting_velocity),
+            map_if_true=lambda t:
+            Term(ufl.replace(t.form, {t.get(transporting_velocity): uadv}),
+                 t.labels)
+        )
+
+        self.residual = transporting_velocity.update_value(self.residual, uadv)
+        # Now also replace transporting velocity in the terms that are
+        # contained in labels
+        for idx, t in enumerate(self.residual.terms):
+            if t.has_label(transporting_velocity):
+                for label in t.labels.keys():
+                    if type(t.labels[label]) is LabelledForm:
+                        t.labels[label] = t.labels[label].label_map(
+                            lambda s: s.has_label(transporting_velocity),
+                            map_if_true=lambda s:
+                            Term(ufl.replace(
+                                s.form,
+                                {s.get(transporting_velocity): uadv}),
+                                s.labels
+                            )
+                        )
+
+                        self.residual.terms[idx].labels[label] = \
+                            transporting_velocity.update_value(t.labels[label], uadv)
 
     @property
     def nlevels(self):
