@@ -303,7 +303,7 @@ class RecoveryWrapper(Wrapper):
         """
 
         if self.interp_back:
-            self.x_projected.assign(self.x_out_projector)
+            self.x_projected.assign(assemble(self.x_out_projector))
         else:
             self.x_out_projector.project()
         x_out.assign(self.x_projected)
