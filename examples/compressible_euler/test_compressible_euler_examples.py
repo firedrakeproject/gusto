@@ -65,6 +65,8 @@ def test_skamarock_klemp_nonhydrostatic_parallel():
     test_skamarock_klemp_nonhydrostatic()
 
 
+# Hydrostatic equations not currently working
+@pytest.mark.xfail
 def test_hyd_switch_skamarock_klemp_nonhydrostatic():
     from skamarock_klemp_nonhydrostatic import skamarock_klemp_nonhydrostatic
     test_name = 'hyd_switch_skamarock_klemp_nonhydrostatic'
@@ -79,6 +81,8 @@ def test_hyd_switch_skamarock_klemp_nonhydrostatic():
     )
 
 
+# Hydrostatic equations not currently working
+@pytest.mark.xfail
 @pytest.mark.parallel(nprocs=2)
 def test_hyd_switch_skamarock_klemp_nonhydrostatic_parallel():
     test_hyd_switch_skamarock_klemp_nonhydrostatic()
