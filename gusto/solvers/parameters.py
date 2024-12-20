@@ -4,7 +4,7 @@ for particular kinds of system.
 """
 from gusto.core.function_spaces import is_cg
 
-__all__ = ['mass_parameters']
+__all__ = ['mass_parameters', 'hydrostatic_parameters']
 
 
 def mass_parameters(V, spaces=None, ignore_vertical=True):
@@ -97,3 +97,28 @@ def mass_parameters(V, spaces=None, ignore_vertical=True):
         }
 
     return parameters
+
+
+hydrostatic_parameters = {
+    'mat_type': 'matfree',
+    'ksp_type': 'preonly',
+    'pc_type': 'python',
+    'pc_python_type': 'firedrake.SCPC',
+    # Velocity mass operator is singular in the hydrostatic case.
+    # So for reconstruction, we eliminate rho into u
+    'pc_sc_eliminate_fields': '1, 0',
+    'condensed_field': {
+        'ksp_type': 'fgmres',
+        'ksp_rtol': 1.0e-8,
+        'ksp_atol': 1.0e-8,
+        'ksp_max_it': 100,
+        'pc_type': 'gamg',
+        'pc_gamg_sym_graph': True,
+        'mg_levels': {
+            'ksp_type': 'gmres',
+            'ksp_max_it': 5,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
+    }
+}
