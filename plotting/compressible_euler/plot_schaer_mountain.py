@@ -8,14 +8,13 @@ from os.path import abspath, dirname
 import matplotlib.pyplot as plt
 from netCDF4 import Dataset
 import numpy as np
-import pandas as pd
 from tomplot import (
     set_tomplot_style, tomplot_cmap, plot_contoured_field,
     add_colorbar_ax, tomplot_field_title, tomplot_contours,
     extract_gusto_coords, extract_gusto_field, reshape_gusto_data
 )
 
-test = 'schaer_alpha_0p51'
+test = 'schaer_mountain'
 
 # ---------------------------------------------------------------------------- #
 # Directory for results and plots
@@ -35,8 +34,8 @@ final_field_labels = [
     r'$w$ (m s$^{-1}$)', r'$\Delta\theta$ (K)'
 ]
 final_contours = [
-    np.linspace(-1.0, 1.0, 21), np.linspace(-1.0, 1.0, 21),
-    np.linspace(-1.0, 1.0, 21), np.linspace(-1.0, 1.0, 21)
+    np.linspace(-1.1, 1.1, 23), np.linspace(-1.4, 1.4, 15),
+    np.linspace(-1.1, 1.1, 23), np.linspace(-1.4, 1.4, 31)
 ]
 
 # ---------------------------------------------------------------------------- #
@@ -129,25 +128,6 @@ for i, (ax, field_name, colour_scheme, field_label, contours) in \
     coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
     time = data_file['time'][time_idx]
 
-    # # Filter data for panels that are zoomed in mountain region
-    # if i in [2, 3]:
-    #     data_dict = {
-    #         'X': coords_X,
-    #         'Y': coords_Y,
-    #         'field': field_data
-    #     }
-    #     data_frame = pd.DataFrame(data_dict)
-
-    #     data_frame = data_frame[
-    #         (data_frame['X'] >= xlims_zoom[0])
-    #         & (data_frame['X'] <= xlims_zoom[1])
-    #         & (data_frame['Y'] >= ylims_zoom[0])
-    #         & (data_frame['Y'] <= ylims_zoom[1])
-    #     ]
-    #     field_data = data_frame['field'].values[:]
-    #     coords_X = data_frame['X'].values[:]
-    #     coords_Y = data_frame['Y'].values[:]
-
     field_data, coords_X, coords_Y = \
         reshape_gusto_data(field_data, coords_X, coords_Y)
 
@@ -160,9 +140,12 @@ for i, (ax, field_name, colour_scheme, field_label, contours) in \
     )
 
     add_colorbar_ax(ax, cf, field_label, location='bottom')
-    tomplot_field_title(
-        ax, None, minmax=True, field_data=field_data, minmax_format='.3f'
-    )
+
+    if i in [0, 1]:
+        # Only print min/max for top plots
+        tomplot_field_title(
+            ax, None, minmax=True, field_data=field_data, minmax_format='.3f'
+        )
 
     # Labels -------------------------------------------------------------------
     ax.set_xlabel(r'$x$ (km)', labelpad=-10)
