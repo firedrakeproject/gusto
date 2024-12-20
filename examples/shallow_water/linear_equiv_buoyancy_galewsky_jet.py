@@ -150,33 +150,24 @@ def Dval(X):
     return val
 
 
-def initialise_fn():
+def initialise_fn(uin, Din):
 
-    if SIQN:
-        u0 = stepper.fields("u")
-        D0 = stepper.fields("D")
-    else:
-        U_in = Function(eqns.function_space)
-        u0, D0 = U_in.subfunctions[0:2]
-
-    u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 12})
+    uin.project(uexpr, form_compiler_parameters={'quadrature_degree': 12})
     
     # Get coordinates to pass to Dval function
-    W = VectorFunctionSpace(mesh, D0.ufl_element())
+    W = VectorFunctionSpace(mesh, Din.ufl_element())
 
     X = interpolate(mesh.coordinates, W)
-    D0.dat.data[:] = Dval(X.dat.data_ro)
-    D0.interpolate(D0 - (H/(2*g) * bexpr))
+    Din.dat.data[:] = Dval(X.dat.data_ro)
+    Din.interpolate(Din - (H/(2*g) * bexpr))
 
     # Adjust mean value of initial D
-    C = Function(D0.function_space()).assign(Constant(1.0))
+    C = Function(Din.function_space()).assign(Constant(1.0))
     area = assemble(C*dx)
-    Dmean = assemble(D0*dx)/area
-    D0 -= Dmean
-    D0 += Constant(parameters.H)
+    Dmean = assemble(Din*dx)/area
+    Din -= Dmean
+    Din += Constant(parameters.H)
 
-
-initialise_fn()
 
 # initial conditions based on moist thermal version
 if not SIQN:
@@ -184,11 +175,15 @@ if not SIQN:
     Uexpl = Function(eqns.function_space, name="output")
     u0, D0, b_e0, q_t0 = U_in.subfunctions
 
+initialise_fn(u0, D0)
+
 initial_sat = q0*H/(D0) * exp(nu*(1-bexpr/g))
 vexpr = 0.98 * initial_sat
 b_e_expr = bexpr - beta2*vexpr
 b_e0.interpolate(b_e_expr)
 q_t0.interpolate(vexpr)
+rexi_output = VTKFile("rexi_linear_equivalent_buoyancy_galewsky_jet.pvd")
+rexi_output.write(u0, D0, b_e0, q_t0)
 
 # Set reference profiles
 if SIQN:
@@ -208,7 +203,6 @@ else:
 if not SIQN:
     rexi_params = RexiParameters(h=h, M=M)
     rexi = Rexi(eqns, rexi_params)
-    rexi_output = VTKFile("rexi_linear_equivalent_buoyancy_galewsky_jet.pvd")
 
 # ----------------------------------------------------------------- #
 # Run
@@ -218,6 +212,10 @@ if SIQN:
     stepper.run(t=0, tmax=tmax)
 else:
     rexi.solve(Uexpl, U_in, tmax)
-    uexpl, Dexpl, b_e_expl, q_t_expl = Uexpl.subfunctions
-    rexi_output.write(u0, D0, b_e0, q_t0, uexpl, Dexpl, b_e_expl, q_t_expl)
+    uexpl, Dexpl, b_e_expl, q_t_expl = Uexpl.subfunctions   
+    u0.assign(uexpl)
+    D0.assign(Dexpl)
+    b_e0.assign(b_e_expl)
+    q_t0.assign(q_t_expl)
+    rexi_output.write(u0, D0, b_e0, q_t0)
 
