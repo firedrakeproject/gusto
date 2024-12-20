@@ -9,7 +9,7 @@ from firedrake.fml import replace_subject, all_terms, drop, keep, Term
 from firedrake.utils import cached_property
 from firedrake.formmanipulation import split_form
 
-from gusto.core.labels import time_derivative, all_but_last, source
+from gusto.core.labels import time_derivative, all_but_last, source_label
 from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 
@@ -138,6 +138,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
         if self.rk_formulation == RungeKuttaFormulation.predictor:
             self.field_i = [Function(self.fs) for _ in range(self.nStages+1)]
+            self.source_i = [Function(self.fs) for _ in range(self.nStages+1)]
         elif self.rk_formulation == RungeKuttaFormulation.increment:
             self.k = [Function(self.fs) for _ in range(self.nStages)]
         elif self.rk_formulation == RungeKuttaFormulation.linear:
@@ -146,7 +147,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             raise NotImplementedError(
                 'Runge-Kutta formulation is not implemented'
             )
-        self.source_i = [Function(self.fs) for _ in range(self.nStages+1)]
 
     @cached_property
     def solver(self):
@@ -238,8 +238,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         """Set up the time discretisation's right hand side."""
 
         if self.rk_formulation == RungeKuttaFormulation.increment:
+            # Do not replace source terms, they have been evaluated
             r = self.residual.label_map(
-                all_terms,
+                lambda t: not t.has_label(source_label),
                 map_if_true=replace_subject(self.x1, old_idx=self.idx))
 
             r = r.label_map(
@@ -265,8 +266,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             rhs_list = []
 
             for stage in range(self.nStages):
+
                 r = self.residual.label_map(
-                    lambda t: not t.has_label(source),
+                    lambda t: not t.has_label(source_label),
                     map_if_true=replace_subject(self.field_i[0], old_idx=self.idx),
                     map_if_false=drop)
 
@@ -275,32 +277,22 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                     map_if_true=keep,
                     map_if_false=lambda t: -self.butcher_matrix[stage, 0]*self.dt*t)
 
-                r_source = self.residual.label_map(
-                            lambda t: t.has_label(source),
-                            map_if_true=replace_subject(self.source_i[0], old_idx=self.idx),
-                            map_if_false=drop)
-                r_source = r_source.label_map(
-                    all_terms,
-                    map_if_true=lambda t: self.butcher_matrix[stage, 0]*self.dt*t)
-                r -= r_source
-
                 for i in range(1, stage+1):
                     r_i = self.residual.label_map(
-                        lambda t: any(t.has_label(time_derivative, source)),
+                        lambda t: any(t.has_label(time_derivative, source_label)),
                         map_if_true=drop,
                         map_if_false=replace_subject(self.field_i[i], old_idx=self.idx)
                     )
 
                     r -= self.butcher_matrix[stage, i]*self.dt*r_i
+
+                # Add on any source terms
+                for i in range(0, stage+1):
                     r_source = self.residual.label_map(
-                                lambda t: t.has_label(source),
+                                lambda t: t.has_label(source_label),
                                 map_if_true=replace_subject(self.source_i[i], old_idx=self.idx),
                                 map_if_false=drop)
-                    r_source = r_source.label_map(
-                        all_terms,
-                        map_if_true=lambda t: self.butcher_matrix[stage, i]*self.dt*t)
-                    r -= r_source
-
+                    r  -= self.butcher_matrix[stage, i]*self.dt*r_source
                 rhs_list.append(r)
 
             return rhs_list
@@ -361,7 +353,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             for i in range(stage):
                 self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
             for evaluate in self.evaluate_source:
-               evaluate(self.source_i[stage], self.x1, self.dt)
+               evaluate(self.x1, self.dt)
             if self.limiter is not None:
                 self.limiter.apply(self.x1)
 
@@ -392,7 +384,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 self.limiter.apply(self.field_i[stage])
 
             for evaluate in self.evaluate_source:
-                evaluate(self.source_i[stage], self.field_i[stage], self.dt)
+                evaluate(self.field_i[stage], self.dt, x_out = self.source_i[stage])
 
             # Obtain field_ip1 = field_n - dt* sum_m{a_im*F[field_m]}
             self.solver[stage].solve()
@@ -424,7 +416,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
                 # Evaluate physics and apply limiter, if necessary
                 for evaluate in self.evaluate_source:
-                    evaluate(self.source_i[0], self.field_rhs, self.dt)
+                    evaluate(self.field_rhs, self.dt)
                 if self.limiter is not None:
                     self.limiter.apply(self.field_rhs)
 
@@ -449,7 +441,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
                 # Evaluate physics and apply limiter, if necessary
                 for evaluate in self.evaluate_source:
-                    evaluate(self.source_i[0], self.field_rhs, self.original_dt)
+                    evaluate(self.field_rhs, self.original_dt)
                 if self.limiter is not None:
                     self.limiter.apply(self.field_rhs)
                 # Use x0 as a first guess (otherwise may not converge)

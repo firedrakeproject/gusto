@@ -11,7 +11,7 @@ from firedrake.fml import identity, Term, subject, drop
 from gusto.equations import Phases, TracerVariableType
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.core.labels import transporting_velocity, transport, prognostic, source
+from gusto.core.labels import transporting_velocity, transport, prognostic, source_label
 from gusto.core.logging import logger
 from gusto.equations import thermodynamics
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
@@ -178,7 +178,7 @@ class SaturationAdjustment(PhysicsParametrisation):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += source(self.label(subject(test * source * dx,
+            equation.residual += source_label(self.label(subject(test * source * dx,
                                                     equation.X), self.evaluate))
         self.V_idxs = V_idxs
 
@@ -293,7 +293,7 @@ class Fallout(PhysicsParametrisation):
         adv_term = transport.remove(adv_term)
 
         adv_term = prognostic(subject(adv_term, equation.X), rain_name)
-        equation.residual += source(self.label(adv_term, self.evaluate))
+        equation.residual += source_label(self.label(adv_term, self.evaluate))
 
         # -------------------------------------------------------------------- #
         # Expressions for determining rainfall velocity
@@ -451,7 +451,7 @@ class Coalescence(PhysicsParametrisation):
         # Add term to equation's residual
         test_cl = equation.tests[self.cloud_idx]
         test_r = equation.tests[self.rain_idx]
-        equation.residual += source(self.label(subject(test_cl * self.source * dx
+        equation.residual += source_label(self.label(subject(test_cl * self.source * dx
                                                 - test_r * self.source * dx,
                                                 equation.X),
                                         self.evaluate))
@@ -624,7 +624,7 @@ class EvaporationOfRain(PhysicsParametrisation):
 
         # Add source terms to residual
         for test, source in zip(tests, self.source):
-            equation.residual += source(self.label(subject(test * source * dx,
+            equation.residual += source_label(self.label(subject(test * source * dx,
                                                     equation.X), self.evaluate))
         self.V_idxs = V_idxs
 

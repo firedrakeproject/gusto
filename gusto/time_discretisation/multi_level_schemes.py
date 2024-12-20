@@ -6,7 +6,7 @@ from firedrake import (Function, NonlinearVariationalProblem,
                        NonlinearVariationalSolver, Constant)
 from firedrake.fml import replace_subject, all_terms, drop
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
-from gusto.core.labels import time_derivative, source
+from gusto.core.labels import time_derivative, source_label
 from gusto.time_discretisation.time_discretisation import TimeDiscretisation
 
 
@@ -48,6 +48,11 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
         super().setup(equation=equation, apply_bcs=apply_bcs, *active_labels)
         for n in range(self.nlevels, 1, -1):
             setattr(self, "xnm%i" % (n-1), Function(self.fs))
+        
+        # Check that we do not have source terms
+        for t in self.residual:
+            if (t.has_label(source_label)):
+                raise NotImplementedError("Source terms have not been implemented with multilevel schemes")
 
 
 class BDF2(MultilevelTimeDiscretisation):
@@ -274,7 +279,6 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
                       *active_labels)
 
         self.x = [Function(self.fs) for i in range(self.nlevels)]
-        self.source_n = [Function(self.fs) for i in range(self.nlevels)]
 
         if (self.order == 1):
             self.b = [1.0]
@@ -296,19 +300,10 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
     def rhs0(self):
         """Set up the discretisation's right hand side for initial forward euler step."""
         r = self.residual.label_map(
-            lambda t: t.has_label(source),
-            map_if_true=drop,
-            map_if_false=replace_subject(self.x[-1], old_idx=self.idx))
+            all_terms,
+            map_if_true=replace_subject(self.x[-1], old_idx=self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -self.dt*t)
-        r_source = self.residual.label_map(
-                            lambda t: t.has_label(source),
-                            map_if_true=replace_subject(self.source_n[-1], old_idx=self.idx),
-                            map_if_false=drop)
-        r_source = r_source.label_map(
-            all_terms,
-            map_if_true=lambda t: -self.dt*t)
-        r += r_source
 
         return r.form
 
@@ -320,34 +315,17 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
     @property
     def rhs(self):
         """Set up the discretisation's right hand side for Adams Bashforth steps."""
-        r = self.residual.label_map(lambda t: t.has_label(source),
-                                    map_if_true=drop,
-                                    map_if_false=replace_subject(self.x[-1], old_idx=self.idx))
+        r = self.residual.label_map(all_terms,
+                                    map_if_true=replace_subject(self.x[-1], old_idx=self.idx))
         r = r.label_map(lambda t: t.has_label(time_derivative),
                         map_if_false=lambda t: -self.b[-1]*self.dt*t)
-        r_source = self.residual.label_map(
-                            lambda t: t.has_label(source),
-                            map_if_true=replace_subject(self.source_n[-1], old_idx=self.idx),
-                            map_if_false=drop)
-        r_source = r_source.label_map(
-            all_terms,
-            map_if_true=lambda t: -self.b[-1]*self.dt*t)
-        r += r_source
         for n in range(self.nlevels-1):
-            rtemp = self.residual.label_map(lambda t: any(t.has_label(time_derivative, source)),
+            rtemp = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                             map_if_true=drop,
                                             map_if_false=replace_subject(self.x[n], old_idx=self.idx))
             rtemp = rtemp.label_map(lambda t: t.has_label(time_derivative),
                                     map_if_false=lambda t: -self.dt*self.b[n]*t)
             r += rtemp
-            r_source = self.residual.label_map(
-                                lambda t: t.has_label(source),
-                                map_if_true=replace_subject(self.source_n[n], old_idx=self.idx),
-                                map_if_false=drop)
-            r_source = r_source.label_map(
-                all_terms,
-                map_if_true=lambda t: -self.b[n]*self.dt*t)
-            r += r_source
         return r.form
 
     @property
@@ -384,10 +362,6 @@ class AdamsBashforth(MultilevelTimeDiscretisation):
 
         for n in range(self.nlevels):
             self.x[n].assign(x_in[n])
-        # Evaluate physics terms
-        for n in range(self.nlevels):
-            for evaluate in self.evaluate_source:
-                evaluate(self.source_n[n], self.x[n], self.dt)
         # Set initial solver guess
         self.x_out.assign(x_in[-1])
         solver.solve()

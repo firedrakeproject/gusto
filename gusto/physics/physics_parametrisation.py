@@ -10,7 +10,7 @@ the form of classes with "evaluate" methods.
 from abc import ABCMeta, abstractmethod
 from firedrake import Interpolator, Function, dx, Projector, Constant
 from firedrake.fml import subject, drop
-from gusto.core.labels import PhysicsLabel, source
+from gusto.core.labels import PhysicsLabel, source_label
 from gusto.core.logging import logger
 
 
@@ -107,7 +107,7 @@ class SourceSink(PhysicsParametrisation):
 
         # Make source/sink term
         self.source = Function(V)
-        equation.residual += source(self.label(subject(test * self.source * dx, equation.X),
+        equation.residual += source_label(self.label(subject(test * self.source * dx, equation.X),
                                         self.evaluate))
 
         # Handle whether the expression is time-varying or not

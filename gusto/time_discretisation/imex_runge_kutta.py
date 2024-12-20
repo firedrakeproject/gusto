@@ -4,7 +4,7 @@ from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import replace_subject, all_terms, drop
 from firedrake.utils import cached_property
-from gusto.core.labels import time_derivative, implicit, explicit, source
+from gusto.core.labels import time_derivative, implicit, explicit, source_label
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
@@ -122,8 +122,8 @@ class IMEXRungeKutta(TimeDiscretisation):
         # Check all terms are labeled implicit, exlicit
         for t in self.residual:
             if ((not t.has_label(implicit)) and (not t.has_label(explicit))
-               and (not t.has_label(time_derivative)) and (not t.has_label(source))):
-                raise NotImplementedError("Non time-derivative terms must be labeled as implicit or explicit")
+               and (not t.has_label(time_derivative)) and (not t.has_label(source_label))):
+                raise NotImplementedError("Non time-derivative or source terms must be labeled as implicit or explicit")
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
         self.source = [Function(self.fs) for i in range(self.nStages)]
@@ -172,7 +172,7 @@ class IMEXRungeKutta(TimeDiscretisation):
 
             # Calculate source terms
             r_source = self.residual.label_map(
-                            lambda t: t.has_label(source),
+                            lambda t: t.has_label(source_label),
                             map_if_true=replace_subject(self.source[i], old_idx=self.idx),
                             map_if_false=drop)
             r_source = r_source.label_map(
@@ -224,7 +224,7 @@ class IMEXRungeKutta(TimeDiscretisation):
             residual += r_exp
             # Calculate source terms
             r_source = self.residual.label_map(
-                            lambda t: t.has_label(source),
+                            lambda t: t.has_label(source_label),
                             map_if_true=replace_subject(self.source[i], old_idx=self.idx),
                             map_if_false=drop)
             r_source = r_source.label_map(
@@ -263,8 +263,9 @@ class IMEXRungeKutta(TimeDiscretisation):
             # Set initial solver guess
             if (stage > 0):
                 self.x_out.assign(self.xs[stage-1])
-            for evaluate in self.evaluate_source:
-                evaluate(self.source[stage], self.xs[stage], self.dt)
+                # Evaluate source terms
+                for evaluate in self.evaluate_source:
+                    evaluate(self.xs[stage-1], self.dt, x_out = self.source[stage-1])
             self.solver.solve()
 
             # Apply limiter
@@ -274,7 +275,7 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         # Solve final stage
         for evaluate in self.evaluate_source:
-            evaluate(self.source[-1], self.xs[-1], self.dt)
+            evaluate(self.xs[-1], self.dt, x_out = self.source[-1])
         self.final_solver.solve()
 
         # Apply limiter
