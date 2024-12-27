@@ -32,7 +32,8 @@ def advection_form(test, q, ubar):
         class:`LabelledForm`: a labelled transport form.
     """
 
-    L = inner(test, dot(ubar, grad(q)))*dx
+    #L = inner(test, dot(ubar, grad(q)))*dx
+    L = inner(test,div(q*ubar)-q*div(ubar))*dx
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.advective)
