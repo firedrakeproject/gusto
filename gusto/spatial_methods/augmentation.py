@@ -236,3 +236,27 @@ class VorticityTransport(Augmentation):
         logger.debug('Vorticity solve')
         self.solver.solve()
         self.x_in.subfunctions[1].assign(self.Z_in)
+
+
+#class MeanMixingRatio(Augmentation):
+    """
+    This augments a transport problem involving a mixing ratio to
+    include a mean mixing ratio field. This enables posivity to be 
+    ensured during conservative transport.
+
+    Args:
+        domain (:class:`Domain`): The domain object.
+        eqns (:class:`PrognosticEquationSet`): The overarching equation set.
+        mixing_ratio (:class: list): List of mixing ratios that 
+        are to have augmented mean mixing ratio fields.
+        OR, keep as a single mixing ratio, but define 
+        multiple augmentations?
+    """
+
+ #   def __init__(
+ #           self, domain, eqns, mX_name
+ #   ):
+
+
+        # Extract the mixing ratio in question:
+ #       field_idx = self.eqns.field_names.index(mX_name)
