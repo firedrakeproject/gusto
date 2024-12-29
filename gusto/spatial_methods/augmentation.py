@@ -11,10 +11,12 @@ from firedrake import (
     transpose, nabla_grad, outer, dS, dS_h, dS_v, sign, jump, div,
     Constant, sqrt, cross, curl, FunctionSpace, assemble, DirichletBC
 )
-from firedrake.fml import subject
+from firedrake.fml import (
+    subject, all_terms, replace_subject, keep, replace_test_function
+)
 from gusto import (
     time_derivative, transport, transporting_velocity, TransportEquationType,
-    logger
+    logger, prognostic, mass_weighted
 )
 
 
@@ -238,7 +240,7 @@ class VorticityTransport(Augmentation):
         self.x_in.subfunctions[1].assign(self.Z_in)
 
 
-#class MeanMixingRatio(Augmentation):
+class MeanMixingRatio(Augmentation):
     """
     This augments a transport problem involving a mixing ratio to
     include a mean mixing ratio field. This enables posivity to be 
@@ -251,12 +253,120 @@ class VorticityTransport(Augmentation):
         are to have augmented mean mixing ratio fields.
         OR, keep as a single mixing ratio, but define 
         multiple augmentations?
+        START with just a single.
     """
 
- #   def __init__(
- #           self, domain, eqns, mX_name
- #   ):
+    def __init__(
+            self, domain, eqns, mX_name
+    ):
 
+        self.eqns = eqns
+        exist_spaces = eqns.spaces
+
+        self.idx_orig = len(exist_spaces)
+        mean_idx = self.idx_orig
 
         # Extract the mixing ratio in question:
- #       field_idx = self.eqns.field_names.index(mX_name)
+        mX_idx = eqns.field_names.index(mX_name)
+
+        # Define the mean mixing ratio on the DG0 space
+        DG0 = FunctionSpace(domain.mesh, "DG", 0)
+
+         # Set up the scheme for the mean mixing ratio
+
+        mean_mX = Function(DG0)
+        mean_space = DG0
+        exist_spaces.append(mean_space)
+
+        self.fs = MixedFunctionSpace(exist_spaces)
+        self.X = Function(self.fs)
+        self.tests = TestFunctions(self.fs)
+
+        self.x_in = Function(self.fs)
+        self.x_out = Function(self.fs)
+
+        # Compute the new mean mass weighted term,
+        # IF this is conservatively transported.
+        mX_idx = eqns.field_names.index(mX_name)
+
+        #mean_mass = 
+
+        # Now, extract the existing residual:
+        old_residual = eqns.residual
+
+        # Extract terms relating to the mixing ratio of interest
+        mX_residual = old_residual.label_map(
+            lambda t: t.get(prognostic) == mX_name,
+            map_if_true=keep
+        )
+
+        # Replace trial and test functions with the new mixed
+        # function space
+        # Does this work is the subject is mass-weighted???
+        for idx in range(self.idx_orig):
+            field = eqns.field_names[idx]
+            # Seperate logic if mass-weighted or not?
+            print(idx)
+            print(field)
+
+
+            old_residual = old_residual.label_map(
+                lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
+                map_if_true=replace_subject(self.X[idx], old_idx=idx)
+            )
+            old_residual = old_residual.label_map(
+                lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
+                map_if_true=replace_test_function(self.tests[idx], old_idx=idx)
+            )
+    
+        # Define the mean mixing ratio residual
+        mean_residual = mX_residual.label_map(
+            lambda t: t.has_label(mass_weighted),
+            #map_if_true=replace_subject(mean_mass, old_idx=mX_idx),
+            map_if_false=replace_subject(self.X[mean_idx], old_idx = mX_idx)
+        )
+
+        mean_residual = mean_residual.label_map(
+            lambda t: t.has_label(mass_weighted),
+            map_if_false=replace_test_function(self.tests[mean_idx], old_idx=mX_idx)
+        )
+
+        self.residual = old_residual + mean_residual
+
+        self.bcs = []
+
+
+    def pre_apply(self, x_in):
+        """
+        Sets the original fields, i.e. not the mean mixing ratios
+
+        Args:
+            x_in (:class:`Function`): The input fields
+        """
+
+        #for idx, field in enumerate(self.eqn.field_names):
+        #    self.x_in.subfunctions[idx].assign(x_in.subfunctions[idx])
+        for idx in range(self.idx_orig):
+            self.x_in.subfunctions[idx].assign(x_in.subfunctions[idx])
+
+
+    def post_apply(self, x_out):
+        """
+        Sets the output fields, i.e. not the mean mixing ratios
+
+        Args:
+            x_out (:class:`Function`): The output fields
+        """
+
+        for idx, field in enumerate(self.eqn.field_names):
+            x_out.subfunctions[idx].assign(self.x_out.subfunctions[idx])
+
+    def update(self, x_in_mixed):
+        """
+        ...
+
+        Args:
+            x_in_mixed (:class:`Function`): The mixed function to update.
+        """
+        
+        pass
