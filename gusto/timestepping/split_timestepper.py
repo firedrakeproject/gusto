@@ -296,7 +296,17 @@ class SplitPrescribedTransport(Timestepper):
         return self.fields('u')
 
     def setup_scheme(self):
+        print('Setting up base equation')
         self.setup_equation(self.equation)
+
+        # If there is an augmentation, set up these transport terms
+        if self.scheme.augmentation is not None:
+            if self.scheme.augmentation.name == 'mean_mixing_ratio':
+                self.scheme.augmentation.setup_transport(self.spatial_methods)
+                print('Setting up augmented equation')
+                self.setup_equation(self.scheme.augmentation)
+
+
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
         self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics_label)), dynamics)

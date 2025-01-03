@@ -19,6 +19,7 @@ from gusto import (
     time_derivative, transport, transporting_velocity, TransportEquationType,
     logger, prognostic, mass_weighted
 )
+import copy
 
 
 class Augmentation(object, metaclass=ABCMeta):
@@ -75,6 +76,8 @@ class VorticityTransport(Augmentation):
     def __init__(
             self, domain, eqns, transpose_commutator=True, supg=False
     ):
+
+        self.name = 'vorticity'
 
         V_vel = domain.spaces('HDiv')
         V_vort = domain.spaces('H1')
@@ -261,6 +264,11 @@ class MeanMixingRatio(Augmentation):
             self, domain, eqns, mX_name
     ):
 
+        self.name = 'mean_mixing_ratio'
+        self.mX_name = mX_name
+        self.mean_name = 'mean_'+mX_name
+        print(self.mean_name)
+
         self.eqns = eqns
         exist_spaces = eqns.spaces
 
@@ -275,7 +283,7 @@ class MeanMixingRatio(Augmentation):
 
          # Set up the scheme for the mean mixing ratio
 
-        mean_mX = Function(DG0, name='mean_mX')
+        mean_mX = Function(DG0, name=self.mean_name)
         mean_space = DG0
         exist_spaces.append(mean_space)
 
@@ -300,6 +308,7 @@ class MeanMixingRatio(Augmentation):
             lambda t: t.get(prognostic) == mX_name,
             map_if_false=drop
         )
+        mean_residual = prognostic.update_value(mean_residual, self.mean_name)
 
         # Replace trial functions with those in the new mixed function space
         for term in eqns.residual:
@@ -362,58 +371,24 @@ class MeanMixingRatio(Augmentation):
         print('\n full residual')
         print(self.residual.form)
 
+        print('yoyoyoy')
+
+        for term in self.residual:
+            print(term.get(prognostic))
+
+    def setup_transport(self, spatial_methods):
+        # Copy spatial method for the mixing ratio onto the 
+        # mean mixing ratio.
+        mX_spatial_method = next(method for method in spatial_methods if method.variable == self.mX_name)
         
-
-    def setup_residual(self):
-        # Update the residual
-        # Now, extract the existing residual:
-        old_residual = eqns.residual
-
-        print(old_residual.form)
-
-        # Extract terms relating to the mixing ratio of interest
-        mX_residual = old_residual.label_map(
-            lambda t: t.get(prognostic) == mX_name,
-            map_if_false=drop
-        )
-
-        print(mX_residual.form)
-
-        # Replace trial and test functions with the new mixed
-        # function space
-        # Does this work is the subject is mass-weighted???
-        for idx in range(self.idx_orig):
-            field = eqns.field_names[idx]
-            # Seperate logic if mass-weighted or not?
-            print(idx)
-            print(field)
-
-            prog = split(self.X)[idx]
-
-            #old_residual = old_residual.label_map(
-            #    lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
-            #    map_if_true=replace_subject(self.X[idx], old_idx=idx)
-            #)
-            #old_residual = old_residual.label_map(
-            #    lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
-            #    map_if_true=replace_test_function(self.tests[idx], old_idx=idx)
-            #)
-    
-        # Define the mean mixing ratio residual
-        mean_residual = mX_residual.label_map(
-            lambda t: t.has_label(mass_weighted),
-            #map_if_true=replace_subject(mean_mass, old_idx=mX_idx),
-            map_if_false=replace_subject(self.X[mean_idx], old_idx = mX_idx)
-        )
-
-        mean_residual = mean_residual.label_map(
-            lambda t: t.has_label(mass_weighted),
-            map_if_false=replace_test_function(self.tests[mean_idx], old_idx=mX_idx)
-        )
-
-        # Form the new residual
-        self.residual = old_residual + mean_residual
-
+        mean_spatial_method = copy.copy(mX_spatial_method)
+        mean_spatial_method.variable = self.mean_name
+        self.spatial_methods = copy.copy(spatial_methods)
+        self.spatial_methods.append(mean_spatial_method)
+        for method in self.spatial_methods:
+            print(method.variable)
+            #method.equation.residual = self.residual
+            print(len(method.equation.residual))
 
     def pre_apply(self, x_in):
         """
