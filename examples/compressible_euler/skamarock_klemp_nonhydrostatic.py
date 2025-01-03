@@ -26,7 +26,8 @@ from gusto import (
     logger, SUPGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
     compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
-    SubcyclingOptions, hydrostatic_parameters
+    SubcyclingOptions, dx, TestFunction, TrialFunction, ZComponent,
+    LinearVariationalProblem, LinearVariationalSolver
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -67,6 +68,8 @@ def skamarock_klemp_nonhydrostatic(
     # ------------------------------------------------------------------------ #
 
     element_order = 1
+    alpha = 0.5
+    u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -80,7 +83,9 @@ def skamarock_klemp_nonhydrostatic(
     # Equation
     parameters = CompressibleParameters()
     if hydrostatic:
-        eqns = HydrostaticCompressibleEulerEquations(domain, parameters)
+        eqns = HydrostaticCompressibleEulerEquations(
+            domain, parameters, u_transport_option=u_eqn_type
+        )
     else:
         eqns = CompressibleEulerEquations(domain, parameters)
 
@@ -110,7 +115,7 @@ def skamarock_klemp_nonhydrostatic(
             dump_vtus=False, dump_nc=True,
         )
 
-    diagnostic_fields = [Perturbation('theta')]
+    diagnostic_fields = [Perturbation('theta'), ZComponent('u')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
@@ -136,8 +141,7 @@ def skamarock_klemp_nonhydrostatic(
     # Linear solver
     if hydrostatic:
         linear_solver = CompressibleSolver(
-            eqns, solver_parameters=hydrostatic_parameters,
-            overwrite_solver_parameters=True
+            eqns, alpha=alpha
         )
     else:
         linear_solver = CompressibleSolver(eqns)
@@ -145,7 +149,7 @@ def skamarock_klemp_nonhydrostatic(
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
+        linear_solver=linear_solver, alpha=alpha, num_outer=2, num_inner=2
     )
 
     # ------------------------------------------------------------------------ #
@@ -175,12 +179,23 @@ def skamarock_klemp_nonhydrostatic(
     # Calculate hydrostatic exner
     compressible_hydrostatic_balance(eqns, theta_b, rho_b)
 
+    # Define initial theta
     theta_pert = (
         deltaTheta * sin(pi*z/domain_height)
         / (1 + (x - domain_width/2)**2 / pert_width**2)
     )
     theta0.interpolate(theta_b + theta_pert)
-    rho0.assign(rho_b)
+
+    # find perturbed rho
+    gamma = TestFunction(Vr)
+    rho_trial = TrialFunction(Vr)
+    dx_qp = dx(degree=domain.max_quad_degree)
+    lhs = gamma * rho_trial * dx_qp
+    rhs = gamma * (rho_b * theta_b / theta0) * dx_qp
+    rho_problem = LinearVariationalProblem(lhs, rhs, rho0)
+    rho_solver = LinearVariationalSolver(rho_problem)
+    rho_solver.solve()
+
     u0.project(as_vector([wind_initial, 0.0]))
 
     stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
