@@ -173,8 +173,10 @@ class BoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         if compressible:
             cs = parameters.cs
+            # On assuming ``cs`` as a constant, it is right keep it out of the
+            # integration.
             linear_div_form = divergence(subject(
-                prognostic(cs**2 * phi * div(u_trial) * dx, 'p'), self.X))
+                prognostic(cs**2 * (phi * div(u_trial) * dx), 'p'), self.X))
             divergence_form = divergence(linearisation(
                 subject(prognostic(cs**2 * phi * div(u) * dx, 'p'), self.X),
                 linear_div_form))

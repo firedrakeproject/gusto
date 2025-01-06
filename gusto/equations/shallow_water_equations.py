@@ -169,8 +169,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
+        # On assuming ``g``, it is right to keep it out of the integral.
         pressure_gradient_form = pressure_gradient(
-            subject(prognostic(-g*div(w)*D*dx, 'u'), self.X))
+            subject(prognostic(-g*(div(w)*D*dx), 'u'), self.X))
 
         residual = (mass_form + adv_form + pressure_gradient_form)
 
