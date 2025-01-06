@@ -734,7 +734,8 @@ class HydrostaticImbalance(DiagnosticField):
 
         bcs = self.equations.bcs['u']
 
-        imbalanceproblem = LinearVariationalProblem(a, L, imbalance, bcs=bcs)
+        imbalanceproblem = LinearVariationalProblem(a, L, imbalance, bcs=bcs,
+                                                    constant_jacobian=True)
         self.imbalance_solver = LinearVariationalSolver(imbalanceproblem)
         self.expr = dot(imbalance, domain.k)
         super().setup(domain, state_fields)
@@ -789,12 +790,14 @@ class Precipitation(DiagnosticField):
         eqn_rhs = domain.dt * self.phi * (rain * dot(- v, domain.k) * rho / area) * ds_b
 
         # Compute area normalisation
-        area_prob = LinearVariationalProblem(eqn_lhs, area_rhs, area)
+        area_prob = LinearVariationalProblem(eqn_lhs, area_rhs, area,
+                                             constant_jacobian=True)
         area_solver = LinearVariationalSolver(area_prob)
         area_solver.solve()
 
         # setup solver
-        rain_prob = LinearVariationalProblem(eqn_lhs, eqn_rhs, self.flux)
+        rain_prob = LinearVariationalProblem(eqn_lhs, eqn_rhs, self.flux,
+                                             constant_jacobian=True)
         self.solver = LinearVariationalSolver(rain_prob)
         self.field = state_fields(self.name, space=DG0, dump=True, pick_up=True)
         # Initialise field to zero, if picking up this will be overridden

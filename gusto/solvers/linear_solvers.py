@@ -11,10 +11,11 @@ from firedrake import (
     rhs, FacetNormal, div, dx, jump, avg, dS, dS_v, dS_h, ds_v, ds_t, ds_b,
     ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis, cross,
     BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC, as_vector,
-    Interpolator, conditional
+    assemble, conditional
 )
 from firedrake.fml import Term, drop
 from firedrake.petsc import flatten_parameters
+from firedrake.__future__ import interpolate
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.equations.active_tracers import TracerVariableType
@@ -82,6 +83,17 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _setup_solver(self):
+        pass
+
+    @abstractmethod
+    def update_reference_profiles(self):
+        """
+        Update the solver when the reference profiles have changed.
+
+        This typically includes forcing any Jacobians that depend on
+        the reference profiles to be reassembled, and recalculating
+        any values derived from the reference values.
+        """
         pass
 
     @abstractmethod
@@ -261,8 +273,10 @@ class CompressibleSolver(TimesteppingSolver):
         rhobar_avg = Function(Vtrace)
         exnerbar_avg = Function(Vtrace)
 
-        rho_avg_prb = LinearVariationalProblem(a_tr, L_tr(rhobar), rhobar_avg)
-        exner_avg_prb = LinearVariationalProblem(a_tr, L_tr(exnerbar), exnerbar_avg)
+        rho_avg_prb = LinearVariationalProblem(a_tr, L_tr(rhobar), rhobar_avg,
+                                               constant_jacobian=True)
+        exner_avg_prb = LinearVariationalProblem(a_tr, L_tr(exnerbar), exnerbar_avg,
+                                                 constant_jacobian=True)
 
         self.rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
                                                       solver_parameters=cg_ilu_parameters,
@@ -318,7 +332,8 @@ class CompressibleSolver(TimesteppingSolver):
         # Function for the hybridized solutions
         self.urhol0 = Function(M)
 
-        hybridized_prb = LinearVariationalProblem(aeqn, Leqn, self.urhol0)
+        hybridized_prb = LinearVariationalProblem(aeqn, Leqn, self.urhol0,
+                                                  constant_jacobian=True)
         hybridized_solver = LinearVariationalSolver(hybridized_prb,
                                                     solver_parameters=self.solver_parameters,
                                                     options_prefix='ImplicitSolver')
@@ -344,7 +359,8 @@ class CompressibleSolver(TimesteppingSolver):
         theta_eqn = gamma*(theta - theta_in
                            + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta_t)*dx
 
-        theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta)
+        theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta,
+                                                 constant_jacobian=True)
         self.theta_solver = LinearVariationalSolver(theta_problem,
                                                     solver_parameters=cg_ilu_parameters,
                                                     options_prefix='thetabacksubstitution')
@@ -361,10 +377,6 @@ class CompressibleSolver(TimesteppingSolver):
 
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
-        """
-        Updates the reference profiles.
-        """
-
         with timed_region("Gusto:HybridProjectRhobar"):
             logger.info('Compressible linear solver: rho average solve')
             self.rho_avg_solver.solve()
@@ -372,6 +384,13 @@ class CompressibleSolver(TimesteppingSolver):
         with timed_region("Gusto:HybridProjectExnerbar"):
             logger.info('Compressible linear solver: Exner average solve')
             self.exner_avg_solver.solve()
+
+        # Because the left hand side of the hybridised problem depends
+        # on the reference profile, the Jacobian matrix should change
+        # when the reference profiles are updated. This call will tell
+        # the hybridized_solver to reassemble the Jacobian next time
+        # `solve` is called.
+        self.hybridized_solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -511,7 +530,8 @@ class BoussinesqSolver(TimesteppingSolver):
         bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, p
-        up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)
+        up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs,
+                                              constant_jacobian=True)
 
         # Provide callback for the nullspace of the trace system
         def trace_nullsp(T):
@@ -534,11 +554,16 @@ class BoussinesqSolver(TimesteppingSolver):
 
         b_problem = LinearVariationalProblem(lhs(b_eqn),
                                              rhs(b_eqn),
-                                             self.b)
+                                             self.b,
+                                             constant_jacobian=True)
         self.b_solver = LinearVariationalSolver(b_problem)
 
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.up_solver.snes.ksp)
+
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        self.up_solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -636,11 +661,11 @@ class ThermalSWSolver(TimesteppingSolver):
             qtbar = split(equation.X_ref)[3]
 
             # set up interpolators that use the X_ref values for D and b_e
-            self.q_sat_expr_interpolator = Interpolator(
-                equation.compute_saturation(equation.X_ref), self.q_sat_func)
-            self.q_v_interpolator = Interpolator(
+            self.q_sat_expr_interpolate = interpolate(
+                equation.compute_saturation(equation.X_ref), VD)
+            self.q_v_interpolate = interpolate(
                 conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
-                self.qvbar)
+                VD)
 
             # bbar was be_bar and here we correct to become bbar
             bbar += equation.parameters.beta2 * self.qvbar
@@ -673,7 +698,8 @@ class ThermalSWSolver(TimesteppingSolver):
         bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, D
-        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs)
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs,
+                                              constant_jacobian=True)
 
         # Provide callback for the nullspace of the trace system
         def trace_nullsp(T):
@@ -694,7 +720,8 @@ class ThermalSWSolver(TimesteppingSolver):
 
         b_problem = LinearVariationalProblem(lhs(b_eqn),
                                              rhs(b_eqn),
-                                             self.b)
+                                             self.b,
+                                             constant_jacobian=True)
         self.b_solver = LinearVariationalSolver(b_problem)
 
         # Log residuals on hybridized solver
@@ -702,13 +729,9 @@ class ThermalSWSolver(TimesteppingSolver):
 
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
-        """
-        Updates the reference profiles.
-        """
-
         if self.equations.equivalent_buoyancy:
-            self.q_sat_expr_interpolator.interpolate()
-            self.q_v_interpolator.interpolate()
+            self.q_sat_func.assign(assemble(self.q_sat_expr_interpolate))
+            self.qvbar.assign(assemble(self.q_v_interpolate))
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -772,13 +795,17 @@ class LinearTimesteppingSolver(object):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, equation, alpha):
+    def __init__(self, equation, alpha, reference_dependent=True):
         """
         Args:
             equation (:class:`PrognosticEquation`): the model's equation object.
             alpha (float): the semi-implicit off-centring factor. A value of 1
                 is fully-implicit.
+            reference_dependent: this indicates that the solver Jacobian should
+                be rebuilt if the reference profiles have been updated.
         """
+        self.reference_dependent = reference_dependent
+
         residual = equation.residual.label_map(
             lambda t: t.has_label(linearisation),
             lambda t: Term(t.get(linearisation).form, t.labels),
@@ -805,11 +832,17 @@ class LinearTimesteppingSolver(object):
         bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
         problem = LinearVariationalProblem(aeqn.form,
                                            action(Leqn.form, self.xrhs),
-                                           self.dy, bcs=bcs)
+                                           self.dy, bcs=bcs,
+                                           constant_jacobian=True)
 
         self.solver = LinearVariationalSolver(problem,
                                               solver_parameters=self.solver_parameters,
                                               options_prefix='linear_solver')
+
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        if self.reference_dependent:
+            self.solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -895,7 +928,8 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
         bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, D
-        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs)
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs,
+                                              constant_jacobian=True)
 
         # Provide callback for the nullspace of the trace system
         def trace_nullsp(T):
@@ -908,6 +942,10 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
 
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
+
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        self.uD_solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
