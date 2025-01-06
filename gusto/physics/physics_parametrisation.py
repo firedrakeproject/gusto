@@ -96,7 +96,7 @@ class SourceSink(PhysicsParametrisation):
 
         # Work out the appropriate function space
         if hasattr(equation, "field_names"):
-            V_idx = equation.field_names.index(variable_name)
+            self.V_idx = equation.field_names.index(variable_name)
             W = equation.function_space
             V = W.sub(V_idx)
             test = equation.tests[V_idx]
@@ -147,9 +147,9 @@ class SourceSink(PhysicsParametrisation):
         if self.time_varying:
             logger.info(f'Evaluating physics parametrisation {self.label.label}')
             if self.method == 'interpolate':
-                self.source.assign(self.source_interpolator.interpolate())
+                self.source.subfunctions[self.V_idx].assign(self.source_interpolator.interpolate())
             else:
-                self.source.assign(self.source_projector.project())
+                self.source.subfunctions[self.V_idx].assign(self.source_projector.project())
         else:
             pass
         # If a source output is provided, assign the source term to it
