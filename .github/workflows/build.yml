@@ -11,13 +11,6 @@ on:
     # Scheduled build at 0330 UTC on Monday mornings to detect bitrot.
     - cron:  '30 3 * * 1'
 
-concurrency:
-  # Cancels jobs running if new commits are pushed
-  group: >
-    ${{ github.workflow }}-
-    ${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
     name: "Build Gusto"

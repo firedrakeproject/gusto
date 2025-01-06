@@ -56,7 +56,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
     # ---------------------------------------------------------------------------
 
     def __init__(self, domain, butcher_matrix, field_name=None,
-                 solver_parameters=None, options=None, augmentation=None):
+                 solver_parameters=None, options=None,):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -75,7 +75,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
         """
         super().__init__(domain, field_name=field_name,
                          solver_parameters=solver_parameters,
-                         options=options, augmentation=augmentation)
+                         options=options)
         self.butcher_matrix = butcher_matrix
         self.nStages = int(np.shape(self.butcher_matrix)[1])
 
@@ -165,7 +165,7 @@ class ImplicitMidpoint(ImplicitRungeKutta):
     y^(n+1) = y^n + dt*k0                                                     \n
     """
     def __init__(self, domain, field_name=None, solver_parameters=None,
-                 options=None, augmentation=None):
+                 options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -182,7 +182,7 @@ class ImplicitMidpoint(ImplicitRungeKutta):
         butcher_matrix = np.array([[0.5], [1.]])
         super().__init__(domain, butcher_matrix, field_name,
                          solver_parameters=solver_parameters,
-                         options=options, augmentation=augmentation)
+                         options=options)
 
 
 class QinZhang(ImplicitRungeKutta):

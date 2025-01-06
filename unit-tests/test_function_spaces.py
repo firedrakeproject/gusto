@@ -100,27 +100,6 @@ def test_de_rham_spaces(domain, family):
     assert elt.degree() == degree, '"L2" space does not seem to be degree ' \
         + f'{degree}. Found degree {elt.degree()}'
 
-    # Check that continuities have been recorded correctly
-    if hasattr(mesh, "_base_mesh"):
-        expected_continuity = {
-            "H1": {'horizontal': True, 'vertical': True},
-            "L2": {'horizontal': False, 'vertical': False},
-            "HDiv": {'horizontal': True, 'vertical': True},
-            "HCurl": {'horizontal': True, 'vertical': True},
-            "theta": {'horizontal': False, 'vertical': True}
-        }
-    else:
-        expected_continuity = {
-            "H1": True,
-            "L2": False,
-            "HDiv": True,
-            "HCurl": True
-        }
-
-    for space, continuity in expected_continuity.items():
-        if space in spaces.continuity:
-            assert spaces.continuity[space] == continuity
-
 
 # ---------------------------------------------------------------------------- #
 # Test creation of DG1 equispaced
@@ -139,13 +118,6 @@ def test_dg_equispaced(domain, family):
     assert elt.variant() == "equispaced", '"DG1 equispaced" does not seem to ' \
         + f'be equispaced variant. Found variant {elt.variant()}'
 
-    if hasattr(mesh, "_base_mesh"):
-        expected_continuity = {'horizontal': False, 'vertical': False}
-    else:
-        expected_continuity = False
-
-    assert spaces.continuity['DG1_equispaced'] == expected_continuity, "DG is discontinuous"
-
 
 # ---------------------------------------------------------------------------- #
 # Test creation of DG0 space
@@ -160,13 +132,6 @@ def test_dg0(domain, family):
     elt = DG0.ufl_element()
     assert elt.degree() in [0, (0, 0)], '"DG0" space does not seem to be' \
         + f'degree 0. Found degree {elt.degree()}'
-
-    if hasattr(mesh, "_base_mesh"):
-        expected_continuity = {'horizontal': False, 'vertical': False}
-    else:
-        expected_continuity = False
-
-    assert spaces.continuity['DG0'] == expected_continuity, "DG is discontinuous"
 
 
 # ---------------------------------------------------------------------------- #
@@ -185,10 +150,3 @@ def test_cg(domain, family):
     assert elt.degree() == degree or elt.degree() == (degree, degree), \
         (f'"CG" space does not seem to be degree {degree}. '
          + f'Found degree {elt.degree()}')
-
-    if hasattr(mesh, "_base_mesh"):
-        expected_continuity = {'horizontal': True, 'vertical': True}
-    else:
-        expected_continuity = True
-
-    assert spaces.continuity['CG'] == expected_continuity, "CG is continuous"

@@ -38,12 +38,10 @@ def run_sw_fplane(tmpdir):
     io = IO(domain, output, diagnostic_fields=[CourantNumber()])
 
     # Transport schemes
-    vorticity_transport = VorticityTransport(domain, eqns, supg=True)
-    transported_fields = [
-        TrapeziumRule(domain, "u", augmentation=vorticity_transport),
-        SSPRK3(domain, "D")
-    ]
-    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
+    transported_fields = [TrapeziumRule(domain, "u"),
+                          SSPRK3(domain, "D")]
+    transport_methods = [DGUpwind(eqns, "u"),
+                         DGUpwind(eqns, "D")]
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,

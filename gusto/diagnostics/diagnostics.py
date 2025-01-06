@@ -1,15 +1,14 @@
 """Common diagnostic fields."""
 
 
-from firedrake import (dot, dx, Function, sqrt, TestFunction,
+from firedrake import (assemble, dot, dx, Function, sqrt, TestFunction,
                        TrialFunction, Constant, grad, inner, FacetNormal,
                        LinearVariationalProblem, LinearVariationalSolver,
                        ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, pi,
                        TensorFunctionSpace, SpatialCoordinate, as_vector,
-                       Projector, assemble, FunctionSpace, FiniteElement,
+                       Projector, Interpolator, FunctionSpace, FiniteElement,
                        TensorProductElement)
 from firedrake.assign import Assigner
-from firedrake.__future__ import interpolate
 from ufl.domain import extract_unique_domain
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -22,8 +21,7 @@ __all__ = ["Diagnostics", "DiagnosticField", "CourantNumber", "Gradient",
            "XComponent", "YComponent", "ZComponent", "MeridionalComponent",
            "ZonalComponent", "RadialComponent", "Energy", "KineticEnergy",
            "Sum", "Difference", "SteadyStateError", "Perturbation",
-           "Divergence", "TracerDensity", "IterativeDiagnosticField",
-           "CumulativeSum"]
+           "Divergence", "TracerDensity", "IterativeDiagnosticField"]
 
 
 class Diagnostics(object):
@@ -194,7 +192,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
 
             # Solve method must be declared in diagnostic's own setup routine
             if self.method == 'interpolate':
-                self.evaluator = interpolate(self.expr, self.space)
+                self.evaluator = Interpolator(self.expr, self.field)
             elif self.method == 'project':
                 self.evaluator = Projector(self.expr, self.field)
             elif self.method == 'assign':
@@ -208,7 +206,7 @@ class DiagnosticField(object, metaclass=ABCMeta):
         logger.debug(f'Computing diagnostic {self.name} with {self.method} method')
 
         if self.method == 'interpolate':
-            self.field.assign(assemble(self.evaluator))
+            self.evaluator.interpolate()
         elif self.method == 'assign':
             self.evaluator.assign()
         elif self.method == 'project':
@@ -295,7 +293,7 @@ class IterativeDiagnosticField(DiagnosticField):
 
             # Solve method must be declared in diagnostic's own setup routine
             if self.method == 'interpolate':
-                self.evaluator = interpolate(self.expr, self.space)
+                self.evaluator = Interpolator(self.expr, self.field)
             elif self.method == 'project':
                 self.evaluator = Projector(self.expr, self.field)
             elif self.method == 'assign':
@@ -515,8 +513,7 @@ class Gradient(DiagnosticField):
             L = -inner(div(test), f)*dx
             if space.extruded:
                 L += dot(dot(test, n), f)*(ds_t + ds_b)
-            prob = LinearVariationalProblem(a, L, self.field,
-                                            constant_jacobian=True)
+            prob = LinearVariationalProblem(a, L, self.field)
             self.evaluator = LinearVariationalSolver(prob)
 
 
@@ -1043,43 +1040,3 @@ class TracerDensity(DiagnosticField):
 
         else:
             super().setup(domain, state_fields)
-
-
-class CumulativeSum(DiagnosticField):
-    """Base diagnostic for cumulatively summing a field in time."""
-    def __init__(self, name):
-        """
-        Args:
-            name (str): name of the field to take the cumulative sum of.
-        """
-        self.field_name = name
-        self.integral_name = name+"_cumulative"
-        super().__init__(self, method='assign', required_fields=(self.field_name,))
-
-    def setup(self, domain, state_fields):
-        """
-        Sets up the :class:`Function` for the diagnostic field.
-
-        Args:
-            domain (:class:`Domain`): the model's domain object.
-            state_fields (:class:`StateFields`): the model's field container.
-        """
-
-        # Gather the field to be summed
-        self.integrand = state_fields(self.field_name)
-        self.space = self.integrand.function_space()
-
-        # Create a new field to store the cumulative sum
-        self.field = state_fields(self.integral_name, space=self.space, dump=True, pick_up=True)
-        # Initialise the new field to zero, if picking up from a checkpoint
-        # file the original cumulative field will load and not be overwritten.
-        self.field.assign(0.0)
-
-    def compute(self):
-        """Increment the cumulative sum diagnostic."""
-        self.field.assign(self.field + self.integrand)
-
-    @property
-    def name(self):
-        """Gives the name of this diagnostic field."""
-        return self.integral_name

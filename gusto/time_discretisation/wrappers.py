@@ -6,16 +6,14 @@ called.
 
 from abc import ABCMeta, abstractmethod
 from firedrake import (
-    FunctionSpace, Function, BrokenElement, Projector, Constant, as_ufl, dot, grad,
-    TestFunction, MixedFunctionSpace, assemble
+    FunctionSpace, Function, BrokenElement, Projector, Interpolator,
+    VectorElement, Constant, as_ufl, dot, grad, TestFunction, MixedFunctionSpace
 )
-from firedrake.__future__ import interpolate
 from firedrake.fml import Term
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
 from gusto.recovery import Recoverer, ReversibleRecoverer, ConservativeRecoverer
 from gusto.core.labels import transporting_velocity
 from gusto.core.conservative_projection import ConservativeProjector
-from gusto.core.function_spaces import is_cg
 import ufl
 
 __all__ = ["EmbeddedDGWrapper", "RecoveryWrapper", "SUPGWrapper", "MixedFSWrapper"]
@@ -265,7 +263,7 @@ class RecoveryWrapper(Wrapper):
         # Operators for projecting back
         self.interp_back = (self.options.project_low_method == 'interpolate')
         if self.options.project_low_method == 'interpolate':
-            self.x_out_projector = interpolate(self.x_out, self.original_space)
+            self.x_out_projector = Interpolator(self.x_out, self.x_projected)
         elif self.options.project_low_method == 'project':
             self.x_out_projector = Projector(self.x_out, self.x_projected,
                                              bcs=post_apply_bcs)
@@ -303,10 +301,31 @@ class RecoveryWrapper(Wrapper):
         """
 
         if self.interp_back:
-            self.x_projected.assign(assemble(self.x_out_projector))
+            self.x_out_projector.interpolate()
         else:
             self.x_out_projector.project()
         x_out.assign(self.x_projected)
+
+
+def is_cg(V):
+    """
+    Checks if a :class:`FunctionSpace` is continuous.
+
+    Function to check if a given space, V, is CG. Broken elements are always
+    discontinuous; for vector elements we check the names of the Sobolev spaces
+    of the subelements and for all other elements we just check the Sobolev
+    space name.
+
+    Args:
+        V (:class:`FunctionSpace`): the space to check.
+    """
+    ele = V.ufl_element()
+    if isinstance(ele, BrokenElement):
+        return False
+    elif type(ele) == VectorElement:
+        return all([e.sobolev_space.name == "H1" for e in ele._sub_elements])
+    else:
+        return V.ufl_element().sobolev_space.name == "H1"
 
 
 class SUPGWrapper(Wrapper):
