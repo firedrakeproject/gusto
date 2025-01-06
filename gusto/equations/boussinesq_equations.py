@@ -106,9 +106,10 @@ class BoussinesqEquations(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
-        # This function converts the parameters to real space.
-        # This is a preventive way to avoid adjoint issues when the parameters
-        # attribute are the control in the sensitivity computations.
+        # Convert the attributes of type ``float`` or ``firedrake.Constant``
+        # in the parameters to a function in real space. This conversion is a
+        # preventive to avoid issues with adjoint computations, particularly
+        # when the parameters  are used as controls in sensitivity analyses.
         convert_parameters_to_real_space(parameters, domain.mesh)
         self.compressible = compressible
 

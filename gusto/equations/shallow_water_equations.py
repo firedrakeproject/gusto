@@ -88,10 +88,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         self.parameters = parameters
         self.domain = domain
-        # This function converts the ``float`` and ``firedrake.Constant`` parameters
-        # attributes to a function in real space.
-        # This is a preventive way to avoid adjoint issues when the parameters
-        # attribute are the control in the sensitivity computations.
+        # Convert the attributes of type ``float`` or ``firedrake.Constant``
+        # in the parameters to a function in real space. This conversion is a
+        # preventive to avoid issues with adjoint computations, particularly
+        # when the parameters  are used as controls in sensitivity analyses.
         convert_parameters_to_real_space(parameters, self.domain.mesh)
         self.active_tracers = active_tracers
 
@@ -424,10 +424,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         # label these as the equivalent pressure gradient term and
         # provide linearisation
         if self.equivalent_buoyancy:
-            try:
-                beta2 = self.parameters.beta2
-            except ValueError:
-                print("Oi")
+            beta2 = self.parameters.beta2
 
             qsat_expr = self.compute_saturation(self.X)
             qv = conditional(qt < qsat_expr, qt, qsat_expr)
@@ -658,9 +655,10 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
-        # This function converts the parameters to real space.
-        # This is a preventive way to avoid adjoint issues when the parameters
-        # attribute are the control in the sensitivity computations.
+        # Convert the attributes of type ``float`` or ``firedrake.Constant``
+        # in the parameters to a function in real space. This conversion is a
+        # preventive to avoid issues with adjoint computations, particularly
+        # when the parameters  are used as controls in sensitivity analyses.
         convert_parameters_to_real_space(parameters, domain.mesh)
         g = parameters.g
         H = parameters.H

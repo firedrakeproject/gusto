@@ -311,11 +311,11 @@ class SubcyclingOptions(Configuration):
 
 
 def convert_parameters_to_real_space(parameters, mesh):
-    """Convert the float type parameters attributes to real space.
+    """Convert parameters to functions in real space.
 
     Args:
-        parameters (:class:`Configuration`): the configuration object containing
-            the parameters to convert
+        parameters (:class:`Configuration`): the configuration object
+        containing the parameters to convert
         mesh (:class:`firedrake.Mesh`): the mesh object to use for the real space.
     """
     R = FunctionSpace(mesh, 'R', 0)
