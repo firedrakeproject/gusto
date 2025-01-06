@@ -178,7 +178,7 @@ class BoussinesqEquations(PrognosticEquationSet):
             linear_div_form = divergence(subject(
                 prognostic(cs**2 * (phi * div(u_trial) * dx), 'p'), self.X))
             divergence_form = divergence(linearisation(
-                subject(prognostic(cs**2 * phi * div(u) * dx, 'p'), self.X),
+                subject(prognostic(cs**2 * (phi * div(u) * dx), 'p'), self.X),
                 linear_div_form))
         else:
             # This enforces that div(u) = 0
