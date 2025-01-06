@@ -70,17 +70,22 @@ class TerminatorToy(PhysicsParametrisation):
         equation.residual -= source_label(self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate))
 
 
-    def evaluate(self, x_out, x_in, dt):
+    def evaluate(self, x_in, dt, x_out = None):
         """
         Evaluates the source/sink for the coalescence process.
 
         Args:
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
 
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
 
-        x_out.assign(self.Xq)
+        # If a source output is provided, assign the source term to it
+        if x_out is not None:
+            x_out.assign(self.Xq)
+
 
         pass

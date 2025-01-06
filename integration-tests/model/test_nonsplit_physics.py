@@ -106,6 +106,8 @@ class WaveEquationForcing(PhysicsParametrisation):
             x_in: (:class: 'Function'): the (mixed) field to be evolved.
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
 
         logger.info(f'Evaluating physics parametrisation {self.label.label}')

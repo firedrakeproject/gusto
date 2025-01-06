@@ -3,7 +3,7 @@ Defines microphysics routines to be used with the moist shallow water equations.
 """
 
 from firedrake import (
-    Interpolator, conditional, Function, dx, min_value, max_value, Constant
+    Interpolator, conditional, Function, dx, min_value, max_value, Constant, split
 )
 from firedrake.fml import subject, drop
 from gusto.core.logging import logger
@@ -92,7 +92,9 @@ class InstantRain(PhysicsParametrisation):
         # the source function is the difference between the water vapour and
         # the saturation function
         self.water_v = Function(Vv)
-        self.source = Function(Vv)
+        self.source = Function(W)
+        self.source_expr = split(self.source)[self.Vv_idx]
+        self.source_int = self.source.subfunctions[self.Vv_idx]
 
         # tau is the timescale for conversion (may or may not be the timestep)
         if tau is not None:
@@ -115,8 +117,8 @@ class InstantRain(PhysicsParametrisation):
             self.saturation_curve = saturation_curve
 
         # lose proportion of vapour above the saturation curve
-        equation.residual += source_label(self.label(subject(test_v * self.source * dx,
-                                                equation.X),
+        equation.residual += source_label(self.label(subject(test_v * self.source_expr * dx,
+                                                self.source),
                                         self.evaluate))
 
         # if rain is not none then the excess vapour is being tracked and is
@@ -124,8 +126,8 @@ class InstantRain(PhysicsParametrisation):
         if rain_name is not None:
             self.Vr_idx = equation.field_names.index(rain_name)
             test_r = equation.tests[self.Vr_idx]
-            equation.residual -= source_label(self.label(subject(test_r * self.source * dx,
-                                                    equation.X),
+            equation.residual -= source_label(self.label(subject(test_r * self.source_expr * dx,
+                                                    self.source),
                                             self.evaluate))
 
         # if feeding back on the height adjust the height equation
@@ -139,7 +141,7 @@ class InstantRain(PhysicsParametrisation):
         self.source_interpolator = Interpolator(conditional(
             self.water_v > self.saturation_curve,
             (1/self.tau)*gamma_r*(self.water_v - self.saturation_curve),
-            0), self.source)
+            0), self.source_int)
 
     def evaluate(self, x_in, dt, x_out = None):
         """
@@ -152,7 +154,8 @@ class InstantRain(PhysicsParametrisation):
             x_in: (:class: 'Function'): the (mixed) field to be evolved.
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
-            x_out: (:class: 'Function'): source terms to be added into the residual later
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
         if self.convective_feedback:
@@ -165,9 +168,7 @@ class InstantRain(PhysicsParametrisation):
         self.source_interpolator.interpolate()
 
         if x_out is not None:
-            x_out.subfunctions[self.Vv_idx].assign(self.source)
-            x_out.subfunctions[self.Vr_idx].assign(self.source)
-            x_out.subfunctions[self.VD_idx].assign(self.source)
+            x_out.assign(self.source)
 
 
 class SWSaturationAdjustment(PhysicsParametrisation):
@@ -328,9 +329,11 @@ class SWSaturationAdjustment(PhysicsParametrisation):
 
         # Add terms to equations and make interpolators
         # sources have the same order as V_idxs and factors
-        self.source = [Function(Vc) for factor in factors]
+        self.source = Function(W)
+        self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
+        self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
         self.source_interpolators = [Interpolator(sat_adj_expr*factor, source)
-                                     for factor, source in zip(factors, self.source)]
+                                     for factor, source in zip(factors, self.source_int)]
 
         # test functions have the same order as factors and sources (vapour,
         # cloud, depth, buoyancy) so that the correct test function multiplies
@@ -338,13 +341,11 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         tests = [equation.tests[idx] for idx in V_idxs]
 
         # Add source terms to residual
-        for test, source in zip(tests, self.source):
-            equation.residual += source_label(self.label(subject(test * source_label * dx,
-                                                    equation.X), self.evaluate))
+        for test, source in zip(tests, self.source_expr):
+            equation.residual += source_label(self.label(subject(test * source * dx,
+                                                    self.source), self.evaluate))
 
-        self.V_idxs = V_idxs
-
-    def evaluate(self, x_out, x_in, dt):
+    def evaluate(self, x_in, dt, x_out = None):
         """
         Evaluates the source_label term generated by the physics.
 
@@ -355,6 +356,8 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             x_in: (:class: 'Function'): the (mixed) field to be evolved.
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
         if self.convective_feedback:
@@ -369,7 +372,8 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         self.cloud.assign(x_in.subfunctions[self.Vc_idx])
         if self.time_varying_gamma_v:
             self.gamma_v.interpolate(self.gamma_v_computation(x_in))
-        for source_label_interpolator in self.source_label_interpolators:
-                source_label_interpolator.interpolate()
-        for idx in self.V_idxs:
-                x_out.subfunctions[idx].assign(self.source[idx])
+        for source_interpolator in self.source_interpolators:
+                source_interpolator.interpolate()
+        # If a source output is provided, assign the source term to it
+        if x_out is not None:
+            x_out.assign(self.source)
