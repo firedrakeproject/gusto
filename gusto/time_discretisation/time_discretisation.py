@@ -21,6 +21,7 @@ from gusto.core.labels import (time_derivative, prognostic, physics_label,
                                mass_weighted, nonlinear_time_derivative)
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
+from gusto.solvers import mass_parameters
 
 __all__ = ["TimeDiscretisation", "ExplicitTimeDiscretisation", "BackwardEuler",
            "ThetaMethod", "TrapeziumRule", "TR_BDF2"]
@@ -471,15 +472,6 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                          limiter=limiter, options=options,
                          augmentation=augmentation)
 
-        # get default solver options if none passed in
-        if solver_parameters is None:
-            self.solver_parameters = {'snes_type': 'ksponly',
-                                      'ksp_type': 'cg',
-                                      'pc_type': 'bjacobi',
-                                      'sub_pc_type': 'ilu'}
-        else:
-            self.solver_parameters = solver_parameters
-
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
@@ -493,6 +485,11 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         super().setup(equation, apply_bcs, *active_labels)
 
+        # get default solver options if none passed in
+        self.solver_parameters.update(mass_parameters(
+            self.fs, equation.domain.spaces))
+        self.solver_parameters['snes_type'] = 'ksponly'
+
         # if user has specified a number of fixed subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
         if (self.subcycling_options is not None
@@ -505,7 +502,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
 
-        # If the time_derivative term is nonlinear, we must use a nonlinear solver
+        # If the time_derivative term is nonlinear, we must use a nonlinear solver,
+        # but if the time_derivative term is linear, we can reuse the factorisations.
         if (
             len(self.residual.label_map(
                 lambda t: t.has_label(nonlinear_time_derivative),
@@ -517,6 +515,11 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                        + ' as the time derivative term is nonlinear')
             logger.warning(message)
             self.solver_parameters['snes_type'] = 'newtonls'
+        else:
+            self.solver_parameters.setdefault('snes_lag_jacobian', -2)
+            self.solver_parameters.setdefault('snes_lag_jacobian_persists', None)
+            self.solver_parameters.setdefault('snes_lag_preconditioner', -2)
+            self.solver_parameters.setdefault('snes_lag_preconditioner_persists', None)
 
     @cached_property
     def res(self):
