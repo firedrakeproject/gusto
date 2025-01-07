@@ -57,7 +57,6 @@ class SurfaceFluxes(PhysicsParametrisation):
             raise ValueError("Surface fluxes can only be used with Compressible Euler equations")
 
         if vapour_name is not None:
-            self.vapour_name = vapour_name
             if vapour_name not in equation.field_names:
                 raise ValueError(f"Field {vapour_name} does not exist in the equation set")
 
@@ -188,7 +187,6 @@ class SurfaceFluxes(PhysicsParametrisation):
 
             dx_reduced = dx(degree=4)
             source_theta_expr = test_theta * dtheta_vd_dt * dx_reduced
-            self.source_theta_vd = theta_vd
 
             equation.residual -= self.label(
                 subject(prognostic(source_theta_expr, 'theta'), X), self.evaluate)
@@ -263,7 +261,6 @@ class WindDrag(PhysicsParametrisation):
         # Extract prognostic variables
         # -------------------------------------------------------------------- #
         u_idx = equation.field_names.index('u')
-        self.u_idx = u_idx
 
         X = self.X
         tests = TestFunctions(X.function_space()) if implicit_formulation else equation.tests
@@ -381,11 +378,11 @@ class StaticAdjustment(PhysicsParametrisation):
         # Extract prognostic variables
         # -------------------------------------------------------------------- #
 
-        self.theta_idx = equation.field_names.index('theta')
-        Vt = equation.spaces[self.theta_idx]
+        theta_idx = equation.field_names.index('theta')
+        Vt = equation.spaces[theta_idx]
         self.theta_to_sort = Function(Vt)
-        self.sorted_theta = Function(Vt)
-        theta = self.X.subfunctions[self.theta_idx]
+        sorted_theta = Function(Vt)
+        theta = self.X.subfunctions[theta_idx]
 
         if theta_variable == 'theta' and 'water_vapour' in equation.field_names:
             Rv = equation.parameters.R_v
@@ -393,10 +390,10 @@ class StaticAdjustment(PhysicsParametrisation):
             mv_idx = equation.field_names.index('water_vapour')
             mv = self.X.subfunctions[mv_idx]
             self.get_theta_variable = Interpolator(theta / (1 + mv*Rv/Rd), self.theta_to_sort)
-            self.set_theta_variable = Interpolator(self.theta_to_sort * (1 + mv*Rv/Rd), self.sorted_theta)
+            self.set_theta_variable = Interpolator(self.theta_to_sort * (1 + mv*Rv/Rd), sorted_theta)
         else:
             self.get_theta_variable = Interpolator(theta, self.theta_to_sort)
-            self.set_theta_variable = Interpolator(self.theta_to_sort, self.sorted_theta)
+            self.set_theta_variable = Interpolator(self.theta_to_sort, sorted_theta)
 
         # -------------------------------------------------------------------- #
         # Set up routines to reshape data
@@ -413,9 +410,9 @@ class StaticAdjustment(PhysicsParametrisation):
         # -------------------------------------------------------------------- #
 
         tests = TestFunctions(self.X.function_space())
-        test = tests[self.theta_idx]
+        test = tests[theta_idx]
 
-        source_expr = inner(test, self.sorted_theta - theta) / self.dt * dx
+        source_expr = inner(test, sorted_theta - theta) / self.dt * dx
 
         equation.residual -= self.label(subject(prognostic(source_expr, 'theta'), equation.X), self.evaluate)
 
@@ -445,7 +442,9 @@ class StaticAdjustment(PhysicsParametrisation):
         self.set_theta_variable.interpolate()
 
         if x_out is not None:
-            raise NotImplementedError("Static adjustment does not output a source term")
+            raise NotImplementedError("Static adjustment does not output a source term, "
+                                      "or a non-interpolated/projected expression and hence "
+                                      "cannot be used in a nonsplit physics formulation.")
 
 
 class SuppressVerticalWind(PhysicsParametrisation):
@@ -490,9 +489,7 @@ class SuppressVerticalWind(PhysicsParametrisation):
         # -------------------------------------------------------------------- #
 
         u_idx = equation.field_names.index('u')
-        self.u_idx = u_idx
         wind = self.X.subfunctions[u_idx]
-        self.wind = wind
 
         # -------------------------------------------------------------------- #
         # Set source term
@@ -635,7 +632,6 @@ class BoundaryLayerMixing(PhysicsParametrisation):
         tests = equation.tests
 
         idx = equation.field_names.index(field_name)
-        self.idx = idx
         test = tests[idx]
         field = X.subfunctions[idx]
 
@@ -675,4 +671,6 @@ class BoundaryLayerMixing(PhysicsParametrisation):
         self.rho_recoverer.project()
 
         if x_out is not None:
-            raise NotImplementedError("Boundary layer mixing does not output a source term")
+            raise NotImplementedError("Boundary layer mixing does not output a source term, "
+                                      "or a non-interpolated/projected expression and hence "
+                                      "cannot be used in a nonsplit physics formulation.")

@@ -131,9 +131,9 @@ class SourceSink(PhysicsParametrisation):
         # If not time-varying, evaluate for the first time here
         if not self.time_varying:
             if self.method == 'interpolate':
-                self.source.assign(self.source_interpolator.interpolate())
+                self.source_interpolator.interpolate()
             else:
-                self.source.assign(self.source_projector.project())
+                self.source_projector.project()
 
     def evaluate(self, x_in, dt, x_out=None):
         """
@@ -149,9 +149,9 @@ class SourceSink(PhysicsParametrisation):
         if self.time_varying:
             logger.info(f'Evaluating physics parametrisation {self.label.label}')
             if self.method == 'interpolate':
-                self.source.assign(self.source_interpolator.interpolate())
+                self.source_interpolator.interpolate()
             else:
-                self.source.assign(self.source_projector.project())
+                self.source_projector.project()
         else:
             pass
         # If a source output is provided, assign the source term to it

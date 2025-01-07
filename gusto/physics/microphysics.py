@@ -89,7 +89,6 @@ class SaturationAdjustment(PhysicsParametrisation):
 
         # Indices of variables in mixed function space
         V_idxs = [vap_idx, cloud_idx]
-        self.V_idxs = V_idxs
         V = equation.function_space.sub(vap_idx)  # space in which to do the calculation
 
         # Get variables used to calculate saturation curve
@@ -183,7 +182,6 @@ class SaturationAdjustment(PhysicsParametrisation):
         for test, source in zip(tests, self.source_expr):
             equation.residual += source_label(self.label(subject(test * source * dx,
                                                                  equation.X), self.evaluate))
-        self.V_idxs = V_idxs
 
     def evaluate(self, x_in, dt, x_out=None):
         """
@@ -279,7 +277,7 @@ class Fallout(PhysicsParametrisation):
 
         Vu = domain.spaces("HDiv")
         # TODO: there must be a better way than forcing this into the equation
-        self.v = equation.prescribed_fields(name='rainfall_velocity', space=Vu)
+        v = equation.prescribed_fields(name='rainfall_velocity', space=Vu)
 
         # -------------------------------------------------------------------- #
         # Create physics term -- which is actually a transport term
@@ -291,7 +289,7 @@ class Fallout(PhysicsParametrisation):
         # Add rainfall velocity by replacing transport_velocity in term
         adv_term = adv_term.label_map(identity,
                                       map_if_true=lambda t: Term(
-                                          ufl.replace(t.form, {t.get(transporting_velocity): self.v}),
+                                          ufl.replace(t.form, {t.get(transporting_velocity): v}),
                                           t.labels))
 
         # We don't want this term to be picked up by normal transport, so drop
@@ -309,7 +307,7 @@ class Fallout(PhysicsParametrisation):
         if moments == AdvectedMoments.M0:
             # all rain falls at terminal velocity
             terminal_velocity = Constant(5)  # in m/s
-            self.v.project(-terminal_velocity*domain.k)
+            v.project(-terminal_velocity*domain.k)
         elif moments == AdvectedMoments.M3:
             self.explicit_only = True
             # this advects the third moment M3 of the raindrop
@@ -348,7 +346,7 @@ class Fallout(PhysicsParametrisation):
 
         if moments != AdvectedMoments.M0:
             self.determine_v = Projector(
-                -v_expression*domain.k, self.v,
+                -v_expression*domain.k, v,
                 quadrature_degree=domain.max_quad_degree
             )
 
@@ -368,7 +366,9 @@ class Fallout(PhysicsParametrisation):
             self.determine_v.project()
 
         if x_out is not None:
-            raise NotImplementedError('Cannot use source term output for fallout')
+            raise NotImplementedError("Fallout does not output a source term, "
+                                      "or a non-interpolated/projected expression and hence "
+                                      "cannot be used in a nonsplit physics formulation.")
 
 
 class Coalescence(PhysicsParametrisation):
@@ -553,7 +553,6 @@ class EvaporationOfRain(PhysicsParametrisation):
 
         # Indices of variables in mixed function space
         V_idxs = [rain_idx, vap_idx]
-        self.V_idxs = V_idxs
         V = equation.function_space.sub(rain_idx)  # space in which to do the calculation
         W = equation.function_space
 
