@@ -172,12 +172,13 @@ class IMEXRungeKutta(TimeDiscretisation):
 
             # Calculate source terms
             r_source = self.residual.label_map(
-                            lambda t: t.has_label(source_label),
-                            map_if_true=replace_subject(self.source[i], old_idx=self.idx),
-                            map_if_false=drop)
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source[i], old_idx=self.idx),
+                map_if_false=drop)
             r_source = r_source.label_map(
                 all_terms,
-                map_if_true=lambda t: Constant(self.butcher_exp[stage, i])*self.dt*t)
+                map_if_true=lambda t: Constant(self.butcher_exp[stage, i]) * self.dt * t
+            )
             residual += r_source
 
         # Calculate and add on dt*a_ss*F(y_s)
@@ -224,9 +225,9 @@ class IMEXRungeKutta(TimeDiscretisation):
             residual += r_exp
             # Calculate source terms
             r_source = self.residual.label_map(
-                            lambda t: t.has_label(source_label),
-                            map_if_true=replace_subject(self.source[i], old_idx=self.idx),
-                            map_if_false=drop)
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source[i], old_idx=self.idx),
+                map_if_false=drop)
             r_source = r_source.label_map(
                 all_terms,
                 map_if_true=lambda t: Constant(self.butcher_exp[self.nStages, i])*self.dt*t)
@@ -265,7 +266,7 @@ class IMEXRungeKutta(TimeDiscretisation):
                 self.x_out.assign(self.xs[stage-1])
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.xs[stage-1], self.dt, x_out = self.source[stage-1])
+                    evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
             self.solver.solve()
 
             # Apply limiter
@@ -275,7 +276,7 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         # Solve final stage
         for evaluate in self.evaluate_source:
-            evaluate(self.xs[-1], self.dt, x_out = self.source[-1])
+            evaluate(self.xs[-1], self.dt, x_out=self.source[-1])
         self.final_solver.solve()
 
         # Apply limiter

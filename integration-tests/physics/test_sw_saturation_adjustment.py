@@ -62,19 +62,19 @@ def run_sw_cond_evap(dirname, process, physics_coupling):
     if physics_coupling == "split":
         # Physics schemes
         physics_schemes = [(SWSaturationAdjustment(eqns, sat,
-                                                parameters=parameters,
-                                                thermal_feedback=True,
-                                                beta2=beta2),
+                                                   parameters=parameters,
+                                                   thermal_feedback=True,
+                                                   beta2=beta2),
                             ForwardEuler(domain))]
 
         # Timestepper
         stepper = SplitPhysicsTimestepper(eqns, RK4(domain), io,
-                                        physics_schemes=physics_schemes)
+                                          physics_schemes=physics_schemes)
     else:
         SWSaturationAdjustment(eqns, sat,
-                            parameters=parameters,
-                            thermal_feedback=True,
-                            beta2=beta2)
+                               parameters=parameters,
+                               thermal_feedback=True,
+                               beta2=beta2)
         stepper = Timestepper(eqns,
                               ForwardEuler(domain, rk_formulation=RungeKuttaFormulation.predictor),
                               io)

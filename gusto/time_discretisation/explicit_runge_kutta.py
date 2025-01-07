@@ -5,7 +5,7 @@ import numpy as np
 from enum import Enum
 from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
-from firedrake.fml import replace_subject, all_terms, drop, keep, Term
+from firedrake.fml import replace_subject, drop, keep, Term
 from firedrake.utils import cached_property
 from firedrake.formmanipulation import split_form
 
@@ -289,10 +289,10 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 # Add on any source terms
                 for i in range(0, stage+1):
                     r_source = self.residual.label_map(
-                                lambda t: t.has_label(source_label),
-                                map_if_true=replace_subject(self.source_i[i], old_idx=self.idx),
-                                map_if_false=drop)
-                    r  -= self.butcher_matrix[stage, i]*self.dt*r_source
+                        lambda t: t.has_label(source_label),
+                        map_if_true=replace_subject(self.source_i[i], old_idx=self.idx),
+                        map_if_false=drop)
+                    r -= self.butcher_matrix[stage, i]*self.dt*r_source
                 rhs_list.append(r)
 
             return rhs_list
@@ -353,7 +353,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             for i in range(stage):
                 self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
             for evaluate in self.evaluate_source:
-               evaluate(self.x1, self.dt)
+                evaluate(self.x1, self.dt)
             if self.limiter is not None:
                 self.limiter.apply(self.x1)
 
@@ -384,7 +384,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 self.limiter.apply(self.field_i[stage])
 
             for evaluate in self.evaluate_source:
-                evaluate(self.field_i[stage], self.dt, x_out = self.source_i[stage])
+                evaluate(self.field_i[stage], self.dt, x_out=self.source_i[stage])
 
             # Obtain field_ip1 = field_n - dt* sum_m{a_im*F[field_m]}
             self.solver[stage].solve()

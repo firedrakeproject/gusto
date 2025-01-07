@@ -326,8 +326,8 @@ class SDC(object, metaclass=ABCMeta):
                                     drop,
                                     replace_subject(self.Uin, old_idx=self.idx))
         L_source = self.residual.label_map(lambda t: t.has_label(source_label),
-                                    replace_subject(self.source_in, old_idx=self.idx),
-                                    drop)
+                                           replace_subject(self.source_in, old_idx=self.idx),
+                                           drop)
         residual_rhs = a - (L + L_source)
         return residual_rhs.form
 
@@ -406,22 +406,22 @@ class SDC(object, metaclass=ABCMeta):
 
             # Calculate source terms
             r_source_kp1 = self.residual.label_map(
-                            lambda t: t.has_label(source_label),
-                            map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
-                            map_if_false=drop)
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
+                map_if_false=drop)
             r_source_kp1 = r_source_kp1.label_map(
                 all_terms,
-                map_if_true=lambda t: Constant(self.Qdelta_exp[m, i])*t)
+                lambda t: Constant(self.Qdelta_exp[m, i])*t)
             residual += r_source_kp1
 
             r_source_k = self.residual.label_map(
-                            lambda t: t.has_label(source_label),
-                            map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
-                            map_if_false=drop)
-            r_source_k = r_source_kp1.label_map(
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
+                map_if_false=drop)
+            r_source_k = r_source_k.label_map(
                 all_terms,
                 map_if_true=lambda t: Constant(self.Qdelta_exp[m, i])*t)
-            residual -= r_source_kp1
+            residual -= r_source_k
 
         # Add on final implicit terms
         # Qdelta_imp[m,m]*(F(y_(m)^(k+1)) - F(y_(m)^k))
@@ -498,7 +498,7 @@ class SDC(object, metaclass=ABCMeta):
                 self.Unodes[m+1].assign(self.Un)
         for m in range(self.M+1):
             for evaluate in self.evaluate_source:
-                evaluate(self.Unodes[m], self.base.dt, x_out = self.source_Uk[m])
+                evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
 
         # Iterate through correction sweeps
         k = 0
@@ -511,7 +511,7 @@ class SDC(object, metaclass=ABCMeta):
                 self.Uin.assign(self.Unodes[m])
                 # Include source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Uin, self.base.dt, x_out = self.source_in)
+                    evaluate(self.Uin, self.base.dt, x_out=self.source_in)
                 self.solver_rhs.solve()
                 self.fUnodes[m-1].assign(self.Urhs)
             self.compute_quad()
@@ -519,7 +519,7 @@ class SDC(object, metaclass=ABCMeta):
             # Loop through quadrature nodes and solve
             self.Unodes1[0].assign(self.Unodes[0])
             for evaluate in self.evaluate_source:
-                evaluate(self.Unodes[0], self.base.dt, x_out = self.source_Uk[0])
+                evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
             for m in range(1, self.M+1):
                 # Set Q or S matrix
                 self.Q_.assign(self.quad[m-1])
@@ -541,9 +541,9 @@ class SDC(object, metaclass=ABCMeta):
                 self.solver.solve()
                 self.Unodes1[m].assign(self.U_SDC)
 
-                 # Evaluate source terms
+                # Evaluate source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes1[m], self.base.dt, x_out = self.source_Ukp1[m])
+                    evaluate(self.Unodes1[m], self.base.dt, x_out=self.source_Ukp1[m])
 
                 # Apply limiter if required
                 if self.limiter is not None:

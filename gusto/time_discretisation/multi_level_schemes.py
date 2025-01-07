@@ -3,7 +3,7 @@
 from abc import abstractproperty
 
 from firedrake import (Function, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, Constant)
+                       NonlinearVariationalSolver)
 from firedrake.fml import replace_subject, all_terms, drop
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.core.labels import time_derivative, source_label
@@ -48,7 +48,7 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
         super().setup(equation=equation, apply_bcs=apply_bcs, *active_labels)
         for n in range(self.nlevels, 1, -1):
             setattr(self, "xnm%i" % (n-1), Function(self.fs))
-        
+
         # Check that we do not have source terms
         for t in self.residual:
             if (t.has_label(source_label)):

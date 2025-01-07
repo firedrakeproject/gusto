@@ -84,6 +84,7 @@ def run_suppress_vertical_wind(dirname, physics_coupling):
 
     return domain, stepper
 
+
 @pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
 def test_suppress_vertical_wind(tmpdir, physics_coupling):
 

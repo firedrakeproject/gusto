@@ -54,21 +54,21 @@ def run_wind_drag(dirname, implicit_formulation, physics_coupling):
 
         # Only want time derivatives and physics terms in equation, so drop the rest
         eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
-                                            map_if_true=identity, map_if_false=drop)
+                                              map_if_true=identity, map_if_false=drop)
 
         # Time stepper
         scheme = ForwardEuler(domain)
         stepper = SplitPhysicsTimestepper(eqn, scheme, io,
-                                        physics_schemes=physics_schemes)
+                                          physics_schemes=physics_schemes)
     else:
         # Only want time derivatives and physics terms in equation, so drop the rest
         eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
-                                            map_if_true=identity, map_if_false=drop)
+                                              map_if_true=identity, map_if_false=drop)
 
         # Time stepper
         scheme = ForwardEuler(domain) if implicit_formulation else BackwardEuler(domain)
         stepper = Timestepper(eqn, scheme, io,
-                                        physics_parametrisations=[physics_parametrisation])
+                              physics_parametrisations=[physics_parametrisation])
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

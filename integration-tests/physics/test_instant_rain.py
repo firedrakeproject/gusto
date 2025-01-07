@@ -12,6 +12,7 @@ from firedrake import (Constant, PeriodicSquareMesh, SpatialCoordinate,
                        sqrt, conditional, cos, pi, FunctionSpace)
 import pytest
 
+
 def run_instant_rain(dirname, physics_coupling):
 
     # ------------------------------------------------------------------------ #
@@ -56,10 +57,9 @@ def run_instant_rain(dirname, physics_coupling):
     if physics_coupling == "split":
         physics_schemes = [(InstantRain(eqns, saturation, rain_name="rain"),
                             RK4(domain))]
-
         # Time stepper
         stepper = SplitPhysicsTimestepper(eqns, RK4(domain), io, transport_method,
-                                        physics_schemes=physics_schemes)
+                                          physics_schemes=physics_schemes)
     else:
         physics_parametrisation = [InstantRain(eqns, saturation, rain_name="rain")]
         scheme = RK4(domain, rk_formulation=RungeKuttaFormulation.predictor)
@@ -96,6 +96,7 @@ def run_instant_rain(dirname, physics_coupling):
 
     stepper.run(t=0, tmax=5*dt)
     return stepper, saturation, initial_vapour, vapour_true, rain_true
+
 
 @pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
 def test_instant_rain_setup(tmpdir, physics_coupling):

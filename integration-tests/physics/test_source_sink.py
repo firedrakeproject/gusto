@@ -65,7 +65,6 @@ def run_source_sink(dirname, process, time_varying, physics_coupling):
     else:
         scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.predictor)
 
-
     stepper = PrescribedTransport(
         eqn, scheme, io, time_varying_velocity,
         transport_method, physics_parametrisations=physics_parametrisations

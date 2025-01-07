@@ -70,7 +70,7 @@ def run_terminator_toy(dirname, physics_coupling):
         )
     else:
         physics_parametrisation = [TerminatorToy(eqn, k1=k1, k2=k2, species1_name='Y',
-                            species2_name='Y2')]
+                                                 species2_name='Y2')]
         eqn.label_terms(lambda t: not t.has_label(time_derivative), implicit)
         transport_scheme = IMEX_SSP3(domain)
         time_varying_velocity = True
@@ -78,7 +78,6 @@ def run_terminator_toy(dirname, physics_coupling):
             eqn, transport_scheme, io, time_varying_velocity, transport_method,
             physics_parametrisations=physics_parametrisation
         )
-
 
     # Set up a non-divergent, time-varying, velocity field
     def u_t(t):
@@ -107,6 +106,7 @@ def run_terminator_toy(dirname, physics_coupling):
     Y2_steady.interpolate(0.5*(Y_T_0 - D_val + r))
 
     return stepper, Y_steady, Y2_steady
+
 
 @pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
 def test_terminator_toy_setup(tmpdir, physics_coupling):

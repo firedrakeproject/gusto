@@ -7,7 +7,7 @@ from firedrake import (
     Interpolator, conditional, Function, dx, min_value, max_value, Constant, pi,
     Projector, split
 )
-from firedrake.fml import identity, Term, subject, drop
+from firedrake.fml import identity, Term, subject
 from gusto.equations import Phases, TracerVariableType
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
@@ -182,10 +182,10 @@ class SaturationAdjustment(PhysicsParametrisation):
         # Add source terms to residual
         for test, source in zip(tests, self.source_expr):
             equation.residual += source_label(self.label(subject(test * source * dx,
-                                                    equation.X), self.evaluate))
+                                                                 equation.X), self.evaluate))
         self.V_idxs = V_idxs
 
-    def evaluate(self, x_in, dt, x_out = None):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Evaluates the source/sink for the saturation adjustment process.
 
@@ -203,7 +203,7 @@ class SaturationAdjustment(PhysicsParametrisation):
             self.rho_recoverer.project()
         # Evaluate the source
         for source_interpolator in self.source_interpolators:
-                source_interpolator.interpolate()
+            source_interpolator.interpolate()
         # If a source output is provided, assign the source term to it
         if x_out is not None:
             x_out.assign(self.source)
@@ -352,8 +352,7 @@ class Fallout(PhysicsParametrisation):
                 quadrature_degree=domain.max_quad_degree
             )
 
-
-    def evaluate(self, x_in, dt, x_out = None):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Evaluates the source/sink corresponding to the fallout process.
 
@@ -424,7 +423,6 @@ class Coalescence(PhysicsParametrisation):
         self.rain = Function(Vr)
 
         # declare function space and source field
-        Vt = self.cloud_water.function_space()
         self.source = Function(W)
         self.source_expr = split(self.source)[self.cloud_idx]
         self.source_int = self.source.subfunctions[self.cloud_idx]
@@ -464,12 +462,17 @@ class Coalescence(PhysicsParametrisation):
         # Add term to equation's residual
         test_cl = equation.tests[self.cloud_idx]
         test_r = equation.tests[self.rain_idx]
-        equation.residual += source_label(self.label(subject(test_cl * self.source_expr * dx
-                                                - test_r * self.source_expr * dx,
-                                                self.source),
-                                        self.evaluate))
+        equation.residual += source_label(
+            self.label(
+                subject(
+                    test_cl * self.source_expr * dx - test_r * self.source_expr * dx,
+                    self.source
+                ),
+                self.evaluate
+            )
+        )
 
-    def evaluate(self, x_in, dt, x_out = None):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Evaluates the source/sink for the coalescence process.
 
@@ -490,7 +493,6 @@ class Coalescence(PhysicsParametrisation):
         # If a source output is provided, assign the source term to it
         if x_out is not None:
             x_out.assign(self.source)
-
 
 
 class EvaporationOfRain(PhysicsParametrisation):
@@ -647,9 +649,9 @@ class EvaporationOfRain(PhysicsParametrisation):
         # Add source terms to residual
         for test, source in zip(tests, self.source_expr):
             equation.residual += source_label(self.label(subject(test * source * dx,
-                                                    self.source), self.evaluate))
+                                                                 self.source), self.evaluate))
 
-    def evaluate(self, x_in, dt, x_out = None):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Applies the process to evaporate rain droplets.
 
