@@ -300,11 +300,11 @@ class SplitPrescribedTransport(Timestepper):
         self.setup_equation(self.equation)
 
         # If there is an augmentation, set up these transport terms
+        # Or, perhaps set up the whole residual now ... ?
         if self.scheme.augmentation is not None:
             if self.scheme.augmentation.name == 'mean_mixing_ratio':
-                self.scheme.augmentation.setup_transport(self.spatial_methods)
+                self.scheme.augmentation.setup_transport(self.spatial_methods, self.equation)
                 print('Setting up augmented equation')
-                self.setup_equation(self.scheme.augmentation)
 
 
         # Go through and label all non-physics terms with a "dynamics" label
