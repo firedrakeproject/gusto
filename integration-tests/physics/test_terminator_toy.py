@@ -8,9 +8,10 @@ from firedrake import IcosahedralSphereMesh, Constant, cos, \
     sin, SpatialCoordinate, Function, max_value, as_vector, \
     errornorm, norm
 import numpy as np
+import pytest
 
 
-def run_terminator_toy(dirname):
+def run_terminator_toy(dirname, physics_coupling):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -56,18 +57,28 @@ def run_terminator_toy(dirname):
 
     k1 = max_value(0, sin(theta)*sin(theta_c) + cos(theta)*cos(theta_c)*cos(lamda-lamda_c))
     k2 = 1
-
-    physics_schemes = [(TerminatorToy(eqn, k1=k1, k2=k2, species1_name='Y',
-                        species2_name='Y2'), BackwardEuler(domain))]
-
-    transport_scheme = SSPRK3(domain)
     transport_method = [DGUpwind(eqn, 'Y'), DGUpwind(eqn, 'Y2')]
+    if physics_coupling == "split":
+        physics_schemes = [(TerminatorToy(eqn, k1=k1, k2=k2, species1_name='Y',
+                            species2_name='Y2'), BackwardEuler(domain))]
 
-    time_varying_velocity = True
-    stepper = SplitPrescribedTransport(
-        eqn, transport_scheme, io, time_varying_velocity,
-        spatial_methods=transport_method, physics_schemes=physics_schemes
-    )
+        transport_scheme = SSPRK3(domain)
+        time_varying_velocity = True
+        stepper = SplitPrescribedTransport(
+            eqn, transport_scheme, io, time_varying_velocity,
+            spatial_methods=transport_method, physics_schemes=physics_schemes
+        )
+    else:
+        physics_parametrisation = [TerminatorToy(eqn, k1=k1, k2=k2, species1_name='Y',
+                            species2_name='Y2')]
+        eqn.label_terms(lambda t: not t.has_label(time_derivative), implicit)
+        transport_scheme = IMEX_SSP3(domain)
+        time_varying_velocity = True
+        stepper = PrescribedTransport(
+            eqn, transport_scheme, io, time_varying_velocity, transport_method,
+            physics_parametrisations=physics_parametrisation
+        )
+
 
     # Set up a non-divergent, time-varying, velocity field
     def u_t(t):
@@ -97,10 +108,10 @@ def run_terminator_toy(dirname):
 
     return stepper, Y_steady, Y2_steady
 
-
-def test_terminator_toy_setup(tmpdir):
+@pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
+def test_terminator_toy_setup(tmpdir, physics_coupling):
     dirname = str(tmpdir)
-    stepper, Y_steady, Y2_steady = run_terminator_toy(dirname)
+    stepper, Y_steady, Y2_steady = run_terminator_toy(dirname, physics_coupling)
     Y_field = stepper.fields("Y")
     Y2_field = stepper.fields("Y2")
 

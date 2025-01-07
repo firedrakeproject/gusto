@@ -98,12 +98,12 @@ class SourceSink(PhysicsParametrisation):
         if hasattr(equation, "field_names"):
             self.V_idx = equation.field_names.index(variable_name)
             W = equation.function_space
-            V = W.sub(V_idx)
-            test = equation.tests[V_idx]
-            self.V_idx = V_idx
+            V = W.sub(self.V_idx)
+            test = equation.tests[self.V_idx]
+            self.V_idx = self.V_idx
             self.source = Function(W)
-            self.source_expr = split(self.source)[V_idx]
-            self.source_int = self.source.subfunctions[V_idx]
+            self.source_expr = split(self.source)[self.V_idx]
+            self.source_int = self.source.subfunctions[self.V_idx]
         else:
             V = equation.function_space
             test = equation.test
@@ -147,9 +147,9 @@ class SourceSink(PhysicsParametrisation):
         if self.time_varying:
             logger.info(f'Evaluating physics parametrisation {self.label.label}')
             if self.method == 'interpolate':
-                self.source.subfunctions[self.V_idx].assign(self.source_interpolator.interpolate())
+                self.source.assign(self.source_interpolator.interpolate())
             else:
-                self.source.subfunctions[self.V_idx].assign(self.source_projector.project())
+                self.source.assign(self.source_projector.project())
         else:
             pass
         # If a source output is provided, assign the source term to it

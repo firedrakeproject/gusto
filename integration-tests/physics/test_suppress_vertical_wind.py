@@ -8,9 +8,10 @@ from gusto.core.labels import physics_label
 from firedrake import (Constant, PeriodicIntervalMesh, as_vector, sin, norm,
                        SpatialCoordinate, ExtrudedMesh, Function, dot, pi)
 from firedrake.fml import identity, drop
+import pytest
 
 
-def run_suppress_vertical_wind(dirname):
+def run_suppress_vertical_wind(dirname, physics_coupling):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -46,19 +47,20 @@ def run_suppress_vertical_wind(dirname):
     # Physics scheme
     physics_parametrisation = SuppressVerticalWind(eqn, spin_up_period)
 
-    time_discretisation = ForwardEuler(domain)
-
-    # time_discretisation = ForwardEuler(domain)
-    physics_schemes = [(physics_parametrisation, time_discretisation)]
-
     # Only want time derivatives and physics terms in equation, so drop the rest
     eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
                                           map_if_true=identity, map_if_false=drop)
-
-    # Time stepper
-    scheme = ForwardEuler(domain)
-    stepper = SplitPhysicsTimestepper(eqn, scheme, io,
-                                      physics_schemes=physics_schemes)
+    if physics_coupling == "split":
+        time_discretisation = ForwardEuler(domain)
+        physics_schemes = [(physics_parametrisation, time_discretisation)]
+        # Time stepper
+        scheme = ForwardEuler(domain)
+        stepper = SplitPhysicsTimestepper(eqn, scheme, io,
+                                          physics_schemes=physics_schemes)
+    else:
+        # Time stepper
+        scheme = ForwardEuler(domain, rk_formulation=RungeKuttaFormulation.predictor)
+        stepper = Timestepper(eqn, scheme, io, physics_parametrisations=[physics_parametrisation])
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -82,11 +84,11 @@ def run_suppress_vertical_wind(dirname):
 
     return domain, stepper
 
-
-def test_suppress_vertical_wind(tmpdir):
+@pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
+def test_suppress_vertical_wind(tmpdir, physics_coupling):
 
     dirname = str(tmpdir)
-    domain, stepper = run_suppress_vertical_wind(dirname)
+    domain, stepper = run_suppress_vertical_wind(dirname, physics_coupling)
 
     u = stepper.fields('u')
     vertical_wind = Function(domain.spaces('theta'))

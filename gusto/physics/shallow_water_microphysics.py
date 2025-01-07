@@ -341,8 +341,8 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         tests = [equation.tests[idx] for idx in V_idxs]
 
         # Add source terms to residual
-        for test, source in zip(tests, self.source_expr):
-            equation.residual += source_label(self.label(subject(test * source * dx,
+        for test, source_val in zip(tests, self.source_expr):
+            equation.residual += source_label(self.label(subject(test * source_val * dx,
                                                     self.source), self.evaluate))
 
     def evaluate(self, x_in, dt, x_out = None):

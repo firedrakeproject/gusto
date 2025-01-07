@@ -53,10 +53,9 @@ class TerminatorToy(PhysicsParametrisation):
             "The function spaces for the two species need to be the same"
 
         self.Xq = Function(equation.X.function_space())
-        Xq = self.Xq
 
-        species1 = split(Xq)[self.species1_idx]
-        species2 = split(Xq)[self.species2_idx]
+        species1 = split(self.Xq)[self.species1_idx]
+        species2 = split(self.Xq)[self.species2_idx]
 
         test_1 = equation.tests[self.species1_idx]
         test_2 = equation.tests[self.species2_idx]
@@ -66,8 +65,8 @@ class TerminatorToy(PhysicsParametrisation):
         source1_expr = test_1 * 2*Kx * dx
         source2_expr = test_2 * -Kx * dx
 
-        equation.residual -= source_label(self.label(subject(prognostic(source1_expr, 'X'), Xq), self.evaluate))
-        equation.residual -= source_label(self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate))
+        equation.residual -= self.label(subject(prognostic(source1_expr, 'X'), self.Xq), self.evaluate)
+        equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), self.Xq), self.evaluate)
 
 
     def evaluate(self, x_in, dt, x_out = None):
@@ -82,10 +81,6 @@ class TerminatorToy(PhysicsParametrisation):
         """
 
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
-
-        # If a source output is provided, assign the source term to it
-        if x_out is not None:
-            x_out.assign(self.Xq)
 
 
         pass

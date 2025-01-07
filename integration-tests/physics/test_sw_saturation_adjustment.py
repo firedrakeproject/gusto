@@ -17,7 +17,7 @@ from netCDF4 import Dataset
 import pytest
 
 
-def run_sw_cond_evap(dirname, process):
+def run_sw_cond_evap(dirname, process, physics_coupling):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -59,17 +59,25 @@ def run_sw_cond_evap(dirname, process):
                               dumpfreq=1)
     io = IO(domain, output,
             diagnostic_fields=[Sum('water_vapour', 'cloud_water')])
+    if physics_coupling == "split":
+        # Physics schemes
+        physics_schemes = [(SWSaturationAdjustment(eqns, sat,
+                                                parameters=parameters,
+                                                thermal_feedback=True,
+                                                beta2=beta2),
+                            ForwardEuler(domain))]
 
-    # Physics schemes
-    physics_schemes = [(SWSaturationAdjustment(eqns, sat,
-                                               parameters=parameters,
-                                               thermal_feedback=True,
-                                               beta2=beta2),
-                        ForwardEuler(domain))]
-
-    # Timestepper
-    stepper = SplitPhysicsTimestepper(eqns, RK4(domain), io,
-                                      physics_schemes=physics_schemes)
+        # Timestepper
+        stepper = SplitPhysicsTimestepper(eqns, RK4(domain), io,
+                                        physics_schemes=physics_schemes)
+    else:
+        SWSaturationAdjustment(eqns, sat,
+                            parameters=parameters,
+                            thermal_feedback=True,
+                            beta2=beta2)
+        stepper = Timestepper(eqns,
+                              ForwardEuler(domain, rk_formulation=RungeKuttaFormulation.predictor),
+                              io)
 
     # Initial conditions
     b0 = stepper.fields("b")
@@ -119,10 +127,11 @@ def run_sw_cond_evap(dirname, process):
 
 
 @pytest.mark.parametrize("process", ["evaporation", "condensation"])
-def test_cond_evap(tmpdir, process):
+@pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
+def test_cond_evap(tmpdir, process, physics_coupling):
 
     dirname = str(tmpdir)
-    eqns, stepper, v_true, c_true, b_true, c_init = run_sw_cond_evap(dirname, process)
+    eqns, stepper, v_true, c_true, b_true, c_init = run_sw_cond_evap(dirname, process, physics_coupling)
 
     vapour = stepper.fields("water_vapour")
     cloud = stepper.fields("cloud_water")
