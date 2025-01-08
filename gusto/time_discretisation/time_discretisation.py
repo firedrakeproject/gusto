@@ -9,8 +9,8 @@ from abc import ABCMeta, abstractmethod
 import math
 
 from firedrake import (Function, TestFunction, TestFunctions, DirichletBC,
-                       Constant, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver)
+                       NonlinearVariationalProblem, NonlinearVariationalSolver,
+                       FunctionSpace)
 from firedrake.fml import (replace_subject, replace_test_function, Term,
                            all_terms, drop)
 from firedrake.formmanipulation import split_form
@@ -88,10 +88,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.domain = domain
         self.field_name = field_name
         self.equation = None
-
-        self.dt = Constant(0.0)
+        R = FunctionSpace(domain.mesh, "R", 0)
+        self.dt = Function(R, val=0.0)
         self.dt.assign(domain.dt)
-        self.original_dt = Constant(0.0)
+        self.original_dt = Function(R, val=0.0)
         self.original_dt.assign(self.dt)
         self.options = options
         self.limiter = limiter

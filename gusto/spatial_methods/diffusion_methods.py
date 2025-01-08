@@ -160,4 +160,5 @@ class CGDiffusion(DiffusionMethod):
             kappa = diffusion_parameters.kappa
             self.form = diffusion(kappa * self.test.dx(0) * self.field.dx(0) * dx)
         else:
-            raise NotImplementedError("CG diffusion only implemented in 1D")
+            kappa = diffusion_parameters.kappa
+            self.form = diffusion(kappa * inner(grad(self.test), grad(self.field)) * dx)

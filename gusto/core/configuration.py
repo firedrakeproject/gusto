@@ -1,7 +1,7 @@
 """Some simple tools for configuring the model."""
-from abc import ABCMeta, abstractproperty
+from abc import ABCMeta, abstractmethod
 from enum import Enum
-from firedrake import sqrt, Constant
+from firedrake import sqrt, Constant, Function, FunctionSpace
 
 
 __all__ = [
@@ -12,7 +12,7 @@ __all__ = [
     "EmbeddedDGOptions", "ConservativeEmbeddedDGOptions", "RecoveryOptions",
     "ConservativeRecoveryOptions", "SUPGOptions", "MixedFSOptions",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters",
-    "SubcyclingOptions"
+    "SubcyclingOptions", "convert_parameters_to_real_space"
 ]
 
 
@@ -167,7 +167,7 @@ class ShallowWaterParameters(Configuration):
 class WrapperOptions(Configuration, metaclass=ABCMeta):
     """Base class for specifying options for a transport scheme."""
 
-    @abstractproperty
+    @abstractmethod
     def name(self):
         pass
 
@@ -308,3 +308,17 @@ class SubcyclingOptions(Configuration):
             raise ValueError(
                 "Cannot provide both fixed_subcycles and subcycle_by_courant"
                 + "parameters.")
+
+
+def convert_parameters_to_real_space(parameters, mesh):
+    """Convert parameters to functions in real space.
+
+    Args:
+        parameters (:class:`Configuration`): the configuration object
+        containing the parameters to convert
+        mesh (:class:`firedrake.Mesh`): the mesh object to use for the real space.
+    """
+    R = FunctionSpace(mesh, 'R', 0)
+    for name, value in vars(parameters).items():
+        if isinstance(value, (float, Constant)):
+            setattr(parameters, name, Function(R, val=float(value)))
