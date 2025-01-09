@@ -4,9 +4,10 @@ compressible Euler equations.
 """
 
 from firedrake import (
-    Interpolator, conditional, Function, dx, min_value, max_value, Constant, pi,
-    Projector, split
+    conditional, Function, dx, min_value, max_value, Constant, pi,
+    Projector, assemble, split
 )
+from firedrake.__future__ import interpolate
 from firedrake.fml import identity, Term, subject
 from gusto.equations import Phases, TracerVariableType
 from gusto.recovery import Recoverer, BoundaryMethod
@@ -173,8 +174,8 @@ class SaturationAdjustment(PhysicsParametrisation):
         self.source = Function(W)
         self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
         self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
-        self.source_interpolators = [Interpolator(sat_adj_expr*factor, source)
-                                     for factor, source in zip(factors, self.source_int)]
+        self.source_interpolate = [interpolate(sat_adj_expr*factor, source)
+                                   for source, factor in zip(self.source_int, factors)]
 
         tests = [equation.tests[idx] for idx in V_idxs]
 
@@ -200,8 +201,9 @@ class SaturationAdjustment(PhysicsParametrisation):
         if isinstance(self.equation, CompressibleEulerEquations):
             self.rho_recoverer.project()
         # Evaluate the source
-        for source_interpolator in self.source_interpolators:
-            source_interpolator.interpolate()
+        for interpolator, src in zip(self.source_interpolate, self.source_int):
+            src.assign(assemble(interpolator))
+
         # If a source output is provided, assign the source term to it
         if x_out is not None:
             x_out.assign(self.source)
@@ -457,7 +459,7 @@ class Coalescence(PhysicsParametrisation):
                                                         min_value(accu_rate, self.cloud_water / self.dt),
                                                         min_value(accr_rate + accu_rate, self.cloud_water / self.dt))))
 
-        self.source_interpolator = Interpolator(rain_expr, self.source_int)
+        self.source_interpolate = interpolate(rain_expr, self.source_int)
 
         # Add term to equation's residual
         test_cl = equation.tests[self.cloud_idx]
@@ -487,9 +489,8 @@ class Coalescence(PhysicsParametrisation):
         self.dt.assign(dt)
         self.rain.assign(x_in.subfunctions[self.rain_idx])
         self.cloud_water.assign(x_in.subfunctions[self.cloud_idx])
-        # Evaluate the source
-        self.source_interpolator.interpolate()
 
+        self.source.assign(assemble(self.source_interpolate))
         # If a source output is provided, assign the source term to it
         if x_out is not None:
             x_out.assign(self.source)
@@ -640,8 +641,10 @@ class EvaporationOfRain(PhysicsParametrisation):
         self.source = Function(W)
         self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
         self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
-        self.source_interpolators = [Interpolator(evap_rate*factor, source)
-                                     for factor, source in zip(factors, self.source_int)]
+        self.source_interpolate = [
+            interpolate(evap_rate * factor, source)
+            for source, factor in zip(self.source_int, factors)
+        ]
 
         tests = [equation.tests[idx] for idx in V_idxs]
 
@@ -666,9 +669,10 @@ class EvaporationOfRain(PhysicsParametrisation):
         self.X.assign(x_in)
         if isinstance(self.equation, CompressibleEulerEquations):
             self.rho_recoverer.project()
-        # Evaluate the source
-        for source_interpolator in self.source_interpolators:
-            source_interpolator.interpolate()
+
+        for interpolator, src in zip(self.source_interpolate, self.source_int):
+            src.assign(assemble(interpolator))
+
         # If a source output is provided, assign the source term to it
         if x_out is not None:
             x_out.assign(self.source)

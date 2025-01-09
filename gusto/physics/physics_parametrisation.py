@@ -8,7 +8,8 @@ the form of classes with "evaluate" methods.
 """
 
 from abc import ABCMeta, abstractmethod
-from firedrake import Interpolator, Function, dx, Projector, split
+from firedrake import Function, dx, Projector, assemble, split
+from firedrake.__future__ import interpolate
 from firedrake.fml import subject
 from gusto.core.labels import PhysicsLabel, source_label
 from gusto.core.logging import logger
@@ -124,14 +125,14 @@ class SourceSink(PhysicsParametrisation):
 
         # Handle method of evaluating source/sink
         if self.method == 'interpolate':
-            self.source_interpolator = Interpolator(expression, self.source_int)
+            self.source_interpolate = interpolate(expression, self.source_int)
         else:
             self.source_projector = Projector(expression, self.source_int)
 
         # If not time-varying, evaluate for the first time here
         if not self.time_varying:
             if self.method == 'interpolate':
-                self.source_interpolator.interpolate()
+                self.source.assign(assemble(self.source_interpolate))
             else:
                 self.source_projector.project()
 
@@ -149,7 +150,7 @@ class SourceSink(PhysicsParametrisation):
         if self.time_varying:
             logger.info(f'Evaluating physics parametrisation {self.label.label}')
             if self.method == 'interpolate':
-                self.source_interpolator.interpolate()
+                self.source.assign(assemble(self.source_interpolate))
             else:
                 self.source_projector.project()
         else:
