@@ -255,7 +255,7 @@ class MeanMixingRatio(Augmentation):
     Args:
         domain (:class:`Domain`): The domain object.
         eqns (:class:`PrognosticEquationSet`): The overarching equation set.
-        mixing_ratio (:class: list): List of mixing ratios that 
+        mixing_ratio (:class: list): A list of mixing ratios that 
         are to have augmented mean mixing ratio fields.
         OR, keep as a single mixing ratio, but define 
         multiple augmentations?
@@ -267,15 +267,16 @@ class MeanMixingRatio(Augmentation):
     ):
 
         self.name = 'mean_mixing_ratio'
+        
         self.mX_name = mX_name
         self.mean_name = 'mean_'+mX_name
-        print(self.mean_name)
 
         self.eqn_orig = eqns
         self.domain=domain
         exist_spaces = eqns.spaces
-
         self.idx_orig = len(exist_spaces)
+
+        # Change this to adjust for a list
         mean_idx = self.idx_orig
         self.mean_idx = mean_idx
 
@@ -285,12 +286,14 @@ class MeanMixingRatio(Augmentation):
 
         # Define the mean mixing ratio on the DG0 space
         DG0 = FunctionSpace(domain.mesh, "DG", 0)
-        self.DG0 = Function(DG0)
-        mX_space = eqns.spaces[mean_idx]
+        mX_space = eqns.spaces[mX_idx]
+
+        # But, what if the mixing ratios are in 
+        # different function spaces???
 
         self.mX_in = Function(mX_space)
-        self.mean_in = Function(mean_space)
-        self.compute_mean = Projector(mX_space, DG0)
+        self.mean = Function(DG0)
+        self.compute_mean = Projector(self.mX_in, self.mean)
 
          # Set up the scheme for the mean mixing ratio
 
@@ -302,101 +305,13 @@ class MeanMixingRatio(Augmentation):
         self.X = Function(self.fs)
         self.tests = TestFunctions(self.fs)
 
-        print(self.X)
-
         self.bcs = None
 
         self.x_in = Function(self.fs)
         self.x_out = Function(self.fs)
 
-        # Compute the new mean mass weighted term,
-        # IF this is conservatively transported.
 
-        #old_residual = eqns.residual
-
-        #mean_residual = old_residual.label_map(
-        #    lambda t: t.get(prognostic) == mX_name,
-        #    map_if_false=drop
-        #)
-        #mean_residual = prognostic.update_value(mean_residual, self.mean_name)
-
-        # Replace trial functions with those in the new mixed function space
-        #for term in eqns.residual:
-        #    print('\n')
-        #    print(term.form)
-
-        # If I do this later on with the transport terms, maybe I don't need to do this here?
-
-        #for idx in range(self.idx_orig):
-        #    field = eqns.field_names[idx]
-            # Seperate logic if mass-weighted or not?
-        #    print(idx)
-        #    print(field)
-
-        #    prog = split(self.X)[idx]
-
-        #    print('\n residual term before change')
-        #    print(old_residual.label_map(
-        #        lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
-        #        map_if_false=drop
-        #    ).form)
-
-        #    old_residual = old_residual.label_map(
-        #        lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
-        #        map_if_true=replace_subject(self.X, old_idx=idx, new_idx = idx)
-        #    )
-        #    old_residual = old_residual.label_map(
-        #        lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
-        #        map_if_true=replace_test_function(self.tests, old_idx=idx, new_idx=idx)
-        #    )
-            
-        #    print('\n residual term after change')
-         #   print(old_residual.label_map(
-        #        lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
-        #        map_if_false=drop
-        #    ).form)
-
-            #old_residual = old_residual.label_map(
-            #    lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
-            #    map_if_true=replace_subject(self.X[idx], old_idx=idx)
-            #)
-            #old_residual = old_residual.label_map(
-            #    lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
-            #    map_if_true=replace_test_function(self.tests[idx], old_idx=idx)
-            #)
-    
-        # Define the mean mixing ratio residual
-        #mean_residual = mX_residual.label_map(
-        #    lambda t: t.has_label(mass_weighted),
-            #map_if_true=replace_subject(mean_mass, old_idx=mX_idx),
-        #    map_if_false=replace_subject(self.X[mean_idx], old_idx = mX_idx)
-        #)
-
-        #print('\n mean mX residual before change')
-        #print(mean_residual.form)
-        #mean_residual = mean_residual.label_map(
-        #    all_terms,
-        #    replace_subject(self.X, old_idx=mX_idx, new_idx = mean_idx)
-        #)
-        #mean_residual = mean_residual.label_map(
-        #    all_terms,
-        #    replace_test_function(self.tests, old_idx=mX_idx, new_idx = mean_idx)
-        #)
-        #print('\n mean mX residual after change')
-        #print(mean_residual.form)
-
-        # Form the new residual
-        #self.residual = old_residual + mean_residual
-
-        #print('\n full residual')
-        #print(self.residual.form)
-
-        #print('yoyoyoy')
-
-        #for term in self.residual:
-        #    print(term.get(prognostic))
-
-    def setup_transport(self, spatial_methods, equation):
+    def setup_residual(self, spatial_methods, equation):
         # Copy spatial method for the mixing ratio onto the 
         # mean mixing ratio.
 
@@ -416,16 +331,16 @@ class MeanMixingRatio(Augmentation):
         for idx in range(self.idx_orig):
             field = self.eqn_orig.field_names[idx]
             # Seperate logic if mass-weighted or not?
-            print('\n', idx)
-            print(field)
+            #print('\n', idx)
+            #print(field)
 
             prog = split(self.X)[idx]
 
-            print('\n residual term before change')
-            print(old_residual.label_map(
-                lambda t: t.get(prognostic) == field,
-                map_if_false=drop
-            ).form)
+            #print('\n residual term before change')
+            #print(old_residual.label_map(
+            #    lambda t: t.get(prognostic) == field,
+            #    map_if_false=drop
+            #).form)
 
             old_residual = old_residual.label_map(
                 lambda t: t.get(prognostic) == field,
@@ -435,17 +350,17 @@ class MeanMixingRatio(Augmentation):
                 lambda t: t.get(prognostic) == field,
                 map_if_true=replace_test_function(self.tests, old_idx=idx, new_idx=idx)
             )
-            print('\n residual term after change')
-            print(old_residual.label_map(
-                lambda t: t.get(prognostic) == field,
-                map_if_false=drop
-            ).form)
+            #print('\n residual term after change')
+            #print(old_residual.label_map(
+            #    lambda t: t.get(prognostic) == field,
+            #    map_if_false=drop
+            #).form)
 
-        print('\n now setting up mean mixing ratio residual terms')
+        #print('\n now setting up mean mixing ratio residual terms')
 
 
-        print('\n mean mX residual after change')
-        print(mean_residual.form)
+        #print('\n mean mX residual after change')
+        #print(mean_residual.form)
         mean_residual = mean_residual.label_map(
             all_terms,
             replace_subject(self.X, old_idx=self.mX_idx, new_idx=self.mean_idx)
@@ -454,15 +369,17 @@ class MeanMixingRatio(Augmentation):
             all_terms,
             replace_test_function(self.tests, old_idx=self.mX_idx, new_idx=self.mean_idx)
         )
-        print('\n mean mX residual after change')
-        print(mean_residual.form)
+        #print('\n mean mX residual after change')
+        #print(mean_residual.form)
 
         # Form the new residual
-        self.residual = old_residual + mean_residual
+        residual = old_residual + mean_residual
+        self.residual = subject(residual, self.X)
 
         #Check these two forms
-        print('\n Original equation with residual of length, ', len(equation.residual))
-        print('\n Augmented equation with residual of length, ', len(self.residual))
+        #print('\n Original equation with residual of length, ', len(equation.residual))
+        #print('\n Augmented equation with residual of length, ', len(self.residual))
+
 
 
 
@@ -529,10 +446,10 @@ class MeanMixingRatio(Augmentation):
 
         # Compute the mean mixing ratio
         # How do I do this?
-        self.mX_in.assign(x_in_mixed[self.mX_idx])
+        self.mX_in.assign(x_in_mixed.subfunctions[self.mX_idx])
 
         # Project this into the lowest order space:
         self.compute_mean.project()
 
-        self.x_in.subfunctions[self.mean_idx].assign(self.mean_out)
+        self.x_in.subfunctions[self.mean_idx].assign(self.mean)
         pass
