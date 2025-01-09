@@ -5,14 +5,14 @@ compressible Euler equations.
 
 from firedrake import (
     conditional, Function, dx, min_value, max_value, Constant, pi,
-    Projector, assemble
+    Projector, assemble, split
 )
 from firedrake.__future__ import interpolate
 from firedrake.fml import identity, Term, subject
 from gusto.equations import Phases, TracerVariableType
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.core.labels import transporting_velocity, transport, prognostic
+from gusto.core.labels import transporting_velocity, transport, prognostic, source_label
 from gusto.core.logging import logger
 from gusto.equations import thermodynamics
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
@@ -80,6 +80,7 @@ class SaturationAdjustment(PhysicsParametrisation):
         parameters = self.parameters
         self.X = Function(equation.X.function_space())
         self.latent_heat = latent_heat
+        W = equation.function_space
 
         # Vapour and cloud variables are needed for every form of this scheme
         cloud_idx = equation.field_names.index(cloud_name)
@@ -170,23 +171,28 @@ class SaturationAdjustment(PhysicsParametrisation):
         # -------------------------------------------------------------------- #
         # Add terms to equations and make interpolators
         # -------------------------------------------------------------------- #
-        self.source = [Function(V) for factor in factors]
-        self.source_interpolate = [interpolate(sat_adj_expr*factor, V) for factor in factors]
+        self.source = Function(W)
+        self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
+        self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
+        self.source_interpolate = [interpolate(sat_adj_expr*factor, source)
+                                   for source, factor in zip(self.source_int, factors)]
 
         tests = [equation.tests[idx] for idx in V_idxs]
 
         # Add source terms to residual
-        for test, source in zip(tests, self.source):
-            equation.residual += self.label(subject(test * source * dx,
-                                                    equation.X), self.evaluate)
+        for test, source in zip(tests, self.source_expr):
+            equation.residual += source_label(self.label(subject(test * source * dx,
+                                                                 equation.X), self.evaluate))
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Evaluates the source/sink for the saturation adjustment process.
 
         Args:
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
         # Update the values of internal variables
@@ -195,8 +201,12 @@ class SaturationAdjustment(PhysicsParametrisation):
         if isinstance(self.equation, CompressibleEulerEquations):
             self.rho_recoverer.project()
         # Evaluate the source
-        for interpolator, src in zip(self.source_interpolate, self.source):
+        for interpolator, src in zip(self.source_interpolate, self.source_int):
             src.assign(assemble(interpolator))
+
+        # If a source output is provided, assign the source term to it
+        if x_out is not None:
+            x_out.assign(self.source)
 
 
 class AdvectedMoments(Enum):
@@ -342,18 +352,25 @@ class Fallout(PhysicsParametrisation):
                 quadrature_degree=domain.max_quad_degree
             )
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Evaluates the source/sink corresponding to the fallout process.
 
         Args:
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
         self.X.assign(x_in)
         if self.moments != AdvectedMoments.M0:
             self.determine_v.project()
+
+        if x_out is not None:
+            raise NotImplementedError("Fallout does not output a source term, "
+                                      "or a non-interpolated/projected expression and hence "
+                                      "cannot be used in a nonsplit physics formulation.")
 
 
 class Coalescence(PhysicsParametrisation):
@@ -403,12 +420,14 @@ class Coalescence(PhysicsParametrisation):
         self.rain_idx = equation.field_names.index(rain_name)
         Vcl = equation.function_space.sub(self.cloud_idx)
         Vr = equation.function_space.sub(self.rain_idx)
+        W = equation.function_space
         self.cloud_water = Function(Vcl)
         self.rain = Function(Vr)
 
         # declare function space and source field
-        Vt = self.cloud_water.function_space()
-        self.source = Function(Vt)
+        self.source = Function(W)
+        self.source_expr = split(self.source)[self.cloud_idx]
+        self.source_int = self.source.subfunctions[self.cloud_idx]
 
         # define some parameters as attributes
         self.dt = Constant(0.0)
@@ -440,31 +459,41 @@ class Coalescence(PhysicsParametrisation):
                                                         min_value(accu_rate, self.cloud_water / self.dt),
                                                         min_value(accr_rate + accu_rate, self.cloud_water / self.dt))))
 
-        self.source_interpolate = interpolate(rain_expr, Vt)
+        self.source_interpolate = interpolate(rain_expr, self.source_int)
 
         # Add term to equation's residual
         test_cl = equation.tests[self.cloud_idx]
         test_r = equation.tests[self.rain_idx]
-        equation.residual += self.label(subject(test_cl * self.source * dx
-                                                - test_r * self.source * dx,
-                                                equation.X),
-                                        self.evaluate)
+        equation.residual += source_label(
+            self.label(
+                subject(
+                    test_cl * self.source_expr * dx - test_r * self.source_expr * dx,
+                    self.source
+                ),
+                self.evaluate
+            )
+        )
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Evaluates the source/sink for the coalescence process.
 
         Args:
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
         # Update the values of internal variables
         self.dt.assign(dt)
         self.rain.assign(x_in.subfunctions[self.rain_idx])
         self.cloud_water.assign(x_in.subfunctions[self.cloud_idx])
-        # Evaluate the source
+
         self.source.assign(assemble(self.source_interpolate))
+        # If a source output is provided, assign the source term to it
+        if x_out is not None:
+            x_out.assign(self.source)
 
 
 class EvaporationOfRain(PhysicsParametrisation):
@@ -526,6 +555,7 @@ class EvaporationOfRain(PhysicsParametrisation):
         # Indices of variables in mixed function space
         V_idxs = [rain_idx, vap_idx]
         V = equation.function_space.sub(rain_idx)  # space in which to do the calculation
+        W = equation.function_space
 
         # Get variables used to calculate saturation curve
         if isinstance(equation, CompressibleEulerEquations):
@@ -608,23 +638,30 @@ class EvaporationOfRain(PhysicsParametrisation):
         # -------------------------------------------------------------------- #
         # Add terms to equations and make interpolators
         # -------------------------------------------------------------------- #
-        self.source = [Function(V) for factor in factors]
-        self.source_interpolate = [interpolate(evap_rate*factor, V) for factor in factors]
+        self.source = Function(W)
+        self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
+        self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
+        self.source_interpolate = [
+            interpolate(evap_rate * factor, source)
+            for source, factor in zip(self.source_int, factors)
+        ]
 
         tests = [equation.tests[idx] for idx in V_idxs]
 
         # Add source terms to residual
-        for test, source in zip(tests, self.source):
-            equation.residual += self.label(subject(test * source * dx,
-                                                    equation.X), self.evaluate)
+        for test, source in zip(tests, self.source_expr):
+            equation.residual += source_label(self.label(subject(test * source * dx,
+                                                                 self.source), self.evaluate))
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Applies the process to evaporate rain droplets.
 
         Args:
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
         # Update the values of internal variables
@@ -632,6 +669,10 @@ class EvaporationOfRain(PhysicsParametrisation):
         self.X.assign(x_in)
         if isinstance(self.equation, CompressibleEulerEquations):
             self.rho_recoverer.project()
-        # Evaluate the source
-        for interpolator, src in zip(self.source_interpolate, self.source):
+
+        for interpolator, src in zip(self.source_interpolate, self.source_int):
             src.assign(assemble(interpolator))
+
+        # If a source output is provided, assign the source term to it
+        if x_out is not None:
+            x_out.assign(self.source)
