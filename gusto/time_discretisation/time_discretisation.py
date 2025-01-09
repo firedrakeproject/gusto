@@ -5,7 +5,7 @@ Time discretisation objects discretise ∂y/∂t = F(y), for variable y, time t 
 operator F.
 """
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 import math
 
 from firedrake import (Function, TestFunction, TestFunctions, DirichletBC,
@@ -21,6 +21,7 @@ from gusto.core.labels import (time_derivative, prognostic, physics_label,
                                mass_weighted, nonlinear_time_derivative)
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
+from gusto.solvers import mass_parameters
 
 __all__ = ["TimeDiscretisation", "ExplicitTimeDiscretisation", "BackwardEuler",
            "ThetaMethod", "TrapeziumRule", "TR_BDF2"]
@@ -30,7 +31,17 @@ def wrapper_apply(original_apply):
     """Decorator to add steps for using a wrapper around the apply method."""
     def get_apply(self, x_out, x_in):
 
-        if self.wrapper is not None:
+        if self.augmentation is not None:
+
+            def new_apply(self, x_out, x_in):
+
+                self.augmentation.pre_apply(x_in)
+                original_apply(self, self.augmentation.x_out, self.augmentation.x_in)
+                self.augmentation.post_apply(x_out)
+
+            return new_apply(self, x_out, x_in)
+
+        elif self.wrapper is not None:
 
             def new_apply(self, x_out, x_in):
 
@@ -51,12 +62,16 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
     """Base class for time discretisation schemes."""
 
     def __init__(self, domain, field_name=None, subcycling_options=None,
-                 solver_parameters=None, limiter=None, options=None):
+                 solver_parameters=None, limiter=None, options=None,
+                 augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
             field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
                 Defaults to None.
             solver_parameters (dict, optional): dictionary of parameters to
                 pass to the underlying solver. Defaults to None.
@@ -66,6 +81,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         self.domain = domain
         self.field_name = field_name
@@ -78,7 +96,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.options = options
         self.limiter = limiter
         self.courant_max = None
-        self.subcycling_options = None
+        self.augmentation = augmentation
+        self.subcycling_options = subcycling_options
 
         if self.subcycling_options is not None:
             self.subcycling_options.check_options()
@@ -159,6 +178,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.fs = equation.function_space
             self.idx = None
 
+        if self.augmentation is not None:
+            self.fs = self.augmentation.fs
+            self.residual = self.augmentation.residual
+            self.idx = None
+
         if len(active_labels) > 0:
             if isinstance(self.field_name, list):
                 # Multiple fields are being solved for simultaneously.
@@ -179,6 +203,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         map_if_false=drop)
 
                 self.residual = residual
+
             else:
                 self.residual = self.residual.label_map(
                     lambda t: any(t.has_label(time_derivative, *active_labels)),
@@ -188,7 +213,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         if isinstance(self.field_name, list):
             self.field_name = equation.field_name
 
-        bcs = equation.bcs[self.field_name]
+        if self.augmentation is not None:
+            # Transfer BCs from appropriate function space
+            bcs = self.augmentation.bcs if hasattr(self.augmentation, "bcs") else None
+        else:
+            bcs = equation.bcs[self.field_name]
 
         self.evaluate_source = []
         self.physics_names = []
@@ -204,8 +233,16 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             for field in equation.field_names:
 
                 # Check if the mass term for this prognostic is mass-weighted
-                if len(self.residual.label_map(lambda t: t.get(prognostic) == field and t.has_label(time_derivative) and t.has_label(mass_weighted), map_if_false=drop)) == 1:
-                    field_terms = self.residual.label_map(lambda t: t.get(prognostic) == field and not t.has_label(time_derivative), map_if_false=drop)
+                if len(self.residual.label_map((
+                    lambda t: t.get(prognostic) == field
+                    and t.has_label(time_derivative)
+                    and t.has_label(mass_weighted)
+                ), map_if_false=drop)) == 1:
+
+                    field_terms = self.residual.label_map(
+                        lambda t: t.get(prognostic) == field and not t.has_label(time_derivative),
+                        map_if_false=drop
+                    )
 
                     # Check that the equation for this prognostic does not involve
                     # both mass-weighted and non-mass-weighted terms; if so, a split
@@ -328,34 +365,33 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
     def nlevels(self):
         return 1
 
-    @abstractproperty
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        l = self.residual.label_map(
+    @property
+    def res(self):
+        """Set up the discretisation's residual."""
+        residual = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.x_out, old_idx=self.idx),
-            map_if_false=drop)
-
-        return l.form
-
-    @abstractproperty
-    def rhs(self):
-        """Set up the time discretisation's right hand side."""
+            map_if_false=drop
+        )
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x1, old_idx=self.idx))
+            map_if_true=replace_subject(self.x1, old_idx=self.idx)
+        )
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_false=lambda t: -self.dt*t)
+            map_if_false=lambda t: -self.dt * t
+        )
 
-        return r.form
+        residual -= r
+
+        return residual.form
 
     @cached_property
     def solver(self):
         """Set up the problem and the solver."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         solver = NonlinearVariationalSolver(
             problem,
@@ -407,7 +443,8 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
     """Base class for explicit time discretisations."""
 
     def __init__(self, domain, field_name=None, subcycling_options=None,
-                 solver_parameters=None, limiter=None, options=None):
+                 solver_parameters=None, limiter=None, options=None,
+                 augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -425,20 +462,15 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         super().__init__(domain, field_name,
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
-
-        # get default solver options if none passed in
-        if solver_parameters is None:
-            self.solver_parameters = {'snes_type': 'ksponly',
-                                      'ksp_type': 'cg',
-                                      'pc_type': 'bjacobi',
-                                      'sub_pc_type': 'ilu'}
-        else:
-            self.solver_parameters = solver_parameters
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -453,20 +485,25 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         super().setup(equation, apply_bcs, *active_labels)
 
+        # get default solver options if none passed in
+        self.solver_parameters.update(mass_parameters(
+            self.fs, equation.domain.spaces))
+        self.solver_parameters['snes_type'] = 'ksponly'
+
         # if user has specified a number of fixed subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
         if (self.subcycling_options is not None
                 and self.subcycling_options.fixed_subcycles is not None):
-            fixed_subcycles = self.subcycling_options.fixed_subcycles
-            self.dt.assign(self.dt/fixed_subcycles)
-            self.ncycles = self.fixed_subcycles
+            self.ncycles = self.subcycling_options.fixed_subcycles
+            self.dt.assign(self.dt/self.ncycles)
         else:
-            self.dt = self.dt
             self.ncycles = 1
+            self.dt = self.dt
         self.x0 = Function(self.fs)
         self.x1 = Function(self.fs)
 
-        # If the time_derivative term is nonlinear, we must use a nonlinear solver
+        # If the time_derivative term is nonlinear, we must use a nonlinear solver,
+        # but if the time_derivative term is linear, we can reuse the factorisations.
         if (
             len(self.residual.label_map(
                 lambda t: t.has_label(nonlinear_time_derivative),
@@ -478,22 +515,40 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                        + ' as the time derivative term is nonlinear')
             logger.warning(message)
             self.solver_parameters['snes_type'] = 'newtonls'
+        else:
+            self.solver_parameters.setdefault('snes_lag_jacobian', -2)
+            self.solver_parameters.setdefault('snes_lag_jacobian_persists', None)
+            self.solver_parameters.setdefault('snes_lag_preconditioner', -2)
+            self.solver_parameters.setdefault('snes_lag_preconditioner_persists', None)
 
     @cached_property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        l = self.residual.label_map(
+    def res(self):
+        """Set up the discretisation's residual"""
+        residual = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x_out, self.idx),
-            map_if_false=drop)
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+            map_if_false=drop
+        )
 
-        return l.form
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, old_idx=self.idx)
+        )
+
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -self.dt * t
+        )
+
+        residual -= r
+
+        return residual.form
 
     @cached_property
     def solver(self):
         """Set up the problem and the solver."""
-        # setup linear solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs - self.rhs, self.x_out, bcs=self.bcs)
+        # setup linear solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
@@ -536,7 +591,8 @@ class BackwardEuler(TimeDiscretisation):
     y^(n+1) = y^n + dt*F[y^(n+1)].                                               \n
     """
     def __init__(self, domain, field_name=None, subcycling_options=None,
-                 solver_parameters=None, limiter=None, options=None):
+                 solver_parameters=None, limiter=None, options=None,
+                 augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -553,7 +609,10 @@ class BackwardEuler(TimeDiscretisation):
             options (:class:`AdvectionOptions`, optional): an object containing
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods. Defaults to None.
-        """
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
+            """
         if not solver_parameters:
             # default solver parameters
             solver_parameters = {'ksp_type': 'gmres',
@@ -562,7 +621,8 @@ class BackwardEuler(TimeDiscretisation):
         super().__init__(domain=domain, field_name=field_name,
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
-                         limiter=limiter, options=options)
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -589,25 +649,27 @@ class BackwardEuler(TimeDiscretisation):
         self.x1 = Function(self.fs)
 
     @property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        l = self.residual.label_map(
+    def res(self):
+        """Set up the discretisation's residual."""
+        residual = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: self.dt*t)
-
-        return l.form
-
-    @property
-    def rhs(self):
-        """Set up the time discretisation's right hand side."""
+            map_if_true=replace_subject(
+                self.x_out, old_idx=self.idx
+            )
+        )
+        residual = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: self.dt*t
+        )
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.x1, old_idx=self.idx),
-            map_if_false=drop)
+            map_if_false=drop
+        )
 
-        return r.form
+        residual -= r
+
+        return residual.form
 
     def apply_cycle(self, x_out, x_in):
         """
@@ -658,7 +720,7 @@ class ThetaMethod(TimeDiscretisation):
     """
 
     def __init__(self, domain, theta, field_name=None, subcycling_options=None,
-                 solver_parameters=None, options=None):
+                 solver_parameters=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -676,6 +738,9 @@ class ThetaMethod(TimeDiscretisation):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
 
         Raises:
             ValueError: if theta is not provided.
@@ -694,7 +759,8 @@ class ThetaMethod(TimeDiscretisation):
         super().__init__(domain, field_name,
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
-                         options=options)
+                         options=options,
+                         augmentation=augmentation)
 
         self.theta = theta
 
@@ -723,26 +789,27 @@ class ThetaMethod(TimeDiscretisation):
         self.x1 = Function(self.fs)
 
     @cached_property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        l = self.residual.label_map(
+    def res(self):
+        """Set up the discretisation's residual."""
+        residual = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: self.theta*self.dt*t)
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx)
+        )
+        residual = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: self.theta * self.dt * t
+        )
 
-        return l.form
-
-    @cached_property
-    def rhs(self):
-        """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x1, old_idx=self.idx))
-        r = r.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: -(1-self.theta)*self.dt*t)
-
-        return r.form
+            map_if_true=replace_subject(self.x1, old_idx=self.idx)
+        )
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -(1 - self.theta) * self.dt * t
+        )
+        residual -= r
+        return residual.form
 
     def apply_cycle(self, x_out, x_in):
         """
@@ -771,6 +838,8 @@ class ThetaMethod(TimeDiscretisation):
             x_in (:class:`Function`): the input field.
         """
         self.update_subcycling()
+        if self.augmentation is not None:
+            self.augmentation.update(x_in)
 
         self.x0.assign(x_in)
         for i in range(self.ncycles):
@@ -791,7 +860,7 @@ class TrapeziumRule(ThetaMethod):
     """
 
     def __init__(self, domain, field_name=None, subcycling_options=None,
-                 solver_parameters=None, options=None):
+                 solver_parameters=None, options=None, augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -804,11 +873,14 @@ class TrapeziumRule(ThetaMethod):
                 options to either be passed to the spatial discretisation, or
                 to control the "wrapper" methods, such as Embedded DG or a
                 recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
         """
         super().__init__(domain, 0.5, field_name,
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
-                         options=options)
+                         options=options, augmentation=augmentation)
 
 
 class TR_BDF2(TimeDiscretisation):
@@ -861,60 +933,63 @@ class TR_BDF2(TimeDiscretisation):
         self.xn = Function(self.fs)
 
     @cached_property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative) for the TR stage."""
-        l = self.residual.label_map(
+    def res(self):
+        """Set up the discretisation's residual for the TR stage."""
+        residual = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.xnpg, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: 0.5*self.gamma*self.dt*t)
+            map_if_true=replace_subject(self.xnpg, old_idx=self.idx)
+        )
+        residual = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: 0.5 * self.gamma * self.dt * t
+        )
 
-        return l.form
-
-    @cached_property
-    def rhs(self):
-        """Set up the time discretisation's right hand side for the TR stage."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.xn, old_idx=self.idx))
-        r = r.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: -0.5*self.gamma*self.dt*t)
+            map_if_true=replace_subject(self.xn, old_idx=self.idx)
+        )
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -0.5 * self.gamma * self.dt * t
+        )
+        residual -= r
 
-        return r.form
+        return residual.form
 
     @cached_property
-    def lhs_bdf2(self):
-        """Set up the discretisation's left hand side (the time derivative) for
-        the BDF2 stage."""
-        l = self.residual.label_map(
+    def res_bdf2(self):
+        """Set up the discretisation's residual for the BDF2 stage."""
+        residual = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: ((1.0-self.gamma)/(2.0-self.gamma))*self.dt*t)
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx)
+        )
+        residual = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: (1.0 - self.gamma) / (2.0 - self.gamma) * self.dt * t
+        )
 
-        return l.form
-
-    @cached_property
-    def rhs_bdf2(self):
-        """Set up the time discretisation's right hand side for the BDF2 stage."""
         xn = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.xn, old_idx=self.idx),
-            map_if_false=drop)
+            map_if_false=drop
+        )
         xnpg = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.xnpg, old_idx=self.idx),
-            map_if_false=drop)
+            map_if_false=drop
+        )
 
-        r = (1.0/(self.gamma*(2.0-self.gamma)))*xnpg - ((1.0-self.gamma)**2/(self.gamma*(2.0-self.gamma)))*xn
+        r = (1.0 / (self.gamma * (2.0 - self.gamma))) * xnpg - \
+            ((1.0 - self.gamma) ** 2 / (self.gamma * (2.0 - self.gamma))) * xn
 
-        return r.form
+        residual -= r
+        return residual.form
 
     @cached_property
     def solver_tr(self):
         """Set up the problem and the solver."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.xnpg, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res, self.xnpg, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_tr"
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
@@ -922,8 +997,8 @@ class TR_BDF2(TimeDiscretisation):
     @cached_property
     def solver_bdf2(self):
         """Set up the problem and the solver."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs_bdf2-self.rhs_bdf2, self.x_out, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res_bdf2, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_bdf2"
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)

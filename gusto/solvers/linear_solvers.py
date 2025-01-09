@@ -10,10 +10,12 @@ from firedrake import (
     TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
     rhs, FacetNormal, div, dx, jump, avg, dS, dS_v, dS_h, ds_v, ds_t, ds_b,
     ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis, cross,
-    BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC, as_vector
+    BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC, as_vector,
+    assemble, conditional
 )
 from firedrake.fml import Term, drop
 from firedrake.petsc import flatten_parameters
+from firedrake.__future__ import interpolate
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.equations.active_tracers import TracerVariableType
@@ -84,6 +86,17 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
+    def update_reference_profiles(self):
+        """
+        Update the solver when the reference profiles have changed.
+
+        This typically includes forcing any Jacobians that depend on
+        the reference profiles to be reassembled, and recalculating
+        any values derived from the reference values.
+        """
+        pass
+
+    @abstractmethod
     def solve(self):
         pass
 
@@ -140,8 +153,7 @@ class CompressibleSolver(TimesteppingSolver):
                                                            'sub_pc_type': 'ilu'}}}
 
     def __init__(self, equations, alpha=0.5, tau_values=None,
-                 quadrature_degree=None, solver_parameters=None,
-                 overwrite_solver_parameters=False):
+                 solver_parameters=None, overwrite_solver_parameters=False):
         """
         Args:
             equations (:class:`PrognosticEquation`): the model's equation.
@@ -149,9 +161,6 @@ class CompressibleSolver(TimesteppingSolver):
                 Defaults to 0.5. A value of 1 is fully-implicit.
             tau_values (dict, optional): contains the semi-implicit relaxation
                 parameters. Defaults to None, in which case the value of alpha is used.
-            quadrature_degree (tuple, optional): a tuple (q_h, q_v) where q_h is
-                the required quadrature degree in the horizontal direction and
-                q_v is that in the vertical direction. Defaults to None.
             solver_parameters (dict, optional): contains the options to be
                 passed to the underlying :class:`LinearVariationalSolver`.
                 Defaults to None.
@@ -161,14 +170,7 @@ class CompressibleSolver(TimesteppingSolver):
                 passed in. Defaults to False.
         """
         self.equations = equations
-
-        if quadrature_degree is not None:
-            self.quadrature_degree = quadrature_degree
-        else:
-            dgspace = equations.domain.spaces("DG")
-            if any(deg > 2 for deg in dgspace.ufl_element().degree()):
-                logger.warning("default quadrature degree most likely not sufficient for this degree element")
-            self.quadrature_degree = (5, 5)
+        self.quadrature_degree = equations.domain.max_quad_degree
 
         super().__init__(equations, alpha, tau_values, solver_parameters,
                          overwrite_solver_parameters)
@@ -230,12 +232,12 @@ class CompressibleSolver(TimesteppingSolver):
         h_project = lambda u: u - k*inner(u, k)
 
         # Specify degree for some terms as estimated degree is too large
-        dxp = dx(degree=(self.quadrature_degree))
-        dS_vp = dS_v(degree=(self.quadrature_degree))
-        dS_hp = dS_h(degree=(self.quadrature_degree))
-        ds_vp = ds_v(degree=(self.quadrature_degree))
-        ds_tbp = (ds_t(degree=(self.quadrature_degree))
-                  + ds_b(degree=(self.quadrature_degree)))
+        dx_qp = dx(degree=(equations.domain.max_quad_degree))
+        dS_v_qp = dS_v(degree=(equations.domain.max_quad_degree))
+        dS_h_qp = dS_h(degree=(equations.domain.max_quad_degree))
+        ds_v_qp = ds_v(degree=(equations.domain.max_quad_degree))
+        ds_tb_qp = (ds_t(degree=(equations.domain.max_quad_degree))
+                    + ds_b(degree=(equations.domain.max_quad_degree)))
 
         # Add effect of density of water upon theta, using moisture reference profiles
         # TODO: Explore if this is the right thing to do for the linear problem
@@ -258,10 +260,10 @@ class CompressibleSolver(TimesteppingSolver):
 
         _l0 = TrialFunction(Vtrace)
         _dl = TestFunction(Vtrace)
-        a_tr = _dl('+')*_l0('+')*(dS_vp + dS_hp) + _dl*_l0*ds_vp + _dl*_l0*ds_tbp
+        a_tr = _dl('+')*_l0('+')*(dS_v_qp + dS_h_qp) + _dl*_l0*ds_v_qp + _dl*_l0*ds_tb_qp
 
         def L_tr(f):
-            return _dl('+')*avg(f)*(dS_vp + dS_hp) + _dl*f*ds_vp + _dl*f*ds_tbp
+            return _dl('+')*avg(f)*(dS_v_qp + dS_h_qp) + _dl*f*ds_v_qp + _dl*f*ds_tb_qp
 
         cg_ilu_parameters = {'ksp_type': 'cg',
                              'pc_type': 'bjacobi',
@@ -271,8 +273,10 @@ class CompressibleSolver(TimesteppingSolver):
         rhobar_avg = Function(Vtrace)
         exnerbar_avg = Function(Vtrace)
 
-        rho_avg_prb = LinearVariationalProblem(a_tr, L_tr(rhobar), rhobar_avg)
-        exner_avg_prb = LinearVariationalProblem(a_tr, L_tr(exnerbar), exnerbar_avg)
+        rho_avg_prb = LinearVariationalProblem(a_tr, L_tr(rhobar), rhobar_avg,
+                                               constant_jacobian=True)
+        exner_avg_prb = LinearVariationalProblem(a_tr, L_tr(exnerbar), exnerbar_avg,
+                                                 constant_jacobian=True)
 
         self.rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
                                                       solver_parameters=cg_ilu_parameters,
@@ -292,16 +296,16 @@ class CompressibleSolver(TimesteppingSolver):
         eqn = (
             # momentum equation
             u_mass
-            - beta_u*cp*div(theta_w*V(w))*exnerbar*dxp
+            - beta_u*cp*div(theta_w*V(w))*exnerbar*dx_qp
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
-            # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_vp
-            + beta_u*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_hp
-            + beta_u*cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tbp
-            - beta_u*cp*div(thetabar_w*w)*exner*dxp
+            # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
+            + beta_u*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_h_qp
+            + beta_u*cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tb_qp
+            - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
             # trace terms appearing after integrating momentum equation
-            + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_vp + dS_hp)
-            + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tbp + ds_vp)
+            + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_v_qp + dS_h_qp)
+            + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tb_qp + ds_v_qp)
             # mass continuity equation
             + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
             + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
@@ -310,13 +314,13 @@ class CompressibleSolver(TimesteppingSolver):
             # constraint equation to enforce continuity of the velocity
             # through the interior facets and weakly impose the no-slip
             # condition
-            + dl('+')*jump(u, n=n)*(dS_vp + dS_hp)
-            + dl*dot(u, n)*(ds_tbp + ds_vp)
+            + dl('+')*jump(u, n=n)*(dS_v + dS_h)
+            + dl*dot(u, n)*(ds_t + ds_b + ds_v)
         )
         # TODO: can we get this term using FML?
         # contribution of the sponge term
         if hasattr(self.equations, "mu"):
-            eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
+            eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx_qp
 
         if equations.parameters.Omega is not None:
             Omega = as_vector([0, 0, equations.parameters.Omega])
@@ -328,7 +332,8 @@ class CompressibleSolver(TimesteppingSolver):
         # Function for the hybridized solutions
         self.urhol0 = Function(M)
 
-        hybridized_prb = LinearVariationalProblem(aeqn, Leqn, self.urhol0)
+        hybridized_prb = LinearVariationalProblem(aeqn, Leqn, self.urhol0,
+                                                  constant_jacobian=True)
         hybridized_solver = LinearVariationalSolver(hybridized_prb,
                                                     solver_parameters=self.solver_parameters,
                                                     options_prefix='ImplicitSolver')
@@ -354,7 +359,8 @@ class CompressibleSolver(TimesteppingSolver):
         theta_eqn = gamma*(theta - theta_in
                            + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta_t)*dx
 
-        theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta)
+        theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta,
+                                                 constant_jacobian=True)
         self.theta_solver = LinearVariationalSolver(theta_problem,
                                                     solver_parameters=cg_ilu_parameters,
                                                     options_prefix='thetabacksubstitution')
@@ -371,10 +377,6 @@ class CompressibleSolver(TimesteppingSolver):
 
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
-        """
-        Updates the reference profiles.
-        """
-
         with timed_region("Gusto:HybridProjectRhobar"):
             logger.info('Compressible linear solver: rho average solve')
             self.rho_avg_solver.solve()
@@ -382,6 +384,13 @@ class CompressibleSolver(TimesteppingSolver):
         with timed_region("Gusto:HybridProjectExnerbar"):
             logger.info('Compressible linear solver: Exner average solve')
             self.exner_avg_solver.solve()
+
+        # Because the left hand side of the hybridised problem depends
+        # on the reference profile, the Jacobian matrix should change
+        # when the reference profiles are updated. This call will tell
+        # the hybridized_solver to reassemble the Jacobian next time
+        # `solve` is called.
+        self.hybridized_solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -521,7 +530,8 @@ class BoussinesqSolver(TimesteppingSolver):
         bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, p
-        up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs)
+        up_problem = LinearVariationalProblem(aeqn, Leqn, self.up, bcs=bcs,
+                                              constant_jacobian=True)
 
         # Provide callback for the nullspace of the trace system
         def trace_nullsp(T):
@@ -544,11 +554,16 @@ class BoussinesqSolver(TimesteppingSolver):
 
         b_problem = LinearVariationalProblem(lhs(b_eqn),
                                              rhs(b_eqn),
-                                             self.b)
+                                             self.b,
+                                             constant_jacobian=True)
         self.b_solver = LinearVariationalSolver(b_problem)
 
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.up_solver.snes.ksp)
+
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        self.up_solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -580,17 +595,18 @@ class BoussinesqSolver(TimesteppingSolver):
 
 
 class ThermalSWSolver(TimesteppingSolver):
-    """
-    Linear solver object for the thermal shallow water equations.
+    """Linear solver object for the thermal shallow water equations.
 
-    This solves a linear problem for the thermal shallow water equations with
-    prognostic variables u (velocity), D (depth) and b (buoyancy). It follows
-    the following strategy:
+    This solves a linear problem for the thermal shallow water
+    equations with prognostic variables u (velocity), D (depth) and
+    either b (buoyancy) or b_e (equivalent buoyancy). It follows the
+    following strategy:
 
     (1) Eliminate b
     (2) Solve the resulting system for (u, D) using a hybrid-mixed method
     (3) Reconstruct b
-     """
+
+    """
 
     solver_parameters = {
         'ksp_type': 'preonly',
@@ -609,6 +625,8 @@ class ThermalSWSolver(TimesteppingSolver):
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
+        equivalent_buoyancy = equation.equivalent_buoyancy
+
         dt = self.dt
         beta_u = dt*self.tau_values.get("u", self.alpha)
         beta_d = dt*self.tau_values.get("D", self.alpha)
@@ -618,14 +636,12 @@ class ThermalSWSolver(TimesteppingSolver):
         Vb = equation.domain.spaces("DG")
 
         # Check that the third field is buoyancy
-        if not equation.field_names[2] == 'b':
-            raise NotImplementedError("Field 'b' must exist to use the thermal linear solver in the SIQN scheme")
+        if not equation.field_names[2] == 'b' and not (equation.field_names[2] == 'b_e' and equivalent_buoyancy):
+            raise NotImplementedError("Field 'b' or 'b_e' must exist to use the thermal linear solver in the SIQN scheme")
 
         # Split up the rhs vector
-        self.xrhs = Function(self.equations.function_space)
-        u_in = split(self.xrhs)[0]
-        D_in = split(self.xrhs)[1]
-        b_in = split(self.xrhs)[2]
+        self.xrhs = Function(equation.function_space)
+        u_in, D_in, b_in = split(self.xrhs)[0:3]
 
         # Build the reduced function space for u, D
         M = MixedFunctionSpace((Vu, VD))
@@ -633,11 +649,26 @@ class ThermalSWSolver(TimesteppingSolver):
         u, D = TrialFunctions(M)
 
         # Get background buoyancy and depth
-        Dbar = split(equation.X_ref)[1]
-        bbar = split(equation.X_ref)[2]
+        Dbar, bbar = split(equation.X_ref)[1:3]
 
         # Approximate elimination of b
         b = -dot(u, grad(bbar))*beta_b + b_in
+
+        if equivalent_buoyancy:
+            # compute q_v using q_sat to partition q_t into q_v and q_c
+            self.q_sat_func = Function(VD)
+            self.qvbar = Function(VD)
+            qtbar = split(equation.X_ref)[3]
+
+            # set up interpolators that use the X_ref values for D and b_e
+            self.q_sat_expr_interpolate = interpolate(
+                equation.compute_saturation(equation.X_ref), VD)
+            self.q_v_interpolate = interpolate(
+                conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
+                VD)
+
+            # bbar was be_bar and here we correct to become bbar
+            bbar += equation.parameters.beta2 * self.qvbar
 
         n = FacetNormal(equation.domain.mesh)
 
@@ -667,7 +698,8 @@ class ThermalSWSolver(TimesteppingSolver):
         bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, D
-        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs)
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs,
+                                              constant_jacobian=True)
 
         # Provide callback for the nullspace of the trace system
         def trace_nullsp(T):
@@ -688,11 +720,18 @@ class ThermalSWSolver(TimesteppingSolver):
 
         b_problem = LinearVariationalProblem(lhs(b_eqn),
                                              rhs(b_eqn),
-                                             self.b)
+                                             self.b,
+                                             constant_jacobian=True)
         self.b_solver = LinearVariationalSolver(b_problem)
 
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
+
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        if self.equations.equivalent_buoyancy:
+            self.q_sat_func.assign(assemble(self.q_sat_expr_interpolate))
+            self.qvbar.assign(assemble(self.q_v_interpolate))
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -756,13 +795,17 @@ class LinearTimesteppingSolver(object):
                                         'sub_pc_type': 'ilu'}}
     }
 
-    def __init__(self, equation, alpha):
+    def __init__(self, equation, alpha, reference_dependent=True):
         """
         Args:
             equation (:class:`PrognosticEquation`): the model's equation object.
             alpha (float): the semi-implicit off-centring factor. A value of 1
                 is fully-implicit.
+            reference_dependent: this indicates that the solver Jacobian should
+                be rebuilt if the reference profiles have been updated.
         """
+        self.reference_dependent = reference_dependent
+
         residual = equation.residual.label_map(
             lambda t: t.has_label(linearisation),
             lambda t: Term(t.get(linearisation).form, t.labels),
@@ -789,11 +832,17 @@ class LinearTimesteppingSolver(object):
         bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
         problem = LinearVariationalProblem(aeqn.form,
                                            action(Leqn.form, self.xrhs),
-                                           self.dy, bcs=bcs)
+                                           self.dy, bcs=bcs,
+                                           constant_jacobian=True)
 
         self.solver = LinearVariationalSolver(problem,
                                               solver_parameters=self.solver_parameters,
                                               options_prefix='linear_solver')
+
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        if self.reference_dependent:
+            self.solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -879,7 +928,8 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
         bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, D
-        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs)
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs,
+                                              constant_jacobian=True)
 
         # Provide callback for the nullspace of the trace system
         def trace_nullsp(T):
@@ -892,6 +942,10 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
 
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
+
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        self.uD_solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):

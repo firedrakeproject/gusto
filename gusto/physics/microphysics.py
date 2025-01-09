@@ -4,9 +4,10 @@ compressible Euler equations.
 """
 
 from firedrake import (
-    Interpolator, conditional, Function, dx, min_value, max_value, Constant, pi,
-    inner, TestFunction, NonlinearVariationalProblem, NonlinearVariationalSolver
+    conditional, Function, dx, min_value, max_value, Constant, pi,
+    Projector, assemble
 )
+from firedrake.__future__ import interpolate
 from firedrake.fml import identity, Term, subject
 from gusto.equations import Phases, TracerVariableType
 from gusto.recovery import Recoverer, BoundaryMethod
@@ -170,8 +171,7 @@ class SaturationAdjustment(PhysicsParametrisation):
         # Add terms to equations and make interpolators
         # -------------------------------------------------------------------- #
         self.source = [Function(V) for factor in factors]
-        self.source_interpolators = [Interpolator(sat_adj_expr*factor, source)
-                                     for factor, source in zip(factors, self.source)]
+        self.source_interpolate = [interpolate(sat_adj_expr*factor, V) for factor in factors]
 
         tests = [equation.tests[idx] for idx in V_idxs]
 
@@ -195,8 +195,8 @@ class SaturationAdjustment(PhysicsParametrisation):
         if isinstance(self.equation, CompressibleEulerEquations):
             self.rho_recoverer.project()
         # Evaluate the source
-        for interpolator in self.source_interpolators:
-            interpolator.interpolate()
+        for interpolator, src in zip(self.source_interpolate, self.source):
+            src.assign(assemble(interpolator))
 
 
 class AdvectedMoments(Enum):
@@ -337,12 +337,10 @@ class Fallout(PhysicsParametrisation):
                 + 'AdvectedMoments.M0 and AdvectedMoments.M3')
 
         if moments != AdvectedMoments.M0:
-            # TODO: introduce reduced projector
-            test = TestFunction(Vu)
-            dx_reduced = dx(degree=4)
-            proj_eqn = inner(test, v + v_expression*domain.k)*dx_reduced
-            proj_prob = NonlinearVariationalProblem(proj_eqn, v)
-            self.determine_v = NonlinearVariationalSolver(proj_prob)
+            self.determine_v = Projector(
+                -v_expression*domain.k, v,
+                quadrature_degree=domain.max_quad_degree
+            )
 
     def evaluate(self, x_in, dt):
         """
@@ -355,7 +353,7 @@ class Fallout(PhysicsParametrisation):
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
         self.X.assign(x_in)
         if self.moments != AdvectedMoments.M0:
-            self.determine_v.solve()
+            self.determine_v.project()
 
 
 class Coalescence(PhysicsParametrisation):
@@ -442,7 +440,7 @@ class Coalescence(PhysicsParametrisation):
                                                         min_value(accu_rate, self.cloud_water / self.dt),
                                                         min_value(accr_rate + accu_rate, self.cloud_water / self.dt))))
 
-        self.source_interpolator = Interpolator(rain_expr, self.source)
+        self.source_interpolate = interpolate(rain_expr, Vt)
 
         # Add term to equation's residual
         test_cl = equation.tests[self.cloud_idx]
@@ -466,7 +464,7 @@ class Coalescence(PhysicsParametrisation):
         self.rain.assign(x_in.subfunctions[self.rain_idx])
         self.cloud_water.assign(x_in.subfunctions[self.cloud_idx])
         # Evaluate the source
-        self.source.assign(self.source_interpolator.interpolate())
+        self.source.assign(assemble(self.source_interpolate))
 
 
 class EvaporationOfRain(PhysicsParametrisation):
@@ -611,8 +609,7 @@ class EvaporationOfRain(PhysicsParametrisation):
         # Add terms to equations and make interpolators
         # -------------------------------------------------------------------- #
         self.source = [Function(V) for factor in factors]
-        self.source_interpolators = [Interpolator(evap_rate*factor, source)
-                                     for factor, source in zip(factors, self.source)]
+        self.source_interpolate = [interpolate(evap_rate*factor, V) for factor in factors]
 
         tests = [equation.tests[idx] for idx in V_idxs]
 
@@ -636,5 +633,5 @@ class EvaporationOfRain(PhysicsParametrisation):
         if isinstance(self.equation, CompressibleEulerEquations):
             self.rho_recoverer.project()
         # Evaluate the source
-        for interpolator in self.source_interpolators:
-            interpolator.interpolate()
+        for interpolator, src in zip(self.source_interpolate, self.source):
+            src.assign(assemble(interpolator))
