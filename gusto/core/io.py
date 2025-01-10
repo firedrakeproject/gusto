@@ -985,24 +985,9 @@ def gather_field_data(field, field_index, domain):
     if comm.size == 1:
         return field.dat.data_ro
 
-    space_name = field.function_space().name
-
+    gathered_data = comm.gather(field.dat.data_ro)
     if comm.rank == 0:
-        # Set up array to store full data in
-        global_data = np.zeros(field.function_space().dim(), dtype=field.dat.dtype)
-
-        # Store data for this processor first
-        (start, stop) = domain.coords.parallel_array_lims[space_name]
-        global_data[start:stop] = field.dat.data_ro[...]
-
-        # Receive data from other processors
-        for rank in range(1, comm.size):
-            incoming_data = comm.recv(source=rank, tag=comm.size*field_index + rank)
-            start, stop = stop, stop + incoming_data.size
-            global_data[start:stop] = incoming_data
-
+        return np.concatenate(gathered_data)
     else:
-        comm.send(field.dat.data_ro, dest=0, tag=comm.size*field_index + comm.rank)
-        global_data = None
-
-    return global_data
+        assert gathered_data is None
+        return None

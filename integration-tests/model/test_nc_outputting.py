@@ -17,11 +17,11 @@ import pytest
 from pytest_mpi import parallel_assert
 
 
-def make_dirname(test_name):
+def make_dirname(test_name, suffix=""):
     if MPI.COMM_WORLD.size > 1:
-        return f'pytest_{test_name}_parallel'
+        return f"pytest_{test_name}_parallel" + suffix
     else:
-        return f'pytest_{test_name}'
+        return f"pytest_{test_name}" + suffix
 
 
 @pytest.fixture
@@ -73,7 +73,7 @@ def test_nc_outputting(geometry, domain_and_mesh_details):
     # ------------------------------------------------------------------------ #
 
     # Make sure all ranks use the same file
-    dirname = make_dirname("nc_outputting")
+    dirname = make_dirname("nc_outputting", suffix=f"_{geometry}_{MPI.COMM_WORLD.size}")
 
     domain, mesh_details = domain_and_mesh_details
     V = domain.spaces('DG')
