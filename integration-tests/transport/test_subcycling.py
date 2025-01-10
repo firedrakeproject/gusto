@@ -22,9 +22,11 @@ def test_subcyling(tmpdir, subcycling, tracer_setup):
     eqn = AdvectionEquation(domain, V, "f")
 
     if subcycling == "fixed":
-        transport_scheme = SSPRK3(domain, fixed_subcycles=2)
+        subcycling_options = SubcyclingOptions(fixed_subcycles=2)
+        transport_scheme = SSPRK3(domain, subcycling_options=subcycling_options)
     elif subcycling == "adaptive":
-        transport_scheme = SSPRK3(domain, subcycle_by_courant=0.25)
+        subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
+        transport_scheme = SSPRK3(domain, subcycling_options=subcycling_options)
     transport_method = DGUpwind(eqn, "f")
 
     time_varying_velocity = False

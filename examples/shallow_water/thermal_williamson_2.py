@@ -15,10 +15,11 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import Function, SpatialCoordinate, sin, cos
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
+    TrapeziumRule, ShallowWaterParameters, ThermalShallowWaterEquations,
     RelativeVorticity, PotentialVorticity, SteadyStateError,
     ZonalComponent, MeridionalComponent, ThermalSWSolver,
-    xyz_vector_from_lonlatr, lonlatr_from_xyz, GeneralIcosahedralSphereMesh
+    xyz_vector_from_lonlatr, lonlatr_from_xyz, GeneralIcosahedralSphereMesh,
+    SubcyclingOptions
 )
 
 thermal_williamson_2_defaults = {
@@ -70,8 +71,8 @@ def thermal_williamson_2(
     params = ShallowWaterParameters(H=mean_depth, g=g)
     Omega = params.Omega
     fexpr = 2*Omega*z/radius
-    eqns = ShallowWaterEquations(
-        domain, params, fexpr=fexpr, u_transport_option=u_eqn_type, thermal=True
+    eqns = ThermalShallowWaterEquations(
+        domain, params, fexpr=fexpr, u_transport_option=u_eqn_type
     )
 
     # IO
@@ -88,10 +89,11 @@ def thermal_williamson_2(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
+    subcycling_options = SubcyclingOptions(fixed_subcycles=2)
     transported_fields = [
         TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "D", fixed_subcycles=2),
-        SSPRK3(domain, "b", fixed_subcycles=2)
+        SSPRK3(domain, "D", subcycling_options=subcycling_options),
+        SSPRK3(domain, "b", subcycling_options=subcycling_options)
     ]
     transport_methods = [
         DGUpwind(eqns, "u"),

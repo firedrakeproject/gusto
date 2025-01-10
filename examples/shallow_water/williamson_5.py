@@ -14,7 +14,8 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, GeneralIcosahedralSphereMesh, ZonalComponent,
-    MeridionalComponent, RelativeVorticity, RungeKuttaFormulation
+    MeridionalComponent, RelativeVorticity, RungeKuttaFormulation,
+    SubcyclingOptions
 )
 
 williamson_5_defaults = {
@@ -72,7 +73,8 @@ def williamson_5(
     rsq = min_value(R0**2, (lamda - lamda_c)**2 + (phi - phi_c)**2)
     r = sqrt(rsq)
     tpexpr = mountain_height * (1 - r/R0)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=tpexpr)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
+                                 topog_expr=tpexpr)
 
     # I/O
     output = OutputParameters(
@@ -84,9 +86,13 @@ def williamson_5(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
+    subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
     transported_fields = [
-        SSPRK3(domain, "u", subcycle_by_courant=0.25),
-        SSPRK3(domain, "D", subcycle_by_courant=0.25, rk_formulation=RungeKuttaFormulation.linear)
+        SSPRK3(domain, "u", subcycling_options=subcycling_options),
+        SSPRK3(
+            domain, "D", subcycling_options=subcycling_options,
+            rk_formulation=RungeKuttaFormulation.linear
+        )
     ]
     transport_methods = [
         DGUpwind(eqns, "u"),

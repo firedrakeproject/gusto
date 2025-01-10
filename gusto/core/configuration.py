@@ -5,12 +5,14 @@ from firedrake import sqrt, Constant
 
 
 __all__ = [
+    "Configuration",
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
     "BoussinesqParameters", "CompressibleParameters",
     "ShallowWaterParameters",
     "EmbeddedDGOptions", "ConservativeEmbeddedDGOptions", "RecoveryOptions",
     "ConservativeRecoveryOptions", "SUPGOptions", "MixedFSOptions",
-    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
+    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters",
+    "SubcyclingOptions"
 ]
 
 
@@ -77,7 +79,11 @@ class Configuration(object):
 
         # Almost all parameters should be Constants -- but there are some
         # specific exceptions which should be kept as integers
-        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq']:
+        non_constants = [
+            'dumpfreq', 'pddumpfreq', 'chkptfreq',
+            'fixed_subcycles', 'max_subcycles', 'subcycle_by_courant'
+        ]
+        if type(value) in [float, int] and name not in non_constants:
             object.__setattr__(self, name, Constant(value))
         else:
             object.__setattr__(self, name, value)
@@ -147,6 +153,15 @@ class ShallowWaterParameters(Configuration):
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
+    # Factor that multiplies the vapour in the equivalent buoyancy
+    # formulation of the thermal shallow water equations
+    beta2 = None
+    # Scaling factor for the saturation function in the equivalent buoyancy
+    # formulation of the thermal shallow water equations
+    nu = None
+    # Scaling factor for the saturation function in the equivalent buoyancy
+    # formulation of the thermal shallow water equations
+    q0 = None
 
 
 class WrapperOptions(Configuration, metaclass=ABCMeta):
@@ -252,3 +267,44 @@ class BoundaryLayerParameters(Configuration):
     coeff_evap = 1.1e-3         # Dimensionless surface evaporation coefficient
     height_surface_layer = 75.  # Height (m) of surface level (usually lowest level)
     mu = 100.                   # Interior penalty coefficient for vertical diffusion
+
+
+class HeldSuarezParameters(Configuration):
+    """
+    Parameters used in the default configuration for the Held Suarez test case.
+    """
+    T0stra = 200               # Stratosphere temp
+    T0surf = 315               # Surface temperature at equator
+    T0horiz = 60               # Equator to pole temperature difference
+    T0vert = 10                # Stability parameter
+    sigmab = 0.7               # Height of the boundary layer
+    tau_d = 40 * 24 * 60 * 60  # 40 day time scale
+    tau_u = 4 * 24 * 60 * 60   # 4 day timescale
+
+
+class SubcyclingOptions(Configuration):
+    """
+    Describes the process of subcycling a time discretisation, by dividing the
+    time step into a number of smaller substeps.
+
+    NB: cannot provide both the fixed_subcycles and max_subcycles parameters,
+    which will raise an error.
+    """
+
+    # Either None, or an integer, giving the number of subcycles to take
+    fixed_subcycles = None
+
+    # If adaptive subcycling, the maximum number of subcycles to take
+    max_subcycles = 10
+
+    # Either None or a float, giving the maximum Courant number for one step
+    subcycle_by_courant = None
+
+    def check_options(self):
+        """Checks that the subcycling options are valid."""
+
+        if (self.fixed_subcycles is not None
+                and self.subcycle_by_courant is not None):
+            raise ValueError(
+                "Cannot provide both fixed_subcycles and subcycle_by_courant"
+                + "parameters.")
