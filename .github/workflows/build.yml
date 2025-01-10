@@ -67,14 +67,8 @@ jobs:
           firedrake-clean
           export GUSTO_PARALLEL_LOG=FILE
           export PYOP2_CFLAGS=-O0
-          python -m pytest \
-            -n 12 --dist worksteal \
-            --durations=100 \
-            --timeout=3600 \
-            --timeout-method=thread \
-            -o faulthandler_timeout=3660 \
-            -v integration-tests/models/test_nc_outputting.py
-        timeout-minutes: 120
+          python -m pytest -n 3 -v integration-tests/model/test_nc_outputting.py
+        timeout-minutes: 10
       - name: Prepare logs
         if: always()
         run: |
