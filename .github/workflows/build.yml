@@ -58,6 +58,12 @@ jobs:
             -o faulthandler_timeout=3660 \
             -v unit-tests integration-tests examples
         timeout-minutes: 120
+      - name: Prepare logs
+        if: always()
+        run: |
+          mkdir logs
+          cd /tmp/pytest-of-firedrake/pytest-0/
+          find . -name "*.log" -exec cp --parents {} /__w/gusto/gusto/logs/ \;
       - name: Test serial netCDF
         run: |
           . /home/firedrake/firedrake/bin/activate
@@ -69,12 +75,6 @@ jobs:
           export PYOP2_CFLAGS=-O0
           python -m pytest -n 3 -v integration-tests/model/test_nc_outputting.py
         timeout-minutes: 10
-      - name: Prepare logs
-        if: always()
-        run: |
-          mkdir logs
-          cd /tmp/pytest-of-firedrake/pytest-0/
-          find . -name "*.log" -exec cp --parents {} /__w/gusto/gusto/logs/ \;
       - name: Upload artifact
         if: always()
         uses: actions/upload-pages-artifact@v3

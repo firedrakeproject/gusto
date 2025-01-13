@@ -807,7 +807,7 @@ class IO(object):
                 if nc_field_file:
                     nc_field_file.createDimension(f'coords_{space_name}', ndofs)
 
-                for i, (coord_name, coord_field) in enumerate(zip(self.domain.coords.coords_name, coord_fields)):
+                for coord_name, coord_field in zip(self.domain.coords.coords_name, coord_fields):
                     if nc_field_file:
                         nc_field_file.createVariable(f'{coord_name}_{space_name}', float, f'coords_{space_name}')
 
@@ -815,7 +815,7 @@ class IO(object):
                         start, stop = self.domain.coords.parallel_array_lims[space_name]
                         nc_field_file.variables[f'{coord_name}_{space_name}'][start:stop] = coord_field.dat.data_ro
                     else:
-                        global_coord_field = gather_field_data(coord_field, i, self.domain)
+                        global_coord_field = gather_field_data(coord_field, self.domain)
                         if comm.rank == 0:
                             nc_field_file.variables[f'{coord_name}_{space_name}'][...] = global_coord_field
 
@@ -849,7 +849,7 @@ class IO(object):
             nc_field_file['time'][self.field_t_idx] = t
 
         # Loop through output field data here
-        for i, field in enumerate(self.to_dump):
+        for field in self.to_dump:
             field_name = field.name()
             space_name = field.function_space().name
 
@@ -868,7 +868,7 @@ class IO(object):
                     start, stop = self.domain.coords.parallel_array_lims[space_name]
                     nc_field_file[field_name]['field_values'][start:stop, self.field_t_idx] = field.dat.data_ro
                 else:
-                    global_field_data = gather_field_data(field, i, self.domain)
+                    global_field_data = gather_field_data(field, self.domain)
                     if comm.rank == 0:
                         nc_field_file[field_name]['field_values'][:, self.field_t_idx] = global_field_data
 
@@ -964,12 +964,11 @@ def make_nc_dataset(filename, access, comm):
     return nc_field_file, nc_supports_parallel
 
 
-def gather_field_data(field, field_index, domain):
+def gather_field_data(field, domain):
     """Gather global field data into a single array on rank 0.
 
     Args:
         field (:class:`firedrake.Function`): The field to gather.
-        field_index (int): Index used to identify the field.
         domain (:class:`Domain`): The domain.
 
     Returns:
@@ -983,7 +982,7 @@ def gather_field_data(field, field_index, domain):
     comm = domain.mesh.comm
 
     if comm.size == 1:
-        return field.dat.data_ro
+        return field.dat.data_ro.copy()
 
     gathered_data = comm.gather(field.dat.data_ro)
     if comm.rank == 0:
