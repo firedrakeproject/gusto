@@ -2,7 +2,7 @@ import os
 import matplotlib.pyplot as plt
 import xarray as xr
 
-file = 'Relax_to_annulus/annular_vortex_mars_55-60_PVmax--2-4_PVpole--1-0_tau_r--2sol_A0-0.0-norel_len-300sols_tracer_tophat-80'
+file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-4'
 
 sol_early = 100
 sol_late = 300
@@ -22,7 +22,7 @@ plot = ds_late_time_zonal_mean.PotentialVorticity.plot(ax=ax)
 plt.savefig(f'{path}/Plots/late_time_pv_profile_{sol_early}-{sol_late}sol.pdf')
 
 
-file1 = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat'
+file1 = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-4'
 path1 = f'/data/home/sh1293/results/{file1}'
 
 ds1 = xr.open_dataset(f'{path1}/regrid_output.nc')
@@ -36,3 +36,4 @@ plot = ds_late_time_zonal_mean.PotentialVorticity.plot(ax=ax, label='Relax to an
 plot1 = ds1_late_time_zonal_mean.PotentialVorticity.plot(ax=ax, label='Full relaxation')
 plt.legend()
 plt.savefig(f'{path}/Plots/late_time_pv_profile_{sol_early}-{sol_late}sol_vs_full-relax.pdf')
+print(f'Plot made:\n {path}/Plots/late_time_pv_profile_{sol_early}-{sol_late}sol_vs_full-relax.pdf')

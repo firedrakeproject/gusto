@@ -10,7 +10,7 @@ import numpy as np
 # file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-30sols_tracer_tophat-80_ref-5'
 # file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-30sols_tracer_tophat-80_ref-6'
 # file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-100sols_tracer_tophat-80_ref-6'
-file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-30sols_tracer_tophat-80_ref-4_continuity'
+# file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-30sols_tracer_tophat-80_ref-4_continuity'
 # file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-30sols_tracer_tophat-80_ref-4_uniform'
 # file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-4_gaussian'
 # file = 'Free_run/annular_vortex_mars_60-70_free_A0-0-norel_len-30sols_tracer_tophat-80_ref-4_tracer100'
@@ -25,10 +25,11 @@ file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01s
 # file = 'passive_tracer_williamson_2_tracer-tophat'
 # file = 'passive_tracer_williamson_2_tracer-tophat_long'
 # file = 'passive_tracer_williamson_2_tracer-tophat_longer'
+file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-4'
 
 norm = False
 
-lat_thresh = 75
+lat_thresh = 80
 
 path = f'/data/home/sh1293/results/{file}'
 
@@ -36,7 +37,17 @@ radius = 3396000
 # radius = 1
 
 ds = xr.open_dataset(f'{path}/regrid_output.nc')
+q = ds.PotentialVorticity
+max_zonal_mean = fcs.max_zonal_mean(q)
 tracer = ds.tracer
+
+q['sol'] = q.time/88774
+ds_late = q.where(q.sol>=100, drop=True).where(q.sol<=300, drop=True)
+lat_thresh_time = fcs.max_zonal_mean(ds_late)
+lat_thresh = lat_thresh_time.max_lat.mean(dim='time').values
+# tracer['lat_thresh'] = max_zonal_mean.max_lat
+# integral_pole, latpole = fcs.tracer_integral(tracer, max_zonal_mean.max_lat, 'pole')
+# integral_eq, lateq = fcs.tracer_integral(tracer, max_zonal_mean.max_lat, 'equator')
 integral_pole, latpole = fcs.tracer_integral(tracer, lat_thresh, 'pole')
 integral_eq, lateq = fcs.tracer_integral(tracer, lat_thresh, 'equator')
 integral_total = integral_eq + integral_pole
@@ -63,10 +74,13 @@ if not norm:
     (diag['total']/radius**2).plot(ax=ax, x='true_time', label='diag total')
 elif norm:
     (diag['total']/diag['total'].values[0]-1).plot(ax=ax, x='true_time', label='diag total (normalised-1)')
-ax.set_yscale('log')
+# ax.set_yscale('log')
 plt.legend()
 
 if not os.path.exists(f'{path}/Plots'):
     os.makedirs((f'{path}/Plots'))
 plt.savefig(f'{path}/Plots/tracer_integral_{lat_thresh}_new.pdf')
 print(f'Plot made:\n {path}/Plots/tracer_integral_{lat_thresh}_new.pdf')
+
+# plt.savefig(f'{path}/Plots/tracer_integral_var-lat.pdf')
+# print(f'Plot made:/n {path}/Plots/tracer_integral_var-lat.pdf')

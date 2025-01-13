@@ -29,7 +29,7 @@ def gaussian_lat_lon_grid(nlat, nlon):
 # Directory for results and plots
 # ---------------------------------------------------------------------------- #
 # When copying this example these should not be relative to this file
-filepath = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-30sols_tracer_tophat-80_ref-4_continuity'
+filepath = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-5'
 
 results_dir = f'/data/home/sh1293/results/{filepath}'
 # plot_dir = f'{results_dir}/plots'
