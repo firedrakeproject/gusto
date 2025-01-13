@@ -4,7 +4,6 @@ from firedrake import IcosahedralSphereMesh, Constant, ge, le, exp, cos, \
     conditional, interpolate, SpatialCoordinate, VectorFunctionSpace, \
     Function, assemble, dx, FunctionSpace,pi
 
-from firedrake.output import VTKFile
 import numpy as np
 
 # ----------------------------------------------------------------- #
@@ -12,7 +11,8 @@ import numpy as np
 # ----------------------------------------------------------------- #
 day = 24.*60.*60.
 dt = 200
-tmax = 1*dt
+tmax = 100*dt
+ndumps = 1
 ref = 3
 # Shallow water parameters
 R = 6371220.
@@ -45,9 +45,43 @@ eqns = LinearThermalShallowWaterEquations(domain, parameters,
                                           equivalent_buoyancy=True,
                                           fexpr=fexpr)
 
+dirname = "linear_equivalent_buoyancy_galewsky_jet_SIQN"
+dumpfreq = int(tmax / (ndumps*dt))
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=dumpfreq,
+                          dumplist_latlon=['D', 'b_e',
+                                           'PotentialVorticity',
+                                           'RelativeVorticity'],
+                          dump_nc=True,
+                          dump_vtus=True,
+                          chkptfreq=1)
+
+diagnostic_fields = [PotentialVorticity(), RelativeVorticity(),
+                     CourantNumber(), SteadyStateError('u'),
+                     SteadyStateError('D'), SteadyStateError('b_e'),
+                     SteadyStateError('q_t'),
+                     PartitionedVapour(eqns),
+                     PartitionedCloud(eqns)]
+io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+
+transport_methods = [DGUpwind(eqns, 'D'),
+                     DGUpwind(eqns, 'b_e'),
+                     DGUpwind(eqns, 'q_t')]
+transport_schemes = [ForwardEuler(domain, "D")]
+linear_solver = ThermalSWSolver(eqns)
+stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes,
+                                  transport_methods,
+                                  linear_solver=linear_solver)
+
 # ----------------------------------------------------------------- #
 # Initial conditions
 # ----------------------------------------------------------------- #
+
+u0 = stepper.fields("u")
+D0 = stepper.fields("D")
+b_e0 = stepper.fields("b_e")
+q_t0 = stepper.fields("q_t")
+
 
 # get lat lon coordinates
 lamda, phi, _ = lonlatr_from_xyz(x[0], x[1], x[2])
@@ -116,60 +150,45 @@ def Dval(X):
     return val
 
 
-def initialise_fn(uin, Din):
+def initialise_fn():
+    u0 = stepper.fields("u")
+    D0 = stepper.fields("D")
 
-    uin.project(uexpr, form_compiler_parameters={'quadrature_degree': 12})
-    
+    u0.project(uexpr, form_compiler_parameters={'quadrature_degree': 12})
+
     # Get coordinates to pass to Dval function
-    W = VectorFunctionSpace(mesh, Din.ufl_element())
+    W = VectorFunctionSpace(mesh, D0.ufl_element())
 
     X = interpolate(mesh.coordinates, W)
-    Din.dat.data[:] = Dval(X.dat.data_ro)
-    Din.interpolate(Din - (H/(2*g) * bexpr))
+    D0.dat.data[:] = Dval(X.dat.data_ro)
+    D0.interpolate(D0 - (H/(2*g) * bexpr))
 
     # Adjust mean value of initial D
-    C = Function(Din.function_space()).assign(Constant(1.0))
+    C = Function(D0.function_space()).assign(Constant(1.0))
     area = assemble(C*dx)
-    Dmean = assemble(Din*dx)/area
-    Din -= Dmean
-    Din += Constant(parameters.H)
+    Dmean = assemble(D0*dx)/area
+    D0 -= Dmean
+    D0 += Constant(parameters.H)
 
+
+initialise_fn()
 
 # initial conditions based on moist thermal version
-U_in = Function(eqns.function_space, name="input")
-Uexpl = Function(eqns.function_space, name="output")
-u0, D0, b_e0, q_t0 = U_in.subfunctions
-
-initialise_fn(u0, D0)
-
 initial_sat = q0*H/(D0) * exp(nu*(1-bexpr/g))
 vexpr = 0.98 * initial_sat
 b_e_expr = bexpr - beta2*vexpr
 b_e0.interpolate(b_e_expr)
 q_t0.interpolate(vexpr)
-rexi_output = VTKFile("rexi_linear_equivalent_buoyancy_galewsky_jet.pvd")
-rexi_output.write(u0, D0, b_e0, q_t0)
 
 # Set reference profiles
-Dbar = eqns.X_ref.subfunctions[1]
-bebar = eqns.X_ref.subfunctions[2]
-qtbar = eqns.X_ref.subfunctions[3]
-Dbar.interpolate(H)
-qtbar.interpolate(Constant(0.02))
-bebar.interpolate(g - beta2*qtbar)
-
-rexi_params = RexiParameters(h=h, M=M)
-rexi = Rexi(eqns, rexi_params)
+Dbar = Function(D0.function_space()).assign(H)
+qtbar = Function(q_t0.function_space()).interpolate(Constant(0.02))
+bebar = Function(b_e0.function_space()).interpolate(g-beta2*qtbar)
+stepper.set_reference_profiles([('D', Dbar), ('b_e', bebar),
+                                ('q_t', qtbar)])
 
 # ----------------------------------------------------------------- #
 # Run
 # ----------------------------------------------------------------- #
 
-rexi.solve(Uexpl, U_in, tmax)
-uexpl, Dexpl, b_e_expl, q_t_expl = Uexpl.subfunctions   
-u0.assign(uexpl)
-D0.assign(Dexpl)
-b_e0.assign(b_e_expl)
-q_t0.assign(q_t_expl)
-rexi_output.write(u0, D0, b_e0, q_t0)
-
+stepper.run(t=0, tmax=tmax)
