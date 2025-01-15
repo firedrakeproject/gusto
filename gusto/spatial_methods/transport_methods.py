@@ -139,9 +139,9 @@ class TransportMethod(SpatialMethod):
                raise RuntimeError('Mass weighted transport terms not yet supported for multiple terms')
 
             # Replace original term with new term
-            # equation.residual = equation.residual.label_map(
-            #     lambda t: t.has_label(transport)  and t.has_label(horizontal) and t.get(prognostic) == self.variable,
-            #     map_if_true=lambda t: new_horizontal_term)
+            equation.residual = equation.residual.label_map(
+                lambda t: t.has_label(transport)  and t.has_label(horizontal) and t.get(prognostic) == self.variable,
+                map_if_true=lambda t: new_horizontal_term)
 
             equation.residual = equation.residual.label_map(
                 lambda t: t.has_label(transport)  and t.has_label(vertical) and t.get(prognostic) == self.variable,

@@ -199,6 +199,9 @@ class SDC(object, metaclass=ABCMeta):
             self.field_name = equation.field_name
             W = equation.function_space
             self.idx = None
+
+        W = self.base.fs
+        self.limiter = self.base.limiter
         self.W = W
         self.Unodes = [Function(W) for _ in range(self.M+1)]
         self.Unodes1 = [Function(W) for _ in range(self.M+1)]
