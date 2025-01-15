@@ -477,6 +477,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
         for i in range(self.nStages):
             self.solve_stage(x_in, i)
+            if self.augmentation is not None:
+                self.augmentation.limit(self.x1)
         x_out.assign(self.x1)
 
 
