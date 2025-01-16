@@ -9,14 +9,20 @@ from firedrake import (
     LinearVariationalProblem, LinearVariationalSolver, lhs, rhs, dot,
     ds_b, ds_v, ds_t, ds, FacetNormal, TestFunction, TrialFunction,
     transpose, nabla_grad, outer, dS, dS_h, dS_v, sign, jump, div,
-    Constant, sqrt, cross, curl, FunctionSpace, assemble, DirichletBC
+    Constant, sqrt, cross, curl, FunctionSpace, assemble, DirichletBC,
+    Projector
 )
-from firedrake.fml import subject
+from firedrake.fml import (
+    subject, all_terms, replace_subject, keep, replace_test_function,
+    replace_trial_function, drop
+)
 from gusto import (
     time_derivative, transport, transporting_velocity, TransportEquationType,
-    logger
+    logger, prognostic, mass_weighted
 )
-
+from gusto.spatial_methods.limiters import MeanLimiter, MixedFSLimiter
+import copy
+import numpy as np
 
 class Augmentation(object, metaclass=ABCMeta):
     """
@@ -49,6 +55,13 @@ class Augmentation(object, metaclass=ABCMeta):
 
         pass
 
+    def limit(self, x_in_mixed):
+        """
+        Apply any special limiting as part of the augmentation
+        """
+
+        pass
+
 
 class VorticityTransport(Augmentation):
     """
@@ -72,6 +85,8 @@ class VorticityTransport(Augmentation):
     def __init__(
             self, domain, eqns, transpose_commutator=True, supg=False
     ):
+
+        self.name = 'vorticity'
 
         V_vel = domain.spaces('HDiv')
         V_vort = domain.spaces('H1')
@@ -236,3 +251,285 @@ class VorticityTransport(Augmentation):
         logger.debug('Vorticity solve')
         self.solver.solve()
         self.x_in.subfunctions[1].assign(self.Z_in)
+
+
+class MeanMixingRatio(Augmentation):
+    """
+    This augments a transport problem involving a mixing ratio to
+    include a mean mixing ratio field. This enables posivity to be 
+    ensured during conservative transport.
+
+    Args:
+        domain (:class:`Domain`): The domain object.
+        eqns (:class:`PrognosticEquationSet`): The overarching equation set.
+        mX_names (:class: list): A list of mixing ratios that 
+        require augmented mean mixing ratio fields.
+    """
+
+    def __init__(
+            self, domain, eqns, mX_names
+    ):
+
+        self.name = 'mean_mixing_ratio'
+        self.mX_names = mX_names
+        self.mX_num = len(mX_names)
+
+        # Store information about original equation set
+        self.eqn_orig = eqns
+        self.domain = domain
+        exist_spaces = eqns.spaces
+        self.idx_orig = len(exist_spaces)
+
+        # Define the mean mixing ratio on the DG0 space
+        DG0 = FunctionSpace(domain.mesh, "DG", 0)
+
+        # Set up fields and names for each mixing ratio
+        self.mean_names = []
+        self.mean_idxs = []
+        self.mX_idxs = []
+        mX_spaces = []
+        mean_spaces = []
+        self.limiters = []
+        #self.sublimiters = {}
+
+        for i in range(self.mX_num):
+            mX_name = mX_names[i]
+            print(mX_names)
+            print(mX_name)
+            self.mean_names.append('mean_'+mX_name)
+            mean_spaces.append(DG0)
+            exist_spaces.append(DG0)
+            self.mean_idxs.append(self.idx_orig + i)
+
+            # Extract the mixing ratio in question:
+            mX_idx = eqns.field_names.index(mX_name)
+            mX_spaces.append(eqns.spaces[mX_idx])
+            self.mX_idxs.append(mX_idx)
+
+            # Define a limiter
+            #self.limiters.append(MeanLimiter(eqns.spaces[mX_idx]))
+            #self.sublimiters.update({mX_name: MeanLimiter(eqns.spaces[mX_idx])})
+
+        #self.limiter = MixedFSLimiter(self.eqn_orig, self.sublimiters)
+        #self.limiter = MixedFSLimiter(sublimiters)
+        self.limiters = MeanLimiter(mX_spaces)
+
+        # Contruct projectors for computing the mean mixing ratios
+        self.mX_ins = [Function(mX_spaces[i]) for i in range(self.mX_num)]
+        self.mean_outs = [Function(mean_spaces[i]) for i in range(self.mX_num)]
+        self.compute_means = [Projector(self.mX_ins[i], self.mean_outs[i]) \
+                               for i in range(self.mX_num)]
+
+        # Create the new mixed function space:
+        self.fs = MixedFunctionSpace(exist_spaces)
+        self.X = Function(self.fs)
+        self.tests = TestFunctions(self.fs)
+
+        self.bcs = None
+
+        self.x_in = Function(self.fs)
+        self.x_out = Function(self.fs)
+
+
+    def setup_residual(self, spatial_methods, equation):
+        # Copy spatial method for the mixing ratio onto the 
+        # mean mixing ratio.
+
+        orig_residual = equation.residual
+
+        # Copy the mean mixing ratio residual terms:
+        for i in range(self.mX_num):
+            if i == 0:
+                mean_residual = orig_residual.label_map(
+                    lambda t: t.get(prognostic) == self.mX_names[i],
+                    map_if_false=drop
+                )
+                mean_residual = prognostic.update_value(mean_residual, self.mean_names[i])
+            else:
+                mean_residual_term = orig_residual.label_map(
+                    lambda t: t.get(prognostic) == self.mX_names[i],
+                    map_if_false=drop
+                )
+                mean_residual_term = prognostic.update_value(mean_residual_term,\
+                                                              self.mean_names[i])
+                mean_residual = mean_residual + mean_residual_term
+
+        print('\n in setup_transport')
+
+        # Replace the tests and trial functions for all terms
+        # of the fields in the original equation
+        for idx in range(self.idx_orig):
+            field = self.eqn_orig.field_names[idx]
+            # Seperate logic if mass-weighted or not?
+            #print('\n', idx)
+            #print(field)
+
+            #prog = split(self.X)[idx]
+
+            #print('\n residual term before change')
+            #print(old_residual.label_map(
+            #    lambda t: t.get(prognostic) == field,
+            #    map_if_false=drop
+            #).form)
+
+            orig_residual = orig_residual.label_map(
+                lambda t: t.get(prognostic) == field,
+                map_if_true=replace_subject(self.X, old_idx=idx, new_idx = idx)
+            )
+            orig_residual = orig_residual.label_map(
+                lambda t: t.get(prognostic) == field,
+                map_if_true=replace_test_function(self.tests, old_idx=idx, new_idx=idx)
+            )
+            #print('\n residual term after change')
+            #print(old_residual.label_map(
+            #    lambda t: t.get(prognostic) == field,
+            #    map_if_false=drop
+            #).form)
+
+        #print('\n now setting up mean mixing ratio residual terms')
+
+
+        #print('\n mean mX residual after change')
+        #print(mean_residual.form)
+
+        # Update the subject and test functions for the
+        # mean mixing ratios
+        for i in range(self.mX_num):
+            mean_residual = mean_residual.label_map(
+                all_terms,
+                replace_subject(self.X, old_idx=self.mX_idxs[i], new_idx=self.mean_idxs[i])
+            )
+            mean_residual = mean_residual.label_map(
+                all_terms,
+                replace_test_function(self.tests, old_idx=self.mX_idxs[i], new_idx=self.mean_idxs[i])
+            )
+
+
+        #print('\n mean mX residual after change')
+        #print(mean_residual.form)
+
+        # Form the new residual
+        residual = orig_residual + mean_residual
+        self.residual = subject(residual, self.X)
+
+        #Check these two forms
+        #print('\n Original equation with residual of length, ', len(equation.residual))
+        #print('\n Augmented equation with residual of length, ', len(self.residual))
+
+
+
+
+
+    def setup_transport_old(self, spatial_methods):
+        mX_spatial_method = next(method for method in spatial_methods if method.variable == self.mX_name)
+        
+        mean_spatial_method = copy.copy(mX_spatial_method)
+        mean_spatial_method.variable = self.mean_name
+        self.spatial_methods = copy.copy(spatial_methods)
+        self.spatial_methods.append(mean_spatial_method)
+        for method in self.spatial_methods:
+            print(method.variable)
+            method.equation.residual = self.residual
+            print(method.form.form)
+            print(len(method.equation.residual))
+
+        # Alternatively, redo all the spatial methods
+        # using the new mixed function space.
+        # So, want to make a new list of spatial methods
+        new_spatial_methods = []
+        for method in self.spatial_methods:
+            # Determine the tye of transport method:
+            new_method = DGUpwind(self, method.variable)
+            new_spatial_methods.append(new_method)
+
+    def pre_apply(self, x_in):
+        """
+        Sets the original fields, i.e. not the mean mixing ratios
+
+        Args:
+            x_in (:class:`Function`): The input fields
+        """
+
+        #for idx, field in enumerate(self.eqn.field_names):
+        #    self.x_in.subfunctions[idx].assign(x_in.subfunctions[idx])
+        print('in pre-apply')
+        for idx in range(self.idx_orig):
+            print(np.min(x_in.subfunctions[idx].dat.data))
+            print('\n')
+            self.x_in.subfunctions[idx].assign(x_in.subfunctions[idx])
+
+        # Set the mean mixing ratio to be zero, just because
+        #DG0 = FunctionSpace(self.domain.mesh, "DG", 0)
+        #mean_mX = Function(DG0, name=self.mean_name)
+        
+        #self.x_in.subfunctions[self.mean_idx].assign(mean_mX)
+
+
+    def post_apply(self, x_out):
+        """
+        Apply the limiters.
+        Sets the output fields, i.e. not the mean mixing ratios
+
+        Args:
+            x_out (:class:`Function`): The output fields
+        """
+        print('in post apply')
+        for idx in range(self.idx_orig):
+            print(np.min(self.x_out.subfunctions[idx].dat.data))
+            print('\n')
+            x_out.subfunctions[idx].assign(self.x_out.subfunctions[idx])
+
+    def update(self, x_in_mixed):
+        """
+        Compute the mean mixing ratio field by projecting the mixing 
+        ratio from DG1 into DG0.
+
+        To DO: Shouldn't this be a conservative projection??!!
+        This requires density fields...
+
+        Args:
+            x_in_mixed (:class:`Function`): The mixed function to update.
+        """
+        print('in update')
+        for i in range(self.mX_num):
+            self.mX_ins[i].assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
+            print('\n min of mX field:')
+            print(np.min(self.mX_ins[i].dat.data))
+            self.compute_means[i].project()
+            self.x_in.subfunctions[self.mean_idxs[i]].assign(self.mean_outs[i])
+
+    def limit(self, x_in_mixed):
+        # Ensure non-negativity by applying the blended limiter
+        mX_pre = []
+        means = []
+        print('limiting within the augmentation')
+        for i in range(self.mX_num):
+            mX_pre.append(x_in_mixed.subfunctions[self.mX_idxs[i]])
+            means.append(x_in_mixed.subfunctions[self.mean_idxs[i]])
+
+            print('\n min of mX field:')
+            print(np.min(mX_pre[i].dat.data))
+            print('\n min of mean field:')
+            print(np.min(means[i].dat.data))
+
+        self.limiters.apply(mX_pre, means)
+
+        print('\n After applying blended limiter')
+
+        for i in range(self.mX_num):
+            x_in_mixed.subfunctions[self.mX_idxs[i]].assign(mX_pre[i])
+            print('\n min of mX field:')
+            print(np.min(mX_pre[i].dat.data))
+            print('\n min of mean field:')
+            print(np.min(means[i].dat.data))
+
+    def limit_old(self, x_in_mixed):
+        # Ensure non-negativity by applying the blended limiter
+        for i in range(self.mX_num):
+            print('limiting within the augmentation')
+            mX_field = x_in_mixed.subfunctions[self.mX_idxs[i]]
+            mean_field = x_in_mixed.subfunctions[self.mean_idxs[i]]
+            print(np.min(x_in_mixed.subfunctions[self.mX_idxs[i]].dat.data))
+            self.limiters[i].apply(mX_field, mean_field)
+            print(np.min(x_in_mixed.subfunctions[self.mX_idxs[i]].dat.data))
+            #x_in_mixed.subfunctions[self.mX_idxs[i]].assign(mX_field)
