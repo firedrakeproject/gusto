@@ -10,7 +10,7 @@ tested.
 """
 
 from firedrake import dx
-from firedrake.parloops import par_loop, READ, WRITE, MIN, MAX, op2
+from firedrake.parloops import par_loop, READ, WRITE, INC, MIN, MAX, op2
 import numpy as np
 
 
@@ -132,19 +132,20 @@ class MeanMixingRatioWeights():
         domain = "{{[i]: 0 <= i < {nDOFs_base}}}".format(**shapes)
 
         instrs = ("""
+                  <float64> min_value1 = 0.0
+                  <float64> min_value2 = 0.0
                   <float64> min_value = 0.0
+                  <float64> new_lamda = 0.0
                   for i
-                      min_value = fmin(mX_field[i*4], mX_field[i*4+1])
-                      min_value = fmin(min_value, mX_field[i*4+2])
-                      min_value = fmin(min_value, mX_field[i*4+3])
+                      min_value1 = fmin(mX_field[i*4], mX_field[i*4+1])
+                      min_value2 = fmin(mX_field[i*4+2], mX_field[i*4+3])
+                      min_value = fmin(min_value1, min_value2)
                       if min_value < 0.0
-                          lamda[i] = -min_value/(mean_field[i] - min_value)
-                      else
-                          lamda[i] = 0.0
+                          lamda[i] = fmax(lamda[i],-min_value/(mean_field[i] - min_value))
                       end
                   end
                   """)
-
+        #lamda[i] = fmax(lamda[i],-min_value/(mean_field[i] - min_value))
         self._kernel = (domain, instrs)
 
     def apply(self, lamda, mX_field, mean_field):
@@ -156,7 +157,7 @@ class MeanMixingRatioWeights():
                 lives in the continuous target space.
         """
         par_loop(self._kernel, dx,
-                 {"lamda": (lamda, WRITE),
+                 {"lamda": (lamda, INC),
                   "mX_field": (mX_field, READ),
                   "mean_field": (mean_field, READ)})
 

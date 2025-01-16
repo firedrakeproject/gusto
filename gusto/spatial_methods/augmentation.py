@@ -307,11 +307,12 @@ class MeanMixingRatio(Augmentation):
             self.mX_idxs.append(mX_idx)
 
             # Define a limiter
-            self.limiters.append(MeanLimiter(eqns.spaces[mX_idx]))
+            #self.limiters.append(MeanLimiter(eqns.spaces[mX_idx]))
             #self.sublimiters.update({mX_name: MeanLimiter(eqns.spaces[mX_idx])})
 
         #self.limiter = MixedFSLimiter(self.eqn_orig, self.sublimiters)
         #self.limiter = MixedFSLimiter(sublimiters)
+        self.limiters = MeanLimiter(mX_spaces)
 
         # Contruct projectors for computing the mean mixing ratios
         self.mX_ins = [Function(mX_spaces[i]) for i in range(self.mX_num)]
@@ -451,7 +452,10 @@ class MeanMixingRatio(Augmentation):
 
         #for idx, field in enumerate(self.eqn.field_names):
         #    self.x_in.subfunctions[idx].assign(x_in.subfunctions[idx])
+        print('in pre-apply')
         for idx in range(self.idx_orig):
+            print(np.min(x_in.subfunctions[idx].dat.data))
+            print('\n')
             self.x_in.subfunctions[idx].assign(x_in.subfunctions[idx])
 
         # Set the mean mixing ratio to be zero, just because
@@ -469,8 +473,10 @@ class MeanMixingRatio(Augmentation):
         Args:
             x_out (:class:`Function`): The output fields
         """
-
+        print('in post apply')
         for idx in range(self.idx_orig):
+            print(np.min(self.x_out.subfunctions[idx].dat.data))
+            print('\n')
             x_out.subfunctions[idx].assign(self.x_out.subfunctions[idx])
 
     def update(self, x_in_mixed):
@@ -478,7 +484,7 @@ class MeanMixingRatio(Augmentation):
         Compute the mean mixing ratio field by projecting the mixing 
         ratio from DG1 into DG0.
 
-        SHouldn't this be a conservative projection??!!
+        To DO: Shouldn't this be a conservative projection??!!
         This requires density fields...
 
         Args:
@@ -487,10 +493,37 @@ class MeanMixingRatio(Augmentation):
         print('in update')
         for i in range(self.mX_num):
             self.mX_ins[i].assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
+            print('\n min of mX field:')
+            print(np.min(self.mX_ins[i].dat.data))
             self.compute_means[i].project()
             self.x_in.subfunctions[self.mean_idxs[i]].assign(self.mean_outs[i])
 
     def limit(self, x_in_mixed):
+        # Ensure non-negativity by applying the blended limiter
+        mX_pre = []
+        means = []
+        print('limiting within the augmentation')
+        for i in range(self.mX_num):
+            mX_pre.append(x_in_mixed.subfunctions[self.mX_idxs[i]])
+            means.append(x_in_mixed.subfunctions[self.mean_idxs[i]])
+
+            print('\n min of mX field:')
+            print(np.min(mX_pre[i].dat.data))
+            print('\n min of mean field:')
+            print(np.min(means[i].dat.data))
+
+        self.limiters.apply(mX_pre, means)
+
+        print('\n After applying blended limiter')
+
+        for i in range(self.mX_num):
+            x_in_mixed.subfunctions[self.mX_idxs[i]].assign(mX_pre[i])
+            print('\n min of mX field:')
+            print(np.min(mX_pre[i].dat.data))
+            print('\n min of mean field:')
+            print(np.min(means[i].dat.data))
+
+    def limit_old(self, x_in_mixed):
         # Ensure non-negativity by applying the blended limiter
         for i in range(self.mX_num):
             print('limiting within the augmentation')
