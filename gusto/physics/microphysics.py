@@ -490,7 +490,7 @@ class Coalescence(PhysicsParametrisation):
         self.rain.assign(x_in.subfunctions[self.rain_idx])
         self.cloud_water.assign(x_in.subfunctions[self.cloud_idx])
 
-        self.source.assign(assemble(self.source_interpolate))
+        self.source_int.assign(assemble(self.source_interpolate))
         # If a source output is provided, assign the source term to it
         if x_out is not None:
             x_out.assign(self.source)

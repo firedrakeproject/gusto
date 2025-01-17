@@ -132,7 +132,7 @@ class SourceSink(PhysicsParametrisation):
         # If not time-varying, evaluate for the first time here
         if not self.time_varying:
             if self.method == 'interpolate':
-                self.source.assign(assemble(self.source_interpolate))
+                self.source_int.assign(assemble(self.source_interpolate))
             else:
                 self.source_projector.project()
 
@@ -150,7 +150,7 @@ class SourceSink(PhysicsParametrisation):
         if self.time_varying:
             logger.info(f'Evaluating physics parametrisation {self.label.label}')
             if self.method == 'interpolate':
-                self.source.assign(assemble(self.source_interpolate))
+                self.source_int.assign(assemble(self.source_interpolate))
             else:
                 self.source_projector.project()
         else:
