@@ -11,7 +11,7 @@ from firedrake.fml import identity, drop
 import pytest
 
 
-def run_wind_drag(dirname, implicit_formulation):
+def run_wind_drag(dirname, implicit_formulation, physics_coupling):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -46,19 +46,29 @@ def run_wind_drag(dirname, implicit_formulation):
     surf_params = BoundaryLayerParameters()
     physics_parametrisation = WindDrag(eqn, implicit_formulation, surf_params)
 
-    time_discretisation = ForwardEuler(domain) if implicit_formulation else BackwardEuler(domain)
+    if physics_coupling == "split":
+        time_discretisation = ForwardEuler(domain) if implicit_formulation else BackwardEuler(domain)
 
-    # time_discretisation = ForwardEuler(domain)
-    physics_schemes = [(physics_parametrisation, time_discretisation)]
+        # time_discretisation = ForwardEuler(domain)
+        physics_schemes = [(physics_parametrisation, time_discretisation)]
 
-    # Only want time derivatives and physics terms in equation, so drop the rest
-    eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
-                                          map_if_true=identity, map_if_false=drop)
+        # Only want time derivatives and physics terms in equation, so drop the rest
+        eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
+                                              map_if_true=identity, map_if_false=drop)
 
-    # Time stepper
-    scheme = ForwardEuler(domain)
-    stepper = SplitPhysicsTimestepper(eqn, scheme, io,
-                                      physics_schemes=physics_schemes)
+        # Time stepper
+        scheme = ForwardEuler(domain)
+        stepper = SplitPhysicsTimestepper(eqn, scheme, io,
+                                          physics_schemes=physics_schemes)
+    else:
+        # Only want time derivatives and physics terms in equation, so drop the rest
+        eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
+                                              map_if_true=identity, map_if_false=drop)
+
+        # Time stepper
+        scheme = ForwardEuler(domain) if implicit_formulation else BackwardEuler(domain)
+        stepper = Timestepper(eqn, scheme, io,
+                              physics_parametrisations=[physics_parametrisation])
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -101,10 +111,11 @@ def run_wind_drag(dirname, implicit_formulation):
 
 
 @pytest.mark.parametrize("implicit_formulation", [False, True])
-def test_wind_drag(tmpdir, implicit_formulation):
+@pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
+def test_wind_drag(tmpdir, implicit_formulation, physics_coupling):
 
     dirname = str(tmpdir)
-    mesh, stepper, u_true = run_wind_drag(dirname, implicit_formulation)
+    mesh, stepper, u_true = run_wind_drag(dirname, implicit_formulation, physics_coupling)
 
     u_final = stepper.fields('u')
 

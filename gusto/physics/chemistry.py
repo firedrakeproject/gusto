@@ -53,10 +53,9 @@ class TerminatorToy(PhysicsParametrisation):
             "The function spaces for the two species need to be the same"
 
         self.Xq = Function(equation.X.function_space())
-        Xq = self.Xq
 
-        species1 = split(Xq)[self.species1_idx]
-        species2 = split(Xq)[self.species2_idx]
+        species1 = split(self.Xq)[self.species1_idx]
+        species2 = split(self.Xq)[self.species2_idx]
 
         test_1 = equation.tests[self.species1_idx]
         test_2 = equation.tests[self.species2_idx]
@@ -66,16 +65,18 @@ class TerminatorToy(PhysicsParametrisation):
         source1_expr = test_1 * 2*Kx * dx
         source2_expr = test_2 * -Kx * dx
 
-        equation.residual -= self.label(subject(prognostic(source1_expr, 'X'), Xq), self.evaluate)
-        equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), Xq), self.evaluate)
+        equation.residual -= self.label(subject(prognostic(source1_expr, 'X'), self.Xq), self.evaluate)
+        equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), self.Xq), self.evaluate)
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Evaluates the source/sink for the coalescence process.
 
         Args:
             x_in (:class:`Function`): the (mixed) field to be evolved.
             dt (:class:`Constant`): the time interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
 
         logger.info(f'Evaluating physics parametrisation {self.label.label}')

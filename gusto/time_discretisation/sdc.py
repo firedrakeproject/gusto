@@ -53,7 +53,7 @@ from firedrake.fml import (
 )
 from firedrake.utils import cached_property
 from gusto.time_discretisation.time_discretisation import wrapper_apply
-from gusto.core.labels import (time_derivative, implicit, explicit)
+from gusto.core.labels import (time_derivative, implicit, explicit, source_label)
 
 from qmat import genQCoeffs, genQDeltaCoeffs
 
@@ -180,12 +180,13 @@ class SDC(object, metaclass=ABCMeta):
         self.base.setup(equation, apply_bcs, *active_labels)
         self.equation = self.base.equation
         self.residual = self.base.residual
+        self.evaluate_source = self.base.evaluate_source
 
         for t in self.residual:
             # Check all terms are labeled implicit or explicit
             if ((not t.has_label(implicit)) and (not t.has_label(explicit))
-               and (not t.has_label(time_derivative))):
-                raise NotImplementedError("Non time-derivative terms must be labeled as implicit or explicit")
+               and (not t.has_label(time_derivative)) and (not t.has_label(source_label))):
+                raise NotImplementedError("Non time-derivative or source terms must be labeled as implicit or explicit")
 
         # Set up bcs
         self.bcs = self.base.bcs
@@ -203,6 +204,8 @@ class SDC(object, metaclass=ABCMeta):
         self.Unodes1 = [Function(W) for _ in range(self.M+1)]
         self.fUnodes = [Function(W) for _ in range(self.M)]
         self.quad = [Function(W) for _ in range(self.M)]
+        self.source_Uk = [Function(W) for _ in range(self.M+1)]
+        self.source_Ukp1 = [Function(W) for _ in range(self.M+1)]
         self.U_SDC = Function(W)
         self.U_start = Function(W)
         self.Un = Function(W)
@@ -211,6 +214,7 @@ class SDC(object, metaclass=ABCMeta):
         self.U_fin = Function(W)
         self.Urhs = Function(W)
         self.Uin = Function(W)
+        self.source_in = Function(W)
 
     @property
     def nlevels(self):
@@ -240,10 +244,13 @@ class SDC(object, metaclass=ABCMeta):
                                     replace_subject(self.Urhs, old_idx=self.idx),
                                     drop)
         # F(y)
-        L = self.residual.label_map(lambda t: t.has_label(time_derivative),
+        L = self.residual.label_map(lambda t: any(t.has_label(time_derivative, source_label)),
                                     drop,
                                     replace_subject(self.Uin, old_idx=self.idx))
-        residual_rhs = a - L
+        L_source = self.residual.label_map(lambda t: t.has_label(source_label),
+                                           replace_subject(self.source_in, old_idx=self.idx),
+                                           drop)
+        residual_rhs = a - (L + L_source)
         return residual_rhs.form
 
     @property
@@ -319,6 +326,25 @@ class SDC(object, metaclass=ABCMeta):
                 lambda t: Constant(self.Qdelta_exp[m, i])*t)
             residual -= r_exp_k
 
+            # Calculate source terms
+            r_source_kp1 = self.residual.label_map(
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
+                map_if_false=drop)
+            r_source_kp1 = r_source_kp1.label_map(
+                all_terms,
+                lambda t: Constant(self.Qdelta_exp[m, i])*t)
+            residual += r_source_kp1
+
+            r_source_k = self.residual.label_map(
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
+                map_if_false=drop)
+            r_source_k = r_source_k.label_map(
+                all_terms,
+                map_if_true=lambda t: Constant(self.Qdelta_exp[m, i])*t)
+            residual -= r_source_k
+
         # Add on final implicit terms
         # Qdelta_imp[m,m]*(F(y_(m)^(k+1)) - F(y_(m)^k))
         r_imp_kp1 = self.residual.label_map(
@@ -392,6 +418,9 @@ class SDC(object, metaclass=ABCMeta):
         else:
             for m in range(self.M):
                 self.Unodes[m+1].assign(self.Un)
+        for m in range(self.M+1):
+            for evaluate in self.evaluate_source:
+                evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
 
         # Iterate through correction sweeps
         k = 0
@@ -415,12 +444,17 @@ class SDC(object, metaclass=ABCMeta):
             # for Z2N: sum(j=1,M) (q_mj*F(y_m^k) +  q_mj*S(y_m^k))
             for m in range(1, self.M+1):
                 self.Uin.assign(self.Unodes[m])
+                # Include source terms
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Uin, self.base.dt, x_out=self.source_in)
                 self.solver_rhs.solve()
                 self.fUnodes[m-1].assign(self.Urhs)
             self.compute_quad()
 
             # Loop through quadrature nodes and solve
             self.Unodes1[0].assign(self.Unodes[0])
+            for evaluate in self.evaluate_source:
+                evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
             for m in range(1, self.M+1):
                 # Set Q or S matrix
                 self.Q_.assign(self.quad[m-1])
@@ -442,21 +476,28 @@ class SDC(object, metaclass=ABCMeta):
                 self.solver.solve()
                 self.Unodes1[m].assign(self.U_SDC)
 
+                # Evaluate source terms
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes1[m], self.base.dt, x_out=self.source_Ukp1[m])
+
                 # Apply limiter if required
                 if self.limiter is not None:
                     self.limiter.apply(self.Unodes1[m])
             for m in range(1, self.M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
+                self.source_Uk[m].assign(self.source_Ukp1[m])
 
         if self.maxk > 0:
             # Compute value at dt rather than final quadrature node tau_M
             if self.final_update:
                 for m in range(1, self.M+1):
                     self.Uin.assign(self.Unodes1[m])
+                    self.source_in.assign(self.source_Ukp1[m])
                     self.solver_rhs.solve()
                     self.fUnodes[m-1].assign(self.Urhs)
                 self.compute_quad_final()
                 # Compute y_(n+1) = y_n + sum(j=1,M) q_j*F(y_j)
+
                 self.U_fin.assign(self.Unodes[-1])
                 self.solver_fin.solve()
                 # Apply limiter if required
