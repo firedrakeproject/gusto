@@ -23,8 +23,8 @@ from gusto.core.logging import (
     logger, DEBUG, logging_ksp_monitor_true_residual,
     attach_custom_monitor
 )
-from gusto.core.labels import linearisation, time_derivative, hydrostatic
-from gusto.equations import thermodynamics
+from gusto.core.labels import linearisation, time_derivative
+from gusto.equations import thermodynamics, HydrostaticCompressibleEulerEquations
 from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
@@ -288,7 +288,7 @@ class CompressibleSolver(TimesteppingSolver):
         # "broken" u, rho, and trace system
         # NOTE: no ds_v integrals since equations are defined on
         # a periodic (or sphere) base mesh.
-        if any([t.has_label(hydrostatic) for t in self.equations.residual]):
+        if isinstance(self.equations, HydrostaticCompressibleEulerEquations):
             u_mass = inner(w, (h_project(u) - u_in))*dx
         else:
             u_mass = inner(w, (u - u_in))*dx
