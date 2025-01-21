@@ -15,8 +15,8 @@ import shutil
 # ---------------------------------------------------------------------------- #
 
 # set inner and outer latitude limits of annulus
-phis = 57
-phin = 62
+phis = 60
+phin = 70
 phimp = phis
 
 # False means initial vortex is annular, True means it's monopolar
@@ -26,8 +26,8 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 2.2
-pvpole = 1.05
+pvmax = 1.6
+pvpole = 1.0
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
@@ -38,7 +38,7 @@ tau_c_ratio = 0.01
 beta = 1.0
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'rad'
+rel_sch = 'both'
 include_co2 = 'yes'
 
 # refinement level
@@ -49,7 +49,7 @@ restart = False
 restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-30sols_tracer_tophat-80_ref-4_continuity'
 
 # length of this run, time to start from (only relevant if doing a restart)
-rundays = 300
+rundays = 100
 start_time = 0
 dt = (0.5)**(ref_lev-4) * 450.
 
@@ -57,6 +57,9 @@ dt = (0.5)**(ref_lev-4) * 450.
 # if running a restart, True introduces a new tracer whilst False still maintains the old one
 tracer = True
 hat_edge = 80
+
+# standard_start is 60-70, 1.6, 1 (i.e. the standard setup I've been playing with). If true then every run starts with this
+standard_start = True
 
 # any extra info to include in the directory name
 extra_name = ''
@@ -298,9 +301,13 @@ def transport_setup(restart, domain, eqns, tracer_eqn, rs_tracer_eqn):
     return transported_fields, tracer_transport, transport_methods
 
 
-rlat, uini, hini = initial_profiles(Omega, R, phis, phin, annulus=True, pvpole=pvpole, pvmax=pvmax)
-rlat_mp, uini_mp, hini_mp = initial_profiles(Omega, R, phimp, phin, annulus=False)
-h_th = min(hini)*beta+H
+rlat_an, uini_an, hini_an = initial_profiles(Omega, R, phis, phin, annulus=True, pvpole=pvpole, pvmax=pvmax)
+rlat_mp, uini_mp, hini_mp = initial_profiles(Omega, R, phimp, phin, annulus=False, pvmax=pvmax)
+rlat, ust, hst = initial_profiles(Omega, R, phiss=60, phinn=70, annulus=True)
+if standard_start:
+    h_th = min(hst)*beta+H
+else:
+    h_th = min(hini)*beta+H
 
 if tracer and not restart:
     Tini = np.where(rlat >= hat_edge*pi/180, 1, 0)
@@ -311,8 +318,12 @@ elif not tracer:
     Tini_rs = 0
 
 if monopolar:
-    rlat, uini, hini = rlat_mp, uini_mp, hini_mp
+    uini, hini = uini_mp, hini_mp
     phin = 90
+if standard_start:
+    uini, hini = ust, hst
+else:
+    uini, hini = uini_an, hini_an
 
 # if not restart:
 #     # Domain
@@ -390,13 +401,13 @@ stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields, transport_method
 # ------------------------------------------------------------------------ #
 
 
-def initial_u(X):
+def initial_u(X, u):
     lats = []
     for X0 in X:
         x, y, z = X0
         _, lat, _ = lonlatr_from_xyz(x, y, z)
         lats.append(lat)
-    return np.interp(np.array(lats), rlat, uini)
+    return np.interp(np.array(lats), rlat, u)
 
 
 def initial_D(X, h):
@@ -430,7 +441,7 @@ if not restart:
     umesh = Vu.mesh()
     Wu = VectorFunctionSpace(umesh, Vu.ufl_element())
     Xu = interpolate(umesh.coordinates, Wu)
-    uzonal.dat.data[:] = initial_u(Xu.dat.data_ro)
+    uzonal.dat.data[:] = initial_u(Xu.dat.data_ro, uini)
     X = SpatialCoordinate(mesh)
     u0.project(xyz_vector_from_lonlatr(uzonal, Constant(0), Constant(0), X))
 
@@ -466,7 +477,7 @@ elif restart:
 
 D0_mp.dat.data[:] = initial_D(XD.dat.data_ro, hini_mp)
 D0_mp += H
-D0_an.dat.data[:] = initial_D(XD.dat.data_ro, hini)
+D0_an.dat.data[:] = initial_D(XD.dat.data_ro, hini_an)
 D0_an += H
 
 # from firedrake import File
