@@ -9,7 +9,7 @@ import pdb
 import os
 import functions as fcs
 
-file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-4'
+file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-5'
 
 start_sol = 0
 
@@ -39,7 +39,7 @@ for timeind in range(0, len(q.time)):
 # for timeind in range(0, 10):
 # for timeind in [0, 9, -1]:
 # for timeind in range(4695, 4705):
-# for timeind in [4698]:
+# for timeind in [5238, 5237]:
     # if timeind%100==0:
     print(timeind)
     fig = plt.figure(figsize = (8, 8))

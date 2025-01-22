@@ -1,5 +1,6 @@
 import numpy as np
 import xarray as xr
+import xrft
 
 def scaled2_eddy_enstrophy(q, **kwargs):
     '''
@@ -19,8 +20,10 @@ def scaled2_eddy_enstrophy(q, **kwargs):
     qp = qprime **2 * cos
 
     Z = qp.sum(dim = 'lat').sum(dim = 'lon') / (cos.sum(dim = 'lat') * 2 * np.pi * q.mean(dim='lon').mean(dim='lat')**2)
+
+    Z_renamed = Z.rename({var: f'{var}_eddens' for var in Z.variables if var !='time'})
     
-    return Z
+    return Z_renamed
 
 
 # def condensing_area(q):
@@ -89,13 +92,23 @@ def tracer_integral(da, lat_thresh, direction):
     return integral, lat_thresh
 
 
+def total_tracer_integral(da):
+    da['coslat'] = np.cos(da.lat * np.pi/180.)
+    integrand = da.coslat * da
+    integrand['lat'] = integrand.lat * np.pi/180.
+    integrand['lon'] = integrand.lon * np.pi/180.
+    integral = integrand.integrate('lat').integrate('lon')
+    return integral
+
+
 def max_zonal_mean(da):
     dabar = da.mean(dim='lon')
     latmax_ind = dabar.argmax(dim='lat')
+    lat_len = xr.DataArray(len(dabar.lat), dims=latmax_ind.dims, coords=latmax_ind.coords)
     start_idx = latmax_ind-1
-    start_idx = start_idx.where(start_idx>=0, start_idx, 0)
+    start_idx = start_idx.where(start_idx>=0, 0)
     end_idx = latmax_ind+2
-    end_idx = end_idx.where(end_idx<=len(dabar.lat), end_idx, len(dabar.lat))
+    end_idx = end_idx.where(end_idx<=lat_len, lat_len)
     latmin = dabar.lat[start_idx]
     latmax = dabar.lat[end_idx-1]
     danear = dabar.where((dabar.lat>=latmin) & (dabar.lat<=latmax), drop=True)
@@ -105,5 +118,37 @@ def max_zonal_mean(da):
         max_val = xr.polyval(max_lat, coefs)
     except ZeroDivisionError:
         print('Coefficient of x**2=0 so an error')
+    # PVpole = 
     result = xr.Dataset({'max_lat':max_lat['polyfit_coefficients'], 'max_val':max_val['polyfit_coefficients']})
     return result
+
+
+def max_merid_grad(da):
+    dabar = da.mean(dim='lon')
+    grad = dabar.differentiate(coord='lat')
+    latmax_ind = grad.argmax(dim='lat')
+    start_idx = latmax_ind-1
+    start_idx = start_idx.where(start_idx>=0, start_idx, 0)
+    end_idx = latmax_ind+2
+    end_idx = end_idx.where(end_idx<=len(grad.lat), end_idx, len(grad.lat))
+    latmin = grad.lat[start_idx]
+    latmax = grad.lat[end_idx-1]
+    danear = grad.where((grad.lat>=latmin) & (grad.lat<=latmax), drop=True)
+    coefs = danear.polyfit(dim='lat', deg=2, skipna=True)
+    try:
+        max_lat = -coefs.sel(degree=1)/(2*coefs.sel(degree=2))
+        max_val = xr.polyval(max_lat, coefs)
+    except ZeroDivisionError:
+        print('Coefficient of x**2=0 so an error')
+    result = xr.Dataset({'max_grad_lat':max_lat['polyfit_coefficients'], 'max_grad_val':max_val['polyfit_coefficients']})
+    return result
+
+
+def fft(da, lat_centre, lat_range, max_wav):
+    da_lat = da.where(da.lat<=lat_centre+lat_range/2, drop=True).where(da.lat>=lat_centre-lat_range/2, drop=True)
+    da_mean = da_lat.mean(dim='lat')
+    fft = np.abs(xrft.fft(da_mean, dim='lon'))
+    fft = fft.assign_coords({'freq_lon':fft.freq_lon*360.})
+    fft_pos = fft.where(fft.freq_lon>=0, drop=True)
+    fft_select = fft_pos.where(fft_pos.freq_lon<=max_wav, drop=True)
+    return fft_select

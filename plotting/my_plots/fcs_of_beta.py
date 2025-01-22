@@ -26,7 +26,7 @@ for beta in [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4]:
     print('calculating eddy enstrophy')
     ds_eddens = fcs.scaled2_eddy_enstrophy(ds)
     print('merging')
-    ds_eddens_renamed = ds_eddens.rename({var: f'{var}_eddens' for var in ds_eddens.variables if var !='time'})
+    ds_eddens_renamed = ds_eddens#.rename({var: f'{var}_eddens' for var in ds_eddens.variables if var !='time'})
     ds_merged = xr.merge([ds, ds_eddens_renamed])
     ds_merged['condensing_fraction'] = fcs.condensing_area(ds)
     ds_merged['beta'] = beta

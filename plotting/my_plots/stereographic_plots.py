@@ -10,7 +10,9 @@ import pdb
 import os
 import functions as fcs
 
-file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-4'
+file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-5'
+
+ref_lev = 5
 
 start_sol = 0
 
@@ -41,9 +43,9 @@ center, radius = [0.5, 0.5], 0.5
 verts = np.vstack([np.sin(theta), np.cos(theta)]).T
 circle = mpath.Path(verts * radius + center)
 
+dt = (0.5)**(ref_lev-4) * 4500.
 
-
-for timeind in range(int(start_sol*88774/4500), len(q.time)):
+for timeind in range(int(start_sol*88774/dt), len(q.time)):
 # for timeind in [153, 154, 155, 156]:
 # for timeind in range(0, 10):
 # for timeind in [9, 5918]:

@@ -13,6 +13,11 @@ from tomplot import (set_tomplot_style, tomplot_contours, tomplot_cmap,
                      regrid_horizontal_slice, regrid_regular_horizontal_slice)
 
 
+filepath = 'Relax_to_pole_and_CO2/annular_vortex_mars_55-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-100sols_tracer_tophat-80_ref-4'
+
+ref_lev = 4
+
+
 def gaussian_lat_lon_grid(nlat, nlon):
     # Generate Gaussian latitudes
     x, _ = roots_legendre(nlat)  # Roots of Legendre polynomial (Gaussian quadrature points)
@@ -29,7 +34,6 @@ def gaussian_lat_lon_grid(nlat, nlon):
 # Directory for results and plots
 # ---------------------------------------------------------------------------- #
 # When copying this example these should not be relative to this file
-filepath = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-5'
 
 results_dir = f'/data/home/sh1293/results/{filepath}'
 # plot_dir = f'{results_dir}/plots'
@@ -41,8 +45,10 @@ data_file = Dataset(results_file_name, 'r')
 times = np.array(data_file['time'])
 
 # lats, lons = gaussian_lat_lon_grid(40, 80)
-lats = np.arange(-90, 91, 1.5)
-lons = np.arange(-180, 181, 3)
+# lats = np.arange(-90, 91, 1.5*(0.5)**(ref_lev-4))
+lats = np.linspace(-90, 90, 120*2**(ref_lev-4)+1)
+# lons = np.arange(-180, 181, 3*(0.5)**(ref_lev-4))
+lons = np.linspace(-180, 181, 120*2**(ref_lev-4)+1)
 X, Y = np.meshgrid(lons, lats)
 
 ds_list=[]

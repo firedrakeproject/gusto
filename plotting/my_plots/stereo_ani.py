@@ -2,8 +2,9 @@ import os
 import ffmpeg
 from PIL import Image
 import glob
+from pdf2image import convert_from_path
 
-file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-4'
+file = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-5'
 results_dir = f'/data/home/sh1293/results/{file}'
 
 path = f'{results_dir}/Plots/Stereo_ani'
@@ -18,10 +19,12 @@ def create_gif_from_pdfs(path, delay):
 
     # Convert each PDF page to an image and add to frames list
     for pdf_file in pdf_files:
-        pdf_image = Image.open(pdf_file)
+        # pdf_image = Image.open(pdf_file)
         # Convert PDF to RGB if not already in RGB mode
-        pdf_image = pdf_image.convert("RGB")
-        frames.append(pdf_image)
+        # pdf_image = pdf_image.convert("RGB")
+        # frames.append(pdf_image)
+        image = convert_from_path(pdf_file)
+        frames.extend(image)
 
     # Save as GIF
     if frames:
@@ -36,7 +39,7 @@ def create_gif_from_pdfs(path, delay):
         print("No PDF files found.")
 
 # Usage
-create_gif_from_pdfs(f'{path}/', delay=10)
+create_gif_from_pdfs(f'{path}/', delay=2.5)
 
 
 
