@@ -13,7 +13,7 @@ from tomplot import (set_tomplot_style, tomplot_contours, tomplot_cmap,
                      regrid_horizontal_slice, regrid_regular_horizontal_slice)
 
 
-filepath = 'Relax_to_pole_and_CO2/annular_vortex_mars_55-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-100sols_tracer_tophat-80_ref-4'
+filepath = 'Relax_to_annulus/annular_vortex_mars_57-62_PVmax--2-2_PVpole--1-05_tau_r--2sol_A0-0-norel_len-100-300sols_tracer_tophat-80_ref-4'
 
 ref_lev = 4
 
@@ -48,14 +48,14 @@ times = np.array(data_file['time'])
 # lats = np.arange(-90, 91, 1.5*(0.5)**(ref_lev-4))
 lats = np.linspace(-90, 90, 120*2**(ref_lev-4)+1)
 # lons = np.arange(-180, 181, 3*(0.5)**(ref_lev-4))
-lons = np.linspace(-180, 181, 120*2**(ref_lev-4)+1)
+lons = np.linspace(-180, 180, 120*2**(ref_lev-4)+1)
 X, Y = np.meshgrid(lons, lats)
 
 ds_list=[]
 for i in range(0, len(times)):
-# for i in [0, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1]:
+# for i in [0, -1]:
     print(i)
-    for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity', 'tracer', 'CO2cond_flag', 'CO2cond_flag_cumulative']:
+    for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity', 'tracer', 'CO2cond_flag', 'CO2cond_flag_cumulative', 'tracer_rs']:
         try:
             field_data = extract_gusto_field(data_file, field_name, time_idx=i)
         except:
@@ -88,6 +88,7 @@ for i in range(0, len(times)):
         else:
             ds = xr.merge([ds, ds1])
 #         ds_list.append(ds1)
+    # pdb.set_trace()
 
 # ds = xr.concat(ds_list, dim='time')
 

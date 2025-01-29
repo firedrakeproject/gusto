@@ -22,12 +22,13 @@ for lev in files:
     tracer = ds.tracer
     q = ds.PotentialVorticity
     max_zonal_mean = fcs.max_zonal_mean(q)
-    lat_thresh = max_zonal_mean.where(ds.sol>=100, drop=True).mean(dim='time')['max_lat']
+    lat_thresh = max_zonal_mean
+    lat_thresh_mean = lat_thresh.where(ds.sol>=100, drop=True).mean(dim='time')['max_lat']
     max_grad = fcs.max_merid_grad(q)
     # print(f'{lev}')
     # print(max_grad)
     lat_thresh_grad = max_grad.where(ds.sol>=100, drop=True).mean(dim='time')['max_grad_lat']
-    pole_tracer, _ = fcs.tracer_integral(tracer, lat_thresh, 'pole')
+    pole_tracer, _ = fcs.tracer_integral(tracer, lat_thresh_mean, 'pole')
     total_tracer = fcs.total_tracer_integral(tracer)
     pole_tracer_frac = pole_tracer/total_tracer
     pole_tracer_grad, _ = fcs.tracer_integral(tracer, lat_thresh_grad, 'pole')
@@ -52,7 +53,7 @@ for lev in files:
     (condensing_fraction).plot(ax=axs[2], color=cs[i])
     axs[2].set_ylabel('Condensing fraction')
     axs[2].axvline(8877400, 0, 1, alpha=0.5, linestyle='--')
-    (lat_thresh).plot(ax=axs[3], color=cs[i])
+    (lat_thresh.max_lat).plot(ax=axs[3], color=cs[i])
     axs[3].set_ylabel('Lat of max zonal mean PV')
     axs[3].axvline(8877400, 0, 1, alpha=0.5, linestyle='--')
     (delta_q_inst).plot(ax=axs[4], color=cs[i])
