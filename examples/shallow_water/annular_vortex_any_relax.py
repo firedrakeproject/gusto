@@ -45,12 +45,12 @@ include_co2 = 'yes'
 ref_lev = 4
 
 # do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
-restart = False
-restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-30sols_tracer_tophat-80_ref-4_continuity'
+restart = True
+restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-1sols_tracer_tophat-80_ref-4_trial'
 
 # length of this run, time to start from (only relevant if doing a restart)
-rundays = 100
-start_time = 0
+rundays = 1
+start_time = 1
 dt = (0.5)**(ref_lev-4) * 450.
 
 # do you want a tracer or not. Edge of tophat function for tracer, north of this the tracer is intialised as 1, south is 0
@@ -61,8 +61,11 @@ hat_edge = 80
 # standard_start is 60-70, 1.6, 1 (i.e. the standard setup I've been playing with). If true then every run starts with this
 standard_start = True
 
+# normal dump_freq = 10
+dump_freq = 10
+
 # any extra info to include in the directory name
-extra_name = ''
+extra_name = '_trial'
 
 #####################################################################################
 
@@ -82,12 +85,18 @@ elif not tracer:
 
 toponame = f'A0-{A0scal}-norel'
 
+dt_dump = dt*dump_freq
+
 # ## max runtime currently 1 day
 if restart:
-    tmax = (rundays + start_time) * day
+    tmax1 = (rundays + start_time) * day
+    tmax = np.ceil(tmax1/dt_dump)*dt_dump
+    tmin1 = start_time*day
+    tmin = np.ceil(tmin1/dt_dump)*dt_dump
     lenname = f'len-{start_time}-{start_time+rundays}sols'
 else:
-    tmax = rundays * day
+    tmax1 = rundays * day
+    tmax = np.ceil(tmax1/dt_dump)*dt_dump
     lenname = f'len-{rundays}sols'
 # ## timestep
 
@@ -351,7 +360,7 @@ if not restart:
     # Equation, including mountain given by bexpr
     eqns, tracer_eqn, rs_tracer_eqn = equation_setup(restart=False, domain=domain, mesh=mesh, parameters=parameters, Omega=Omega, R=R, A0scal=A0scal, H=H)
 
-    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, dumplist=dumplist)
+    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=dump_freq, checkpoint=True, dumplist=dumplist)
 
     # Transport schemes
     transported_fields, tracer_transport, transport_methods = transport_setup(restart=False, domain=domain, eqns=eqns, tracer_eqn=tracer_eqn, rs_tracer_eqn=rs_tracer_eqn)
@@ -360,7 +369,7 @@ elif restart:
         dumplist.append('tracer_rs')
         groups.append('tracer_rs')
     create_restart_nc(dirpath=dirpath, dirnameold=dirnameold, groups=groups)
-    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=10, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5', dumplist=dumplist)
+    output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=dump_freq, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5', dumplist=dumplist)
 
     chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
     mesh = chkpt_mesh
@@ -535,7 +544,7 @@ if not restart:
 elif restart:
     logger.info(f'Restart from {dirnameold}')
     logger.info(f'Directory name is {dirname}')
-    stepper.run(t=start_time*day, tmax=tmax, pick_up=True)
+    stepper.run(t=tmin, tmax=tmax, pick_up=True)
 
 
 print(f'directory name is {dirname}')
