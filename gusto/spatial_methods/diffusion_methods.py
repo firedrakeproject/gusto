@@ -45,7 +45,7 @@ def interior_penalty_diffusion_form(domain, test, q, parameters):
     """
 
     quad = domain.max_quad_degree
-    dS_ = (dS_v(degree=quad) + dS_h(degree=quad)) if Vu.extruded else dS(degree=quad)
+    dS_ = (dS_v(degree=quad) + dS_h(degree=quad)) if domain.mesh.extruded else dS(degree=quad)
     kappa = parameters.kappa
     mu = parameters.mu
 
