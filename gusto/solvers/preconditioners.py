@@ -126,7 +126,7 @@ class VerticalHybridizationPC(PCBase):
 
         # Again, assumes tensor product structure. Why use this if you
         # don't have some form of vertical extrusion?
-        Kform = gammar('+') * jump(sigma, n=n) * dS_h
+        Kform = gammar('+') * jump(sigma, n=n) * dS_h(degree=domain.max_quad_degree)
 
         # Here we deal with boundary conditions
         if self.ctx.row_bcs:
