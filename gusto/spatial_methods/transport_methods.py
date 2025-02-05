@@ -310,7 +310,8 @@ def upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=Fa
     if outflow and ibp == IntegrateByParts.NEVER:
         raise ValueError("outflow is True and ibp is None are incompatible options")
     Vu = domain.spaces("HDiv")
-    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    quad = domain.max_quad_degree
+    dS_ = (dS_v(degree=quad) + dS_h(degree=quad)) if Vu.extruded else dS(degree=quad)
     ubar = Function(Vu)
 
     if ibp == IntegrateByParts.ONCE:
@@ -372,10 +373,12 @@ def upwind_advection_form_1d(domain, test, q, ibp=IntegrateByParts.ONCE,
     ubar = Function(Vu)
     n = FacetNormal(domain.mesh)
     un = 0.5*(ubar * n[0] + abs(ubar * n[0]))
+    quad = domain.max_quad_degree
+    dS_ = dS(degree=quad)
 
     if ibp == IntegrateByParts.ONCE:
         L = -(test * ubar).dx(0) * q * dx + \
-            jump(test) * (un('+')*q('+') - un('-')*q('-'))*dS
+            jump(test) * (un('+')*q('+') - un('-')*q('-'))*dS_
     else:
         raise NotImplementedError("1d advection form only implemented with option ibp=IntegrateByParts.ONCE")
 
@@ -414,7 +417,8 @@ def upwind_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=F
     if outflow and ibp == IntegrateByParts.NEVER:
         raise ValueError("outflow is True and ibp is None are incompatible options")
     Vu = domain.spaces("HDiv")
-    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    quad = domain.max_quad_degree
+    dS_ = (dS_v(degree=quad) + dS_h(degree=quad)) if Vu.extruded else dS(degree=quad)
     ubar = Function(Vu)
 
     if ibp == IntegrateByParts.ONCE:
@@ -476,10 +480,12 @@ def upwind_continuity_form_1d(domain, test, q, ibp=IntegrateByParts.ONCE,
     ubar = Function(Vu)
     n = FacetNormal(domain.mesh)
     un = 0.5*(ubar * n[0] + abs(ubar * n[0]))
+    quad = domain.max_quad_degree
+    dS_ = dS(degree=quad)
 
     if ibp == IntegrateByParts.ONCE:
         L = -test.dx(0) * q * ubar * dx \
-            + jump(test) * (un('+')*q('+') - un('-')*q('-')) * dS
+            + jump(test) * (un('+')*q('+') - un('-')*q('-')) * dS_
     else:
         raise NotImplementedError("1d continuity form only implemented with option ibp=IntegrateByParts.ONCE")
 
@@ -520,7 +526,8 @@ def upwind_tracer_conservative_form(domain, test, q, rho,
     if outflow and ibp == IntegrateByParts.NEVER:
         raise ValueError("outflow is True and ibp is None are incompatible options")
     Vu = domain.spaces("HDiv")
-    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    quad = domain.max_quad_degree
+    dS_ = (dS_v(degree=quad) + dS_h(degree=quad)) if Vu.extruded else dS(degree=quad)
     ubar = Function(Vu)
 
     if ibp == IntegrateByParts.ONCE:
@@ -576,7 +583,8 @@ def vector_manifold_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, o
 
     # TODO: there should maybe be a restriction on IBP here
     Vu = domain.spaces("HDiv")
-    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    quad = domain.max_quad_degree
+    dS_ = (dS_v(degree=quad) + dS_h(degree=quad)) if Vu.extruded else dS(degree=quad)
     ubar = Function(Vu)
     n = FacetNormal(domain.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
@@ -613,7 +621,8 @@ def vector_manifold_continuity_form(domain, test, q, ibp=IntegrateByParts.ONCE, 
     L = upwind_continuity_form(domain, test, q, ibp, outflow)
 
     Vu = domain.spaces("HDiv")
-    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    quad = domain.max_quad_degree
+    dS_ = (dS_v(degree=quad) + dS_h(degree=quad)) if Vu.extruded else dS(degree=quad)
     ubar = Function(Vu)
     n = FacetNormal(domain.mesh)
     un = 0.5*(dot(ubar, n) + abs(dot(ubar, n)))
@@ -653,7 +662,8 @@ def upwind_circulation_form(domain, test, q, ibp=IntegrateByParts.ONCE):
     """
 
     Vu = domain.spaces("HDiv")
-    dS_ = (dS_v + dS_h) if Vu.extruded else dS
+    quad = domain.max_quad_degree
+    dS_ = (dS_v(degree=quad) + dS_h(degree=quad)) if Vu.extruded else dS(degree=quad)
     ubar = Function(Vu)
     n = FacetNormal(domain.mesh)
     Upwind = 0.5*(sign(dot(ubar, n))+1)
