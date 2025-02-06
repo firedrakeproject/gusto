@@ -6,7 +6,7 @@ from firedrake import (Function, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import replace_subject, all_terms, drop
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
-from gusto.core.labels import time_derivative
+from gusto.core.labels import time_derivative, source_label
 from gusto.time_discretisation.time_discretisation import TimeDiscretisation
 
 
@@ -52,6 +52,11 @@ class MultilevelTimeDiscretisation(TimeDiscretisation):
         super().setup(equation=equation, apply_bcs=apply_bcs, *active_labels)
         for n in range(self.nlevels, 1, -1):
             setattr(self, "xnm%i" % (n-1), Function(self.fs))
+
+        # Check that we do not have source terms
+        for t in self.residual:
+            if (t.has_label(source_label)):
+                raise NotImplementedError("Source terms have not been implemented with multilevel schemes")
 
 
 class BDF2(MultilevelTimeDiscretisation):
@@ -241,6 +246,7 @@ class Leapfrog(MultilevelTimeDiscretisation):
 
         self.xnm1.assign(x_in[0])
         self.x1.assign(x_in[1])
+
         # Set initial solver guess
         self.x_out.assign(x_in[1])
         solver.solve()

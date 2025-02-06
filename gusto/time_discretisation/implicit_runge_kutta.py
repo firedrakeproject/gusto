@@ -7,7 +7,7 @@ from firedrake import (Function, split, NonlinearVariationalProblem,
 from firedrake.fml import replace_subject, all_terms, drop
 from firedrake.utils import cached_property
 
-from gusto.core.labels import time_derivative
+from gusto.core.labels import time_derivative, source_label
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
@@ -101,6 +101,13 @@ class ImplicitRungeKutta(TimeDiscretisation):
         """
 
         super().setup(equation, apply_bcs, *active_labels)
+
+        self.k = [Function(self.fs) for i in range(self.nStages)]
+
+        # Check that we do not have source terms
+        for t in self.residual:
+            if (t.has_label(source_label)):
+                raise NotImplementedError("Source terms have not been implemented with implicit RK schemes")
 
         if self.rk_formulation == RungeKuttaFormulation.predictor:
             self.xs = [Function(self.fs) for _ in range(self.nStages)]
