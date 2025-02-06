@@ -2,7 +2,7 @@ import os
 import matplotlib.pyplot as plt
 import xarray as xr
 
-file = 'Relax_to_annulus/annular_vortex_mars_57-62_PVmax--2-2_PVpole--1-05_tau_r--2sol_A0-0-norel_len-300sols_tracer_tophat-80_ref-4'
+file = 'Relax_to_annulus/annular_vortex_mars_57-62_PVmax--2-2_PVpole--1-05_tau_r--2sol_A0-0-norel_len-100-300sols_tracer_tophat-80_ref-4'
 
 sol_early = 100
 sol_late = 300
@@ -22,7 +22,7 @@ plot = ds_late_time_zonal_mean.PotentialVorticity.plot(ax=ax)
 plt.savefig(f'{path}/Plots/late_time_pv_profile_{sol_early}-{sol_late}sol.pdf')
 
 
-file1 = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-300sols_tracer_tophat-80_ref-4'
+file1 = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-100-300sols_tracer_tophat-80_ref-4'
 path1 = f'/data/home/sh1293/results/{file1}'
 
 ds1 = xr.open_dataset(f'{path1}/regrid_output.nc')

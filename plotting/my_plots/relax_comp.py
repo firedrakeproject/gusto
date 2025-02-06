@@ -29,12 +29,16 @@ for beta in [1, 2]:
     ds_eddens = fcs.scaled2_eddy_enstrophy(ds)
     cond_frac = fcs.condensing_area(ds)
     q = ds.PotentialVorticity
-    tracer = ds.tracer_rs
+    tracer = ds.tracer
     max_zonal_mean = fcs.max_zonal_mean(q)
+    max_merid_grad = fcs.max_merid_grad(q)
     lat_thresh = max_zonal_mean.where(ds.sol>=100, drop=True).mean(dim='time')['max_lat']
+    lat_thresh_grad = max_merid_grad.where(ds.sol>=100, drop=True).mean(dim='time')['max_grad_lat']
     pole_tracer, _ = fcs.tracer_integral(tracer, lat_thresh, 'pole')
+    pole_tracer_grad, _ = fcs.tracer_integral(tracer, lat_thresh_grad, 'pole')
     total_tracer = fcs.total_tracer_integral(tracer)
     pole_tracer_frac = pole_tracer/total_tracer
+    pole_tracer_grad_frac = pole_tracer_grad/total_tracer
     fft = fcs.fft(q, lat_thresh, 10, 100)
     # zonal_power_zero = fft.where(fft.freq_lon==0, drop=True).sum(dim='freq_lon')/fft.where(fft.freq_lon!=0, drop=True).sum(dim='freq_lon')
     fft_ave = fft.where(fft.time>=100*88774., drop=True).mean(dim='time')
@@ -42,7 +46,8 @@ for beta in [1, 2]:
 
 
     pveddens = ds_eddens.PotentialVorticity_eddens.plot(ax=ax[0], color=colour, label=labels[beta])
-    tracer_plot = pole_tracer_frac.plot(ax=ax[1], color=colour, label=labels[beta])
+    tracer_plot = pole_tracer_frac.plot(ax=ax[1], color=colour, label=labels[beta]+f', {lat_thresh.values:.2f}')
+    tracer_grad_plot = pole_tracer_grad_frac.plot(ax=ax[1], color=colour, linestyle='--', label=labels[beta]+f', {lat_thresh_grad.values:.2f}')
     # power_plot = zonal_power_zero.plot(ax=ax[2], color=colour, label=labels[beta])
     fft_plot = fft_ave_cut.plot(ax=ax[2], color=colour, label=labels[beta], marker='*')
 
@@ -50,6 +55,8 @@ for beta in [1, 2]:
     ax[1].set_title('Poleward tracer integral')
     ax[2].set_title('Amplitude of zonal wavenumbers')
     ax[0].legend()
+    ax[1].legend()
+    ax[2].legend()
 
 plt.savefig(f'{path}/Relax_to_pole_and_CO2/full_vs_ann_comp.pdf')
 print(f'Plot made:\n {path}/Relax_to_pole_and_CO2/full_vs_ann_comp.pdf')

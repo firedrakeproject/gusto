@@ -1,6 +1,9 @@
 import numpy as np
 import xarray as xr
 import xrft
+import matplotlib.pyplot as plt
+from cartopy import crs as ccrs
+from shapely.geometry import LineString
 
 def scaled2_eddy_enstrophy(q, **kwargs):
     '''
@@ -118,8 +121,9 @@ def max_zonal_mean(da):
         max_val = xr.polyval(max_lat, coefs)
     except ZeroDivisionError:
         print('Coefficient of x**2=0 so an error')
-    # PVpole = 
-    result = xr.Dataset({'max_lat':max_lat['polyfit_coefficients'], 'max_val':max_val['polyfit_coefficients']})
+    pole_lat = dabar.lat.max().item()
+    pole_val = dabar.sel(lat=pole_lat).reset_coords('lat', drop=True)
+    result = xr.Dataset({'max_lat':max_lat['polyfit_coefficients'], 'max_val':max_val['polyfit_coefficients'], 'pole_val':pole_val})
     return result
 
 
@@ -152,3 +156,26 @@ def fft(da, lat_centre, lat_range, max_wav):
     fft_pos = fft.where(fft.freq_lon>=0, drop=True)
     fft_select = fft_pos.where(fft_pos.freq_lon<=max_wav, drop=True)
     return fft_select
+
+
+def contour_length(da, contour_value, start_sol=100):
+    # da = da.where(da.mean(dim='time')>0, drop=True)
+    da = da.where(da.time>start_sol*88774., drop=True)
+    lons = da.lon.values
+    lats = da.lat.values
+    times = da.time.values
+    contour_lengths = []
+    fig, ax = plt.subplots(subplot_kw={"projection": ccrs.NorthPolarStereo()})
+    for i in range(len(times)):
+        if i%200==0:
+            print(i)
+        contour_set = ax.contour(lons, lats, da[i], transform=ccrs.PlateCarree(), levels=[contour_value])
+        for collection in contour_set.collections:
+            for path in collection.get_paths():
+                coords = path.vertices
+                line_string = LineString(coords)
+                contour_lengths.append(line_string.length)
+            collection.remove()
+    plt.close(fig)
+    contour_lengths = xr.DataArray(contour_lengths, coords={'time':times}, dims=['time'])
+    return contour_lengths
