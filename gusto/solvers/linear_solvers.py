@@ -55,7 +55,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
         """
         self.equations = equations
         self.dt = equations.domain.dt
-        self.alpha = alpha
+        self.alpha = Constant(alpha)
         self.tau_values = tau_values if tau_values is not None else {}
 
         if solver_parameters is not None:
@@ -811,9 +811,10 @@ class LinearTimesteppingSolver(object):
             lambda t: Term(t.get(linearisation).form, t.labels),
             drop)
 
+        self.alpha = Constant(alpha)
         dt = equation.domain.dt
         W = equation.function_space
-        beta = dt*alpha
+        beta = dt*self.alpha
 
         # Split up the rhs vector (symbolically)
         self.xrhs = Function(W)
