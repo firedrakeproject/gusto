@@ -8,7 +8,7 @@ from gusto.equations import PrognosticEquationSet
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.io import TimeData
 from gusto.core.labels import transport, diffusion, prognostic, transporting_velocity
-from gusto.core.logging import logger
+from gusto.core.logging import logger, DEBUG
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.spatial_methods.transport_methods import TransportMethod
 import ufl
@@ -167,6 +167,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         """
         Logs some field stats, which can be useful for debugging.
         """
+        current_log_level = logger.getEffectiveLevel()
+        if current_log_level > DEBUG:
+            return
         for field_name in self.fields._field_names:
             field_data = self.fields(field_name).dat.data_ro
             # Mixed functions don't have min or max routines, and are less
