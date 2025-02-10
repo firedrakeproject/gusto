@@ -418,11 +418,12 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
             # Cap number of subcycles
             if max_subcycles is not None:
-                self.ncycles = min(self.ncycles, max_subcycles)
-                logger.warning(
-                    'Adaptive subcycling: capping number of subcycles at '
-                    f'{max_subcycles}'
-                )
+                if self.ncycles > max_subcycles:
+                    logger.warning(
+                        'Adaptive subcycling: capping number of subcycles at '
+                        f'{max_subcycles}'
+                    )
+                    self.ncycles = max_subcycles
 
             logger.debug(f'Performing {self.ncycles} subcycles')
             self.dt.assign(self.original_dt/self.ncycles)
