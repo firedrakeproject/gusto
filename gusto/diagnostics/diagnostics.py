@@ -7,7 +7,7 @@ from firedrake import (dot, dx, Function, sqrt, TestFunction,
                        ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, pi,
                        TensorFunctionSpace, SpatialCoordinate, as_vector,
                        Projector, assemble, FunctionSpace, FiniteElement,
-                       TensorProductElement)
+                       TensorProductElement, CellVolume, Cofunction)
 from firedrake.assign import Assigner
 from firedrake.__future__ import interpolate
 from ufl.domain import extract_unique_domain
@@ -410,12 +410,8 @@ class CourantNumber(DiagnosticField):
 
         V = FunctionSpace(domain.mesh, "DG", 0)
         test = TestFunction(V)
-        cell_volume = Function(V)
-        self.cell_flux = Function(V)
-
-        # Calculate cell volumes
-        One = Function(V).assign(1)
-        assemble(One*test*dx, tensor=cell_volume)
+        cell_volume = Function(V).interpolate(CellVolume(domain.mesh))
+        self.cell_flux = Cofunction(V.dual())
 
         # Get the velocity that is being used
         if type(self.velocity) is str:
@@ -450,7 +446,10 @@ class CourantNumber(DiagnosticField):
         self.cell_flux_form = 2*avg(un*test)*dS_calc + un*test*ds_calc
 
         # Final Courant number expression
-        self.expr = self.cell_flux * domain.dt / cell_volume
+        cell_flux = self.cell_flux.riesz_representation(
+            'l2', solver_options={'function_space': V}
+        )
+        self.expr = cell_flux * domain.dt / cell_volume
 
         super().setup(domain, state_fields)
 
