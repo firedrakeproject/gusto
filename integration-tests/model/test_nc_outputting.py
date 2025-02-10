@@ -11,8 +11,17 @@ from gusto import (Domain, IO, PrescribedTransport, AdvectionEquation,
                    ForwardEuler, OutputParameters, XComponent, YComponent,
                    ZComponent, MeridionalComponent, ZonalComponent,
                    RadialComponent, DGUpwind)
-from netCDF4 import Dataset
+from mpi4py import MPI
+from netCDF4 import Dataset, chartostring
 import pytest
+from pytest_mpi import parallel_assert
+
+
+def make_dirname(test_name, suffix=""):
+    if MPI.COMM_WORLD.size > 1:
+        return f"pytest_{test_name}_parallel" + suffix
+    else:
+        return f"pytest_{test_name}" + suffix
 
 
 @pytest.fixture
@@ -53,17 +62,19 @@ def domain_and_mesh_details(geometry):
     return (domain, mesh_details)
 
 
-# TODO: make parallel configurations of this test
+@pytest.mark.parallel([1, 2])
 @pytest.mark.parametrize("geometry", ["interval", "vertical_slice",
                                       "plane", "extruded_plane",
                                       "spherical_shell", "extruded_spherical_shell"])
-def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
+def test_nc_outputting(geometry, domain_and_mesh_details):
 
     # ------------------------------------------------------------------------ #
     # Make model objects
     # ------------------------------------------------------------------------ #
 
-    dirname = str(tmpdir)
+    # Make sure all ranks use the same file
+    dirname = make_dirname("nc_outputting", suffix=f"_{geometry}_{MPI.COMM_WORLD.size}")
+
     domain, mesh_details = domain_and_mesh_details
     V = domain.spaces('DG')
     if geometry == "interval":
@@ -136,16 +147,28 @@ def test_nc_outputting(tmpdir, geometry, domain_and_mesh_details):
     # ------------------------------------------------------------------------ #
 
     # Check that metadata is correct
-    output_data = Dataset(f'{dirname}/field_output.nc', 'r')
+    try:
+        output_data = Dataset(f'results/{dirname}/field_output.nc', 'r', parallel=True)
+    except ValueError:
+        # serial netCDF4, do everything on rank 0
+        if MPI.COMM_WORLD.rank == 0:
+            output_data = Dataset(f'results/{dirname}/field_output.nc', 'r', parallel=False)
+        else:
+            output_data = None
+
     for metadata_key, metadata_value in mesh_details.items():
         # Convert None or booleans to strings
-        if type(metadata_value) in [type(None), type(True)]:
+        if metadata_value is None or isinstance(metadata_value, bool):
             output_value = str(metadata_value)
         else:
             output_value = metadata_value
 
         error_message = f'Metadata {metadata_key} for geometry {geometry} is incorrect'
         if type(output_value) == float:
-            assert output_data[metadata_key][0] - output_value < 1e-14, error_message
+            def assertion():
+                return output_data[metadata_key][0] - output_value < 1e-14
         else:
-            assert output_data[metadata_key][0] == output_value, error_message
+            def assertion():
+                return str(chartostring(output_data[metadata_key][0])) == output_value
+
+        parallel_assert(assertion, participating=output_data is not None, msg=error_message)
