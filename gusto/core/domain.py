@@ -11,6 +11,7 @@ from firedrake import (
     VectorFunctionSpace, Function, FunctionSpace, perp, curl
 )
 import numpy as np
+from mpi4py import MPI
 
 
 class Domain(object):
@@ -233,25 +234,26 @@ def construct_domain_metadata(mesh, coords, on_sphere):
     else:
         raise ValueError('Unable to determine domain type')
 
+    # Determine domain properties
+    chi = coords.chi_coords['DG1_equispaced']
     comm = mesh.comm
-    my_rank = comm.Get_rank()
-
-    # Properties of domain will be determined from full coords, so need
-    # doing on the first processor then broadcasting to others
-
-    if my_rank == 0:
-        chi = coords.global_chi_coords['DG1_equispaced']
-        if not on_sphere:
-            metadata['domain_extent_x'] = np.max(chi[0, :]) - np.min(chi[0, :])
-            if metadata['domain_type'] in ['plane', 'extruded_plane']:
-                metadata['domain_extent_y'] = np.max(chi[1, :]) - np.min(chi[1, :])
-        if mesh.extruded:
-            metadata['domain_extent_z'] = np.max(chi[-1, :]) - np.min(chi[-1, :])
-
-    else:
-        metadata = {}
-
-    # Send information to other processors
-    metadata = comm.bcast(metadata, root=0)
+    if not on_sphere:
+        _min_x = np.min(chi[0].dat.data_ro)
+        _max_x = np.max(chi[0].dat.data_ro)
+        min_x = comm.allreduce(_min_x, MPI.MIN)
+        max_x = comm.allreduce(_max_x, MPI.MAX)
+        metadata['domain_extent_x'] = max_x - min_x
+        if metadata['domain_type'] in ['plane', 'extruded_plane']:
+            _min_y = np.min(chi[1].dat.data_ro)
+            _max_y = np.max(chi[1].dat.data_ro)
+            min_y = comm.allreduce(_min_y, MPI.MIN)
+            max_y = comm.allreduce(_max_y, MPI.MAX)
+            metadata['domain_extent_y'] = max_y - min_y
+    if mesh.extruded:
+        _min_z = np.min(chi[-1].dat.data_ro)
+        _max_z = np.max(chi[-1].dat.data_ro)
+        min_z = comm.allreduce(_min_z, MPI.MIN)
+        max_z = comm.allreduce(_max_z, MPI.MAX)
+        metadata['domain_extent_z'] = max_z - min_z
 
     return metadata

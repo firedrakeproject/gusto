@@ -20,6 +20,30 @@ cd firedrake/src/gusto
 make test
 ```
 
+#### Parallel output with netCDF
+
+The [`netCDF4`](https://pypi.org/project/netCDF4/) package installed by Gusto does not support parallel usage.
+This means that, when Gusto is run in parallel, distributed data structures must first be gathered onto rank 0 before they can be output.
+This is *extremely inefficient* at high levels of parallelism.
+
+To avoid this it is possible to build a parallel-aware version of `netCDF4`.
+The steps to do this are as follows:
+
+1. Activate the Firedrake virtual environment.
+2. Uninstall the existing `netCDF4` package:
+    ```
+    $ pip uninstall netCDF4
+    ```
+3. Set necessary environment variables (note that this assumes that PETSc was built by Firedrake):
+    ```
+    $ export HDF5_DIR=$VIRTUAL_ENV/src/petsc/default
+    $ export NETCDF4_DIR=$HDF5_DIR
+    ```
+4. Install the parallel version of `netCDF4`:
+    ```
+    $ pip install --no-build-isolation --no-binary netCDF4 netCDF4
+    ```
+
 ### Getting Started
 
 Once you have a working installation, the best way to get started with Gusto is to play with some of the examples in the `gusto/examples` directory.

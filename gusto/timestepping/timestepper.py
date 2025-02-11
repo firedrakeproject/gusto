@@ -8,10 +8,11 @@ from gusto.equations import PrognosticEquationSet
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.io import TimeData
 from gusto.core.labels import transport, diffusion, prognostic, transporting_velocity
-from gusto.core.logging import logger
+from gusto.core.logging import logger, DEBUG
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.spatial_methods.transport_methods import TransportMethod
 import ufl
+import numpy as np
 
 __all__ = ["BaseTimestepper", "Timestepper", "PrescribedTransport"]
 
@@ -162,6 +163,23 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         logger.info('='*40)
         logger.info(f'at start of timestep {self.step}, t={float(self.t)}, dt={float(self.dt)}')
 
+    def log_field_stats(self):
+        """
+        Logs some field stats, which can be useful for debugging.
+        """
+        current_log_level = logger.getEffectiveLevel()
+        if current_log_level > DEBUG:
+            return
+        for field_name in self.fields._field_names:
+            field_data = self.fields(field_name).dat.data_ro
+            # Mixed functions don't have min or max routines, and are less
+            # useful, so try to eliminate these by only logging fields with
+            # a 1-dimension array of data
+            if type(field_data) is np.ndarray and len(np.shape(field_data)) == 1:
+                min_val = field_data.min()
+                max_val = field_data.max()
+                logger.debug(f'{field_name}, min: {min_val}, max: {max_val}')
+
     def run(self, t, tmax, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax
@@ -200,6 +218,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             logger.debug('Dumping output to disk')
             self.io.setup_dump(self.fields, t, pick_up)
 
+        self.log_field_stats()
+
         self.t.assign(t)
 
         # Time loop
@@ -225,6 +245,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                     last_ref_update_time=self.last_ref_update_time
                 )
                 self.io.dump(self.fields, time_data)
+
+            self.log_field_stats()
 
         if self.io.output.checkpoint and self.io.output.checkpoint_method == 'dumbcheckpoint':
             self.io.chkpt.close()
@@ -406,7 +428,8 @@ class PrescribedTransport(Timestepper):
             raise RuntimeError('Prescribed velocity already set up!')
 
         self.velocity_projection = Projector(
-            expr_func(self.t), self.fields('u')
+            expr_func(self.t), self.fields('u'),
+            quadrature_degree=self.equation.domain.max_quad_degree
         )
 
         self.is_velocity_setup = True
