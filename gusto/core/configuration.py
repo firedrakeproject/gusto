@@ -1,7 +1,7 @@
 """Some simple tools for configuring the model."""
 from abc import ABCMeta, abstractmethod
 from enum import Enum
-from firedrake import sqrt, Constant, Function, FunctionSpace
+from firedrake import sqrt, Function, FunctionSpace
 
 
 __all__ = [
@@ -12,7 +12,7 @@ __all__ = [
     "EmbeddedDGOptions", "ConservativeEmbeddedDGOptions", "RecoveryOptions",
     "ConservativeRecoveryOptions", "SUPGOptions", "MixedFSOptions",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters",
-    "SubcyclingOptions", "convert_parameters_to_real_space"
+    "SubcyclingOptions"
 ]
 
 
@@ -50,21 +50,21 @@ class TransportEquationType(Enum):
 class Configuration(object):
     """A base configuration object, for storing aspects of the model."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, mesh=None, **kwargs):
         """
         Args:
             **kwargs: attributes and their values to be stored in the object.
         """
         for name, value in kwargs.items():
-            self.__setattr__(name, value)
+            self.__setattr__(mesh, name, value)
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, mesh, name, value):
         """
         Sets the model configuration attributes.
 
         When attributes are provided as floats or integers, these are converted
         to Firedrake :class:`Constant` objects, other than a handful of special
-        integers (dumpfreq, pddumpfreq, chkptfreq and log_level).
+        integers.
 
         Args:
             name: the attribute's name.
@@ -77,14 +77,17 @@ class Configuration(object):
         if not hasattr(self, name):
             raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, name))
 
-        # Almost all parameters should be Constants -- but there are some
-        # specific exceptions which should be kept as integers
+        # Almost all parameters should be functions on the real space
+        # -- but there are some specific exceptions which should be
+        # kept as integers
+        if mesh is not None:
+            R = FunctionSpace(mesh, 'R', 0)
         non_constants = [
             'dumpfreq', 'pddumpfreq', 'chkptfreq',
             'fixed_subcycles', 'max_subcycles', 'subcycle_by_courant'
         ]
         if type(value) in [float, int] and name not in non_constants:
-            object.__setattr__(self, name, Constant(value))
+            object.__setattr__(self, name, Function(R, val=float(value)))
         else:
             object.__setattr__(self, name, value)
 
@@ -308,17 +311,3 @@ class SubcyclingOptions(Configuration):
             raise ValueError(
                 "Cannot provide both fixed_subcycles and subcycle_by_courant"
                 + "parameters.")
-
-
-def convert_parameters_to_real_space(parameters, mesh):
-    """Convert parameters to functions in real space.
-
-    Args:
-        parameters (:class:`Configuration`): the configuration object
-        containing the parameters to convert
-        mesh (:class:`firedrake.Mesh`): the mesh object to use for the real space.
-    """
-    R = FunctionSpace(mesh, 'R', 0)
-    for name, value in vars(parameters).items():
-        if isinstance(value, (float, Constant)):
-            setattr(parameters, name, Function(R, val=float(value)))

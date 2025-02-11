@@ -6,7 +6,6 @@ from gusto.core.labels import (
     time_derivative, transport, prognostic, linearisation,
     pressure_gradient, coriolis, divergence, gravity, incompressible
 )
-from gusto.core.configuration import convert_parameters_to_real_space
 from gusto.equations.common_forms import (
     advection_form, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form,
@@ -106,11 +105,6 @@ class BoussinesqEquations(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
-        # Convert the attributes of type ``float`` or ``firedrake.Constant``
-        # in the parameters to a function in real space. This conversion is a
-        # preventive to avoid issues with adjoint computations, particularly
-        # when the parameters  are used as controls in sensitivity analyses.
-        convert_parameters_to_real_space(parameters, domain.mesh)
         self.compressible = compressible
 
         w, phi, gamma = self.tests[0:3]

@@ -17,7 +17,6 @@ from gusto.equations.common_forms import (
 )
 from gusto.equations.active_tracers import Phases, TracerVariableType
 from gusto.equations.prognostic_equations import PrognosticEquationSet
-from gusto.core.configuration import convert_parameters_to_real_space
 __all__ = ["CompressibleEulerEquations", "HydrostaticCompressibleEulerEquations"]
 
 
@@ -101,11 +100,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
-        # Convert the attributes of type ``float`` or ``firedrake.Constant``
-        # in the parameters to a function in real space. This conversion is a
-        # preventive to avoid issues with adjoint computations, particularly
-        # when the parameters  are used as controls in sensitivity analyses.
-        convert_parameters_to_real_space(parameters, domain.mesh)
         g = parameters.g
         cp = parameters.cp
 

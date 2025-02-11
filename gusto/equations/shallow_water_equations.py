@@ -12,7 +12,6 @@ from gusto.equations.common_forms import (
     linear_continuity_form, linear_advection_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
-from gusto.core.configuration import convert_parameters_to_real_space
 
 
 __all__ = ["ShallowWaterEquations", "LinearShallowWaterEquations",
@@ -88,11 +87,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         self.parameters = parameters
         self.domain = domain
-        # Convert the attributes of type ``float`` or ``firedrake.Constant``
-        # in the parameters to a function in real space. This conversion is a
-        # preventive to avoid issues with adjoint computations, particularly
-        # when the parameters  are used as controls in sensitivity analyses.
-        convert_parameters_to_real_space(parameters, self.domain.mesh)
         self.active_tracers = active_tracers
 
         self._setup_residual(fexpr, topog_expr, u_transport_option)
@@ -655,11 +649,6 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
                          active_tracers=active_tracers)
 
         self.parameters = parameters
-        # Convert the attributes of type ``float`` or ``firedrake.Constant``
-        # in the parameters to a function in real space. This conversion is a
-        # preventive to avoid issues with adjoint computations, particularly
-        # when the parameters  are used as controls in sensitivity analyses.
-        convert_parameters_to_real_space(parameters, domain.mesh)
         g = parameters.g
         H = parameters.H
 
