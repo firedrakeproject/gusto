@@ -43,7 +43,7 @@ def dcmip_3_1_gravity_wave(
     # Test case parameters
     # ------------------------------------------------------------------------ #
 
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     a_ref = 6.37122e6               # Radius of the Earth (m)
     X = 125.0                       # Reduced-size Earth reduction factor
     a = a_ref/X                     # Scaled radius of planet (m)

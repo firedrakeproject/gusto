@@ -84,7 +84,7 @@ def unsaturated_bubble(
     domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
-    params = CompressibleParameters()
+    params = CompressibleParameters(mesh)
     tracers = [WaterVapour(), CloudWater(), Rain()]
     eqns = CompressibleEulerEquations(
         domain, params, active_tracers=tracers, u_transport_option=u_eqn_type

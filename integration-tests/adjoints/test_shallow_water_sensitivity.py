@@ -37,7 +37,7 @@ def test_shallow_water(tmpdir):
     mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=2)
     x = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, 'BDM', 1)
-    parameters = ShallowWaterParameters(H=H)
+    parameters = ShallowWaterParameters(mesh, H=H)
 
     # Equation
     Omega = parameters.Omega

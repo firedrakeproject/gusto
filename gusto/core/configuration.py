@@ -50,15 +50,18 @@ class TransportEquationType(Enum):
 class Configuration(object):
     """A base configuration object, for storing aspects of the model."""
 
+    mesh = None
+
     def __init__(self, mesh=None, **kwargs):
         """
         Args:
             **kwargs: attributes and their values to be stored in the object.
         """
+        self.mesh = mesh
         for name, value in kwargs.items():
-            self.__setattr__(mesh, name, value)
+            self.__setattr__(name, value)
 
-    def __setattr__(self, mesh, name, value):
+    def __setattr__(self, name, value):
         """
         Sets the model configuration attributes.
 
@@ -80,13 +83,14 @@ class Configuration(object):
         # Almost all parameters should be functions on the real space
         # -- but there are some specific exceptions which should be
         # kept as integers
-        if mesh is not None:
-            R = FunctionSpace(mesh, 'R', 0)
+        if self.mesh is not None:
+            R = FunctionSpace(self.mesh, 'R', 0)
         non_constants = [
             'dumpfreq', 'pddumpfreq', 'chkptfreq',
             'fixed_subcycles', 'max_subcycles', 'subcycle_by_courant'
         ]
         if type(value) in [float, int] and name not in non_constants:
+            print(name, type(value))
             object.__setattr__(self, name, Function(R, val=float(value)))
         else:
             object.__setattr__(self, name, value)

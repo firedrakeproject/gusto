@@ -42,7 +42,7 @@ def test_diffusion_sensitivity(nu_is_control, tmpdir):
     R = FunctionSpace(mesh, "R", 0)
     # We need to define nu as a function in order to have a control variable.
     nu = Function(R, val=0.0001)
-    diffusion_params = DiffusionParameters(kappa=nu)
+    diffusion_params = DiffusionParameters(mesh, kappa=nu)
     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
 
     diffusion_scheme = BackwardEuler(domain)

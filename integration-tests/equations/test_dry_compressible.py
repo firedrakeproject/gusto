@@ -30,7 +30,7 @@ def run_dry_compressible(tmpdir):
     domain = Domain(mesh, dt, "CG", 1)
 
     # Equation
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqn = CompressibleEulerEquations(domain, parameters)
 
     # I/O

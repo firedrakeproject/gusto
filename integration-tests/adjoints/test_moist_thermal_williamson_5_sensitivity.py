@@ -95,7 +95,7 @@ def test_moist_thermal_williamson_5_sensitivity(
     lamda, phi, _ = lonlatr_from_xyz(x, y, z)
 
     # Equation: coriolis
-    parameters = ShallowWaterParameters(H=mean_depth, g=g)
+    parameters = ShallowWaterParameters(mesh, H=mean_depth, g=g)
     Omega = parameters.Omega
     fexpr = 2*Omega*z/radius
 

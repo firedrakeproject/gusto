@@ -31,7 +31,7 @@ def setup_balance(dirname):
     domain = Domain(mesh, dt, "CG", 1)
 
     # Equation
-    parameters = BoussinesqParameters()
+    parameters = BoussinesqParameters(mesh)
     eqns = BoussinesqEquations(domain, parameters)
 
     # I/O
