@@ -209,17 +209,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.setup_transporting_velocity(aux_scheme)
 
         self.tracers_to_copy = []
-        for name in equation_set.field_names:
-            # Extract time derivative for that prognostic
-            mass_form = equation_set.residual.label_map(
-                lambda t: (t.has_label(time_derivative) and t.get(prognostic) == name),
-                map_if_false=drop)
-            if mass_form.terms[0].has_label(linearisation):
-                print("this field's time derivative has a linearisation label:", name)
-            # Copy over field if the time derivative term has no linearisation
-            if not mass_form.terms[0].has_label(linearisation):
-                self.tracers_to_copy.append(name)
-        print("this is now the length of tracers_to_copy (should be 2):", len(self.tracers_to_copy))
+        if equation_set.active_tracers is not None:
+            for active_tracer in equation_set.active_tracers:
+                self.tracers_to_copy.append(active_tracer.name)
 
         self.field_name = equation_set.field_name
         W = equation_set.function_space
