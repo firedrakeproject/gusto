@@ -70,7 +70,7 @@ class WaveEquationForcing(PhysicsParametrisation):
         # -------------------------------------------------------------------- #
         # Extract prognostic variables and test functions
         # -------------------------------------------------------------------- #
-        u, v = self.fields.split()
+        u, v = self.fields.subfunctions
         Vu = u.function_space()
         Vv = v.function_space()
         test_u, test_v = equation.tests
