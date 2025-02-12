@@ -11,8 +11,8 @@ from firedrake.fml import drop, replace_subject
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (transport, diffusion, time_derivative,
-                               linearisation, prognostic, hydrostatic,
-                               physics_label, sponge, incompressible)
+                               hydrostatic, physics_label, sponge,
+                               incompressible)
 from gusto.solvers import LinearTimesteppingSolver
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
