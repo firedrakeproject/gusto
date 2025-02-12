@@ -12,8 +12,8 @@ from firedrake.__future__ import interpolate
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (transport, diffusion, time_derivative,
-                               linearisation, prognostic, hydrostatic,
-                               physics_label, sponge, incompressible)
+                               hydrostatic, physics_label, sponge,
+                               incompressible)
 from gusto.solvers import LinearTimesteppingSolver, mass_parameters
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
@@ -220,14 +220,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.setup_transporting_velocity(aux_scheme)
 
         self.tracers_to_copy = []
-        for name in equation_set.field_names:
-            # Extract time derivative for that prognostic
-            mass_form = equation_set.residual.label_map(
-                lambda t: (t.has_label(time_derivative) and t.get(prognostic) == name),
-                map_if_false=drop)
-            # Copy over field if the time derivative term has no linearisation
-            if not mass_form.terms[0].has_label(linearisation):
-                self.tracers_to_copy.append(name)
+        if equation_set.active_tracers is not None:
+            for active_tracer in equation_set.active_tracers:
+                self.tracers_to_copy.append(active_tracer.name)
 
         self.field_name = equation_set.field_name
         W = equation_set.function_space
