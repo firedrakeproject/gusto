@@ -4,8 +4,8 @@ used by the model.
 """
 
 from gusto.core.logging import logger
-from firedrake import (HCurl, HDiv, FunctionSpace, FiniteElement,
-                       TensorProductElement, interval)
+from firedrake import (HCurl, HDiv, FunctionSpace, FiniteElement, VectorElement,
+                       TensorProductElement, BrokenElement, interval)
 
 __all__ = ["Spaces", "check_degree_args"]
 
@@ -71,6 +71,7 @@ class Spaces(object):
         self.mesh = mesh
         self.extruded_mesh = hasattr(mesh, "_base_mesh")
         self.de_rham_complex = {}
+        self.continuity = {}
 
     def __call__(self, name):
         """
@@ -89,7 +90,7 @@ class Spaces(object):
         else:
             raise ValueError(f'The space container has no space {name}')
 
-    def add_space(self, name, space, overwrite_space=False):
+    def add_space(self, name, space, overwrite_space=False, continuity=None):
         """
         Adds a function space to the container.
 
@@ -100,6 +101,10 @@ class Spaces(object):
             overwrite_space (bool, optional): Logical to allow space existing in
                 container to be overwritten by an incoming space. Defaults to
                 False.
+            continuity: Whether the space is continuous or not. For spaces on
+                extruded meshes, must be a dictionary with entries for the
+                'horizontal' and 'vertical' continuity.
+                If None, defaults to value of is_cg(space).
         """
 
         if hasattr(self, name) and not overwrite_space:
@@ -109,9 +114,28 @@ class Spaces(object):
 
         setattr(self, name, space)
 
-    def create_space(self, name, family, degree, overwrite_space=False):
+        # set the continuity of the space - for extruded meshes specify both directions
+        if continuity is None:
+            continuity = is_cg(space)
+            if self.extruded_mesh:
+                self.continuity[name] = {
+                    'horizontal': continuity,
+                    'vertical': continuity
+                }
+            else:
+                self.continuity[name] = continuity
+        else:
+            if self.extruded_mesh:
+                self.continuity[name] = {
+                    'horizontal': continuity['horizontal'],
+                    'vertical': continuity['vertical']
+                }
+            else:
+                self.continuity[name] = continuity
+
+    def create_space(self, name, family, degree, overwrite_space=False, continuity=None):
         """
-        Creates a space and adds it to the container..
+        Creates a space and adds it to the container.
 
         Args:
             name (str): the name to give to the space.
@@ -120,18 +144,18 @@ class Spaces(object):
             overwrite_space (bool, optional): Logical to allow space existing in
                 container to be overwritten by an incoming space. Defaults to
                 False.
+            continuity: Whether the space is continuous or not. For spaces on
+                extruded meshes, must be a tuple for the (horizontal, vertical)
+                continuity. If None, defaults to value of is_cg(space).
 
         Returns:
             :class:`FunctionSpace`: the desired function space.
         """
-
-        if hasattr(self, name) and not overwrite_space:
-            raise RuntimeError(f'Space {name} already exists. If you really '
-                               + 'to create it then set `overwrite_space` as '
-                               + 'to be True')
-
         space = FunctionSpace(self.mesh, family, degree, name=name)
-        setattr(self, name, space)
+
+        self.add_space(name, space,
+                       overwrite_space=overwrite_space,
+                       continuity=continuity)
         return space
 
     def build_compatible_spaces(self, family, horizontal_degree,
@@ -181,8 +205,14 @@ class Spaces(object):
         setattr(self, "L2"+complex_name, de_rham_complex.L2)
         # Register L2 space as DG also
         setattr(self, "DG"+complex_name, de_rham_complex.L2)
-        if hasattr(de_rham_complex, "theta"+complex_name):
+        if hasattr(de_rham_complex, "theta"):
             setattr(self, "theta"+complex_name, de_rham_complex.theta)
+
+        # Grab the continuity information from the complex
+        for space_type in ("H1, HCurl", "HDiv", "L2", "DG", "theta"):
+            space_name = space_type + complex_name
+            if hasattr(de_rham_complex, space_type):
+                self.continuity[space_name] = de_rham_complex.continuity[space_type]
 
     def build_dg1_equispaced(self):
         """
@@ -198,12 +228,15 @@ class Spaces(object):
             hori_elt = FiniteElement('DG', cell, 1, variant='equispaced')
             vert_elt = FiniteElement('DG', interval, 1, variant='equispaced')
             V_elt = TensorProductElement(hori_elt, vert_elt)
+            continuity = {'horizontal': False, 'vertical': False}
         else:
             cell = self.mesh.ufl_cell().cellname()
             V_elt = FiniteElement('DG', cell, 1, variant='equispaced')
+            continuity = False
 
         space = FunctionSpace(self.mesh, V_elt, name='DG1_equispaced')
-        setattr(self, 'DG1_equispaced', space)
+
+        self.add_space('DG1_equispaced', space, continuity=continuity)
         return space
 
 
@@ -234,6 +267,7 @@ class DeRhamComplex(object):
         self.extruded_mesh = hasattr(mesh, '_base_mesh')
         self.family = family
         self.complex_name = complex_name
+        self.continuity = {}
         self.build_base_spaces(family, horizontal_degree, vertical_degree)
         self.build_compatible_spaces()
 
@@ -303,15 +337,24 @@ class DeRhamComplex(object):
         if self.extruded_mesh:
             # Horizontal and vertical degrees
             # need specifying separately. Vtheta needs returning.
-            Vcg = self.build_h1_space()
+            Vcg, continuity = self.build_h1_space()
+            self.continuity["H1"] = continuity
             setattr(self, "H1", Vcg)
-            Vcurl = self.build_hcurl_space()
+
+            Vcurl, continuity = self.build_hcurl_space()
+            self.continuity["HCurl"] = continuity
             setattr(self, "HCurl", Vcurl)
-            Vu = self.build_hdiv_space()
+
+            Vu, continuity = self.build_hdiv_space()
+            self.continuity["HDiv"] = continuity
             setattr(self, "HDiv", Vu)
-            Vdg = self.build_l2_space()
+
+            Vdg, continuity = self.build_l2_space()
+            self.continuity["L2"] = continuity
             setattr(self, "L2", Vdg)
-            Vth = self.build_theta_space()
+
+            Vth, continuity = self.build_theta_space()
+            self.continuity["theta"] = continuity
             setattr(self, "theta", Vth)
 
             return Vcg, Vcurl, Vu, Vdg, Vth
@@ -320,13 +363,20 @@ class DeRhamComplex(object):
             # 2D: two de Rham complexes (hcurl or hdiv) with 3 spaces
             # 3D: one de Rham complexes with 4 spaces
             # either way, build all spaces
-            Vcg = self.build_h1_space()
+            Vcg, continuity = self.build_h1_space()
+            self.continuity["H1"] = continuity
             setattr(self, "H1", Vcg)
-            Vcurl = self.build_hcurl_space()
+
+            Vcurl, continuity = self.build_hcurl_space()
+            self.continuity["HCurl"] = continuity
             setattr(self, "HCurl", Vcurl)
-            Vu = self.build_hdiv_space()
+
+            Vu, continuity = self.build_hdiv_space()
+            self.continuity["HDiv"] = continuity
             setattr(self, "HDiv", Vu)
-            Vdg = self.build_l2_space()
+
+            Vdg, continuity = self.build_l2_space()
+            self.continuity["L2"] = continuity
             setattr(self, "L2", Vdg)
 
             return Vcg, Vcurl, Vu, Vdg
@@ -334,11 +384,18 @@ class DeRhamComplex(object):
         else:
             # 1D domain, de Rham complex has 2 spaces
             # CG, hdiv and hcurl spaces should be the same
-            Vcg = self.build_h1_space()
+            Vcg, continuity = self.build_h1_space()
+
+            self.continuity["H1"] = continuity
             setattr(self, "H1", Vcg)
+
             setattr(self, "HCurl", None)
+
+            self.continuity["HDiv"] = continuity
             setattr(self, "HDiv", Vcg)
-            Vdg = self.build_l2_space()
+
+            Vdg, continuity = self.build_l2_space()
+            self.continuity["L2"] = continuity
             setattr(self, "L2", Vdg)
 
             return Vcg, Vdg
@@ -360,7 +417,7 @@ class DeRhamComplex(object):
         """
         if hdiv_hcurl_dict[self.family] is None:
             logger.warning('There is no HCurl space for this family. Not creating one')
-            return None
+            return None, None
 
         if self.extruded_mesh:
             Vh_elt = HCurl(TensorProductElement(self.base_elt_hori_hcurl,
@@ -368,10 +425,13 @@ class DeRhamComplex(object):
             Vv_elt = HCurl(TensorProductElement(self.base_elt_hori_cg,
                                                 self.base_elt_vert_dg))
             V_elt = Vh_elt + Vv_elt
+            continuity = {'horizontal': True, 'vertical': True}
         else:
             V_elt = self.base_elt_hori_hcurl
+            continuity = True
 
-        return FunctionSpace(self.mesh, V_elt, name='HCurl'+self.complex_name)
+        space_name = 'HCurl'+self.complex_name
+        return FunctionSpace(self.mesh, V_elt, name=space_name), continuity
 
     def build_hdiv_space(self):
         """
@@ -387,9 +447,13 @@ class DeRhamComplex(object):
                                           self.base_elt_vert_cg)
             Vv_elt = HDiv(Vt_elt)
             V_elt = Vh_elt + Vv_elt
+            continuity = {'horizontal': True, 'vertical': True}
         else:
             V_elt = self.base_elt_hori_hdiv
-        return FunctionSpace(self.mesh, V_elt, name='HDiv'+self.complex_name)
+            continuity = True
+
+        space_name = 'HDiv'+self.complex_name
+        return FunctionSpace(self.mesh, V_elt, name=space_name), continuity
 
     def build_l2_space(self):
         """
@@ -401,10 +465,13 @@ class DeRhamComplex(object):
 
         if self.extruded_mesh:
             V_elt = TensorProductElement(self.base_elt_hori_dg, self.base_elt_vert_dg)
+            continuity = {'horizontal': False, 'vertical': False}
         else:
             V_elt = self.base_elt_hori_dg
+            continuity = False
 
-        return FunctionSpace(self.mesh, V_elt, name='L2'+self.complex_name)
+        space_name = 'L2'+self.complex_name
+        return FunctionSpace(self.mesh, V_elt, name=space_name), continuity
 
     def build_theta_space(self):
         """
@@ -423,8 +490,10 @@ class DeRhamComplex(object):
         assert self.extruded_mesh, 'Cannot create theta space if mesh is not extruded'
 
         V_elt = TensorProductElement(self.base_elt_hori_dg, self.base_elt_vert_cg)
+        continuity = {'horizontal': False, 'vertical': True}
 
-        return FunctionSpace(self.mesh, V_elt, name='theta'+self.complex_name)
+        space_name = 'theta'+self.complex_name
+        return FunctionSpace(self.mesh, V_elt, name=space_name), continuity
 
     def build_h1_space(self):
         """
@@ -440,11 +509,13 @@ class DeRhamComplex(object):
 
         if self.extruded_mesh:
             V_elt = TensorProductElement(self.base_elt_hori_cg, self.base_elt_vert_cg)
-
+            continuity = {'horizontal': True, 'vertical': True}
         else:
             V_elt = self.base_elt_hori_cg
+            continuity = True
 
-        return FunctionSpace(self.mesh, V_elt, name='H1'+self.complex_name)
+        space_name = 'H1'+self.complex_name
+        return FunctionSpace(self.mesh, V_elt, name=space_name), continuity
 
 
 def check_degree_args(name, mesh, degree, horizontal_degree, vertical_degree):
@@ -476,3 +547,24 @@ def check_degree_args(name, mesh, degree, horizontal_degree, vertical_degree):
         raise ValueError(f'Cannot pass both "degree" and "vertical_degree" to {name}')
     if not extruded_mesh and vertical_degree is not None:
         raise ValueError(f'Cannot pass "vertical_degree" to {name} if mesh is not extruded')
+
+
+def is_cg(V):
+    """
+    Checks if a :class:`FunctionSpace` is continuous.
+
+    Function to check if a given space, V, is CG. Broken elements are always
+    discontinuous; for vector elements we check the names of the Sobolev spaces
+    of the subelements and for all other elements we just check the Sobolev
+    space name.
+
+    Args:
+        V (:class:`FunctionSpace`): the space to check.
+    """
+    ele = V.ufl_element()
+    if isinstance(ele, BrokenElement):
+        return False
+    elif type(ele) == VectorElement:
+        return all([e.sobolev_space.name == "H1" for e in ele._sub_elements])
+    else:
+        return V.ufl_element().sobolev_space.name == "H1"

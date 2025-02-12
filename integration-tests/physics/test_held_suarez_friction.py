@@ -1,23 +1,21 @@
 """
-This tests the physics routine to apply drag to the wind.
+This tests the Rayleigh friction term used in the Held Suarez test case.
 """
 
 from gusto import *
 import gusto.equations.thermodynamics as td
 from gusto.core.labels import physics_label
-from firedrake import (norm, Constant, PeriodicIntervalMesh, as_vector, dot,
-                       SpatialCoordinate, ExtrudedMesh, Function, conditional)
+from firedrake import (Constant, PeriodicIntervalMesh, as_vector, norm,
+                       ExtrudedMesh, Function, dot)
 from firedrake.fml import identity, drop
-import pytest
 
 
-def run_wind_drag(dirname, implicit_formulation, physics_coupling):
-
+def run_apply_rayleigh_friction(dirname):
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
-    dt = 100.0
+    dt = 3600.0
 
     # declare grid shape, with length L and height H
     L = 500.
@@ -30,45 +28,32 @@ def run_wind_drag(dirname, implicit_formulation, physics_coupling):
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=(H / nlayers))
     domain = Domain(mesh, dt, "CG", 0)
 
-    _, z = SpatialCoordinate(mesh)
-
     # Set up equation
     parameters = CompressibleParameters()
     eqn = CompressibleEulerEquations(domain, parameters)
 
     # I/O
-    output = OutputParameters(dirname=dirname+"/wind_drag",
+    output = OutputParameters(dirname=dirname+"/held_suarez_friction",
                               dumpfreq=1,
                               dumplist=['u'])
     io = IO(domain, output)
 
     # Physics scheme
-    surf_params = BoundaryLayerParameters()
-    physics_parametrisation = WindDrag(eqn, implicit_formulation, surf_params)
+    physics_parametrisation = RayleighFriction(eqn)
 
-    if physics_coupling == "split":
-        time_discretisation = ForwardEuler(domain) if implicit_formulation else BackwardEuler(domain)
+    time_discretisation = BackwardEuler(domain)
 
-        # time_discretisation = ForwardEuler(domain)
-        physics_schemes = [(physics_parametrisation, time_discretisation)]
+    # time_discretisation = ForwardEuler(domain)
+    physics_schemes = [(physics_parametrisation, time_discretisation)]
 
-        # Only want time derivatives and physics terms in equation, so drop the rest
-        eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
-                                              map_if_true=identity, map_if_false=drop)
+    # Only want time derivatives and physics terms in equation, so drop the rest
+    eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
+                                          map_if_true=identity, map_if_false=drop)
 
-        # Time stepper
-        scheme = ForwardEuler(domain)
-        stepper = SplitPhysicsTimestepper(eqn, scheme, io,
-                                          physics_schemes=physics_schemes)
-    else:
-        # Only want time derivatives and physics terms in equation, so drop the rest
-        eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
-                                              map_if_true=identity, map_if_false=drop)
-
-        # Time stepper
-        scheme = ForwardEuler(domain) if implicit_formulation else BackwardEuler(domain)
-        stepper = Timestepper(eqn, scheme, io,
-                              physics_parametrisations=[physics_parametrisation])
+    # Time stepper
+    scheme = ForwardEuler(domain)
+    stepper = SplitPhysicsTimestepper(eqn, scheme, io,
+                                      physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -77,9 +62,6 @@ def run_wind_drag(dirname, implicit_formulation, physics_coupling):
     Vu = domain.spaces("HDiv")
     Vt = domain.spaces("theta")
     Vr = domain.spaces("DG")
-
-    surface_mask = Function(Vt)
-    surface_mask.interpolate(conditional(z < 100., 1.0, 0.0))
 
     # Declare prognostic fields
     u0 = stepper.fields("u")
@@ -95,11 +77,11 @@ def run_wind_drag(dirname, implicit_formulation, physics_coupling):
     rho0.interpolate(pressure / (temperature*parameters.R_d))
 
     # Constant horizontal wind
-    u0.project(as_vector([15.0, 0.0]))
+    u0.project(as_vector([864, 0.0]))
 
     # Answer: slower winds than initially
     u_true = Function(Vu)
-    u_true.project(surface_mask*as_vector([14.53, 0.0]) + (1-surface_mask)*u0)
+    u_true.project(as_vector([828, 0.0]))
 
     # ------------------------------------------------------------------------ #
     # Run
@@ -110,12 +92,10 @@ def run_wind_drag(dirname, implicit_formulation, physics_coupling):
     return mesh, stepper, u_true
 
 
-@pytest.mark.parametrize("implicit_formulation", [False, True])
-@pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
-def test_wind_drag(tmpdir, implicit_formulation, physics_coupling):
+def test_rayleigh_friction(tmpdir):
 
     dirname = str(tmpdir)
-    mesh, stepper, u_true = run_wind_drag(dirname, implicit_formulation, physics_coupling)
+    mesh, stepper, u_true = run_apply_rayleigh_friction(dirname)
 
     u_final = stepper.fields('u')
 
@@ -130,5 +110,5 @@ def test_wind_drag(tmpdir, implicit_formulation, physics_coupling):
     u_z_true = Function(DG0).project(dot(u_true, e_z))
 
     denom = norm(u_x_true)
-    assert norm(u_x_final - u_x_true) / denom < 0.01, 'Final horizontal wind is incorrect'
+    assert norm(u_x_final - u_x_true) / denom < 0.0001, 'Final horizontal wind is incorrect'
     assert norm(u_z_final - u_z_true) < 1e-12, 'Final vertical wind is incorrect'
