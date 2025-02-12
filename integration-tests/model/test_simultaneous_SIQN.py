@@ -62,7 +62,7 @@ def run_simult_SIQN(tmpdir, order):
                           density_name='rho')]
 
     # Equation
-    params = CompressibleParameters()
+    params = CompressibleParameters(mesh)
     eqns = CompressibleEulerEquations(
         domain, params, active_tracers=tracers, u_transport_option=u_eqn_type
     )
