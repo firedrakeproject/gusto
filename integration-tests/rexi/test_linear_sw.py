@@ -57,9 +57,11 @@ def run_rexi_sw(tmpdir, ensemble=None):
     U_in = Function(eqns.function_space, name="U_in")
     Uexpl = Function(eqns.function_space, name="Uexpl")
     u, D = U_in.subfunctions
+    Dbar = eqns.X_ref.subfunctions[1]
 
     u.project(uexpr)
     D.interpolate(Dexpr)
+    Dbar.interpolate(H)
     if write_output:
         rexi_output.write(u, D)
 
@@ -70,6 +72,7 @@ def run_rexi_sw(tmpdir, ensemble=None):
     uexpl, Dexpl = Uexpl.subfunctions
     u.assign(uexpl)
     D.assign(Dexpl)
+
     if write_output:
         rexi_output.write(u, D)
 
