@@ -9,14 +9,15 @@ import numpy as np
 from netCDF4 import Dataset
 import os
 import shutil
+import subprocess
 
 # ---------------------------------------------------------------------------- #
 # Test case parameters
 # ---------------------------------------------------------------------------- #
 
 # set inner and outer latitude limits of annulus
-phis = 60
-phin = 70
+phis = 57
+phin = 62
 phimp = phis
 
 # False means initial vortex is annular, True means it's monopolar
@@ -26,8 +27,8 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 1.6
-pvpole = 1.0
+pvmax = 2.4
+pvpole = 1.05
 
 # tau_r is radiative relaxation time constant
 # tau_c is CO2 condensation relaxation time constant
@@ -38,7 +39,7 @@ tau_c_ratio = 0.01
 beta = 1.0
 
 # relaxation schemes can be rad, co2, both, none
-rel_sch = 'both'
+rel_sch = 'rad'
 include_co2 = 'yes'
 
 # refinement level
@@ -46,17 +47,23 @@ ref_lev = 4
 
 # do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
 restart = True
-restart_name = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-1sols_tracer_tophat-80_ref-4_trial'
+restart_name = 'Relax_to_annulus/annular_vortex_mars_57-62_PVmax--2-4_PVpole--1-05_tau_r--2sol_A0-0-norel_len-100sols_tracer_tophat-80_ref-4'
 
 # length of this run, time to start from (only relevant if doing a restart)
-rundays = 1
-start_time = 1
+rundays = 200
+start_time = 100
 dt = (0.5)**(ref_lev-4) * 450.
 
 # do you want a tracer or not. Edge of tophat function for tracer, north of this the tracer is intialised as 1, south is 0
 # if running a restart, True introduces a new tracer whilst False still maintains the old one
 tracer = True
+
+hat = False
 hat_edge = 80
+
+strip = True
+strip_eq_edge = 20
+strip_pole_edge = 40
 
 # standard_start is 60-70, 1.6, 1 (i.e. the standard setup I've been playing with). If true then every run starts with this
 standard_start = True
@@ -65,7 +72,10 @@ standard_start = True
 dump_freq = 10
 
 # any extra info to include in the directory name
-extra_name = '_trial'
+extra_name = ''
+
+# if true then automatically regrid file
+regrid = True
 
 #####################################################################################
 
@@ -76,10 +86,11 @@ if include_co2 == 'no':
 if phimp != phis:
     extra_name = f'{extra_name}_phimp--{phimp}'
 
-if tracer and not restart:
-    tracername = f'tracer_tophat-{hat_edge}'
-elif tracer and restart:
-    tracername = f'tracer_tophat-{hat_edge}'
+if tracer:
+    if hat and not strip:
+        tracername = f'tracer_tophat-{hat_edge}'
+    elif strip and not hat:
+        tracername = f'tracer_strip-{strip_eq_edge}-{strip_pole_edge}'
 elif not tracer:
     tracername = ''
 
@@ -319,9 +330,15 @@ else:
     h_th = min(hini)*beta+H
 
 if tracer and not restart:
-    Tini = np.where(rlat >= hat_edge*pi/180, 1, 0)
+    if hat and not strip:
+        Tini = np.where(rlat >= hat_edge*pi/180, 1, 0)
+    elif strip and not hat:
+        Tini = np.where((strip_eq_edge*pi/180 <= rlat) & (rlat <=strip_pole_edge*pi/180), 1, 0)
 elif tracer and restart:
-    Tini_rs = np.where(rlat >= hat_edge*pi/180, 1, 0)
+    if hat and not strip:
+        Tini_rs = np.where(rlat >= hat_edge*pi/180, 1, 0)
+    elif strip and not hat:
+        Tini_rs = np.where((strip_eq_edge*pi/180 <= rlat) & (rlat <=strip_pole_edge*pi/180), 1, 0)
 elif not tracer:
     Tini = 0
     Tini_rs = 0
@@ -548,3 +565,7 @@ elif restart:
 
 
 print(f'directory name is {dirname}')
+
+if regrid:
+    print(f'regridding, {dirname}, {ref_lev}')
+    subprocess.run(['python', '/data/home/sh1293/firedrake-real-opt_oct24/src/gusto/plotting/my_plots/regrid.py', dirname, str(ref_lev)])
