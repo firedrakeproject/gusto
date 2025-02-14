@@ -5,7 +5,7 @@ and GungHo dynamical cores.
 
 from firedrake import (
     Function, Constant, TrialFunctions, DirichletBC, div, assemble,
-    LinearVariationalProblem, LinearVariationalSolver
+    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace
 )
 from firedrake.fml import drop, replace_subject
 from firedrake.__future__ import interpolate
@@ -114,12 +114,14 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         self.num_outer = num_outer
         self.num_inner = num_inner
-        self.alpha = Constant(alpha)
+        mesh = equation_set.domain.mesh
+        R = FunctionSpace(mesh, "R", 0)
+        self.alpha = Function(R, val=float(alpha))
         self.predictor = predictor
         self.accelerator = accelerator
 
         # Options relating to reference profiles and spin-up
-        self._alpha_original = Constant(alpha)
+        self._alpha_original = Function(R, val=float(alpha))
         self.reference_update_freq = reference_update_freq
         self.to_update_ref_profile = False
         self.spinup_steps = spinup_steps
@@ -131,7 +133,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         # default is to not offcentre transporting velocity but if it
         # is offcentred then use the same value as alpha
-        self.alpha_u = Constant(alpha) if off_centred_u else Constant(0.5)
+        self.alpha_u = Function(R, val=float(alpha)) if off_centred_u else Function(R, val=0.5)
 
         self.spatial_methods = spatial_methods
 
@@ -573,7 +575,7 @@ class Forcing(object):
                                map_if_false=drop)
 
         # the explicit forms are multiplied by (1-alpha) and moved to the rhs
-        L_explicit = -(Constant(1)-alpha)*dt*residual.label_map(
+        L_explicit = Constant(1-alpha)*dt*residual.label_map(
             lambda t:
                 any(t.has_label(time_derivative, hydrostatic, *implicit_terms,
                                 return_tuple=True)),

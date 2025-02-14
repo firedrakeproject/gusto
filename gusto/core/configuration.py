@@ -50,11 +50,81 @@ class TransportEquationType(Enum):
 class Configuration(object):
     """A base configuration object, for storing aspects of the model."""
 
-    mesh = None
-
-    def __init__(self, mesh=None, **kwargs):
+    def __init__(self, **kwargs):
         """
         Args:
+            **kwargs: attributes and their values to be stored in the object.
+        """
+        for name, value in kwargs.items():
+            self.__setattr__(name, value)
+
+    def __setattr__(self, name, value):
+        """
+        Sets the model configuration attributes.
+
+        When attributes are provided as floats or integers, these are converted
+        to Firedrake :class:`Constant` objects, other than a handful of special
+        integers.
+
+        Args:
+            name: the attribute's name.
+            value: the value to provide to the attribute.
+
+        Raises:
+            AttributeError: if the :class:`Configuration` object does not have
+                this attribute pre-defined.
+        """
+        if not hasattr(self, name):
+            raise AttributeError(f"{type(self).__name__} object has no attribute {name}.")
+
+        # Almost all parameters should be functions on the real space
+        # -- but there are some specific exceptions which should be
+        # kept as integers
+        non_constants = [
+            'dumpfreq', 'pddumpfreq', 'chkptfreq',
+            'fixed_subcycles', 'max_subcycles', 'subcycle_by_courant'
+        ]
+        if type(value) in [float, int] and name not in non_constants:
+            raise AttributeError(f"Attribute {name} requires a mesh.")
+
+        object.__setattr__(self, name, value)
+
+
+class OutputParameters(Configuration):
+    """Parameters for controlling outputting."""
+
+    dump_vtus = True
+    dump_nc = False
+    dumpfreq = 1
+    pddumpfreq = None
+    dumplist = None
+    dumplist_latlon = []
+    dump_diagnostics = True
+    diagfreq = 1
+    checkpoint = False
+    checkpoint_method = 'checkpointfile'
+    checkpoint_pickup_filename = None
+    chkptfreq = 1
+    dirname = None
+    log_courant = True
+    #: TODO: Should the output fields be interpolated or projected to
+    #: a linear space?  Default is interpolation.
+    project_fields = False
+    #: List of ordered pairs (name, points) where name is the field
+    # name and points is the points at which to dump them
+    point_data = []
+    tolerance = None
+
+
+class EquationParameters(object):
+    """A base configuration object for storing equation parameters."""
+
+    mesh = None
+
+    def __init__(self, mesh, **kwargs):
+        """
+        Args:
+            mesh: for creating the real function space
             **kwargs: attributes and their values to be stored in the object.
         """
         self.mesh = mesh
@@ -84,45 +154,16 @@ class Configuration(object):
         # -- but there are some specific exceptions which should be
         # kept as integers
         if self.mesh is not None:
+            # This check is required so that on instantiation we do
+            # not hit this line while self.mesh is still None
             R = FunctionSpace(self.mesh, 'R', 0)
-        non_constants = [
-            'dumpfreq', 'pddumpfreq', 'chkptfreq',
-            'fixed_subcycles', 'max_subcycles', 'subcycle_by_courant'
-        ]
-        if type(value) in [float, int] and name not in non_constants:
-            print(name, type(value))
+        if type(value) in [float, int]:
             object.__setattr__(self, name, Function(R, val=float(value)))
         else:
             object.__setattr__(self, name, value)
 
 
-class OutputParameters(Configuration):
-    """Parameters for controlling outputting."""
-
-    dump_vtus = True
-    dump_nc = False
-    dumpfreq = 1
-    pddumpfreq = None
-    dumplist = None
-    dumplist_latlon = []
-    dump_diagnostics = True
-    diagfreq = 1
-    checkpoint = False
-    checkpoint_method = 'checkpointfile'
-    checkpoint_pickup_filename = None
-    chkptfreq = 1
-    dirname = None
-    log_courant = True
-    #: TODO: Should the output fields be interpolated or projected to
-    #: a linear space?  Default is interpolation.
-    project_fields = False
-    #: List of ordered pairs (name, points) where name is the field
-    # name and points is the points at which to dump them
-    point_data = []
-    tolerance = None
-
-
-class BoussinesqParameters(Configuration):
+class BoussinesqParameters(EquationParameters):
     """Physical parameters for the Boussinesq equations."""
 
     g = 9.810616
@@ -131,7 +172,7 @@ class BoussinesqParameters(Configuration):
     Omega = None
 
 
-class CompressibleParameters(Configuration):
+class CompressibleParameters(EquationParameters):
     """Physical parameters for the Compressible Euler equations."""
 
     g = 9.810616
@@ -154,7 +195,7 @@ class CompressibleParameters(Configuration):
     Omega = None    # Rotation rate
 
 
-class ShallowWaterParameters(Configuration):
+class ShallowWaterParameters(EquationParameters):
     """Physical parameters for the shallow-water equations."""
 
     g = 9.80616
@@ -246,7 +287,7 @@ class MixedFSOptions(WrapperOptions):
     suboptions = None
 
 
-class SpongeLayerParameters(Configuration):
+class SpongeLayerParameters(EquationParameters):
     """Specifies parameters describing a 'sponge' (damping) layer."""
 
     H = None
@@ -254,14 +295,14 @@ class SpongeLayerParameters(Configuration):
     mubar = None
 
 
-class DiffusionParameters(Configuration):
+class DiffusionParameters(EquationParameters):
     """Parameters for a diffusion term with an interior penalty method."""
 
     kappa = None
     mu = None
 
 
-class BoundaryLayerParameters(Configuration):
+class BoundaryLayerParameters(EquationParameters):
     """
     Parameters for the idealised wind drag, surface flux and boundary layer
     mixing schemes.
@@ -276,7 +317,7 @@ class BoundaryLayerParameters(Configuration):
     mu = 100.                   # Interior penalty coefficient for vertical diffusion
 
 
-class HeldSuarezParameters(Configuration):
+class HeldSuarezParameters(EquationParameters):
     """
     Parameters used in the default configuration for the Held Suarez test case.
     """

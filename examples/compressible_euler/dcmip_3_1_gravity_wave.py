@@ -75,9 +75,9 @@ def dcmip_3_1_gravity_wave(
         extrusion_type="radial"
     )
     domain = Domain(mesh, dt, "RTCF", element_order)
-    parameters = CompressibleParameters(mesh)
 
     # Equation
+    parameters = CompressibleParameters(mesh)
     eqns = CompressibleEulerEquations(
         domain, parameters, u_transport_option=u_eqn_type
     )
