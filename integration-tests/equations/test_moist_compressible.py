@@ -30,7 +30,7 @@ def run_moist_compressible(tmpdir):
     domain = Domain(mesh, dt, "CG", 1)
 
     # Equation
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     tracers = [WaterVapour(name='vapour_mixing_ratio'), CloudWater(name='cloud_liquid_mixing_ratio')]
     eqn = CompressibleEulerEquations(domain, parameters, active_tracers=tracers)
 

@@ -15,7 +15,7 @@ def set_up_model_objects(mesh, dt, output, stepper_type, ref_update_freq):
 
     domain = Domain(mesh, dt, "CG", 1)
 
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqns = CompressibleEulerEquations(domain, parameters)
 
     # Have two diagnostic fields that depend on initial values -- check if

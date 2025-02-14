@@ -32,7 +32,7 @@ def test_scalar_diffusion(tmpdir, DG, tracer_setup):
 
     mu = 5.
 
-    diffusion_params = DiffusionParameters(kappa=kappa, mu=mu)
+    diffusion_params = DiffusionParameters(mesh, kappa=kappa, mu=mu)
     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
     diffusion_scheme = BackwardEuler(domain)
     diffusion_methods = [InteriorPenaltyDiffusion(eqn, "f", diffusion_params)]

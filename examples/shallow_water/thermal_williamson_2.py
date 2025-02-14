@@ -68,7 +68,7 @@ def thermal_williamson_2(
     x, y, z = SpatialCoordinate(mesh)
 
     # Equations
-    params = ShallowWaterParameters(H=mean_depth, g=g)
+    params = ShallowWaterParameters(mesh, H=mean_depth, g=g)
     Omega = params.Omega
     fexpr = 2*Omega*z/radius
     eqns = ThermalShallowWaterEquations(

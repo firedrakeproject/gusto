@@ -28,7 +28,7 @@ def run_linear_sw_wave(tmpdir):
     domain = Domain(mesh, dt, 'BDM', 1)
 
     # Equation
-    parameters = ShallowWaterParameters(H=H, g=g)
+    parameters = ShallowWaterParameters(mesh, H=H, g=g)
     fexpr = Constant(1)
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
 

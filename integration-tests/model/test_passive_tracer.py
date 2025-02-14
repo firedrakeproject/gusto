@@ -26,7 +26,7 @@ def run_tracer(setup):
 
     x = SpatialCoordinate(mesh)
     H = 0.1
-    parameters = ShallowWaterParameters(H=H)
+    parameters = ShallowWaterParameters(mesh, H=H)
     Omega = parameters.Omega
     g = parameters.g
     umax = setup.umax

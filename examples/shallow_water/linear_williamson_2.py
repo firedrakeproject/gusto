@@ -57,7 +57,7 @@ def linear_williamson_2(
     domain = Domain(mesh, dt, 'BDM', element_order)
 
     # Equation
-    parameters = ShallowWaterParameters(H=mean_depth)
+    parameters = ShallowWaterParameters(mesh, H=mean_depth)
     Omega = parameters.Omega
     fexpr = 2*Omega*z/radius
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)

@@ -33,7 +33,7 @@ def run_boundary_layer_mixing(dirname, field_name, recovered, semi_implicit):
     _, z = SpatialCoordinate(mesh)
 
     # Set up equation
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqn = CompressibleEulerEquations(domain, parameters)
 
     # I/O
@@ -43,7 +43,7 @@ def run_boundary_layer_mixing(dirname, field_name, recovered, semi_implicit):
     io = IO(domain, output)
 
     # Physics scheme
-    surf_params = BoundaryLayerParameters()
+    surf_params = BoundaryLayerParameters(mesh)
     physics_parametrisation = BoundaryLayerMixing(eqn, field_name, surf_params)
 
     if recovered:

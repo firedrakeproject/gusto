@@ -18,7 +18,7 @@ def test_wetbulb_temperature():
     mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
     domain = Domain(mesh, 0.1, 'CG', 1)
-    params = CompressibleParameters()
+    params = CompressibleParameters(mesh)
     active_tracers = [WaterVapour()]
     eqn = CompressibleEulerEquations(domain, params, active_tracers=active_tracers)
     prog_fields = TimeLevelFields(eqn)

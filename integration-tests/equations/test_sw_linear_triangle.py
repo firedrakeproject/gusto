@@ -30,7 +30,7 @@ def setup_sw(dirname):
     domain = Domain(mesh, dt, "BDM", degree=1)
 
     # Equation
-    parameters = ShallowWaterParameters(H=H)
+    parameters = ShallowWaterParameters(mesh, H=H)
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)

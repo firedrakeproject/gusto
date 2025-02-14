@@ -62,7 +62,7 @@ def williamson_2(
     xyz = SpatialCoordinate(mesh)
 
     # Equation
-    parameters = ShallowWaterParameters(H=mean_depth)
+    parameters = ShallowWaterParameters(mesh, H=mean_depth)
     Omega = parameters.Omega
     _, lat, _ = rotated_lonlatr_coords(xyz, rotate_pole_to)
     e_lon, _, _ = rotated_lonlatr_vectors(xyz, rotate_pole_to)

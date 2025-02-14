@@ -43,16 +43,10 @@ def dcmip_3_1_gravity_wave(
     # Test case parameters
     # ------------------------------------------------------------------------ #
 
-    parameters = CompressibleParameters()
     a_ref = 6.37122e6               # Radius of the Earth (m)
     X = 125.0                       # Reduced-size Earth reduction factor
     a = a_ref/X                     # Scaled radius of planet (m)
-    g = parameters.g                # Acceleration due to gravity (m/s^2)
     N = 0.01                        # Brunt-Vaisala frequency (1/s)
-    p_0 = parameters.p_0            # Reference pressure (Pa, not hPa)
-    c_p = parameters.cp             # SHC of dry air at constant pressure (J/kg/K)
-    R_d = parameters.R_d            # Gas constant for dry air (J/kg/K)
-    kappa = parameters.kappa        # R_d/c_p
     T_eq = 300.0                    # Isothermal atmospheric temperature (K)
     p_eq = 1000.0 * 100.0           # Reference surface pressure at the equator
     u_max = 20.0                    # Maximum amplitude of the zonal wind (m/s)
@@ -83,6 +77,7 @@ def dcmip_3_1_gravity_wave(
     domain = Domain(mesh, dt, "RTCF", element_order)
 
     # Equation
+    parameters = CompressibleParameters(mesh)
     eqns = CompressibleEulerEquations(
         domain, parameters, u_transport_option=u_eqn_type
     )
@@ -136,6 +131,13 @@ def dcmip_3_1_gravity_wave(
 
     # Initial conditions with u0
     uexpr = as_vector([-u_max*y/a, u_max*x/a, 0.0])
+
+    # Parameters required for initialising
+    g = parameters.g                # Acceleration due to gravity (m/s^2)
+    p_0 = parameters.p_0            # Reference pressure (Pa, not hPa)
+    c_p = parameters.cp             # SHC of dry air at constant pressure (J/kg/K)
+    R_d = parameters.R_d            # Gas constant for dry air (J/kg/K)
+    kappa = parameters.kappa        # R_d/c_p
 
     # Surface temperature
     G = g**2/(N**2*c_p)
