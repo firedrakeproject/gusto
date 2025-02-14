@@ -1,5 +1,6 @@
 import numpy as np
 import pdb
+import sys
 from scipy.special import roots_legendre
 import matplotlib.pyplot as plt
 import xarray as xr
@@ -13,9 +14,18 @@ from tomplot import (set_tomplot_style, tomplot_contours, tomplot_cmap,
                      regrid_horizontal_slice, regrid_regular_horizontal_slice)
 
 
-filepath = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-100-300sols_tracer_strip-20-40_ref-4_pvmax-1-8'
+if len(sys.argv) != 3:
+    print('Wrong number of arguments')
+    sys.exit(1)
 
-ref_lev = 4
+# filepath = 'Relax_to_pole_and_CO2/annular_vortex_mars_60-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-100-300sols_tracer_strip-20-40_ref-4_pvmax-1-8'
+
+# ref_lev = 4
+
+filepath = sys.argv[1]
+ref_lev = int(sys.argv[2])
+
+print(f'inputs to regrid.py are filepath={filepath} and ref_lev={ref_lev}')
 
 dumpfreq = 10
 
@@ -58,9 +68,10 @@ ds_list=[]
 for i in range(0, len(times)):
 # for i in [0, 1970, 1971, 1972, 1973, 1974, 1975, 1976, 1977, 1978, 1979, 1980, 1981, 1982, 1983, 1984]:
     print(i)
-    # print(data_file.variables['time'][i].item())
+
     if data_file.variables['time'][i].item()%dt==0:
         print(data_file.variables['time'][i].item())
+
         for field_name in ['D', 'D_minus_H_rel_flag_less', 'u_meridional', 'u_zonal', 'PotentialVorticity', 'tracer', 'CO2cond_flag', 'CO2cond_flag_cumulative', 'tracer_rs']:
             try:
                 field_data = extract_gusto_field(data_file, field_name, time_idx=i)
@@ -70,11 +81,6 @@ for i in range(0, len(times)):
             # times = np.arange(np.shape(field_data)[1])
             coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
 
-
-            # field_data_t = field_data[:,i]
-
-            # times = np.arange(np.shape(field_data)[1])
-            # pdb.set_trace()
             if field_name == 'D_minus_H_rel_flag_less':
                 new_data = regrid_horizontal_slice(X, Y,
                                                     coords_X, coords_Y, field_data,
@@ -93,10 +99,7 @@ for i in range(0, len(times)):
                 ds = ds1
             else:
                 ds = xr.merge([ds, ds1])
-#         ds_list.append(ds1)
-    # pdb.set_trace()
 
-# ds = xr.concat(ds_list, dim='time')
 
 ds.to_netcdf(output_file_name)
 

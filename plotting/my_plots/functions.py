@@ -160,7 +160,7 @@ def fft(da, lat_centre, lat_range, max_wav):
 
 def contour_length(da, contour_value, start_sol=100):
     # da = da.where(da.mean(dim='time')>0, drop=True)
-    da = da.where(da.time>start_sol*88774., drop=True)
+    da = da.where(da.time>=start_sol*88774., drop=True)
     lons = da.lon.values
     lats = da.lat.values
     times = da.time.values

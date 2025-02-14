@@ -10,14 +10,14 @@ import pdb
 import os
 import functions as fcs
 
-file = 'Relax_to_pole_and_CO2/annular_vortex_mars_65-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-100-300sols_tracer_tophat-80_ref-4'
+file = 'Relax_to_pole_and_CO2/annular_vortex_mars_55-70_tau_r--2sol_tau_c--0.01sol_beta--1-0_A0-0-norel_len-100-300sols_tracer_strip-20-40_ref-4'
 
 ref_lev = 4
 
 relax = 'full'
 
-start_frame = 2770
-end_frame = 2820
+start_frame = 2500
+end_frame = 3000
 
 start_sol = 100
 
