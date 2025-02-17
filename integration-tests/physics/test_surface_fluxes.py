@@ -37,7 +37,7 @@ def run_surface_fluxes(dirname, moist, implicit_formulation, physics_coupling):
     # Set up equation
     tracers = [WaterVapour()] if moist else None
     vapour_name = 'water_vapour' if moist else None
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqn = CompressibleEulerEquations(domain, parameters, active_tracers=tracers)
 
     # I/O

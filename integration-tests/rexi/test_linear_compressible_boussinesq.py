@@ -31,7 +31,7 @@ def run_rexi_linear_boussinesq(tmpdir):
     domain = Domain(mesh, tmax, 'CG', 1)
 
     # Equation
-    parameters = BoussinesqParameters(cs=300)
+    parameters = BoussinesqParameters(mesh, cs=300)
     eqns = LinearBoussinesqEquations(domain, parameters)
 
     # ---------------------------------------------------------------------- #

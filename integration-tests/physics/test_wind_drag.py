@@ -33,7 +33,7 @@ def run_wind_drag(dirname, implicit_formulation, physics_coupling):
     _, z = SpatialCoordinate(mesh)
 
     # Set up equation
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqn = CompressibleEulerEquations(domain, parameters)
 
     # I/O
@@ -43,7 +43,7 @@ def run_wind_drag(dirname, implicit_formulation, physics_coupling):
     io = IO(domain, output)
 
     # Physics scheme
-    surf_params = BoundaryLayerParameters()
+    surf_params = BoundaryLayerParameters(mesh)
     physics_parametrisation = WindDrag(eqn, implicit_formulation, surf_params)
 
     if physics_coupling == "split":
