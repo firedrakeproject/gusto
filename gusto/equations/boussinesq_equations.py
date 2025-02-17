@@ -1,9 +1,9 @@
 """Defines the Boussinesq equations."""
 
-from firedrake import inner, dx, div, cross, split, as_vector
+from firedrake import sin, pi, conditional, SpatialCoordinate, FunctionSpace, inner, dx, div, cross, split, as_vector
 from firedrake.fml import subject
 from gusto.core.labels import (
-    time_derivative, transport, prognostic, linearisation,
+    sponge, time_derivative, transport, prognostic, linearisation,
     pressure_gradient, coriolis, divergence, gravity, incompressible
 )
 from gusto.equations.common_forms import (
@@ -39,6 +39,7 @@ class BoussinesqEquations(PrognosticEquationSet):
     """
 
     def __init__(self, domain, parameters,
+		 sponge_options=None,
                  compressible=True,
                  space_names=None,
                  linearisation_map='default',
@@ -196,6 +197,23 @@ class BoussinesqEquations(PrognosticEquationSet):
             coriolis_form = coriolis(subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, 'u'), self.X))
             residual += coriolis_form
+        if sponge_options is not None:
+            W_DG = FunctionSpace(domain.mesh, "DG", 2)
+            x = SpatialCoordinate(domain.mesh)
+            z = x[len(x)-1]
+            H = sponge_options.H
+            zc = sponge_options.z_level
+            assert float(zc) < float(H), \
+                "The sponge level is set above the height the your domain"
+            dx_qp = dx(degree=(domain.max_quad_degree))
+            mubar = sponge_options.mubar
+            muexpr = conditional(z <= zc,
+                                 0.0,
+                                 mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
+            self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
+
+            residual += sponge(subject(prognostic(
+                self.mu*inner(w, domain.k)*inner(u, domain.k)*dx_qp, 'u'), self.X))
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
@@ -226,6 +244,7 @@ class LinearBoussinesqEquations(BoussinesqEquations):
     """
 
     def __init__(self, domain, parameters,
+		 sponge_options=None,
                  compressible=True,
                  space_names=None,
                  linearisation_map='default',
@@ -274,7 +293,8 @@ class LinearBoussinesqEquations(BoussinesqEquations):
                  or (t.get(prognostic) in ['p', 'b'] and t.has_label(transport)))
         super().__init__(domain=domain,
                          parameters=parameters,
-                         compressible=compressible,
+                         sponge_options=sponge_options,
+			 compressible=compressible,
                          space_names=space_names,
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,

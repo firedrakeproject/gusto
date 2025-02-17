@@ -9,21 +9,22 @@ The degree 1 elements are used, with an explicit RK4 time stepper.
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
-    PeriodicIntervalMesh, ExtrudedMesh, sin, SpatialCoordinate, Function, pi
+    PeriodicIntervalMesh, Mesh, as_vector, cos, conditional, VectorFunctionSpace, 
+    ExtrudedMesh, SpatialCoordinate, Function, pi
 )
 from gusto import (
-    Domain, IO, OutputParameters, RK4, DGUpwind, SUPGOptions, Divergence,
+    Domain, IO, SpongeLayerParameters, OutputParameters, RK4, DGUpwind, SUPGOptions, Divergence,
     Timestepper, Perturbation, CourantNumber, BoussinesqParameters,
     LinearBoussinesqEquations, boussinesq_hydrostatic_balance
 )
 
 skamarock_klemp_linear_bouss_defaults = {
-    'ncolumns': 300,
-    'nlayers': 10,
-    'dt': 0.5,
-    'tmax': 3600.,
-    'dumpfreq': 3600,
-    'dirname': 'skamarock_klemp_linear_bouss'
+    'ncolumns': 90,
+    'nlayers': 35,
+    'dt': 0.1,
+    'tmax': 9000.,
+    'dumpfreq': 1,
+    'dirname': 'mountain_linear_bouss'
 }
 
 
@@ -40,13 +41,15 @@ def skamarock_klemp_linear_bouss(
     # Test case parameters
     # ------------------------------------------------------------------------ #
 
-    domain_width = 3.0e5      # Width of domain (m)
-    domain_height = 1.0e4     # Height of domain (m)
-    pert_width = 5.0e3        # Width parameter of perturbation (m)
-    deltab = 1.0e-2           # Magnitude of buoyancy perturbation (m/s^2)
+    domain_width = 144000      # Width of domain (m)
+    domain_height = 35000    # Height of domain (m)
     N = 0.01                  # Brunt-Vaisala frequency (1/s)
     cs = 300.                 # Speed of sound (m/s)
-
+    a = 1000.                 # scale width of mountain, in m
+    hm = 1.                   # height of mountain, in m
+    zh = 5000.                # height at which mesh is no longer distorted, in m
+    sponge_depth = 10000.0    # depth of sponge layer, in m
+    mu_dt = 0.15              # parameter for strength of sponge layer, no units
     # ------------------------------------------------------------------------ #
     # Our settings for this set up
     # ------------------------------------------------------------------------ #
@@ -56,15 +59,35 @@ def skamarock_klemp_linear_bouss(
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
-
+    
     # Domain
+    # Make normal extruded mesh which will be distorted to describe the mountain
     base_mesh = PeriodicIntervalMesh(ncolumns, domain_width)
-    mesh = ExtrudedMesh(base_mesh, nlayers, layer_height=domain_height/nlayers)
-    domain = Domain(mesh, dt, 'CG', element_order)
+    ext_mesh = ExtrudedMesh(
+        base_mesh, layers=nlayers, layer_height=domain_height/nlayers
+    )
+    Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
+
+    # Describe the mountain
+    xc = domain_width/2.
+    x, z = SpatialCoordinate(ext_mesh)
+    zs = hm * a**2 / ((x - xc)**2 + a**2)
+    xexpr = as_vector(
+        [x, conditional(z < zh, z + cos(0.5 * pi * z / zh)**6 * zs, z)]
+    )
+
+    # Make new mesh
+    new_coords = Function(Vc).interpolate(xexpr)
+    mesh = Mesh(new_coords)
+    mesh._base_mesh = base_mesh  # Force new mesh to inherit original base mesh
+    domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
     parameters = BoussinesqParameters(cs=cs)
-    eqns = LinearBoussinesqEquations(domain, parameters)
+    sponge = SpongeLayerParameters(
+        H=domain_height, z_level=domain_height-sponge_depth, mubar=mu_dt/dt
+    )
+    eqns = LinearBoussinesqEquations(domain, parameters, sponge_options=sponge)
 
     # I/O
     output = OutputParameters(
@@ -104,14 +127,6 @@ def skamarock_klemp_linear_bouss(
     bref = z*(N**2)
     # interpolate the expression to the function
     b_b = Function(Vb).interpolate(bref)
-
-    # setup constants
-    b_pert = (
-        deltab * sin(pi*z/domain_height)
-        / (1 + (x - domain_width/2)**2 / pert_width**2)
-    )
-    # interpolate the expression to the function
-    b0.interpolate(b_b + b_pert)
 
     p_b = Function(Vp)
     boussinesq_hydrostatic_balance(eqns, b_b, p_b)
