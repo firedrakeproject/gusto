@@ -47,7 +47,7 @@ def run_surface_fluxes(dirname, moist, implicit_formulation, physics_coupling):
     io = IO(domain, output)
 
     # Physics scheme
-    surf_params = BoundaryLayerParameters()
+    surf_params = BoundaryLayerParameters(mesh)
     T_surf = Constant(300.0)
 
     if physics_coupling == "split":

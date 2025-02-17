@@ -26,7 +26,7 @@ class Relaxation(PhysicsParametrisation):
         """
         label_name = f'relaxation_{variable_name}'
         if hs_parameters is None:
-            hs_parameters = HeldSuarezParameters()
+            hs_parameters = HeldSuarezParameters(equation.domain.mesh)
             logger.warning('Using default Held-Suarez parameters')
         super().__init__(equation, label_name, hs_parameters)
 
@@ -121,7 +121,7 @@ class RayleighFriction(PhysicsParametrisation):
         """
         label_name = 'rayleigh_friction'
         if hs_parameters is None:
-            hs_parameters = HeldSuarezParameters()
+            hs_parameters = HeldSuarezParameters(equation.domain.mesh)
             logger.warning('Using default Held-Suarez parameters')
         super().__init__(equation, label_name, hs_parameters)
 
