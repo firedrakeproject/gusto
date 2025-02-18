@@ -1,7 +1,8 @@
 """Some simple tools for configuring the model."""
 from abc import ABCMeta, abstractmethod
 from enum import Enum
-from firedrake import sqrt, Function, FunctionSpace
+from firedrake import sqrt, Function, FunctionSpace, Constant
+import inspect
 
 
 __all__ = [
@@ -128,7 +129,10 @@ class EquationParameters(object):
             **kwargs: attributes and their values to be stored in the object.
         """
         self.mesh = mesh
-        for name, value in kwargs.items():
+        typecheck = lambda val: type(val) in [float, int, Constant]
+        params = dict(inspect.getmembers(self, typecheck))
+        params.update(kwargs.items())
+        for name, value in params.items():
             self.__setattr__(name, value)
 
     def __setattr__(self, name, value):
@@ -157,7 +161,7 @@ class EquationParameters(object):
             # This check is required so that on instantiation we do
             # not hit this line while self.mesh is still None
             R = FunctionSpace(self.mesh, 'R', 0)
-        if type(value) in [float, int]:
+        if type(value) in [float, int, Constant]:
             object.__setattr__(self, name, Function(R, val=float(value)))
         else:
             object.__setattr__(self, name, value)
