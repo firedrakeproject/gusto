@@ -35,15 +35,17 @@ jobs:
       PYTEST_MPI_MAX_NPROCS: 4
       EXTRA_PYTEST_ARGS: --durations=100 --timeout=3600 --timeout-method=thread -o faulthandler_timeout=3660 --verbose gusto-repo/unit-tests gusto-repo/integration-tests gusto-repo/examples
     steps:
-      # TODO: This can be removed when the image is updated
-      - name: Extend PATH
-        run: echo "/home/firedrake/.local/bin" >> "$GITHUB_PATH"
-
       - name: Fix HOME
         # For unknown reasons GitHub actions overwrite HOME to /github/home
         # which will break everything unless fixed
         # (https://github.com/actions/runner/issues/863)
         run: echo "HOME=/home/firedrake" >> "$GITHUB_ENV"
+
+      # TODO: These can be removed when the image is updated
+      - name: Temporary fixups
+        run: |
+          echo "/home/firedrake/.local/bin" >> "$GITHUB_PATH"
+          python3 -m pip install mpi-pytest --break-system-packages
 
       - name: Pre-cleanup
         run: |
@@ -63,6 +65,7 @@ jobs:
         run: python3 -m venv --system-site-packages venv-gusto
 
       - name: Install Gusto
+        id: install-one
         run: |
           . venv-gusto/bin/activate
           pip install ./gusto-repo
@@ -82,7 +85,9 @@ jobs:
         timeout-minutes: 10
 
       - name: Install parallel netCDF
-        id: install
+        # Run even if the step above failed
+        if: success() || steps.install-one.conclusion == 'success'
+        id: install-two
         run: |
           . venv-gusto/bin/activate
           pip uninstall -y netCDF4
@@ -102,7 +107,7 @@ jobs:
 
       - name: Run tests (nprocs = 2)
         # Run even if earlier tests failed
-        if: success() || steps.install.conclusion == 'success'
+        if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
           firedrake-run-split-tests 2 6 "$EXTRA_PYTEST_ARGS"
@@ -110,7 +115,7 @@ jobs:
         timeout-minutes: 120
 
       - name: Run tests (nprocs = 3)
-        if: success() || steps.install.conclusion == 'success'
+        if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
           firedrake-run-split-tests 3 4 "$EXTRA_PYTEST_ARGS"
@@ -118,7 +123,7 @@ jobs:
         timeout-minutes: 120
 
       - name: Run tests (nprocs = 4)
-        if: success() || steps.install.conclusion == 'success'
+        if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
           firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS"
@@ -126,7 +131,7 @@ jobs:
         timeout-minutes: 120
 
       - name: Prepare logs
-        if: success() || steps.install.conclusion == 'success'
+        if: success() || steps.install-two.conclusion == 'success'
         id: prepare-logs
         run: |
           mkdir logs
