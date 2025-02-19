@@ -45,6 +45,7 @@ jobs:
       - name: Temporary fixups
         run: |
           echo "/home/firedrake/.local/bin" >> "$GITHUB_PATH"
+          echo "$PETSC_DIR/$PETSC_ARCH/bin" >> "$GITHUB_PATH"
           python3 -m pip install mpi-pytest --break-system-packages
 
       - name: Pre-cleanup
@@ -61,7 +62,7 @@ jobs:
           path: gusto-repo
 
       - name: Create virtual environment
-        # pass --system-site-packages so Firedrake can be found
+        # pass '--system-site-packages' so Firedrake can be found
         run: python3 -m venv --system-site-packages venv-gusto
 
       - name: Install Gusto
@@ -91,9 +92,10 @@ jobs:
         run: |
           . venv-gusto/bin/activate
           pip uninstall -y netCDF4
-          # FIXME: unsure if this is needed
-          # export HDF5_DIR=$PETSC_DIR/packages
-          export NETCDF4_DIR=$PETSC_DIR/$PETSC_ARCH
+          : # '--no-build-isolation' has to be passed for mpi4py to be found
+          : # but this means that we need to install any extra build
+          : # dependencies manually
+          pip install Cython
           pip install --no-binary netCDF4 --no-build-isolation netCDF4
 
       - name: Run tests (nprocs = 1)
