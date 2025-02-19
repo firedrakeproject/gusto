@@ -575,7 +575,8 @@ class Forcing(object):
                                map_if_false=drop)
 
         # the explicit forms are multiplied by (1-alpha) and moved to the rhs
-        L_explicit = Constant(1-alpha)*dt*residual.label_map(
+        one_minus_alpha = Function(alpha.function_space(), val=1-alpha)
+        L_explicit = -one_minus_alpha*dt*residual.label_map(
             lambda t:
                 any(t.has_label(time_derivative, hydrostatic, *implicit_terms,
                                 return_tuple=True)),
