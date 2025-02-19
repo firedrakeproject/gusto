@@ -53,6 +53,9 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
+          # Download Gusto into a subdirectory not called 'gusto' to make sure
+          # that the package installs correctly. Otherwise 'import gusto' may
+          # work even if the installation failed because it is a subdirectory.
           path: gusto-repo
 
       - name: Create virtual environment
@@ -73,9 +76,9 @@ jobs:
         run: |
           . venv-gusto/bin/activate
           : # Run the serial tests
-          firedrake-run-split-tests 1 1 -n 12 --verbose integration-tests/model/test_nc_outputting.py
+          firedrake-run-split-tests 1 1 -n 12 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py
           : # Run the parallel tests
-          firedrake-run-split-tests 2 6 --verbose integration-tests/model/test_nc_outputting.py
+          firedrake-run-split-tests 2 6 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py
         timeout-minutes: 10
 
       - name: Install parallel netCDF
