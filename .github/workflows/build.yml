@@ -39,15 +39,11 @@ jobs:
       - name: Extend PATH
         run: echo "/home/firedrake/.local/bin" >> "$GITHUB_PATH"
 
-      - name: DEBUGGING
-        run: |
-          whoami
-          ls
-          echo $HOME
-          ls -al /home/firedrake
-          echo $PATH
-          which python3
-          python3 -c "from firedrake import *"
+      - name: Fix HOME
+        # For unknown reasons GitHub actions overwrite HOME to /github/home
+        # which will break everything unless fixed
+        # (https://github.com/actions/runner/issues/863)
+        run: echo "HOME=/home/firedrake" >> $GITHUB_ENV
 
       - name: Pre-cleanup
         run: |
