@@ -212,7 +212,7 @@ def run_simult_SIQN(tmpdir, order):
 
     # wind initially zero
     u0.project(as_vector(
-        [Constant(0.0, domain=mesh), Constant(0.0, domain=mesh)]
+        [Constant(0.0), Constant(0.0)]
     ))
 
     stepper.set_reference_profiles(
@@ -238,7 +238,8 @@ def run_simult_SIQN(tmpdir, order):
                                     checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
     check_domain = Domain(check_mesh, dt, "CG", order)
-    check_eqn = CompressibleEulerEquations(check_domain, params, active_tracers=tracers, u_transport_option=u_eqn_type)
+    check_params = CompressibleParameters(check_mesh)
+    check_eqn = CompressibleEulerEquations(check_domain, check_params, active_tracers=tracers, u_transport_option=u_eqn_type)
     check_io = IO(check_domain, check_output)
     check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
     check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)

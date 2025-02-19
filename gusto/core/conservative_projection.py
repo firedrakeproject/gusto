@@ -70,8 +70,10 @@ class ConservativeProjector(object):
         V = self.m_target.function_space()
         mesh = V.mesh()
 
-        self.m_mean = Constant(0.0, domain=mesh)
-        self.volume = assemble(Constant(1.0, domain=mesh)*dx)
+        self.m_mean = Constant(0.0)
+        self.volume = assemble(
+            1*dx(domain=ufl.domain.extract_unique_domain(self.m_target))
+            )
 
         test = TestFunction(V)
         m_trial = TrialFunction(V)

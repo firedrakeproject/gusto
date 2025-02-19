@@ -104,7 +104,9 @@ def run_moist_compressible(tmpdir):
                                     checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
     check_domain = Domain(check_mesh, dt, "CG", 1)
-    check_eqn = CompressibleEulerEquations(check_domain, parameters, active_tracers=tracers)
+    check_parameters = CompressibleParameters(check_mesh)
+    check_eqn = CompressibleEulerEquations(check_domain, check_parameters,
+                                           active_tracers=tracers)
     check_io = IO(check_domain, output=check_output)
     check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
     check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
