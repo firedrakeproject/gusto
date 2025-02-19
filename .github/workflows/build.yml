@@ -39,11 +39,9 @@ jobs:
       - name: Extend PATH
         run: echo "/home/firedrake/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Cleanup
-        if: always()
+      - name: Pre-cleanup
         run: |
-          : # Blow away everything in the current directory
-          find . -delete
+          rm -rf ./venv-gusto
           firedrake-clean
 
       - uses: actions/checkout@v4
@@ -52,11 +50,11 @@ jobs:
 
       - name: Create virtual environment
         # pass --system-site-packages so Firedrake can be found
-        run: python -m venv --system-site-packages venv
+        run: python -m venv --system-site-packages venv-gusto
 
       - name: Install Gusto
         run: |
-          . venv/bin/activate
+          . venv-gusto/bin/activate
           pip install ./gusto-repo
           : # Extra test dependencies
           sudo apt-get update
@@ -66,14 +64,14 @@ jobs:
 
       - name: Test serial-only netCDF
         run: |
-          . venv/bin/activate
+          . venv-gusto/bin/activate
           python -m pytest -n 3 -v integration-tests/model/test_nc_outputting.py
         timeout-minutes: 10
 
       - name: Install parallel netCDF
         id: install
         run: |
-          . venv/bin/activate
+          . venv-gusto/bin/activate
           pip uninstall -y netCDF4
           # FIXME: unsure if this is needed
           # export HDF5_DIR=$PETSC_DIR/packages
@@ -82,7 +80,7 @@ jobs:
 
       - name: Run tests (nprocs = 1)
         run: |
-          . venv/bin/activate
+          . venv-gusto/bin/activate
           : # Use pytest-xdist here so we can have a single collated output (not possible
           : # for parallel tests)
           firedrake-run-split-tests 1 1 "-n 12 --dist worksteal $EXTRA_PYTEST_ARGS"
@@ -93,7 +91,7 @@ jobs:
         # Run even if earlier tests failed
         if: success() || steps.install.conclusion == 'success'
         run: |
-          . venv/bin/activate
+          . venv-gusto/bin/activate
           firedrake-run-split-tests 2 6 "$EXTRA_PYTEST_ARGS"
         # TODO: adjust once we know how long each stage takes
         timeout-minutes: 120
@@ -101,7 +99,7 @@ jobs:
       - name: Run tests (nprocs = 3)
         if: success() || steps.install.conclusion == 'success'
         run: |
-          . venv/bin/activate
+          . venv-gusto/bin/activate
           firedrake-run-split-tests 3 4 "$EXTRA_PYTEST_ARGS"
         # TODO: adjust once we know how long each stage takes
         timeout-minutes: 120
@@ -109,22 +107,29 @@ jobs:
       - name: Run tests (nprocs = 4)
         if: success() || steps.install.conclusion == 'success'
         run: |
-          . venv/bin/activate
+          . venv-gusto/bin/activate
           firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS"
         # TODO: adjust once we know how long each stage takes
         timeout-minutes: 120
 
       - name: Prepare logs
         if: success() || steps.install.conclusion == 'success'
+        id: prepare-logs
         run: |
           mkdir logs
           cd /tmp/pytest-of-firedrake/pytest-0/
           find . -name "*.log" -exec cp --parents {} /__w/gusto/gusto/logs/ \;
 
       - name: Upload artifact
-        if: always()
+        if: success() || steps.prepare-logs.conclusion == 'success'
         uses: actions/upload-pages-artifact@v3
         with:
           name: log-files
           path: /__w/gusto/gusto/logs
           retention-days: 5
+
+      - name: Post-cleanup
+        if: always()
+        run: |
+          rm -rf ./venv-gusto
+          firedrake-clean
