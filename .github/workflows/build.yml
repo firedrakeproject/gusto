@@ -42,6 +42,9 @@ jobs:
       - name: DEBUGGING
         run: |
           whoami
+          ls
+          echo $HOME
+          ls -al /home/firedrake
           echo $PATH
           which python3
           python3 -c "from firedrake import *"
