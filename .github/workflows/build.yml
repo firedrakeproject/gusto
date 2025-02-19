@@ -57,7 +57,7 @@ jobs:
 
       - name: Create virtual environment
         # pass --system-site-packages so Firedrake can be found
-        run: python -m venv --system-site-packages venv-gusto
+        run: python3 -m venv --system-site-packages venv-gusto
 
       - name: Install Gusto
         run: |
@@ -72,7 +72,10 @@ jobs:
       - name: Test serial-only netCDF
         run: |
           . venv-gusto/bin/activate
-          python -m pytest -n 3 -v integration-tests/model/test_nc_outputting.py
+          : # Run the serial tests
+          firedrake-run-split-tests 1 1 -n 12 --verbose integration-tests/model/test_nc_outputting.py
+          : # Run the parallel tests
+          firedrake-run-split-tests 2 6 --verbose integration-tests/model/test_nc_outputting.py
         timeout-minutes: 10
 
       - name: Install parallel netCDF
@@ -90,7 +93,7 @@ jobs:
           . venv-gusto/bin/activate
           : # Use pytest-xdist here so we can have a single collated output (not possible
           : # for parallel tests)
-          firedrake-run-split-tests 1 1 "-n 12 --dist worksteal $EXTRA_PYTEST_ARGS"
+          firedrake-run-split-tests 1 1 -n 12 --dist worksteal "$EXTRA_PYTEST_ARGS"
         # TODO: adjust once we know how long each stage takes
         timeout-minutes: 120
 
