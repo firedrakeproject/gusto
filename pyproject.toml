@@ -25,4 +25,4 @@ Homepage = "http://www.firedrakeproject.org/gusto/"
 Repository = "https://github.com/firedrakeproject/gusto.git"
 
 [tool.setuptools.packages.find]
-include = ["gusto"]
+include = ["gusto*"]
