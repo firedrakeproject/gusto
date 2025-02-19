@@ -35,6 +35,10 @@ jobs:
       PYTEST_MPI_MAX_NPROCS: 4
       EXTRA_PYTEST_ARGS: --durations=100 --timeout=3600 --timeout-method=thread -o faulthandler_timeout=3660 --verbose gusto-repo/unit-tests gusto-repo/integration-tests gusto-repo/examples
     steps:
+      # TODO: This can be removed when the image is updated
+      - name: Extend PATH
+        run: echo "/home/firedrake/.local/bin" >> "$GITHUB_PATH"
+
       - name: Cleanup
         if: always()
         run: |
@@ -82,6 +86,7 @@ jobs:
           : # Use pytest-xdist here so we can have a single collated output (not possible
           : # for parallel tests)
           firedrake-run-split-tests 1 1 "-n 12 --dist worksteal $EXTRA_PYTEST_ARGS"
+        # TODO: adjust once we know how long each stage takes
         timeout-minutes: 120
 
       - name: Run tests (nprocs = 2)
@@ -90,6 +95,7 @@ jobs:
         run: |
           . venv/bin/activate
           firedrake-run-split-tests 2 6 "$EXTRA_PYTEST_ARGS"
+        # TODO: adjust once we know how long each stage takes
         timeout-minutes: 120
 
       - name: Run tests (nprocs = 3)
@@ -97,6 +103,7 @@ jobs:
         run: |
           . venv/bin/activate
           firedrake-run-split-tests 3 4 "$EXTRA_PYTEST_ARGS"
+        # TODO: adjust once we know how long each stage takes
         timeout-minutes: 120
 
       - name: Run tests (nprocs = 4)
@@ -104,6 +111,7 @@ jobs:
         run: |
           . venv/bin/activate
           firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS"
+        # TODO: adjust once we know how long each stage takes
         timeout-minutes: 120
 
       - name: Prepare logs
