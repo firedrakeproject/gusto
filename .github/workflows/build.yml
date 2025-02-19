@@ -39,9 +39,17 @@ jobs:
       - name: Extend PATH
         run: echo "/home/firedrake/.local/bin" >> "$GITHUB_PATH"
 
+      - name: DEBUGGING
+        run: |
+          whoami
+          echo $PATH
+          which python3
+          python3 -c "from firedrake import *"
+
       - name: Pre-cleanup
         run: |
-          rm -rf ./venv-gusto
+          : # Wipe everything away in the current directory
+          find . -delete
           firedrake-clean
 
       - uses: actions/checkout@v4
@@ -131,5 +139,5 @@ jobs:
       - name: Post-cleanup
         if: always()
         run: |
-          rm -rf ./venv-gusto
+          find . -delete
           firedrake-clean
