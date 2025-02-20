@@ -6,8 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "gusto"
 version = "1.0"
 dependencies = [
-  # TODO: Does this work?
-  # "firedrake @ git+https://github.com/firedrakeproject/firedrake.git",
+  "firedrake @ git+https://github.com/firedrakeproject/firedrake.git",
   "netCDF4",
   "pandas",
   "qmat",

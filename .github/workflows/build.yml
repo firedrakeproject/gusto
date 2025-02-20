@@ -41,13 +41,6 @@ jobs:
         # (https://github.com/actions/runner/issues/863)
         run: echo "HOME=/home/firedrake" >> "$GITHUB_ENV"
 
-      # TODO: These can be removed when the image is updated
-      - name: Temporary fixups
-        run: |
-          echo "/home/firedrake/.local/bin" >> "$GITHUB_PATH"
-          echo "$PETSC_DIR/$PETSC_ARCH/bin" >> "$GITHUB_PATH"
-          python3 -m pip install mpi-pytest --break-system-packages
-
       - name: Pre-cleanup
         run: |
           : # Wipe everything away in the current directory
@@ -70,10 +63,6 @@ jobs:
         run: |
           . venv-gusto/bin/activate
           pip install ./gusto-repo
-          : # Extra test dependencies
-          sudo apt-get update
-          sudo apt-get install -y parallel
-          pip install pytest-split pytest-timeout pytest-xdist
           pip list
 
       - name: Test serial-only netCDF
@@ -104,8 +93,7 @@ jobs:
           : # Use pytest-xdist here so we can have a single collated output (not possible
           : # for parallel tests)
           firedrake-run-split-tests 1 1 -n 12 --dist worksteal "$EXTRA_PYTEST_ARGS"
-        # TODO: adjust once we know how long each stage takes
-        timeout-minutes: 120
+        timeout-minutes: 60
 
       - name: Run tests (nprocs = 2)
         # Run even if earlier tests failed
@@ -113,24 +101,21 @@ jobs:
         run: |
           . venv-gusto/bin/activate
           firedrake-run-split-tests 2 6 "$EXTRA_PYTEST_ARGS"
-        # TODO: adjust once we know how long each stage takes
-        timeout-minutes: 120
+        timeout-minutes: 30
 
       - name: Run tests (nprocs = 3)
         if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
           firedrake-run-split-tests 3 4 "$EXTRA_PYTEST_ARGS"
-        # TODO: adjust once we know how long each stage takes
-        timeout-minutes: 120
+        timeout-minutes: 10
 
       - name: Run tests (nprocs = 4)
         if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
           firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS"
-        # TODO: adjust once we know how long each stage takes
-        timeout-minutes: 120
+        timeout-minutes: 10
 
       - name: Prepare logs
         if: success() || steps.install-two.conclusion == 'success'
