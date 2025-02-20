@@ -117,20 +117,12 @@ jobs:
           firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS"
         timeout-minutes: 10
 
-      - name: Prepare logs
+      - name: Upload log files
+        uses: actions/upload-artifact@v4
         if: success() || steps.install-two.conclusion == 'success'
-        id: prepare-logs
-        run: |
-          mkdir logs
-          cd /tmp/pytest-of-firedrake/pytest-0/
-          find . -name "*.log" -exec cp --parents {} /__w/gusto/gusto/logs/ \;
-
-      - name: Upload artifact
-        if: success() || steps.prepare-logs.conclusion == 'success'
-        uses: actions/upload-pages-artifact@v3
         with:
-          name: log-files
-          path: /__w/gusto/gusto/logs
+          name: gusto-logs
+          path: pytest_*.log
           retention-days: 5
 
       - name: Post-cleanup
