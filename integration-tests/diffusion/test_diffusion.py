@@ -4,7 +4,7 @@ the resulting field to ensure that the result is reasonable.
 """
 
 from gusto import *
-from firedrake import (VectorFunctionSpace, Constant, as_vector, errornorm,
+from firedrake import (VectorFunctionSpace, as_vector, errornorm,
                        TensorFunctionSpace)
 import pytest
 
