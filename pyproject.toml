@@ -9,6 +9,7 @@ dependencies = [
   "netCDF4",
   "pandas",
   "qmat",
+  "vtk",
 ]
 authors = [
   {name = "The Gusto Team"},
