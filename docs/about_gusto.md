@@ -3,45 +3,49 @@ Gusto is a library of finite element methods for geophysical fluid dynamics.
 In particular, Gusto focuses on using compatible finite element discretisations, in which variables lie in function spaces that preserve the underlying geometric structure of the equations.
 These compatible finite element methods underpin the Met Office's next-generation model, [LFRic](https://www.metoffice.gov.uk/research/approach/modelling-systems/lfric).
 
-### Download
+## Installing
 
-The best way to install Gusto is as an additional package when installing [Firedrake](http://firedrakeproject.org). Usually, for a Mac with Homebrew or an Ubuntu installation this is done by downloading the Firedrake install script and executing it:
+Before installing Gusto you should first install Firedrake using the instructions found [here](https://firedrakeproject.org/install).
+Once this is done Gusto can then be installed by running:
 ```
-curl -0 https://raw.githubusercontent/com/firedrakeproject/firedrake/master/scripts/firedrake-install
-python3 firedrake-install --install gusto
+$ git clone https://github.com/firedrakeproject/gusto.git
+$ pip install --editable ./gusto
 ```
-For an up-to-date installation guide, see the [firedrake installation instructions](http://firedrakeproject.org/download.html). Once installed, Gusto must be run from within the Firedrake virtual environment, which is activated via
+or equivalently:
 ```
-source firedrake/bin/activate
+$ pip install --src . --editable git+https://github.com/firedrakeproject/gusto.git
 ```
-To test your Gusto installation, run the test-suites:
+
+To test your Gusto installation you can run the test suite with:
 ```
-cd firedrake/src/gusto
-make test
+$ cd gusto
+$ make test
 ```
 
 #### Parallel output with netCDF
 
-The [`netCDF4`](https://pypi.org/project/netCDF4/) package installed by Gusto does not support parallel usage.
+By default the [`netCDF4`](https://pypi.org/project/netCDF4/) package installed by Gusto does not support parallel I/O.
 This means that, when Gusto is run in parallel, distributed data structures must first be gathered onto rank 0 before they can be output.
 This is *extremely inefficient* at high levels of parallelism.
 
 To avoid this it is possible to build a parallel-aware version of `netCDF4`.
-The steps to do this are as follows:
+The steps to do this for an Ubuntu machine are as follows:
 
-1. Activate the Firedrake virtual environment.
-2. Uninstall the existing `netCDF4` package:
+1. Uninstall the existing `netCDF4` package:
     ```
     $ pip uninstall netCDF4
     ```
-3. Set necessary environment variables (note that this assumes that PETSc was built by Firedrake):
+2. Set necessary environment variables and install the build dependencies:
     ```
-    $ export HDF5_DIR=$VIRTUAL_ENV/src/petsc/default
-    $ export NETCDF4_DIR=$HDF5_DIR
+    $ export PETSC_DIR=/path/to/petsc PETSC_ARCH=arch-firedrake-default
+    $ export PATH=$PETSC_DIR/$PETSC_ARCH/bin:$PATH
+    $ pip install Cython
     ```
-4. Install the parallel version of `netCDF4`:
+    On non-Ubuntu platform additional environment variables like `HDF5_DIR` and
+    `NETCDF4_DIR` may need to be set (see [here](https://unidata.github.io/netcdf4-python/#developer-install) for more information).
+3. Install the parallel version of `netCDF4`:
     ```
-    $ pip install --no-build-isolation --no-binary netCDF4 netCDF4
+    $ pip install --no-binary netCDF4 --no-build-isolation netCDF4
     ```
 
 ### Getting Started
@@ -63,7 +67,7 @@ Here is the team
 
 ### Getting in touch
 
-If you're interested in using Gusto we'd love to hear from you! The best way to get in touch with the Gusto developers is through our [Github page](https://github.com/firedrakeproject/gusto) or the Gusto channel on the Firedrake project [slack channel](https://firedrakeproject.slack.com/). Alternatively you can email [Jemma Shipton](https://mathematics.exeter.ac.uk/staff/js1075) or [Tom Bendall](https://www.metoffice.gov.uk/research/people/tom-bendall)
+If you're interested in using Gusto we'd love to hear from you! The best way to get in touch with the Gusto developers is through our [Github page](https://github.com/firedrakeproject/gusto) or the Gusto channel on the Firedrake project [Slack channel](https://firedrakeproject.slack.com/). Alternatively you can email [Jemma Shipton](https://mathematics.exeter.ac.uk/staff/js1075) or [Tom Bendall](https://www.metoffice.gov.uk/research/people/tom-bendall)
 
 <!--
 ### Funding and Citation
