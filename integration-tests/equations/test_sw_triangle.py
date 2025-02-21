@@ -36,7 +36,7 @@ def setup_sw(dirname, dt, u_transport_option):
     x = SpatialCoordinate(mesh)
 
     # Equation
-    parameters = ShallowWaterParameters(H=H)
+    parameters = ShallowWaterParameters(mesh, H=H)
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,

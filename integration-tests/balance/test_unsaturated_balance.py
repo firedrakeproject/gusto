@@ -42,7 +42,7 @@ def setup_unsaturated(dirname, recovered):
         u_transport_option = "vector_advection_form"
     else:
         u_transport_option = "vector_invariant_form"
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqns = CompressibleEulerEquations(
         domain, parameters, u_transport_option=u_transport_option, active_tracers=tracers)
 

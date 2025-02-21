@@ -36,7 +36,7 @@ def run_static_adjustment(dirname, theta_variable):
 
     # Set up equation
     tracers = [WaterVapour()]
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqn = CompressibleEulerEquations(domain, parameters, active_tracers=tracers)
 
     # I/O
