@@ -103,21 +103,21 @@ jobs:
         if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
-          firedrake-run-split-tests 2 6 "$EXTRA_PYTEST_ARGS" --log-file=gusto2_{#}.log
+          firedrake-run-split-tests 2 6 "$EXTRA_PYTEST_ARGS" "--log-file=gusto2_{#}.log"
         timeout-minutes: 30
 
       - name: Run tests (nprocs = 3)
         if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
-          firedrake-run-split-tests 3 4 "$EXTRA_PYTEST_ARGS" --log-file=gusto3_{#}.log
+          firedrake-run-split-tests 3 4 "$EXTRA_PYTEST_ARGS" "--log-file=gusto3_{#}.log"
         timeout-minutes: 10
 
       - name: Run tests (nprocs = 4)
         if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
-          firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS" --log-file=gusto4_{#}.log
+          firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS" "--log-file=gusto4_{#}.log"
         timeout-minutes: 10
 
       - name: Upload pytest log files
