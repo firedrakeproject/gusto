@@ -29,7 +29,10 @@ jobs:
       # image: firedrakeproject/firedrake-vanilla-default:latest
       image: firedrakeproject/firedrake-vanilla-default:pip
     env:
-      GUSTO_PARALLEL_LOG: FILE
+      # Make Gusto output logging information, this will *not* be printed to
+      # the terminal because pytest will capture it. Instead it is written to
+      # the file specified by '--log-file'.
+      GUSTO_PARALLEL_LOG: CONSOLE
       PYOP2_CFLAGS: -O0
       # Make sure that tests with >4 processes are not silently skipped
       PYTEST_MPI_MAX_NPROCS: 4
@@ -69,9 +72,9 @@ jobs:
         run: |
           . venv-gusto/bin/activate
           : # Run the serial tests
-          firedrake-run-split-tests 1 1 -n 12 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py
+          firedrake-run-split-tests 1 1 -n 12 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py  --log-file=gusto_netcdf_serial.log
           : # Run the parallel tests
-          firedrake-run-split-tests 2 6 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py
+          firedrake-run-split-tests 2 6 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py --log-file=gusto_netcdf_parallel.log
         timeout-minutes: 10
 
       - name: Install parallel netCDF
@@ -92,7 +95,7 @@ jobs:
           . venv-gusto/bin/activate
           : # Use pytest-xdist here so we can have a single collated output (not possible
           : # for parallel tests)
-          firedrake-run-split-tests 1 1 -n 12 --dist worksteal "$EXTRA_PYTEST_ARGS"
+          firedrake-run-split-tests 1 1 -n 12 --dist worksteal "$EXTRA_PYTEST_ARGS" --log-file=gusto1.log
         timeout-minutes: 60
 
       - name: Run tests (nprocs = 2)
@@ -100,29 +103,37 @@ jobs:
         if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
-          firedrake-run-split-tests 2 6 "$EXTRA_PYTEST_ARGS"
+          firedrake-run-split-tests 2 6 "$EXTRA_PYTEST_ARGS" --log-file=gusto2_{#}.log
         timeout-minutes: 30
 
       - name: Run tests (nprocs = 3)
         if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
-          firedrake-run-split-tests 3 4 "$EXTRA_PYTEST_ARGS"
+          firedrake-run-split-tests 3 4 "$EXTRA_PYTEST_ARGS" --log-file=gusto3_{#}.log
         timeout-minutes: 10
 
       - name: Run tests (nprocs = 4)
         if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
-          firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS"
+          firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS" --log-file=gusto4_{#}.log
         timeout-minutes: 10
 
-      - name: Upload log files
+      - name: Upload pytest log files
+        uses: actions/upload-artifact@v4
+        if: success() || steps.install-two.conclusion == 'success'
+        with:
+          name: pytest-logs
+          path: pytest_*.log
+          retention-days: 5
+
+      - name: Upload Gusto log files
         uses: actions/upload-artifact@v4
         if: success() || steps.install-two.conclusion == 'success'
         with:
           name: gusto-logs
-          path: pytest_*.log
+          path: gusto*.log
           retention-days: 5
 
       - name: Post-cleanup
