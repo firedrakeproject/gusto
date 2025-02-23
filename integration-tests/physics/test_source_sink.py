@@ -8,7 +8,7 @@ from firedrake import (as_vector, PeriodicSquareMesh, SpatialCoordinate,
 import pytest
 
 
-def run_source_sink(dirname, process, time_varying):
+def run_source_sink(dirname, process, time_varying, physics_coupling):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -59,9 +59,16 @@ def run_source_sink(dirname, process, time_varying):
     physics_parametrisations = [SourceSink(eqn, 'ash', expression, time_varying)]
 
     # Time stepper
-    stepper = PrescribedTransport(eqn, SSPRK3(domain), io, transport_method,
-                                  physics_parametrisations=physics_parametrisations)
+    time_varying_velocity = False
+    if physics_coupling == "split":
+        scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.increment)
+    else:
+        scheme = SSPRK3(domain, rk_formulation=RungeKuttaFormulation.predictor)
 
+    stepper = PrescribedTransport(
+        eqn, scheme, io, time_varying_velocity,
+        transport_method, physics_parametrisations=physics_parametrisations
+    )
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
@@ -91,9 +98,10 @@ def run_source_sink(dirname, process, time_varying):
 
 @pytest.mark.parametrize("process", ["source", "sink"])
 @pytest.mark.parametrize("time_varying", [False, True])
-def test_source_sink(tmpdir, process, time_varying):
+@pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
+def test_source_sink(tmpdir, process, time_varying, physics_coupling):
     dirname = str(tmpdir)
-    stepper, initial_ash = run_source_sink(dirname, process, time_varying)
+    stepper, initial_ash = run_source_sink(dirname, process, time_varying, physics_coupling)
     final_ash = stepper.fields("ash")
 
     initial_total_ash = assemble(initial_ash*dx)

@@ -5,17 +5,17 @@ of the water mixing ratio is conserved.
 """
 
 from os import path
+import gusto.equations.thermodynamics as td
 from gusto import *
-import gusto.thermodynamics as td
 from firedrake import (norm, Constant, PeriodicIntervalMesh,
                        SpatialCoordinate, ExtrudedMesh, Function, sqrt,
                        conditional)
-from firedrake.fml import identity
+from firedrake.fml import identity, drop
 from netCDF4 import Dataset
 import pytest
 
 
-def run_cond_evap(dirname, process):
+def run_cond_evap(dirname, process, physics_coupling):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -47,13 +47,21 @@ def run_cond_evap(dirname, process):
                               dumplist=['u'])
     io = IO(domain, output, diagnostic_fields=[Sum('water_vapour', 'cloud_water')])
 
-    # Physics scheme
-    physics_schemes = [(SaturationAdjustment(eqn, parameters=parameters), ForwardEuler(domain))]
+    if physics_coupling == "split":
+        # Physics scheme
+        physics_schemes = [(SaturationAdjustment(eqn, parameters=parameters), ForwardEuler(domain))]
 
-    # Time stepper
-    scheme = ForwardEuler(domain)
-    stepper = SplitPhysicsTimestepper(eqn, scheme, io,
-                                      physics_schemes=physics_schemes)
+        # Time stepper
+        scheme = ForwardEuler(domain)
+        stepper = SplitPhysicsTimestepper(eqn, scheme, io,
+                                          physics_schemes=physics_schemes)
+    else:
+        # Physics scheme
+        physics_parametrisation = [SaturationAdjustment(eqn, parameters=parameters)]
+
+        # Time stepper
+        scheme = ForwardEuler(domain, rk_formulation=RungeKuttaFormulation.predictor)
+        stepper = Timestepper(eqn, scheme, io, physics_parametrisations=physics_parametrisation)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -116,10 +124,13 @@ def run_cond_evap(dirname, process):
 
 
 @pytest.mark.parametrize("process", ["evaporation", "condensation"])
-def test_cond_evap(tmpdir, process):
+@pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
+def test_cond_evap(tmpdir, process, physics_coupling):
 
     dirname = str(tmpdir)
-    eqn, stepper, mv_true, mc_true, theta_d_true, mc_init = run_cond_evap(dirname, process)
+    eqn, stepper, mv_true, mc_true, theta_d_true, mc_init = run_cond_evap(dirname,
+                                                                          process,
+                                                                          physics_coupling)
 
     water_v = stepper.fields('water_vapour')
     water_c = stepper.fields('cloud_water')
