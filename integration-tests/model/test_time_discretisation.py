@@ -20,7 +20,7 @@ def run(timestepper, tmax, f_end):
 
         "ssprk4_increment_5", "ssprk4_predictor_5", "ssprk4_linear_5",
 
-        "TrapeziumRule", "ImplicitMidpoint", "QinZhang",
+        "TrapeziumRule", "ImplicitMidpoint", "QinZhang_increment", "QinZhang_predictor",
         "RK4", "Heun", "BDF2", "TR_BDF2", "AdamsBashforth", "Leapfrog",
         "AdamsMoulton", "AdamsMoulton"
     ]
@@ -90,8 +90,10 @@ def test_time_discretisation(tmpdir, scheme, tracer_setup):
         transport_scheme = TrapeziumRule(domain)
     elif scheme == "ImplicitMidpoint":
         transport_scheme = ImplicitMidpoint(domain)
-    elif scheme == "QinZhang":
-        transport_scheme = QinZhang(domain)
+    elif scheme == "QinZhang_increment":
+        transport_scheme = QinZhang(domain, rk_formulation=RungeKuttaFormulation.increment)
+    elif scheme == "QinZhang_predictor":
+        transport_scheme = QinZhang(domain, rk_formulation=RungeKuttaFormulation.predictor)
     elif scheme == "RK4":
         transport_scheme = RK4(domain)
     elif scheme == "Heun":

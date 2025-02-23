@@ -402,7 +402,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # This only needs doing once, so update the flag
         self.spinup_done = True
 
-    def log_w(self, field, time_stage):
+    def log_w(self, field, time_stage): #todo: remove this
         k = self.equation.domain.k
         w = Function(self.equation.domain.spaces('theta'))
         w.interpolate(dot(k, field))

@@ -44,7 +44,8 @@ def interior_penalty_diffusion_form(domain, test, q, parameters):
         :class:`ufl.Form`: the diffusion form.
     """
 
-    dS_ = (dS_v + dS_h) if domain.mesh.extruded else dS
+    quad = domain.max_quad_degree
+    dS_ = (dS_v(degree=quad) + dS_h(degree=quad)) if domain.mesh.extruded else dS(degree=quad)
     kappa = parameters.kappa
     mu = parameters.mu
 

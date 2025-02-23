@@ -27,7 +27,7 @@ from gusto import (
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
     compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
     SubcyclingOptions, dx, TestFunction, TrialFunction, ZComponent,
-    LinearVariationalProblem, LinearVariationalSolver
+    LinearVariationalProblem, LinearVariationalSolver, hydrostatic_parameters
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -115,7 +115,7 @@ def skamarock_klemp_nonhydrostatic(
             dump_vtus=False, dump_nc=True,
         )
 
-    diagnostic_fields = [Perturbation('theta'), ZComponent('u')]
+    diagnostic_fields = [Perturbation('theta'), ZComponent('u')] #todo: remove ZComponent
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
@@ -141,10 +141,11 @@ def skamarock_klemp_nonhydrostatic(
     # Linear solver
     if hydrostatic:
         linear_solver = CompressibleSolver(
-            eqns, alpha=alpha
+            eqns, alpha=alpha, solver_parameters=hydrostatic_parameters,
+            overwrite_solver_parameters=True
         )
     else:
-        linear_solver = CompressibleSolver(eqns)
+        linear_solver = CompressibleSolver(eqns, alpha=alpha)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
