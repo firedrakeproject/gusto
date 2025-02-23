@@ -350,21 +350,16 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
         # Term to appear in both explicit and implicit forcings
         # For the explicit forcing, this will cancel out the u^n part of the
         # time derivative
-        self.residual += hydrostatic(subject(prognostic(
+        self.residual -= hydrostatic(subject(prognostic(
             inner(k, w)*inner(k, u)/domain.dt*dx, 'u'), self.X)
         )
 
         # Term that appears only in implicit forcing
         # For the implicit forcing, in combination with the term above, the
         # u^{n+1} term will be cancelled out
-        self.residual += implicit(hydrostatic(subject(prognostic(
-            Constant(-1.0)*inner(k, w)*inner(k, u)/domain.dt*dx, 'u'), self.X))
+        self.residual -= implicit(hydrostatic(subject(prognostic(
+            Constant(-2.0)*inner(k, w)*inner(k, u)/domain.dt*dx, 'u'), self.X))
         )
-
-        # # Add Euler-Poincare term
-        # self.residual += hydrostatic(subject(prognostic(
-        #     Constant(0.5)*div(w)*inner(u_hori, u)*dx, 'u'), self.X)
-        # )
 
         # -------------------------------------------------------------------- #
         # Only transport horizontal wind
@@ -376,10 +371,6 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
             map_if_true=drop,
             map_if_false=keep
         )
-
-        # u_term = prognostic(
-        #     advection_equation_circulation_form(domain, w, u_hori, u), 'u'
-        # )
 
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
@@ -396,3 +387,4 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
             raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
 
         self.residual += horizontal_prognostic(subject(u_term, self.X))
+

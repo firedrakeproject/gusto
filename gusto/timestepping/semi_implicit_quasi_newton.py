@@ -264,7 +264,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xn = self.x.n
         xnp1 = self.x.np1
         # computes ubar from un and unp1
-        return xn('u') + self.alpha_u*(xnp1('u')-xn('u'))
+        if hasattr(self.equation, 'transporting_velocity'):
+            return self.equation.transporting_velocity(xn('u') + self.alpha_u*(xnp1('u')-xn('u')))
+        else:
+            return xn('u') + self.alpha_u*(xnp1('u')-xn('u'))
 
     def setup_fields(self):
         """Sets up time levels n, star, p and np1"""
@@ -493,6 +496,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 xnp1X += dy
                 self.log_w(xnp1('u'), 'After solver')
 
+                # from firedrake import File
+                # output = File('hyd_new5_output.pvd')
+                # u_out = Function(xp('u').function_space())
+                # u_out.assign(xp('u'))
+                # output.write(u_out, xrhs.subfunctions[0], dy.subfunctions[0], xnp1('u'))
+                # assert False
+
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xnp1)
 
@@ -586,7 +596,7 @@ class Forcing(object):
         # the explicit forms are multiplied by (1-alpha) and moved to the rhs
         L_explicit = -(Constant(1)-alpha)*dt*residual.label_map(
             lambda t:
-                any(t.has_label(time_derivative, hydrostatic, *implicit_terms,
+                any(t.has_label(time_derivative, *implicit_terms,
                                 return_tuple=True)),
             drop,
             replace_subject(self.x0))
@@ -595,7 +605,7 @@ class Forcing(object):
         L_implicit = -alpha*dt*residual.label_map(
             lambda t:
                 any(t.has_label(
-                    time_derivative, hydrostatic, *implicit_terms,
+                    time_derivative, *implicit_terms,
                     return_tuple=True)),
             drop,
             replace_subject(self.x0))
@@ -605,18 +615,6 @@ class Forcing(object):
             lambda t: any(t.has_label(*implicit_terms, return_tuple=True)),
             replace_subject(self.x0),
             drop)
-
-        # the hydrostatic equations require some additional forms:
-        if any([t.has_label(hydrostatic) for t in residual]):
-            L_explicit += residual.label_map(
-                lambda t: t.has_label(hydrostatic),
-                replace_subject(self.x0),
-                drop)
-
-            L_implicit -= residual.label_map(
-                lambda t: t.has_label(hydrostatic),
-                replace_subject(self.x0),
-                drop)
 
         # now we can set up the explicit and implicit problems
         explicit_forcing_problem = LinearVariationalProblem(

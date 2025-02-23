@@ -106,7 +106,7 @@ hydrostatic_parameters = {
     'pc_python_type': 'firedrake.SCPC',
     # Velocity mass operator is singular in the hydrostatic case.
     # So for reconstruction, we eliminate rho into u
-    'pc_sc_eliminate_fields': '1, 0',
+    'pc_sc_eliminate_fields': '0, 1',
     'condensed_field': {
         'ksp_type': 'fgmres',
         'ksp_rtol': 1.0e-8,
