@@ -121,3 +121,16 @@ def test_unsaturated_bubble():
 @pytest.mark.parallel(nprocs=2)
 def test_unsaturated_bubble_parallel():
     test_unsaturated_bubble()
+
+
+def test_compressible_eady():
+    from compressible_eady import compressible_eady
+    test_name = 'compressible_eady'
+    compressible_eady(
+        ncolumns=10,
+        nlayers=5,
+        dt=300.0,
+        tmax=1500.0,
+        dumpfreq=5,
+        dirname=make_dirname(test_name)
+    )

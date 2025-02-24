@@ -7,8 +7,8 @@ from firedrake import sqrt, Constant
 __all__ = [
     "Configuration",
     "IntegrateByParts", "TransportEquationType", "OutputParameters",
-    "BoussinesqParameters", "CompressibleParameters",
-    "ShallowWaterParameters",
+    "BoussinesqParameters", "CompressibleParameters", "ShallowWaterParameters",
+    "IncompressibleEadyParameters", "CompressibleEadyParameters",
     "EmbeddedDGOptions", "ConservativeEmbeddedDGOptions", "RecoveryOptions",
     "ConservativeRecoveryOptions", "SUPGOptions", "MixedFSOptions",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters",
@@ -162,6 +162,38 @@ class ShallowWaterParameters(Configuration):
     # Scaling factor for the saturation function in the equivalent buoyancy
     # formulation of the thermal shallow water equations
     q0 = None
+
+
+class EadyParameters(Configuration):
+    """
+    Base class of physical parameters for Eady problems
+    """
+    dbdy = -1.0e-07
+    H = None
+    L = None
+    f = None
+    deltax = None
+    deltaz = None
+    fourthorder = False
+
+
+class IncompressibleEadyParameters(BoussinesqParameters, EadyParameters):
+    """
+    Base class of physical parameters for incompressible Eady problems
+    """
+    Nsq = BoussinesqParameters.N**2
+
+
+class CompressibleEadyParameters(CompressibleParameters, EadyParameters):
+
+    """
+    Physical parameters for Compressible Eady
+    """
+    g = 10.
+    Nsq = CompressibleParameters.N**2
+    theta_surf = 300.
+    dthetady = theta_surf/g*EadyParameters.dbdy
+    Pi0 = 0.0
 
 
 class WrapperOptions(Configuration, metaclass=ABCMeta):

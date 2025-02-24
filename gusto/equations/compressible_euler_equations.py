@@ -2,7 +2,7 @@
 
 from firedrake import (
     sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg, dS_v,
-    conditional, SpatialCoordinate, split, Constant, as_vector
+    conditional, SpatialCoordinate, split, Constant, as_vector, TestFunctions
 )
 from firedrake.fml import subject, replace_subject
 from gusto.core.labels import (
@@ -18,7 +18,10 @@ from gusto.equations.common_forms import (
 from gusto.equations.active_tracers import Phases, TracerVariableType
 from gusto.equations.prognostic_equations import PrognosticEquationSet
 
-__all__ = ["CompressibleEulerEquations", "HydrostaticCompressibleEulerEquations"]
+__all__ = [
+    "CompressibleEulerEquations", "HydrostaticCompressibleEulerEquations",
+    "CompressibleEadyEquations"
+]
 
 
 class CompressibleEulerEquations(PrognosticEquationSet):
@@ -382,3 +385,72 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
         #   to replace the subject with the new hydrostatic subject
         # - add the hydrostatic label
         return replace_subject(new_subj, old_idx=f_idx)(term)
+
+
+class CompressibleEadyEquations(CompressibleEulerEquations):
+    """
+    The compressible equations in a vertical slice, augmented with a third
+    velocity component normal to the slice, as used in the Eady problem.
+    """
+
+    def __init__(self, domain, parameters, sponge_options=None,
+                 extra_terms=None, space_names=None,
+                 linearisation_map='default',
+                 u_transport_option="vector_invariant_form",
+                 no_normal_flow_bc_ids=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            parameters (:class:`Configuration`, optional): an object containing
+                the model's physical parameters.
+            sponge_options (:class:`SpongeLayerParameters`, optional): any
+                parameters for applying a sponge layer to the upper boundary.
+                Defaults to None.
+            extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
+                included in the equation set. Defaults to None.
+            space_names (dict, optional): a dictionary of strings for names of
+                the function spaces to use for the spatial discretisation. The
+                keys are the names of the prognostic variables. Defaults to None
+                in which case the spaces are taken from the de Rham complex.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the string 'default',
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
+            u_transport_option (str, optional): specifies the transport term
+                used for the velocity equation. Supported options are:
+                'vector_invariant_form', 'vector_advection_form' and
+                'circulation_form'.
+                Defaults to 'vector_invariant_form'.
+            no_normal_flow_bc_ids (list, optional): a list of IDs of domain
+                boundaries at which no normal flow will be enforced. Defaults to
+                None.
+        """
+
+        super().__init__(domain, parameters,
+                         sponge_options=sponge_options,
+                         extra_terms=extra_terms, space_names=space_names,
+                         linearisation_map=linearisation_map,
+                         u_transport_option=u_transport_option,
+                         diffusion_options=None,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         active_tracers=None)
+
+        dthetady = parameters.dthetady
+        cp = parameters.cp
+        y_vec = as_vector([0., 1., 0.])
+
+        W = self.function_space
+        w, _, gamma = TestFunctions(W)
+        X = self.X
+        u, rho, theta = split(X)
+
+        exner_pi = exner_pressure(parameters, rho, theta)
+        Pi0 = self.parameters.Pi0
+
+        self.residual -= subject(prognostic(
+            cp*dthetady*(exner_pi - Pi0)*inner(w, y_vec)*dx, "u"), X)
+
+        self.residual += subject(prognostic(
+            gamma*(dthetady*inner(u, y_vec))*dx, "theta"), X)

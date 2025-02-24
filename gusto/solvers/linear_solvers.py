@@ -515,7 +515,7 @@ class BoussinesqSolver(TimesteppingSolver):
             eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
 
         if equation.parameters.Omega is not None:
-            Omega = as_vector((0, 0, equation.parameter.Omega))
+            Omega = as_vector((0, 0, equation.parameters.Omega))
             eqn += inner(w, cross(2*Omega, u))*dx
 
         aeqn = lhs(eqn)

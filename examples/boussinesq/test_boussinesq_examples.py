@@ -62,3 +62,16 @@ def test_skamarock_klemp_linear_bouss():
 @pytest.mark.parallel(nprocs=2)
 def test_skamarock_klemp_linear_bouss_parallel():
     test_skamarock_klemp_linear_bouss()
+
+
+def test_incompressible_eady():
+    from incompressible_eady import incompressible_eady
+    test_name = 'incompressible_eady'
+    incompressible_eady(
+        ncolumns=10,
+        nlayers=5,
+        dt=300.0,
+        tmax=1500.0,
+        dumpfreq=5,
+        dirname=make_dirname(test_name)
+    )
