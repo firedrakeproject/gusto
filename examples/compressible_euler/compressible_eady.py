@@ -16,8 +16,8 @@ from gusto import (
 from gusto import thermodynamics as tde
 from firedrake import (
     as_vector, SpatialCoordinate, solve, ds_b, ds_t, PeriodicRectangleMesh,
-    ExtrudedMesh, assemble, exp, cos, sin, cosh, sinh, tanh, pi, Function, sqrt,
-    TrialFunction, TestFunction, inner, dx, div, FacetNormal, FunctionSpace
+    ExtrudedMesh, exp, cos, sin, cosh, sinh, tanh, pi, Function, sqrt,
+    TrialFunction, TestFunction, inner, dx, div, FacetNormal
 )
 
 compressible_eady_defaults = {
