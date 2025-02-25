@@ -18,7 +18,7 @@ from gusto import (
     LinearBoussinesqEquations, boussinesq_hydrostatic_balance
 )
 
-skamarock_klemp_linear_bouss_defaults = {
+mountain_linear_bouss_defaults = {
     'ncolumns': 90,
     'nlayers': 35,
     'dt': 0.1,
@@ -28,21 +28,21 @@ skamarock_klemp_linear_bouss_defaults = {
 }
 
 
-def skamarock_klemp_linear_bouss(
-        ncolumns=skamarock_klemp_linear_bouss_defaults['ncolumns'],
-        nlayers=skamarock_klemp_linear_bouss_defaults['nlayers'],
-        dt=skamarock_klemp_linear_bouss_defaults['dt'],
-        tmax=skamarock_klemp_linear_bouss_defaults['tmax'],
-        dumpfreq=skamarock_klemp_linear_bouss_defaults['dumpfreq'],
-        dirname=skamarock_klemp_linear_bouss_defaults['dirname']
+def mountain_linear_bouss(
+        ncolumns=mountain_linear_bouss_defaults['ncolumns'],
+        nlayers=mountain_linear_bouss_defaults['nlayers'],
+        dt=mountain_linear_bouss_defaults['dt'],
+        tmax=mountain_linear_bouss_defaults['tmax'],
+        dumpfreq=mountain_linear_bouss_defaults['dumpfreq'],
+        dirname=mountain_linear_bouss_defaults['dirname']
 ):
 
     # ------------------------------------------------------------------------ #
     # Test case parameters
     # ------------------------------------------------------------------------ #
 
-    domain_width = 144000      # Width of domain (m)
-    domain_height = 35000    # Height of domain (m)
+    domain_width = 144000     # Width of domain (m)
+    domain_height = 35000     # Height of domain (m)
     N = 0.01                  # Brunt-Vaisala frequency (1/s)
     cs = 300.                 # Speed of sound (m/s)
     a = 1000.                 # scale width of mountain, in m
@@ -87,7 +87,9 @@ def skamarock_klemp_linear_bouss(
     sponge = SpongeLayerParameters(
         H=domain_height, z_level=domain_height-sponge_depth, mubar=mu_dt/dt
     )
-    eqns = LinearBoussinesqEquations(domain, parameters, sponge_options=sponge)
+
+    # JS: sponge layer commented out below for now so it doesn't mess things up
+    eqns = LinearBoussinesqEquations(domain, parameters)#, sponge_options=sponge)
 
     # I/O
     output = OutputParameters(
@@ -113,6 +115,7 @@ def skamarock_klemp_linear_bouss(
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
+    u0 = stepper.fields("u")
     b0 = stepper.fields("b")
     p0 = stepper.fields("p")
 
@@ -129,11 +132,17 @@ def skamarock_klemp_linear_bouss(
     b_b = Function(Vb).interpolate(bref)
 
     p_b = Function(Vp)
-    boussinesq_hydrostatic_balance(eqns, b_b, p_b)
+    boussinesq_hydrostatic_balance(eqns, b_b, p_b, top=True)
+    b0.assign(b_b)
     p0.assign(p_b)
 
-    # set the background buoyancy
-    stepper.set_reference_profiles([('p', p_b), ('b', b_b)])
+    # JS: set initial wind to be 10ms-1 in the horizontal across the depth
+    # of the domain
+    initial_wind = 10.0
+    u0.project(as_vector([initial_wind, 0.0]), bcs=eqns.bcs['u'])
+
+    # set the background buoyancy JS: no need to do this for RK4 timestepping
+    # stepper.set_reference_profiles([('p', p_b), ('b', b_b)])
 
     # ------------------------------------------------------------------------ #
     # Run
@@ -155,38 +164,38 @@ if __name__ == "__main__":
         '--ncolumns',
         help="The number of columns in the vertical slice mesh.",
         type=int,
-        default=skamarock_klemp_linear_bouss_defaults['ncolumns']
+        default=mountain_linear_bouss_defaults['ncolumns']
     )
     parser.add_argument(
         '--nlayers',
         help="The number of layers for the mesh.",
         type=int,
-        default=skamarock_klemp_linear_bouss_defaults['nlayers']
+        default=mountain_linear_bouss_defaults['nlayers']
     )
     parser.add_argument(
         '--dt',
         help="The time step in seconds.",
         type=float,
-        default=skamarock_klemp_linear_bouss_defaults['dt']
+        default=mountain_linear_bouss_defaults['dt']
     )
     parser.add_argument(
         "--tmax",
         help="The end time for the simulation in seconds.",
         type=float,
-        default=skamarock_klemp_linear_bouss_defaults['tmax']
+        default=mountain_linear_bouss_defaults['tmax']
     )
     parser.add_argument(
         '--dumpfreq',
         help="The frequency at which to dump field output.",
         type=int,
-        default=skamarock_klemp_linear_bouss_defaults['dumpfreq']
+        default=mountain_linear_bouss_defaults['dumpfreq']
     )
     parser.add_argument(
         '--dirname',
         help="The name of the directory to write to.",
         type=str,
-        default=skamarock_klemp_linear_bouss_defaults['dirname']
+        default=mountain_linear_bouss_defaults['dirname']
     )
     args, unknown = parser.parse_known_args()
 
-    skamarock_klemp_linear_bouss(**vars(args))
+    mountain_linear_bouss(**vars(args))
