@@ -4,7 +4,7 @@ from firedrake import Projector
 from firedrake.fml import Label, drop
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
-from gusto.core.labels import time_derivative, physics_label
+from gusto.core.labels import time_derivative, physics_label, dynamics_label
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper, Timestepper
 from numpy import ones
@@ -296,7 +296,25 @@ class SplitPrescribedTransport(Timestepper):
         return self.fields('u')
 
     def setup_scheme(self):
+        print('Setting up base equation')
         self.setup_equation(self.equation)
+
+         # If there is an augmentation, set up the residual now
+        if self.scheme.augmentation is not None:
+            if self.scheme.augmentation.name == 'mean_mixing_ratio':
+                self.scheme.augmentation.setup_residual(self.spatial_methods, self.equation)
+                print('Setting up augmented equation')
+                # Go through and label all non-physics terms with a "dynamics" label
+                dynamics = Label('dynamics')
+                self.scheme.augmentation.residual = self.scheme.augmentation.residual.label_map(
+                    lambda t: not any(t.has_label(time_derivative, physics_label)),
+                    map_if_true=lambda t: dynamics(t)
+                )
+                print(len(self.scheme.augmentation.residual.label_map(
+                    lambda t: t.has_label(dynamics),
+                    map_if_false=drop
+                )))
+
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
         self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics_label)), dynamics)
@@ -305,6 +323,7 @@ class SplitPrescribedTransport(Timestepper):
         self.setup_transporting_velocity(self.scheme)
         if self.io.output.log_courant:
             self.scheme.courant_max = self.io.courant_max
+
 
     def setup_prescribed_expr(self, expr_func):
         """
