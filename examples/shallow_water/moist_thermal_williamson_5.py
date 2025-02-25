@@ -121,14 +121,14 @@ def moist_thermal_williamson_5(
 
     # Function to pass to physics (takes mixed function as argument)
     def phys_sat_func(x_in):
-        D = x_in.split()[1]
-        b = x_in.split()[2]
+        D = x_in.subfunctions[1]
+        b = x_in.subfunctions[2]
         return q_sat(b, D)
 
     # Feedback proportionality is dependent on D and b
     def gamma_v(x_in):
-        D = x_in.split()[1]
-        b = x_in.split()[2]
+        D = x_in.subfunctions[1]
+        b = x_in.subfunctions[2]
         return 1.0 / (1.0 + nu*beta2/g*q_sat(b, D))
 
     SWSaturationAdjustment(

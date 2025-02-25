@@ -99,12 +99,14 @@ class VorticityTransport(Augmentation):
         F, Z = split(self.X)
         test_F, test_Z = self.tests
 
+        quad = domain.max_quad_degree
+
         if hasattr(domain.mesh, "_base_mesh"):
-            self.ds = ds_b + ds_t + ds_v
-            self.dS = dS_v + dS_h
+            self.ds = ds_b(degree=quad) + ds_t(degree=quad) + ds_v(degree=quad)
+            self.dS = dS_v(degree=quad) + dS_h(degree=quad)
         else:
-            self.ds = ds
-            self.dS = dS
+            self.ds = ds(degree=quad)
+            self.dS = dS(degree=quad)
 
         # Add boundary conditions
         self.bcs = []
