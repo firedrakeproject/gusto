@@ -18,7 +18,7 @@ from firedrake.fml import (
 )
 from gusto import (
     time_derivative, transport, transporting_velocity, TransportEquationType,
-    logger, prognostic, mass_weighted
+    logger, prognostic, mass_weighted, nonlinear_time_derivative
 )
 from gusto.spatial_methods.limiters import MeanLimiter, MixedFSLimiter
 import copy
@@ -290,6 +290,8 @@ class MeanMixingRatio(Augmentation):
         mX_spaces = []
         mean_spaces = []
         self.limiters = []
+        self.rho_names = []
+        self.rho_idxs = []
         #self.sublimiters = {}
 
         for i in range(self.mX_num):
@@ -306,6 +308,18 @@ class MeanMixingRatio(Augmentation):
             mX_spaces.append(eqns.spaces[mX_idx])
             self.mX_idxs.append(mX_idx)
 
+            # Determine if this is a conservatively transported tracer.
+            # If so, extract the corresponding density name, if not
+            # set this to none.
+            #self.rho_names.append('None')
+            for tracer in eqns.active_tracers:
+                if tracer.name == mX_name:
+                    print(tracer.density_name)
+                    if tracer.density_name is not None:
+                        self.rho_idxs.append(eqns.field_names.index(tracer.density_name))
+                    else:
+                        self.rho_idxs.append('None')
+            print(self.rho_idxs)
             # Define a limiter
             #self.limiters.append(MeanLimiter(eqns.spaces[mX_idx]))
             #self.sublimiters.update({mX_name: MeanLimiter(eqns.spaces[mX_idx])})
@@ -339,17 +353,47 @@ class MeanMixingRatio(Augmentation):
 
         # Copy the mean mixing ratio residual terms:
         for i in range(self.mX_num):
+            print('copying old terms into new residual')
+            print(self.mX_names[i])
             if i == 0:
                 mean_residual = orig_residual.label_map(
-                    lambda t: t.get(prognostic) == self.mX_names[i],
+                    lambda t: (t.get(prognostic) == self.mX_names[i]) and not t.has_label(mass_weighted),
                     map_if_false=drop
                 )
+                if self.rho_idxs[i] != 'None':
+                    test = self.tests[i]
+                    # We need to provide a mass-weighted term
+                    ref_density = split(self.X)[self.rho_idxs[i]]
+                    prog = split(self.X)[self.mX_idxs[i]]
+                    q = ref_density*prog
+                    field_name = self.mX_names[i]
+
+                    mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
+                    mass_weighted_form = nonlinear_time_derivative(time_derivative(
+                            subject(prognostic(inner(q, test)*dx, field_name), self.X)))
+
+                    mean_residual += mass_weighted(mass, mass_weighted_form)
+
                 mean_residual = prognostic.update_value(mean_residual, self.mean_names[i])
             else:
                 mean_residual_term = orig_residual.label_map(
-                    lambda t: t.get(prognostic) == self.mX_names[i],
+                    lambda t: (t.get(prognostic) == self.mX_names[i]) and not t.has_label(mass_weighted),
                     map_if_false=drop
                 )
+                if self.rho_idxs[i] != 'None':
+                    test = self.tests[i]
+                    # We need to provide a mass-weighted term
+                    ref_density = split(self.X)[self.rho_idxs[i]]
+                    prog = split(self.X)[self.mX_idxs[i]]
+                    q = ref_density*prog
+                    field_name = self.mX_names[i]
+
+                    mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
+                    mass_weighted_form = nonlinear_time_derivative(time_derivative(
+                            subject(prognostic(inner(q, test)*dx, field_name), self.X)))
+
+                    mean_residual_term += mass_weighted(mass, mass_weighted_form)
+
                 mean_residual_term = prognostic.update_value(mean_residual_term,\
                                                               self.mean_names[i])
                 mean_residual = mean_residual + mean_residual_term
@@ -372,14 +416,36 @@ class MeanMixingRatio(Augmentation):
             #    map_if_false=drop
             #).form)
 
+            ## YEP, SHOULD SPLIT BY MASS WEIGHTED OR NOT MASS WEIGHTED,
+            # HERE INSTEAD!
+
             orig_residual = orig_residual.label_map(
-                lambda t: t.get(prognostic) == field,
+                lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
                 map_if_true=replace_subject(self.X, old_idx=idx, new_idx = idx)
             )
             orig_residual = orig_residual.label_map(
-                lambda t: t.get(prognostic) == field,
+                lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
                 map_if_true=replace_test_function(self.tests, old_idx=idx, new_idx=idx)
             )
+
+            # Need to be more involved for mass weighted terms:
+            if self.rho_idxs[i] != 'None':
+                print('Replacing tests and trials for a mass weighted term')
+                test = self.tests[i]
+                # We need to provide a mass-weighted term
+                ref_density = split(self.X)[self.rho_idxs[i]]
+                prog = split(self.X)[self.mX_idxs[i]]
+                q = ref_density*prog
+                field_name = self.mX_names[i]
+
+                mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
+                mass_weighted_form = nonlinear_time_derivative(time_derivative(
+                        subject(prognostic(inner(q, test)*dx, field_name), self.X)))
+
+                mass_weighted_residual_term += mass_weighted(mass, mass_weighted_form)
+
+                orig_residual = orig_residual + mass_weighted_residual_term
+
             #print('\n residual term after change')
             #print(old_residual.label_map(
             #    lambda t: t.get(prognostic) == field,
@@ -502,14 +568,14 @@ class MeanMixingRatio(Augmentation):
         # Ensure non-negativity by applying the blended limiter
         mX_pre = []
         means = []
-        print('limiting within the augmentation')
+        print('Values after transport')
         for i in range(self.mX_num):
             mX_pre.append(x_in_mixed.subfunctions[self.mX_idxs[i]])
             means.append(x_in_mixed.subfunctions[self.mean_idxs[i]])
 
             print('\n min of mX field:')
             print(np.min(mX_pre[i].dat.data))
-            print('\n min of mean field:')
+            print(f'\n min of {self.mean_names[i]} field:')
             print(np.min(means[i].dat.data))
 
         self.limiters.apply(mX_pre, means)
@@ -520,7 +586,7 @@ class MeanMixingRatio(Augmentation):
             x_in_mixed.subfunctions[self.mX_idxs[i]].assign(mX_pre[i])
             print('\n min of mX field:')
             print(np.min(mX_pre[i].dat.data))
-            print('\n min of mean field:')
+            print(f'\n min of {self.mean_names[i]} field:')
             print(np.min(means[i].dat.data))
 
     def limit_old(self, x_in_mixed):

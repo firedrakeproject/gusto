@@ -8,6 +8,7 @@ from gusto.core.labels import time_derivative, physics_label, dynamics_label
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper, Timestepper
 from numpy import ones
+import numpy as np
 
 __all__ = ["SplitTimestepper", "SplitPhysicsTimestepper", "SplitPrescribedTransport"]
 
@@ -226,9 +227,18 @@ class SplitPhysicsTimestepper(Timestepper):
 
         super().timestep()
 
+        print('just performed transport in split phyics timestepper')
+
+        for field in self.x.np1:
+            print(np.min(field.dat.data))
+
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
                 scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+
+        # Perform augmented limiting if required:
+        if self.augmentation is not None:
+            self.augmentation.limit(self.x.np1)
 
 
 class SplitPrescribedTransport(Timestepper):
@@ -395,6 +405,23 @@ class SplitPrescribedTransport(Timestepper):
 
         super().timestep()
 
+        print('Transport complete in split prescribed timestepper')
+
+        for idx, field in enumerate(self.x.np1):
+            print(idx)
+            print(np.min(field.dat.data))
+
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
                 scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+
+        print('Physics complete in split prescribed timestepper')
+
+        for idx, field in enumerate(self.x.np1):
+            print(idx)
+            print(np.min(field.dat.data))
+
+        # Perform augmented limiting if required:
+        #if self.scheme.augmentation is not None:
+        #    name = self.equation.field_name
+        #    self.scheme.augmentation.limit(self.x.np1(name))
