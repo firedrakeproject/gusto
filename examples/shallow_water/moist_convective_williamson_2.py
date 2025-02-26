@@ -103,7 +103,7 @@ def moist_convect_williamson_2(
 
     # define saturation function
     def sat_func(x_in):
-        h = x_in.split()[1]
+        h = x_in.subfunctions[1]
         numerator = (
             theta_0 + sigma*((cos(phi))**2)
             * ((w + sigma)*(cos(phi))**2 + 2*(phi_0 - w - sigma))
