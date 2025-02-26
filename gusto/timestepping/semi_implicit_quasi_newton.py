@@ -37,7 +37,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  auxiliary_equations_and_schemes=None, linear_solver=None,
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
-                 alpha=Constant(0.5), off_centred_u=False,
+                 alpha=0.5, off_centred_u=False,
                  num_outer=2, num_inner=2, accelerator=False,
                  predictor=None, reference_update_freq=None,
                  spinup_steps=0):
@@ -121,7 +121,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.accelerator = accelerator
 
         # Options relating to reference profiles and spin-up
-        self._alpha_original = Function(R, val=float(alpha))
+        self._alpha_original = float(alpha)
         self.reference_update_freq = reference_update_freq
         self.to_update_ref_profile = False
         self.spinup_steps = spinup_steps
