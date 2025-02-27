@@ -54,6 +54,12 @@ jobs:
             -o faulthandler_timeout=3660 \
             -v unit-tests integration-tests examples
         timeout-minutes: 120
+      - name: Prepare logs
+        if: always()
+        run: |
+          mkdir logs
+          cd /tmp/pytest-of-firedrake/pytest-*/
+          find . -name "*.log" -exec cp --parents {} /__w/gusto/gusto/logs/ \;
       - name: Gusto jupyter_notebooks
         run: |
           . /home/firedrake/firedrake/bin/activate
@@ -64,13 +70,8 @@ jobs:
             --timeout-method=thread \
             -o faulthandler_timeout=1260 \
             --nbval-lax \
-            jupyter_notebooks
-      - name: Prepare logs
-        if: always()
-        run: |
-          mkdir logs
-          cd /tmp/pytest-of-firedrake/pytest-0/
-          find . -name "*.log" -exec cp --parents {} /__w/gusto/gusto/logs/ \;
+            --nbval-cell-timeout=3000 \
+            -v jupyter_notebooks
       - name: Upload artifact
         if: always()
         uses: actions/upload-pages-artifact@v3
