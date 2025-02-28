@@ -108,7 +108,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         u_trial = split(self.trials)[0]
         _, rho_bar, theta_bar = split(self.X_ref)[0:3]
         zero_expr = Constant(0.0)*theta
-        # Check this for adjoints
         exner = exner_pressure(parameters, rho, theta)
         n = FacetNormal(domain.mesh)
 
