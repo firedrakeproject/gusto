@@ -7,7 +7,7 @@ from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
 from gusto.core.labels import prognostic
 from gusto.equations import thermodynamics
-from gusto.core.configuration import HeldSuarezParameters
+from gusto.core.equation_configuration import HeldSuarezParameters
 from gusto.core import logger
 
 
