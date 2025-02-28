@@ -219,7 +219,7 @@ class ShallowWaterParameters(EquationParameters):
 class WrapperOptions(Configuration, metaclass=ABCMeta):
     """Base class for specifying options for a transport scheme."""
 
-    @abstractmethod
+    @abstractproperty
     def name(self):
         pass
 
