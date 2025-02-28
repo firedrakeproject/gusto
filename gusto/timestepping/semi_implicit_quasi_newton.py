@@ -73,9 +73,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`).
                 These schemes are evaluated within the outer loop. Defaults to
                 None.
-            alpha (`ufl.Constant`, optional): the semi-implicit off-centering
+            alpha (`float, optional): the semi-implicit off-centering
                 parameter. A value of 1 corresponds to fully implicit, while 0
-                corresponds to fully explicit. Defaults to Constant(0.5).
+                corresponds to fully explicit. Defaults to 0.5.
             off_centred_u (bool, optional): option to offcentre the transporting
                 velocity. Defaults to False, in which case transporting velocity
                 is centred. If True offcentring uses value of alpha.
@@ -121,7 +121,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.accelerator = accelerator
 
         # Options relating to reference profiles and spin-up
-        self._alpha_original = float(alpha)
+        self._alpha_original = float(alpha)  # float so as to not upset adjoint
         self.reference_update_freq = reference_update_freq
         self.to_update_ref_profile = False
         self.spinup_steps = spinup_steps
@@ -541,7 +541,7 @@ class Forcing(object):
         Args:
             equation (:class:`PrognosticEquationSet`): the prognostic equations
                 containing the forcing terms.
-            alpha (:class:`Constant`): semi-implicit off-centering factor. An
+            alpha (:class:`Function`): semi-implicit off-centering factor. An
                 alpha of 0 corresponds to fully explicit, while a factor of 1
                 corresponds to fully implicit.
         """
