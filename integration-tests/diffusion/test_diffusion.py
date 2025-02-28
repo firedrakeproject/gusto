@@ -4,7 +4,8 @@ the resulting field to ensure that the result is reasonable.
 """
 
 from gusto import *
-from firedrake import (VectorFunctionSpace, Constant, as_vector, errornorm)
+from firedrake import (VectorFunctionSpace, as_vector, errornorm,
+                       TensorFunctionSpace)
 import pytest
 
 
@@ -32,7 +33,7 @@ def test_scalar_diffusion(tmpdir, DG, tracer_setup):
 
     mu = 5.
 
-    diffusion_params = DiffusionParameters(kappa=kappa, mu=mu)
+    diffusion_params = DiffusionParameters(domain.mesh, kappa=kappa, mu=mu)
     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
     diffusion_scheme = BackwardEuler(domain)
     diffusion_methods = [InteriorPenaltyDiffusion(eqn, "f", diffusion_params)]
@@ -52,21 +53,23 @@ def test_vector_diffusion(tmpdir, DG, tracer_setup):
     f_init = setup.f_init
     tmax = setup.tmax
     tol = 3.e-2
-    kappa = 1.
 
     f_end_expr = (1/(1+4*tmax))*f_init**(1/(1+4*tmax))
 
-    kappa = Constant([[kappa, 0.], [0., kappa]])
+    VR = TensorFunctionSpace(domain.mesh, "R", 0)
+    kappa = Function(VR, val=((1., 0.), (0., 1.)))
+
     if DG:
         V = VectorFunctionSpace(domain.mesh, "DG", 1)
     else:
         V = domain.spaces("HDiv")
+
     f_init = as_vector([f_init, 0.])
     f_end_expr = as_vector([f_end_expr, 0.])
 
     mu = 5.
 
-    diffusion_params = DiffusionParameters(kappa=kappa, mu=mu)
+    diffusion_params = DiffusionParameters(domain.mesh, kappa=kappa, mu=mu)
     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
     diffusion_scheme = BackwardEuler(domain)
     diffusion_methods = [InteriorPenaltyDiffusion(eqn, "f", diffusion_params)]

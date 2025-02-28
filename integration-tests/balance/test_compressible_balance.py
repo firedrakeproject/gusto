@@ -31,7 +31,7 @@ def setup_balance(dirname):
     domain = Domain(mesh, dt, "CG", 1)
 
     # Equation
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqns = CompressibleEulerEquations(domain, parameters)
 
     # I/O

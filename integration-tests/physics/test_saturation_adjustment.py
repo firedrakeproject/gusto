@@ -38,7 +38,7 @@ def run_cond_evap(dirname, process, physics_coupling):
 
     # Set up equation
     tracers = [WaterVapour(), CloudWater()]
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqn = CompressibleEulerEquations(domain, parameters, active_tracers=tracers)
 
     # I/O

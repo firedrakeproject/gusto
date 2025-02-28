@@ -8,7 +8,7 @@ from firedrake import (
     SpatialCoordinate, dS_v
 )
 from firedrake.fml import subject
-from gusto.core.configuration import BoundaryLayerParameters
+from gusto.core.equation_configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
 from gusto.core.labels import prognostic, source_label

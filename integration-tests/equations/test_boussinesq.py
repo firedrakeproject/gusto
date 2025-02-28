@@ -31,7 +31,7 @@ def run_boussinesq(tmpdir, compressible):
     domain = Domain(mesh, dt, "CG", 1)
 
     # Equation
-    parameters = BoussinesqParameters()
+    parameters = BoussinesqParameters(mesh)
     eqn = BoussinesqEquations(domain, parameters, compressible=compressible)
 
     # I/O

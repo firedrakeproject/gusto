@@ -43,7 +43,7 @@ def run_sw_cond_evap(dirname, process, physics_coupling):
     sat = 100
 
     # Equation
-    parameters = ShallowWaterParameters(H=H)
+    parameters = ShallowWaterParameters(mesh, H=H)
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
 

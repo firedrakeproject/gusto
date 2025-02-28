@@ -30,7 +30,7 @@ def run_held_suarez_relaxation(dirname, temp):
     domain = Domain(mesh, dt, "CG", 0)
 
     # Set up equation
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqn = CompressibleEulerEquations(domain, parameters)
 
     # I/O

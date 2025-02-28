@@ -43,7 +43,7 @@ def setup_zero_limiter(dirname, limiter=False, rain=False):
     x = SpatialCoordinate(mesh)
 
     # Equations
-    parameters = ShallowWaterParameters(H=H, g=g)
+    parameters = ShallowWaterParameters(mesh, H=H, g=g)
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
 
