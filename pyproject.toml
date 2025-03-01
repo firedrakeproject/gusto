@@ -25,5 +25,11 @@ classifiers = [
 Homepage = "http://www.firedrakeproject.org/gusto/"
 Repository = "https://github.com/firedrakeproject/gusto.git"
 
+[project.optional-dependencies]
+docs = [
+  "sphinx",
+  "sphinx_rtd_theme",
+]
+
 [tool.setuptools.packages.find]
 include = ["gusto*"]
