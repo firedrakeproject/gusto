@@ -13,7 +13,7 @@ $ pip install --editable ./gusto
 ```
 or equivalently:
 ```
-$ pip install --src . --editable git+https://github.com/firedrakeproject/gusto.git
+$ pip install --src . --editable git+https://github.com/firedrakeproject/gusto.git#egg=gusto
 ```
 
 To test your Gusto installation you can run the test suite with:
