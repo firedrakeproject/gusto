@@ -96,7 +96,7 @@ def mountain_linear_bouss(
         dirname=dirname, dumpfreq=dumpfreq, dump_vtus=True, dump_nc=True,
     )
     # list of diagnostic fields, each defined in a class in diagnostics.py
-    diagnostic_fields = [CourantNumber(), Divergence(), Perturbation('b')]
+    diagnostic_fields = [CourantNumber(), Divergence()]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
@@ -127,7 +127,12 @@ def mountain_linear_bouss(
 
     # first setup the background buoyancy profile
     # z.grad(bref) = N**2
-    bref = z*(N**2)
+
+    # JS: here is how to change N conditional on height:
+    H = 12000
+    Ns = 0.02
+    bref = conditional(z<H, z*(N**2), z*(Ns**2))
+
     # interpolate the expression to the function
     b_b = Function(Vb).interpolate(bref)
 
@@ -139,8 +144,12 @@ def mountain_linear_bouss(
     # JS: set initial wind to be 10ms-1 in the horizontal across the depth
     # of the domain
     initial_wind = 10.0
+    # JS: here is how to change the wind - you will need to define U0, s and UH:
+    # initial_wind = conditional(z<H, U0 + s*z, UH)
+    
     u0.project(as_vector([initial_wind, 0.0]), bcs=eqns.bcs['u'])
 
+    
     # set the background buoyancy JS: no need to do this for RK4 timestepping
     # stepper.set_reference_profiles([('p', p_b), ('b', b_b)])
 
