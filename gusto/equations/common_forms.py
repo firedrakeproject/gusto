@@ -363,17 +363,21 @@ def split_hv_advective_form(equation, field_name):
         if (t.get(transport) == TransportEquationType.advective and t.get(prognostic) == field_name):
             # Get fields and test functions
             subj = t.get(subject)
-            idx = equation.field_names.index(field_name)
-            W = equation.function_space
-            test = TestFunctions(W)[idx]
-            q = split(subj)[idx]
+
             # u is either a prognostic or prescribed field
             if (hasattr(equation, "field_names")
                and 'u' in equation.field_names):
+                idx = equation.field_names.index(field_name)
+                W = equation.function_space
+                test = TestFunctions(W)[idx]
+                q = split(subj)[idx]
                 u_idx = equation.field_names.index('u')
                 uadv = split(equation.X)[u_idx]
             elif 'u' in equation.prescribed_fields._field_names:
                 uadv = equation.prescribed_fields('u')
+                q = subj
+                W = equation.function_space
+                test = TestFunction(W)
             else:
                 raise ValueError('Cannot get velocity field')
 
@@ -381,14 +385,10 @@ def split_hv_advective_form(equation, field_name):
             u_vertical = k*inner(uadv, k)
             u_horizontal = uadv - u_vertical
 
-            L = inner(test, dot(u_vertical, grad(q)))*dx
-            vertical_adv_term = prognostic(vertical(transport(transporting_velocity(L, uadv), TransportEquationType.advective)), field_name)
-            L = inner(test, dot(u_horizontal, grad(q)))*dx
-            horizontal_adv_term = prognostic( horizontal(transport(transporting_velocity(L, uadv), TransportEquationType.advective)), field_name)
-            #horizontal_adv_term = prognostic(advection_form(test, q, u_horizontal), field_name)
+            vertical_adv_term = prognostic(vertical(transport(transporting_velocity(inner(test, dot(u_vertical, grad(q)))*dx, uadv), TransportEquationType.advective)), field_name)
+            horizontal_adv_term = prognostic(horizontal(transport(transporting_velocity(inner(test, dot(u_horizontal, grad(q)))*dx, uadv), TransportEquationType.advective)), field_name)
 
-
-            # # Add linearisations of new terms if required
+            # Add linearisations of new terms if required
             if (t.has_label(linearisation)):
                 u_trial = TrialFunctions(W)[u_idx]
                 u_trial_vert = k*inner(u_trial, k)
@@ -398,7 +398,7 @@ def split_hv_advective_form(equation, field_name):
                 linear_hori_term = horizontal(transport(transporting_velocity(test*dot(u_trial_horiz, grad(qbar))*dx, u_trial), TransportEquationType.advective))
                 adv_horiz_term = linearisation(horizontal_adv_term, linear_hori_term)
                 # Add linearisation to div_term
-                linear_vert_term =  horizontal(transport(transporting_velocity(test*dot(u_trial_vert, grad(qbar))*dx, u_trial), TransportEquationType.advective))
+                linear_vert_term = horizontal(transport(transporting_velocity(test*dot(u_trial_vert, grad(qbar))*dx, u_trial), TransportEquationType.advective))
                 adv_vert_term = linearisation(vertical_adv_term, linear_vert_term)
             else:
                 adv_vert_term = vertical_adv_term
@@ -408,9 +408,7 @@ def split_hv_advective_form(equation, field_name):
                 lambda t: t.get(transport) == TransportEquationType.advective and t.get(prognostic) == field_name,
                 map_if_true=drop)
 
-
             # Add new terms onto residual
             equation.residual += subject(adv_horiz_term, subj) + subject(adv_vert_term, subj)
-
 
     return equation

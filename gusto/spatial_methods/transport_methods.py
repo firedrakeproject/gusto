@@ -112,13 +112,13 @@ class TransportMethod(SpatialMethod):
 
         else:
             horizontal_form = equation.residual.label_map(
-            lambda t: t.has_label(transport) and t.has_label(horizontal) and t.get(prognostic) == self.variable,
+                lambda t: t.has_label(transport) and t.has_label(horizontal) and t.get(prognostic) == self.variable,
                 map_if_true=keep, map_if_false=drop
-                )
+            )
             vertical_form = equation.residual.label_map(
-            lambda t: t.has_label(transport) and t.has_label(vertical) and t.get(prognostic) == self.variable,
+                lambda t: t.has_label(transport) and t.has_label(vertical) and t.get(prognostic) == self.variable,
                 map_if_true=keep, map_if_false=drop
-                )
+            )
 
             # Replace form
             horizontal_term = horizontal_form.terms[0]
@@ -136,18 +136,16 @@ class TransportMethod(SpatialMethod):
 
             # Check if this is a conservative transport
             if horizontal_term.has_label(mass_weighted) or vertical_term.has_label(mass_weighted):
-               raise RuntimeError('Mass weighted transport terms not yet supported for multiple terms')
+                raise RuntimeError('Mass weighted transport terms not yet supported for multiple terms')
 
-            # Replace original term with new term
-            # equation.residual = equation.residual.label_map(
-            #     lambda t: t.has_label(transport)  and t.has_label(horizontal) and t.get(prognostic) == self.variable,
-            #     map_if_true=lambda t: new_horizontal_term)
+            # Replace original terms with new terms
+            equation.residual = equation.residual.label_map(
+                lambda t: t.has_label(transport) and t.has_label(horizontal) and t.get(prognostic) == self.variable,
+                map_if_true=lambda _: new_horizontal_term)
 
             equation.residual = equation.residual.label_map(
-                lambda t: t.has_label(transport)  and t.has_label(vertical) and t.get(prognostic) == self.variable,
-                map_if_true=lambda t: new_vertical_term)
-
-
+                lambda t: t.has_label(transport) and t.has_label(vertical) and t.get(prognostic) == self.variable,
+                map_if_true=lambda _: new_vertical_term)
 
 
 # ---------------------------------------------------------------------------- #
@@ -314,7 +312,8 @@ class DGUpwind(TransportMethod):
 
 class Split_DGUpwind(TransportMethod):
     """
-    The Discontinuous Galerkin Upwind transport scheme.
+    The Discontinuous Galerkin Upwind transport scheme applied separately in the
+    horizontal and vertical directions.
     Discretises the gradient of a field weakly, taking the upwind value of the
     transported variable at facets.
     """
@@ -342,30 +341,25 @@ class Split_DGUpwind(TransportMethod):
         # Determine appropriate form to use
         # -------------------------------------------------------------------- #
         # first check for 1d mesh and scalar velocity space
+        if equation.domain.on_sphere:
+            raise NotImplementedError('Split hv Upwind transport scheme has not been '
+                                      + 'implemented for spherical geometry')
         if equation.domain.mesh.topological_dimension() == 1 and len(equation.domain.spaces("HDiv").shape) == 0:
             assert not vector_manifold_correction
-            if self.transport_equation_type == TransportEquationType.advective:
-                form = upwind_advection_form_1d(self.domain, self.test,
-                                                self.field,
-                                                ibp=ibp, outflow=outflow)
-            elif self.transport_equation_type == TransportEquationType.conservative:
-                form = upwind_continuity_form_1d(self.domain, self.test,
-                                                 self.field,
-                                                 ibp=ibp, outflow=outflow)
+            raise ValueError('You cannot do horizontal and vertical splitting in 1D')
 
         else:
             if self.transport_equation_type == TransportEquationType.advective:
 
                 form_h, form_v = split_upwind_advection_form(self.domain, self.test,
-                                                self.field,
-                                                ibp=ibp, outflow=outflow)
+                                                             self.field,
+                                                             ibp=ibp, outflow=outflow)
 
             else:
-                raise NotImplementedError('Upwind transport scheme has not been '
+                raise NotImplementedError('Split hv Upwind transport scheme has not been '
                                           + 'implemented for this transport equation type')
         self.form_v = form_v
         self.form_h = form_h
-
 
 
 # ---------------------------------------------------------------------------- #
@@ -373,8 +367,9 @@ class Split_DGUpwind(TransportMethod):
 # ---------------------------------------------------------------------------- #
 def split_upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     u"""
-    The form corresponding to the DG upwind advective transport operator.
-    This discretises (u.∇)q, for transporting velocity u and transported
+    The forms corresponding to the DG upwind advective transport operator in
+    the horizontal and vertical directions.
+    This discretises u_h.(∇_h)q and w dq/dz, for transporting velocity u and transported
     variable q. An upwind discretisation is used for the facet terms when the
     form is integrated by parts.
     Args:
@@ -397,7 +392,7 @@ def split_upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outf
     if outflow and ibp == IntegrateByParts.NEVER:
         raise ValueError("outflow is True and ibp is None are incompatible options")
     Vu = domain.spaces("HDiv")
-    k=domain.k
+    k = domain.k
     dS_ = (dS_v + dS_h) if Vu.extruded else dS
     ubar = Function(Vu)
     ubar_v = k*inner(ubar, k)
@@ -421,11 +416,11 @@ def split_upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outf
         L_v += dot(jump(test), (un_v('+')*q('+') - un_v('-')*q('-')))*dS_
 
         if ibp == IntegrateByParts.TWICE:
-            L_h -= (inner(test('+'), dot(ubar_h('+'), n('+'))*q('+'))
-                  + inner(test('-'), dot(ubar_h('-'), n('-'))*q('-')))*dS_
+            L_h -= (inner(test('+'), dot(ubar_h('+'), n('+')) * q('+'))
+                    + inner(test('-'), dot(ubar_h('-'), n('-')) * q('-'))) * dS_
 
-            L_v -= (inner(test('+'), dot(ubar_v('+'), n('+'))*q('+'))
-                  + inner(test('-'), dot(ubar_v('-'), n('-'))*q('-')))*dS_
+            L_v -= (inner(test('+'), dot(ubar_v('+'), n('+')) * q('+'))
+                    + inner(test('-'), dot(ubar_v('-'), n('-')) * q('-'))) * dS_
 
     if outflow:
         n = FacetNormal(domain.mesh)

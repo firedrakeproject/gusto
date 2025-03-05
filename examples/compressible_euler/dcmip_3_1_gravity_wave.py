@@ -19,7 +19,6 @@ from gusto import (
     compressible_hydrostatic_balance, Perturbation, GeneralCubedSphereMesh,
     SubcyclingOptions
 )
-import numpy as np
 
 dcmip_3_1_gravity_wave_defaults = {
     'ncells_per_edge': 8,
@@ -69,7 +68,7 @@ def dcmip_3_1_gravity_wave(
     # ------------------------------------------------------------------------ #
 
     element_order = 1
-    u_eqn_type = 'vector_advection_form'
+    u_eqn_type = 'vector_invariant_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -87,6 +86,7 @@ def dcmip_3_1_gravity_wave(
     eqns = CompressibleEulerEquations(
         domain, parameters, u_transport_option=u_eqn_type
     )
+
     # I/O
     output = OutputParameters(
         dirname=dirname, dumpfreq=dumpfreq, dump_vtus=False, dump_nc=True
@@ -107,11 +107,18 @@ def dcmip_3_1_gravity_wave(
         ),
     ]
     transport_methods = [
-        DGUpwind(eqns, "u"), DGUpwind(eqns, "rho"), DGUpwind(eqns, "theta")
+        DGUpwind(eqns, field) for field in ["u", "rho", "theta"]
     ]
 
+    # Linear solver
+    linear_solver = CompressibleSolver(eqns)
 
-    stepper = SemiImplicitQuasiNewton(eqns, io, spatial_methods=transport_methods, transported_fields=transported_fields)
+    # Time stepper
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods,
+        linear_solver=linear_solver
+    )
+
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
