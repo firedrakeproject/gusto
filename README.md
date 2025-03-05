@@ -12,23 +12,25 @@ These compatible methods underpin the Met Office's next-generation model, [LFRic
 - a **flexible framework** for exploring different modelling choices for geophysical fluid dynamics
 - a **simple environment** for setting up and running test cases
 
-## Download
+## Installing
 
-The best way to install Gusto is as an additional package when installing [Firedrake](http://firedrakeproject.org). Usually, for a Mac with Homebrew or an Ubuntu installation this is done by downloading the Firedrake install script and executing it:
+Before installing Gusto you should first install Firedrake using the instructions found [here](https://firedrakeproject.org/install).
+Once this is done Gusto can then be installed by running:
 ```
-curl -0 https://raw.githubusercontent.com/firedrakeproject/firedrake/master/scripts/firedrake-install
-python3 firedrake-install --install gusto
+$ git clone https://github.com/firedrakeproject/gusto.git
+$ pip install --editable ./gusto
 ```
-For an up-to-date installation guide, see the [firedrake installation instructions](http://firedrakeproject.org/download.html). Once installed, Gusto must be run from within the Firedrake virtual environment, which is activated via
+or equivalently:
 ```
-source firedrake/bin/activate
+$ pip install --src . --editable git+https://github.com/firedrakeproject/gusto.git#egg=gusto
 ```
+
 ## Getting Started
 
-To test your Gusto installation, run the test-suites:
+To test your Gusto installation you can run the test suite with:
 ```
-cd firedrake/src/gusto
-make test
+$ cd gusto
+$ make test
 ```
 
 The `examples` directory contains several test cases, which you can play with to get started with Gusto.
@@ -44,4 +46,4 @@ Gusto can produce output in two formats:
 
 ## Website
 
-For more information, please see our [website](https://www.firedrakeproject.org/gusto/), and please do get in touch via the Gusto channel on the Firedrake project [slack workspace](https://firedrakeproject.slack.com/).
+For more information, please see our [website](https://www.firedrakeproject.org/gusto/), and please do get in touch via the Gusto channel on the Firedrake project [Slack workspace](https://firedrakeproject.slack.com/).
