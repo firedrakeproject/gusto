@@ -10,9 +10,10 @@ minimum of the rain is zero.
 from gusto import *
 from firedrake import (Constant, PeriodicSquareMesh, SpatialCoordinate,
                        sqrt, conditional, cos, pi, FunctionSpace)
+import pytest
 
 
-def run_instant_rain(dirname):
+def run_instant_rain(dirname, physics_coupling):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -53,12 +54,18 @@ def run_instant_rain(dirname):
     # Physics schemes
     # define saturation function
     saturation = Constant(0.5)
-    physics_schemes = [(InstantRain(eqns, saturation, rain_name="rain"),
-                        RK4(domain))]
-
-    # Time stepper
-    stepper = SplitPhysicsTimestepper(eqns, RK4(domain), io, transport_method,
-                                      physics_schemes=physics_schemes)
+    if physics_coupling == "split":
+        physics_schemes = [(InstantRain(eqns, saturation, rain_name="rain"),
+                            RK4(domain))]
+        # Time stepper
+        stepper = SplitPhysicsTimestepper(eqns, RK4(domain), io, transport_method,
+                                          physics_schemes=physics_schemes)
+    else:
+        physics_parametrisation = [InstantRain(eqns, saturation, rain_name="rain")]
+        scheme = RK4(domain, rk_formulation=RungeKuttaFormulation.predictor)
+        # Time stepper
+        stepper = Timestepper(eqns, scheme, io, transport_method,
+                              physics_parametrisations=physics_parametrisation)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -91,9 +98,11 @@ def run_instant_rain(dirname):
     return stepper, saturation, initial_vapour, vapour_true, rain_true
 
 
-def test_instant_rain_setup(tmpdir):
+@pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
+def test_instant_rain_setup(tmpdir, physics_coupling):
     dirname = str(tmpdir)
-    stepper, saturation, initial_vapour, vapour_true, rain_true = run_instant_rain(dirname)
+    stepper, saturation, initial_vapour, vapour_true, rain_true = run_instant_rain(dirname,
+                                                                                   physics_coupling)
     v = stepper.fields("water_vapour")
     r = stepper.fields("rain")
 

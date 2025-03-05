@@ -21,7 +21,7 @@ from firedrake import (
 )
 from gusto import (
     Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
-    ShallowWaterParameters, ShallowWaterEquations, Sum,
+    ShallowWaterParameters, ThermalShallowWaterEquations, Sum,
     lonlatr_from_xyz, InstantRain, SWSaturationAdjustment, WaterVapour,
     CloudWater, Rain, GeneralIcosahedralSphereMesh, RelativeVorticity,
     ZonalComponent, MeridionalComponent
@@ -99,8 +99,8 @@ def moist_thermal_williamson_5(
     tracers = [
         WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')
     ]
-    eqns = ShallowWaterEquations(
-        domain, parameters, fexpr=fexpr, bexpr=tpexpr, thermal=True,
+    eqns = ThermalShallowWaterEquations(
+        domain, parameters, fexpr=fexpr, topog_expr=tpexpr,
         active_tracers=tracers, u_transport_option=u_eqn_type
     )
 
@@ -121,14 +121,14 @@ def moist_thermal_williamson_5(
 
     # Function to pass to physics (takes mixed function as argument)
     def phys_sat_func(x_in):
-        D = x_in.split()[1]
-        b = x_in.split()[2]
+        D = x_in.subfunctions[1]
+        b = x_in.subfunctions[2]
         return q_sat(b, D)
 
     # Feedback proportionality is dependent on D and b
     def gamma_v(x_in):
-        D = x_in.split()[1]
-        b = x_in.split()[2]
+        D = x_in.subfunctions[1]
+        b = x_in.subfunctions[2]
         return 1.0 / (1.0 + nu*beta2/g*q_sat(b, D))
 
     SWSaturationAdjustment(

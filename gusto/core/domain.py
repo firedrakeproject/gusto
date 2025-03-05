@@ -6,10 +6,12 @@ model's time interval.
 
 from gusto.core.coordinates import Coordinates
 from gusto.core.function_spaces import Spaces, check_degree_args
-from firedrake import (Constant, SpatialCoordinate, sqrt, CellNormal, cross,
-                       inner, grad, VectorFunctionSpace, Function, FunctionSpace,
-                       perp)
+from firedrake import (
+    Constant, SpatialCoordinate, sqrt, CellNormal, cross, inner, grad,
+    VectorFunctionSpace, Function, FunctionSpace, perp, curl
+)
 import numpy as np
+from mpi4py import MPI
 
 
 class Domain(object):
@@ -26,7 +28,7 @@ class Domain(object):
     """
     def __init__(self, mesh, dt, family, degree=None,
                  horizontal_degree=None, vertical_degree=None,
-                 rotated_pole=None):
+                 rotated_pole=None, max_quad_degree=None):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
@@ -47,6 +49,11 @@ class Domain(object):
                 system. These are expressed in the original coordinate system.
                 The longitude and latitude must be expressed in radians.
                 Defaults to None. This is unused for non-spherical domains.
+            max_quad_degree (int, optional): the maximum quadrature degree to
+                use in certain non-linear terms (e.g. when using an expression
+                for the Exner pressure). Defaults to None, in which case this
+                will be set to the 2*p+3, where p is the maximum polynomial
+                degree for the DG space.
 
         Raises:
             ValueError: if incompatible degrees are specified (e.g. specifying
@@ -77,6 +84,12 @@ class Domain(object):
         # Get degrees
         self.horizontal_degree = degree if horizontal_degree is None else horizontal_degree
         self.vertical_degree = degree if vertical_degree is None else vertical_degree
+
+        if max_quad_degree is None:
+            max_degree = max(self.horizontal_degree, self.vertical_degree)
+            self.max_quad_degree = 2*max_degree + 3
+        else:
+            self.max_quad_degree = max_quad_degree
 
         self.mesh = mesh
         self.family = family
@@ -113,12 +126,14 @@ class Domain(object):
                 V = VectorFunctionSpace(mesh, "DG", sphere_degree)
                 self.outward_normals = Function(V).interpolate(CellNormal(mesh))
                 self.perp = lambda u: cross(self.outward_normals, u)
+                self.divperp = lambda u: inner(self.outward_normals, curl(u))
         else:
             kvec = [0.0]*dim
             kvec[dim-1] = 1.0
             self.k = Constant(kvec)
             if dim == 2:
                 self.perp = perp
+                self.divperp = lambda u: -u[0].dx(1) + u[1].dx(0)
 
         # -------------------------------------------------------------------- #
         # Construct information relating to height/radius
@@ -218,25 +233,26 @@ def construct_domain_metadata(mesh, coords, on_sphere):
     else:
         raise ValueError('Unable to determine domain type')
 
+    # Determine domain properties
+    chi = coords.chi_coords['DG1_equispaced']
     comm = mesh.comm
-    my_rank = comm.Get_rank()
-
-    # Properties of domain will be determined from full coords, so need
-    # doing on the first processor then broadcasting to others
-
-    if my_rank == 0:
-        chi = coords.global_chi_coords['DG1_equispaced']
-        if not on_sphere:
-            metadata['domain_extent_x'] = np.max(chi[0, :]) - np.min(chi[0, :])
-            if metadata['domain_type'] in ['plane', 'extruded_plane']:
-                metadata['domain_extent_y'] = np.max(chi[1, :]) - np.min(chi[1, :])
-        if mesh.extruded:
-            metadata['domain_extent_z'] = np.max(chi[-1, :]) - np.min(chi[-1, :])
-
-    else:
-        metadata = {}
-
-    # Send information to other processors
-    metadata = comm.bcast(metadata, root=0)
+    if not on_sphere:
+        _min_x = np.min(chi[0].dat.data_ro)
+        _max_x = np.max(chi[0].dat.data_ro)
+        min_x = comm.allreduce(_min_x, MPI.MIN)
+        max_x = comm.allreduce(_max_x, MPI.MAX)
+        metadata['domain_extent_x'] = max_x - min_x
+        if metadata['domain_type'] in ['plane', 'extruded_plane']:
+            _min_y = np.min(chi[1].dat.data_ro)
+            _max_y = np.max(chi[1].dat.data_ro)
+            min_y = comm.allreduce(_min_y, MPI.MIN)
+            max_y = comm.allreduce(_max_y, MPI.MAX)
+            metadata['domain_extent_y'] = max_y - min_y
+    if mesh.extruded:
+        _min_z = np.min(chi[-1].dat.data_ro)
+        _max_z = np.max(chi[-1].dat.data_ro)
+        min_z = comm.allreduce(_min_z, MPI.MIN)
+        max_z = comm.allreduce(_max_z, MPI.MAX)
+        metadata['domain_extent_z'] = max_z - min_z
 
     return metadata

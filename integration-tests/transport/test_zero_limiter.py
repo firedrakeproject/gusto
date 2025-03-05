@@ -52,9 +52,10 @@ def setup_zero_limiter(dirname, limiter=False, rain=False):
     else:
         tracers = [WaterVapour(space='DG'), CloudWater(space='DG')]
 
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
-                                 u_transport_option='vector_advection_form',
-                                 thermal=True, active_tracers=tracers)
+    eqns = ThermalShallowWaterEquations(
+        domain, parameters, fexpr=fexpr,
+        u_transport_option='vector_advection_form',
+        active_tracers=tracers)
 
     output = OutputParameters(dirname=dirname, dumpfreq=1)
 
@@ -66,14 +67,14 @@ def setup_zero_limiter(dirname, limiter=False, rain=False):
 
     # Saturation function
     def sat_func(x_in):
-        D = x_in.split()[1]
-        b = x_in.split()[2]
+        D = x_in.subfunctions[1]
+        b = x_in.subfunctions[2]
         return q0/(g*D) * exp(20*(1 - b/g))
 
     # Feedback proportionality is dependent on h and b
     def gamma_v(x_in):
-        D = x_in.split()[1]
-        b = x_in.split()[2]
+        D = x_in.subfunctions[1]
+        b = x_in.subfunctions[2]
         return (1 + 10*(20*q0/g*D * exp(20*(1 - b/g))))**(-1)
 
     transport_methods = [DGUpwind(eqns, field_name) for field_name in eqns.field_names]

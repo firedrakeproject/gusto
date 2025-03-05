@@ -79,7 +79,11 @@ class Configuration(object):
 
         # Almost all parameters should be Constants -- but there are some
         # specific exceptions which should be kept as integers
-        if type(value) in [float, int] and name not in ['dumpfreq', 'pddumpfreq', 'chkptfreq']:
+        non_constants = [
+            'dumpfreq', 'pddumpfreq', 'chkptfreq',
+            'fixed_subcycles', 'max_subcycles', 'subcycle_by_courant'
+        ]
+        if type(value) in [float, int] and name not in non_constants:
             object.__setattr__(self, name, Constant(value))
         else:
             object.__setattr__(self, name, value)
@@ -149,6 +153,15 @@ class ShallowWaterParameters(Configuration):
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
     H = None  # mean depth
+    # Factor that multiplies the vapour in the equivalent buoyancy
+    # formulation of the thermal shallow water equations
+    beta2 = None
+    # Scaling factor for the saturation function in the equivalent buoyancy
+    # formulation of the thermal shallow water equations
+    nu = None
+    # Scaling factor for the saturation function in the equivalent buoyancy
+    # formulation of the thermal shallow water equations
+    q0 = None
 
 
 class WrapperOptions(Configuration, metaclass=ABCMeta):
@@ -254,6 +267,19 @@ class BoundaryLayerParameters(Configuration):
     coeff_evap = 1.1e-3         # Dimensionless surface evaporation coefficient
     height_surface_layer = 75.  # Height (m) of surface level (usually lowest level)
     mu = 100.                   # Interior penalty coefficient for vertical diffusion
+
+
+class HeldSuarezParameters(Configuration):
+    """
+    Parameters used in the default configuration for the Held Suarez test case.
+    """
+    T0stra = 200               # Stratosphere temp
+    T0surf = 315               # Surface temperature at equator
+    T0horiz = 60               # Equator to pole temperature difference
+    T0vert = 10                # Stability parameter
+    sigmab = 0.7               # Height of the boundary layer
+    tau_d = 40 * 24 * 60 * 60  # 40 day time scale
+    tau_u = 4 * 24 * 60 * 60   # 4 day timescale
 
 
 class SubcyclingOptions(Configuration):
