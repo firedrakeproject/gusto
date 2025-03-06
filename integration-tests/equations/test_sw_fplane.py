@@ -23,7 +23,7 @@ def run_sw_fplane(tmpdir):
     # Equation
     H = 2
     g = 50
-    parameters = ShallowWaterParameters(H=H, g=g)
+    parameters = ShallowWaterParameters(mesh, H=H, g=g)
     f0 = 10
     fexpr = Constant(f0)
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)

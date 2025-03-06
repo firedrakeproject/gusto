@@ -22,7 +22,7 @@ def run_advection_diffusion(tmpdir):
     domain = Domain(mesh, dt, "CG", 1)
 
     # Equation
-    diffusion_params = DiffusionParameters(kappa=0.75, mu=5)
+    diffusion_params = DiffusionParameters(mesh, kappa=0.75, mu=5)
     V = domain.spaces("DG")
     Vu = VectorFunctionSpace(mesh, "CG", 1)
 

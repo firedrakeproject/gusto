@@ -39,7 +39,7 @@ def run_instant_rain(dirname, physics_coupling):
     rain = Rain(name="rain", space="DG",
                 transport_eqn=TransportEquationType.no_transport)
 
-    parameters = ShallowWaterParameters(H=H, g=g)
+    parameters = ShallowWaterParameters(mesh, H=H, g=g)
     eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
                                  active_tracers=[vapour, rain])
 

@@ -235,7 +235,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             self.timestep()
 
-            self.t.assign(self.t + self.dt)
+            self.t.assign(float(self.t) + float(self.dt))
             self.step += 1
 
             with timed_stage("Dump output"):

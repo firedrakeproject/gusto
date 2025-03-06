@@ -45,7 +45,7 @@ def run_rexi_sw(tmpdir, ensemble=None):
     domain = Domain(mesh, tmax, 'BDM', 1)
 
     # Equation
-    parameters = ShallowWaterParameters(H=H, g=g)
+    parameters = ShallowWaterParameters(mesh, H=H, g=g)
     fexpr = Constant(f)
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
