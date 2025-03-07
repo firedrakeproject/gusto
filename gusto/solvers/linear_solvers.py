@@ -833,34 +833,23 @@ class MoistThermalSWSolver(TimesteppingSolver):
         u, D, b, qc, qv = TrialFunctions(M)
 
         # Get parameters from equation
-        q0 = Constant(equation.parameters.q0)
+        q0 = equation.parameters.q0
         nu = equation.parameters.nu
         beta2 = equation.parameters.beta2
-        # tau = equation.parameters.tau
         g = equation.parameters.g
         H = equation.parameters.H
         
         # Get reference fields
         Dbar, bbar, qvbar, qcbar = split(equation.X_ref)[1:5]
-        # need to replace bbar in X_ref with bebar to pass to compute saturation
-        # bebar = bbar - beta2*qvbar
-        # ref = 
 
-        # Compute saturation function at reference fields
-        self.q_sat_func = Function(VD)
-        # b_e = Function(VD).interpolate(b - beta2*qv)
-        # sat_expr = q0*H/(D) * exp(nu*(1 - b_e/g))
-        sat_expr = equation.compute_saturation(equation.X_ref)
-        self.q_sat_expr_interpolate = interpolate(q_sat_expr, VD)
+        b_ebar = bbar - beta2*qvbar
+        sat_expr = q0*H/(Dbar) * exp(nu*(1 - b_ebar/g))
 
         # Write expression for P
-        self.P_func = Function(VD)
-        P_expr = (qv + self.q_sat_func*(1/Dbar*(D - Dbar)
-                                        + nu/g*b
-                                        - nu*beta2/g*qv)
+        P_expr = ((qv) + sat_expr*(1/Dbar*(D)
+                                         + nu/g*(b)
+                                         - nu*beta2/g*(qv))
                   )
-        P_expr = P_expr/equation.domain.dt  # this should really be tau
-        self.P_expr_interpolate = interpolate(P_expr, VD)
 
         n = FacetNormal(equation.domain.mesh)
 
@@ -880,17 +869,17 @@ class MoistThermalSWSolver(TimesteppingSolver):
             + inner(lamda, (b - b_in)) * dx
             - beta_b * bbar * div(lamda*u) * dx
             + beta_b * jump(lamda*u, n) * avg(bbar) * dS
-            + beta_b * lamda * beta2 * self.P_func * dx
+            + beta_b * lamda * beta2 * P_expr * dx
             # qv equation
             + inner(tau1, (qv - qv_in)) * dx
             - beta_qv * qvbar * div(tau1*u) * dx
             + beta_qv * jump(tau1*u, n) * avg(qvbar) * dS
-            + beta_qv * tau1 * self.P_func * dx
+            + beta_qv * tau1 * P_expr * dx
             # qc equation
             + inner(tau2, (qc - qc_in)) * dx
             - beta_qc * qcbar * div(tau2*u) * dx
             + beta_qc * jump(tau2*u, n) * avg(qcbar) * dS
-            - beta_qc * tau2 * self.P_func * dx
+            - beta_qc * tau2 * P_expr * dx
         )
 
         if 'coriolis' in equation.prescribed_fields._field_names:
@@ -915,8 +904,7 @@ class MoistThermalSWSolver(TimesteppingSolver):
 
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
-        self.q_sat_func.assign(assemble(self.q_sat_expr_interpolate))
-        self.P_func.assign(assemble(self.P_expr_interpolate))
+        self.solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
