@@ -64,7 +64,7 @@ def linear_thermal_galewsky_jet(
     domain = Domain(mesh, dt, 'BDM', element_order)
 
     # Equation
-    parameters = ShallowWaterParameters(H=H)
+    parameters = ShallowWaterParameters(mesh, H=H)
     Omega = parameters.Omega
     fexpr = 2*Omega*xyz[2]/R
     eqns = LinearThermalShallowWaterEquations(domain, parameters, fexpr=fexpr)

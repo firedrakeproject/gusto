@@ -70,8 +70,8 @@ def straka_bubble(
     domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
-    parameters = CompressibleParameters()
-    diffusion_params = DiffusionParameters(kappa=kappa, mu=mu0/delta)
+    parameters = CompressibleParameters(mesh)
+    diffusion_params = DiffusionParameters(mesh, kappa=kappa, mu=mu0/delta)
     diffusion_options = [("u", diffusion_params), ("theta", diffusion_params)]
     eqns = CompressibleEulerEquations(
         domain, parameters, u_transport_option=u_eqn_type,

@@ -163,8 +163,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
+        # On assuming ``g``, it is right to keep it out of the integral.
         pressure_gradient_form = pressure_gradient(
-            subject(prognostic(-g*div(w)*D*dx, 'u'), self.X))
+            subject(prognostic(-g*(div(w)*D*dx), 'u'), self.X))
 
         residual = (mass_form + adv_form + pressure_gradient_form)
 
@@ -418,6 +419,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         # provide linearisation
         if self.equivalent_buoyancy:
             beta2 = self.parameters.beta2
+
             qsat_expr = self.compute_saturation(self.X)
             qv = conditional(qt < qsat_expr, qt, qsat_expr)
             qvbar = conditional(qtbar < qsat_expr, qtbar, qsat_expr)

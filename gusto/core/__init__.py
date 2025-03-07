@@ -3,6 +3,7 @@ from gusto.core.conservative_projection import *   # noqa
 from gusto.core.coordinates import *               # noqa
 from gusto.core.coord_transforms import *          # noqa
 from gusto.core.domain import *                    # noqa
+from gusto.core.equation_configuration import *    # noqa
 from gusto.core.fields import *                    # noqa
 from gusto.core.function_spaces import *           # noqa
 from gusto.core.io import *                        # noqa
