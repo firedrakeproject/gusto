@@ -14,7 +14,7 @@ from firedrake import (
 )
 from firedrake.fml import (
     subject, all_terms, replace_subject, keep, replace_test_function,
-    replace_trial_function, drop
+    replace_trial_function, drop, Term
 )
 from gusto import (
     time_derivative, transport, transporting_velocity, TransportEquationType,
@@ -347,168 +347,199 @@ class MeanMixingRatio(Augmentation):
         self.x_out = Function(self.fs)
 
 
-    def setup_residual(self, spatial_methods, equation):
-        # Copy spatial method for the mixing ratio onto the 
+    # New attempt:
+    def setup_residual(self, equation):
+        # Copy across the residual, add terms for the mean
+        # mixing ratio fields, and modify the subjects
+        #
+        # Additionally, cope the spatial method for the mixing ratio onto the 
         # mean mixing ratio.
+        print('Setting up augmented residual')
 
+        print(equation.residual.form)
+
+        # The residual for the original equations
         orig_residual = equation.residual
 
-        # Copy the mean mixing ratio residual terms:
-        for i in range(self.mX_num):
-            print('copying old terms into new residual')
-            print(self.mX_names[i])
-            if i == 0:
-                mean_residual = orig_residual.label_map(
-                    lambda t: (t.get(prognostic) == self.mX_names[i]) and not t.has_label(mass_weighted),
-                    map_if_false=drop
-                )
-                if self.rho_idxs[i] != 'None':
-                    test = self.tests[i]
-                    # We need to provide a mass-weighted term
-                    ref_density = split(self.X)[self.rho_idxs[i]]
-                    prog = split(self.X)[self.mX_idxs[i]]
-                    q = ref_density*prog
-                    field_name = self.mX_names[i]
-
-                    mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
-                    mass_weighted_form = nonlinear_time_derivative(time_derivative(
-                            subject(prognostic(inner(q, test)*dx, field_name), self.X)))
-
-                    mean_residual += mass_weighted(mass, mass_weighted_form)
-
-                mean_residual = prognostic.update_value(mean_residual, self.mean_names[i])
-            else:
-                mean_residual_term = orig_residual.label_map(
-                    lambda t: (t.get(prognostic) == self.mX_names[i]) and not t.has_label(mass_weighted),
-                    map_if_false=drop
-                )
-                if self.rho_idxs[i] != 'None':
-                    test = self.tests[i]
-                    # We need to provide a mass-weighted term
-                    ref_density = split(self.X)[self.rho_idxs[i]]
-                    prog = split(self.X)[self.mX_idxs[i]]
-                    q = ref_density*prog
-                    field_name = self.mX_names[i]
-
-                    mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
-                    mass_weighted_form = nonlinear_time_derivative(time_derivative(
-                            subject(prognostic(inner(q, test)*dx, field_name), self.X)))
-
-                    mean_residual_term += mass_weighted(mass, mass_weighted_form)
-
-                mean_residual_term = prognostic.update_value(mean_residual_term,\
-                                                              self.mean_names[i])
-                mean_residual = mean_residual + mean_residual_term
-
-        print('\n in setup_transport')
-
-        # Replace the tests and trial functions for all terms
-        # of the fields in the original equation
+        # Replace tests and trials of original residual with
+        # those from the new mixed space.
+        # The indices of the original fields
+        # will be the same in the new mixed space
         for idx in range(self.idx_orig):
-            field = self.eqn_orig.field_names[idx]
-            # Seperate logic if mass-weighted or not?
-            #print('\n', idx)
-            #print(field)
+            print(idx, idx)
 
-            #prog = split(self.X)[idx]
-
-            #print('\n residual term before change')
-            #print(old_residual.label_map(
-            #    lambda t: t.get(prognostic) == field,
-            #    map_if_false=drop
-            #).form)
-
-            ## YEP, SHOULD SPLIT BY MASS WEIGHTED OR NOT MASS WEIGHTED,
-            # HERE INSTEAD!
+            print(orig_residual.form)
 
             orig_residual = orig_residual.label_map(
-                lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
-                map_if_true=replace_subject(self.X, old_idx=idx, new_idx = idx)
-            )
-            orig_residual = orig_residual.label_map(
-                lambda t: t.get(prognostic) == field and not t.has_label(mass_weighted),
-                map_if_true=replace_test_function(self.tests, old_idx=idx, new_idx=idx)
-            )
-
-            # Need to be more involved for mass weighted terms:
-            if self.rho_idxs[i] != 'None':
-                print('Replacing tests and trials for a mass weighted term')
-                test = self.tests[i]
-                # We need to provide a mass-weighted term
-                ref_density = split(self.X)[self.rho_idxs[i]]
-                prog = split(self.X)[self.mX_idxs[i]]
-                q = ref_density*prog
-                field_name = self.mX_names[i]
-
-                mass = subject(prognostic(inner(prog, test)*dx, field_name), self.X)
-                mass_weighted_form = nonlinear_time_derivative(time_derivative(
-                        subject(prognostic(inner(q, test)*dx, field_name), self.X)))
-
-                mass_weighted_residual_term += mass_weighted(mass, mass_weighted_form)
-
-                orig_residual = orig_residual + mass_weighted_residual_term
-
-            #print('\n residual term after change')
-            #print(old_residual.label_map(
-            #    lambda t: t.get(prognostic) == field,
-            #    map_if_false=drop
-            #).form)
-
-        #print('\n now setting up mean mixing ratio residual terms')
-
-
-        #print('\n mean mX residual after change')
-        #print(mean_residual.form)
-
-        # Update the subject and test functions for the
-        # mean mixing ratios
-        for i in range(self.mX_num):
-            mean_residual = mean_residual.label_map(
                 all_terms,
-                replace_subject(self.X, old_idx=self.mX_idxs[i], new_idx=self.mean_idxs[i])
+                replace_subject(self.X, old_idx=idx, new_idx=idx)
             )
+            orig_residual = orig_residual.label_map(
+                all_terms,
+                replace_test_function(self.tests, old_idx=idx, new_idx=idx)
+            )
+            print('\n')
+            print(orig_residual.form)
+
+            # Now, need to use replace subject for any mass_weighted terms?
+
+        new_residual = orig_residual
+
+        # For each mean mixing ratio, copy across the terms relating to 
+        # the mixing ratio and replace the test function and trial function.
+        for i in range(self.mX_num):
+            mean_residual = equation.residual.label_map(
+                lambda t: t.get(prognostic) == self.mX_names[i],
+                map_if_false=drop
+            )
+            print(len(mean_residual))
+            print(self.mX_idxs[i], self.mean_idxs[i])
+            print('\n')
+            print(mean_residual.form)
+
+            # Replace any instances of the original mixing ratio with 
+            # its mean version:
+            for j in range(self.mX_num):
+                mean_residual = mean_residual.label_map(
+                    all_terms,
+                    replace_subject(self.X, old_idx=self.mX_idxs[j], new_idx=self.mean_idxs[j])
+                )
+
+            # Replace density terms also:
+            #if self.rho_idxs[i] != 'None':
+            #    mean_residual = mean_residual.label_map(
+            #        all_terms,
+            #        replace_subject(self.X, old_idx=self.rho_idxs[i], new_idx=self.rho_idxs[i])
+            #    )
+
             mean_residual = mean_residual.label_map(
                 all_terms,
                 replace_test_function(self.tests, old_idx=self.mX_idxs[i], new_idx=self.mean_idxs[i])
             )
+            print('\n')
+            print(mean_residual.form)
 
+            new_residual += mean_residual
 
-        #print('\n mean mX residual after change')
-        #print(mean_residual.form)
-
-        # Form the new residual
-        residual = orig_residual + mean_residual
-        self.residual = subject(residual, self.X)
+        self.residual = subject(new_residual, self.X)
 
         #Check these two forms
-        #print('\n Original equation with residual of length, ', len(equation.residual))
-        #print('\n Augmented equation with residual of length, ', len(self.residual))
+        print('\n Original equation with residual of length, ', len(equation.residual))
+        print('\n Augmented equation with residual of length, ', len(self.residual))
+
+        print('\n')
+        #print(self.residual.form)
+
+        # Yep, the mass_weighted terms still have the old form.
+        print('\n')
+        for term in self.residual:
+            if term.has_label(mass_weighted):
+                field = term.get(prognostic)
+                print('advective form of a mass weighted term')
+                print(term.form)
+                print('the mass-weighted part')
+                mass_term = term.get(mass_weighted)
+                print(mass_term.form)
+
+                # Need a special statement if this is a transport term:
+                if term.has_label(transport):
+                    print(term.form.terms)
+                #    print(term.form.terms)
+                #    print('this is a transport term')
+                    mass_term = term.get(mass_weighted).term
+                #print('\n')
+
+                #mass_term = self.residual.label_map(
+                #    lambda t: t == term,
+                #    map_if_false = lambda t: t.get(mass_weighted)
+                #)
+
+                #mass_term.terms[0].replace_subject(self.X, 0, 0)
+                #mass_term_new = replace_subject(mass_term.terms[0])(self.X, old_idx=0, new_idx=0)
+                if field in self.mX_names:
+                    # Replace using mX_indices
+                    list_idx = self.mX_names.index(field)
+                    mX_idx = self.mX_idxs[list_idx]
+                    rho_idx = self.rho_idxs[list_idx]
 
 
+                    # Replace mixing ratio
+                    mass_term_new = mass_term.label_map(
+                        all_terms,
+                        replace_subject(self.X, old_idx = mX_idx, new_idx = mX_idx)
+                    )
+
+                    # Replace density
+                    mass_term_new = mass_term_new.label_map(
+                        all_terms,
+                        replace_subject(self.X, old_idx = rho_idx, new_idx = rho_idx)
+                    )
+
+                    # Replace test function
+                    mass_term_new = mass_term_new.label_map(
+                        all_terms,
+                        replace_test_function(self.tests, old_idx = mX_idx, new_idx = mX_idx)
+                    )
+
+                elif field in self.mean_names:
+                    list_idx = self.mean_names.index(field)
+                    mX_idx = self.mX_idxs[list_idx]
+                    mean_idx = self.mean_idxs[list_idx]
+                    rho_idx = self.rho_idxs[list_idx]
+
+                    # Replace mixing ratio
+                    mass_term_new = mass_term.label_map(
+                        all_terms,
+                        replace_subject(self.X, old_idx = mX_idx, new_idx = mean_idx)
+                    )
+
+                    # Replace density
+                    mass_term_new = mass_term.label_map(
+                        all_terms,
+                        replace_subject(self.X, old_idx = rho_idx, new_idx = rho_idx)
+                    )
+
+                    # Replace test function
+                    mass_term_new = mass_term.label_map(
+                        all_terms,
+                        replace_test_function(self.tests, old_idx = mX_idx, new_idx = mean_idx)
+                    )
+
+                print(mass_term_new.form)
+
+                #new_mass_weighted_term = Term(mass_term_new.form, term.labels)
+                new_term = Term(term.form, term.labels)
+                new_term = mass_weighted.update_value(new_term, mass_term_new)
+
+                # Put this new term back in the residual:
+                self.residual = self.residual.label_map(
+                    lambda t: t == term,
+                    map_if_true=lambda t: new_term
+                )
+
+                print('now we have hopefully replaced stuff')
+            else:
+                print('Not')
+                print(term.form)
+                print('\n')
+
+        print('\n Original equation with residual of length, ', len(equation.residual))
+        print('\n Augmented equation with residual of length, ', len(self.residual))
 
 
+        print('\n')
+        for term in self.residual:
+            if term.has_label(mass_weighted):
+                print('advective form of a mass weighted term')
+                print(term.form)
+                print('the mass-weighted part')
+                print(term.get(mass_weighted).form)
+                print('\n')
+            else:
+                print('Not')
+                print(term.form)
+                print('\n')
 
-    def setup_transport_old(self, spatial_methods):
-        mX_spatial_method = next(method for method in spatial_methods if method.variable == self.mX_name)
-        
-        mean_spatial_method = copy.copy(mX_spatial_method)
-        mean_spatial_method.variable = self.mean_name
-        self.spatial_methods = copy.copy(spatial_methods)
-        self.spatial_methods.append(mean_spatial_method)
-        for method in self.spatial_methods:
-            print(method.variable)
-            method.equation.residual = self.residual
-            print(method.form.form)
-            print(len(method.equation.residual))
-
-        # Alternatively, redo all the spatial methods
-        # using the new mixed function space.
-        # So, want to make a new list of spatial methods
-        new_spatial_methods = []
-        for method in self.spatial_methods:
-            # Determine the tye of transport method:
-            new_method = DGUpwind(self, method.variable)
-            new_spatial_methods.append(new_method)
 
     def pre_apply(self, x_in):
         """
