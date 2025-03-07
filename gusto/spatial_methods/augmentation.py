@@ -14,7 +14,7 @@ from firedrake import (
 )
 from firedrake.fml import (
     subject, all_terms, replace_subject, keep, replace_test_function,
-    replace_trial_function, drop, Term
+    replace_trial_function, drop, Term, LabelledForm
 )
 from gusto import (
     time_derivative, transport, transporting_velocity, TransportEquationType,
@@ -405,19 +405,19 @@ class MeanMixingRatio(Augmentation):
                     replace_subject(self.X, old_idx=self.mX_idxs[j], new_idx=self.mean_idxs[j])
                 )
 
-            # Replace density terms also:
-            #if self.rho_idxs[i] != 'None':
-            #    mean_residual = mean_residual.label_map(
-            #        all_terms,
-            #        replace_subject(self.X, old_idx=self.rho_idxs[i], new_idx=self.rho_idxs[i])
-            #    )
-
+            # Replace test function from the new mixed space
             mean_residual = mean_residual.label_map(
                 all_terms,
                 replace_test_function(self.tests, old_idx=self.mX_idxs[i], new_idx=self.mean_idxs[i])
             )
             print('\n')
             print(mean_residual.form)
+
+            # Update the name of the prognostic:
+            mean_residual = mean_residual.label_map(
+                all_terms,
+                lambda t: prognostic.update_value(t, self.mean_names[i])
+            )
 
             new_residual += mean_residual
 
@@ -435,24 +435,45 @@ class MeanMixingRatio(Augmentation):
         for term in self.residual:
             if term.has_label(mass_weighted):
                 field = term.get(prognostic)
+                print(field)
                 print('advective form of a mass weighted term')
+                #print(term)
                 print(term.form)
+                #print(term.labels)
+                print('\n')
                 print('the mass-weighted part')
                 mass_term = term.get(mass_weighted)
+                #print(mass_term)
                 print(mass_term.form)
+                print('\n')
+
 
                 # Need a special statement if this is a transport term:
                 if term.has_label(transport):
-                    print(term.form.terms)
+                    mass_term = LabelledForm(mass_term)
+                    #print(mass_term.form)
+                    #print(mass_term.labels)
+                    #mass_term = self.residual.label_map(
+                    #    lambda t: t.has_label(transport) and t.get(prognostic) == field,
+                    #    map_if_true=keep, map_if_false=drop
+                    #)
+                #    mass_term = self.residual.label_map(
+                #    lambda t: t == term,
+                #    map_if_false = drop
+                #    )
+
+                #    print(term.form)
+                    
                 #    print(term.form.terms)
                 #    print('this is a transport term')
-                    mass_term = term.get(mass_weighted).term
+                 #   mass_term = term.get(mass_weighted).term
                 #print('\n')
+                    #print('extracting this term from the residual again')
+                    #mass_term = mass_term.form.terms[0].get(mass_weighted)
+                    #print(mass_term.form)
+                    #print('\n')
 
-                #mass_term = self.residual.label_map(
-                #    lambda t: t == term,
-                #    map_if_false = lambda t: t.get(mass_weighted)
-                #)
+                
 
                 #mass_term.terms[0].replace_subject(self.X, 0, 0)
                 #mass_term_new = replace_subject(mass_term.terms[0])(self.X, old_idx=0, new_idx=0)
@@ -494,18 +515,20 @@ class MeanMixingRatio(Augmentation):
                     )
 
                     # Replace density
-                    mass_term_new = mass_term.label_map(
+                    mass_term_new = mass_term_new.label_map(
                         all_terms,
                         replace_subject(self.X, old_idx = rho_idx, new_idx = rho_idx)
                     )
 
                     # Replace test function
-                    mass_term_new = mass_term.label_map(
+                    mass_term_new = mass_term_new.label_map(
                         all_terms,
                         replace_test_function(self.tests, old_idx = mX_idx, new_idx = mean_idx)
                     )
 
+                print('form after changes')
                 print(mass_term_new.form)
+                print('\n')
 
                 #new_mass_weighted_term = Term(mass_term_new.form, term.labels)
                 new_term = Term(term.form, term.labels)
@@ -518,6 +541,7 @@ class MeanMixingRatio(Augmentation):
                 )
 
                 print('now we have hopefully replaced stuff')
+                print('\n')
             else:
                 print('Not')
                 print(term.form)
