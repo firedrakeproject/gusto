@@ -4,10 +4,11 @@ from firedrake import Projector
 from firedrake.fml import Label, drop
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
-from gusto.core.labels import time_derivative, physics_label
+from gusto.core.labels import time_derivative, physics_label, dynamics_label
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper, Timestepper
 from numpy import ones
+import numpy as np
 
 __all__ = ["SplitTimestepper", "SplitPhysicsTimestepper", "SplitPrescribedTransport"]
 
@@ -226,9 +227,18 @@ class SplitPhysicsTimestepper(Timestepper):
 
         super().timestep()
 
+        print('just performed transport in split phyics timestepper')
+
+        for field in self.x.np1:
+            print(np.min(field.dat.data))
+
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
                 scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+
+        # Perform augmented limiting if required:
+        if self.augmentation is not None:
+            self.augmentation.limit(self.x.np1)
 
 
 class SplitPrescribedTransport(Timestepper):
@@ -296,7 +306,25 @@ class SplitPrescribedTransport(Timestepper):
         return self.fields('u')
 
     def setup_scheme(self):
+        print('Setting up base equation')
         self.setup_equation(self.equation)
+
+         # If there is an augmentation, set up the residual now
+        if self.scheme.augmentation is not None:
+            if self.scheme.augmentation.name == 'mean_mixing_ratio':
+                self.scheme.augmentation.setup_residual(self.spatial_methods, self.equation)
+                print('Setting up augmented equation')
+                # Go through and label all non-physics terms with a "dynamics" label
+                dynamics = Label('dynamics')
+                self.scheme.augmentation.residual = self.scheme.augmentation.residual.label_map(
+                    lambda t: not any(t.has_label(time_derivative, physics_label)),
+                    map_if_true=lambda t: dynamics(t)
+                )
+                print(len(self.scheme.augmentation.residual.label_map(
+                    lambda t: t.has_label(dynamics),
+                    map_if_false=drop
+                )))
+
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
         self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics_label)), dynamics)
@@ -305,6 +333,7 @@ class SplitPrescribedTransport(Timestepper):
         self.setup_transporting_velocity(self.scheme)
         if self.io.output.log_courant:
             self.scheme.courant_max = self.io.courant_max
+
 
     def setup_prescribed_expr(self, expr_func):
         """
@@ -376,6 +405,23 @@ class SplitPrescribedTransport(Timestepper):
 
         super().timestep()
 
+        print('Transport complete in split prescribed timestepper')
+
+        for idx, field in enumerate(self.x.np1):
+            print(idx)
+            print(np.min(field.dat.data))
+
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
                 scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+
+        print('Physics complete in split prescribed timestepper')
+
+        for idx, field in enumerate(self.x.np1):
+            print(idx)
+            print(np.min(field.dat.data))
+
+        # Perform augmented limiting if required:
+        #if self.scheme.augmentation is not None:
+        #    name = self.equation.field_name
+        #    self.scheme.augmentation.limit(self.x.np1(name))
