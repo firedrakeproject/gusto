@@ -24,7 +24,7 @@ class TerminatorToy(PhysicsParametrisation):
     """
 
     def __init__(self, equation, k1=1, k2=1,
-                 species1_name='X', species2_name='X2'):
+                 species1_name='X_tracer', species2_name='X_tracer2'):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation
@@ -33,9 +33,9 @@ class TerminatorToy(PhysicsParametrisation):
             k2(float, optional): Reaction rate for species 2 (X2). Defaults to a
                 constant 1 over the domain.
             species1_name(str, optional): Name of the first interacting species.
-                Defaults to 'X'.
+                Defaults to 'X_tracer'.
             species2_name(str, optional): Name of the second interacting
-                species. Defaults to 'X2'.
+                species. Defaults to 'X_tracer2'.
         """
 
         label_name = 'terminator_toy'
@@ -65,8 +65,8 @@ class TerminatorToy(PhysicsParametrisation):
         source1_expr = test_1 * 2*Kx * dx
         source2_expr = test_2 * -Kx * dx
 
-        equation.residual -= self.label(subject(prognostic(source1_expr, 'X'), self.Xq), self.evaluate)
-        equation.residual -= self.label(subject(prognostic(source2_expr, 'X2'), self.Xq), self.evaluate)
+        equation.residual -= self.label(subject(prognostic(source1_expr, species1_name), self.Xq), self.evaluate)
+        equation.residual -= self.label(subject(prognostic(source2_expr, species2_name), self.Xq), self.evaluate)
 
     def evaluate(self, x_in, dt, x_out=None):
         """

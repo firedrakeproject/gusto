@@ -264,25 +264,21 @@ class MixedFSLimiter(object):
 
 class MeanLimiter(object):
     """
-    A limiter for a mixing ratio that ensures non-negativity by blending
-    the mixing ratio field with that of a mean mixing ratio. The blending
-    factor is given by the DG0 function lamda.
+    A mass-preseving limiter for a mixing ratio that ensures non-negativity 
+    by blending the mixing ratio field with that of a mean mixing ratio.
+    The blending factor is given by the DG0 function lamda.
     """
 
     def __init__(self, spaces):
         """
         Args:
-            space: The mixed function space for the equation set
-            mX_field: The mixing ratio field
-            mean_field: The mean mixing ratio field
+            spaces: The mixed function space for the equation set
         Raises:
             ValueError: If the space is not appropriate for the limiter.
         """
 
-        #self.space = space 
-        #mesh = space.mesh()
-
-        # check that space is DG1
+        # check that space is DG1.
+        # Should I have this code?
         for space in spaces:
             degree = space.ufl_element().degree()
             if (space.ufl_element().sobolev_space.name != 'L2'

@@ -310,9 +310,11 @@ class SplitPrescribedTransport(Timestepper):
         self.setup_equation(self.equation)
 
          # If there is an augmentation, set up the residual now
+        
         if self.scheme.augmentation is not None:
             if self.scheme.augmentation.name == 'mean_mixing_ratio':
-                self.scheme.augmentation.setup_residual(self.spatial_methods, self.equation)
+                #self.scheme.augmentation.setup_residual_prev(self.equation)
+                self.scheme.augmentation.setup_residual(self.equation)
                 print('Setting up augmented equation')
                 # Go through and label all non-physics terms with a "dynamics" label
                 dynamics = Label('dynamics')
@@ -324,6 +326,8 @@ class SplitPrescribedTransport(Timestepper):
                     lambda t: t.has_label(dynamics),
                     map_if_false=drop
                 )))
+        
+        
 
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')

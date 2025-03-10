@@ -5,7 +5,7 @@ import numpy as np
 from enum import Enum
 from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
-from firedrake.fml import replace_subject, drop, keep, Term
+from firedrake.fml import replace_subject, drop, keep, Term, subject
 from firedrake.utils import cached_property
 from firedrake.formmanipulation import split_form
 
@@ -232,6 +232,10 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         elif self.rk_formulation == RungeKuttaFormulation.predictor:
             residual_list = []
             for stage in range(self.nStages):
+                for term in self.residual:
+                    print(term.form)
+                    print(term.get(subject))
+                    print('\n')
                 residual = self.residual.label_map(
                     lambda t: t.has_label(time_derivative),
                     map_if_true=replace_subject(self.field_i[stage+1], self.idx),

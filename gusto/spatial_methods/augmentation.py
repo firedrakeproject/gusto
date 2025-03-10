@@ -538,10 +538,8 @@ class MeanMixingRatio(Augmentation):
                 print(mass_term_new.form)
                 print('\n')
 
-                # If this is a transport term, make this a term again
-                # instead of a labelled form
-                if term.has_label(transport):
-                    mass_term_new = Term(mass_term_new.form, term.labels)
+                # Carry across original labels here.
+                mass_term_new = Term(mass_term_new.form, term.labels)
 
                 #new_mass_weighted_term = Term(mass_term_new.form, term.labels)
                 # Update the mass_weighted part of the residual term,
@@ -596,20 +594,10 @@ class MeanMixingRatio(Augmentation):
             x_in (:class:`Function`): The input fields
         """
 
-        #for idx, field in enumerate(self.eqn.field_names):
-        #    self.x_in.subfunctions[idx].assign(x_in.subfunctions[idx])
-        print('in pre-apply')
         for idx in range(self.idx_orig):
             print(np.min(x_in.subfunctions[idx].dat.data))
             print('\n')
             self.x_in.subfunctions[idx].assign(x_in.subfunctions[idx])
-
-        # Set the mean mixing ratio to be zero, just because
-        #DG0 = FunctionSpace(self.domain.mesh, "DG", 0)
-        #mean_mX = Function(DG0, name=self.mean_name)
-        
-        #self.x_in.subfunctions[self.mean_idx].assign(mean_mX)
-
 
     def post_apply(self, x_out):
         """
@@ -619,7 +607,7 @@ class MeanMixingRatio(Augmentation):
         Args:
             x_out (:class:`Function`): The output fields
         """
-        print('in post apply')
+
         for idx in range(self.idx_orig):
             print(np.min(self.x_out.subfunctions[idx].dat.data))
             print('\n')
@@ -636,7 +624,7 @@ class MeanMixingRatio(Augmentation):
         Args:
             x_in_mixed (:class:`Function`): The mixed function to update.
         """
-        print('in update')
+
         for i in range(self.mX_num):
             self.mX_ins[i].assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
             print('\n min of mX field:')
@@ -657,6 +645,10 @@ class MeanMixingRatio(Augmentation):
             print(np.min(mX_pre[i].dat.data))
             print(f'\n min of {self.mean_names[i]} field:')
             print(np.min(means[i].dat.data))
+            print('\n max of mX field:')
+            print(np.max(mX_pre[i].dat.data))
+            print(f'\n max of {self.mean_names[i]} field:')
+            print(np.max(means[i].dat.data))
 
         self.limiters.apply(mX_pre, means)
 
@@ -668,14 +660,8 @@ class MeanMixingRatio(Augmentation):
             print(np.min(mX_pre[i].dat.data))
             print(f'\n min of {self.mean_names[i]} field:')
             print(np.min(means[i].dat.data))
+            print('\n max of mX field:')
+            print(np.max(mX_pre[i].dat.data))
+            print(f'\n max of {self.mean_names[i]} field:')
+            print(np.max(means[i].dat.data))
 
-    def limit_old(self, x_in_mixed):
-        # Ensure non-negativity by applying the blended limiter
-        for i in range(self.mX_num):
-            print('limiting within the augmentation')
-            mX_field = x_in_mixed.subfunctions[self.mX_idxs[i]]
-            mean_field = x_in_mixed.subfunctions[self.mean_idxs[i]]
-            print(np.min(x_in_mixed.subfunctions[self.mX_idxs[i]].dat.data))
-            self.limiters[i].apply(mX_field, mean_field)
-            print(np.min(x_in_mixed.subfunctions[self.mX_idxs[i]].dat.data))
-            #x_in_mixed.subfunctions[self.mX_idxs[i]].assign(mX_field)
