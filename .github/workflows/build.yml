@@ -34,7 +34,7 @@ jobs:
       PYOP2_CFLAGS: -O0
       # Make sure that tests with >4 processes are not silently skipped
       PYTEST_MPI_MAX_NPROCS: 4
-      EXTRA_PYTEST_ARGS: --durations=100 --timeout=3600 --timeout-method=thread -o faulthandler_timeout=3660 --verbose gusto-repo/unit-tests gusto-repo/integration-tests gusto-repo/examples
+      EXTRA_PYTEST_ARGS: --durations=100 --timeout=3600 --timeout-method=thread -o faulthandler_timeout=3660 --show-capture=no --verbose gusto-repo/unit-tests gusto-repo/integration-tests gusto-repo/examples
     steps:
       - name: Fix HOME
         # For unknown reasons GitHub actions overwrite HOME to /github/home
@@ -70,9 +70,9 @@ jobs:
         run: |
           . venv-gusto/bin/activate
           : # Run the serial tests
-          firedrake-run-split-tests 1 1 -n 12 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py  --log-file=gusto_netcdf_serial.log
+          firedrake-run-split-tests 1 1 -n 12 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py  --log-file=gusto_netcdf_serial.log --show-capture=no
           : # Run the parallel tests
-          firedrake-run-split-tests 2 6 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py --log-file=gusto_netcdf_parallel.log
+          firedrake-run-split-tests 2 6 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py --log-file=gusto_netcdf_parallel.log --show-capture=no
         timeout-minutes: 10
 
       - name: Install parallel netCDF
