@@ -122,6 +122,7 @@ def run_sw_fplane(tmpdir):
 
     return stepper, check_stepper
 
+
 def test_sw_fplane(tmpdir):
 
     dirname = str(tmpdir)

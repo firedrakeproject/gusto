@@ -116,6 +116,7 @@ def run_boussinesq(tmpdir, compressible):
 
     return stepper, check_stepper
 
+
 @pytest.mark.parametrize("compressible", [True, False])
 def test_boussinesq(tmpdir, compressible):
 
