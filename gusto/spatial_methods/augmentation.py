@@ -277,6 +277,10 @@ class MeanMixingRatio(Augmentation):
         self.mX_num = len(mX_names)
 
         # Store information about original equation set
+        self.field_names = []
+        for i in np.arange(len(eqns.field_names)):
+            self.field_names.append(eqns.field_names[i])
+
         self.eqn_orig = eqns
         self.domain = domain
         exist_spaces = eqns.spaces
@@ -301,6 +305,7 @@ class MeanMixingRatio(Augmentation):
             print(mX_names)
             print(mX_name)
             self.mean_names.append('mean_'+mX_name)
+            self.field_names.append(self.mean_names[-1])
             mean_spaces.append(DG0)
             exist_spaces.append(DG0)
             self.mean_idxs.append(self.idx_orig + i)
@@ -345,6 +350,9 @@ class MeanMixingRatio(Augmentation):
 
         self.x_in = Function(self.fs)
         self.x_out = Function(self.fs)
+
+        print(eqns.field_names)
+        print(self.field_names)
 
 
     # New attempt:
@@ -447,8 +455,8 @@ class MeanMixingRatio(Augmentation):
                 print(mass_term.form)
                 print('\n')
 
-
-                # Need a special statement if this is a transport term:
+                # Transport terms are Terms not LabelledForms,
+                # so this needs to be changed. This will be revert later on.
                 if term.has_label(transport):
                     mass_term = LabelledForm(mass_term)
                     #print(mass_term.form)
@@ -482,7 +490,6 @@ class MeanMixingRatio(Augmentation):
                     list_idx = self.mX_names.index(field)
                     mX_idx = self.mX_idxs[list_idx]
                     rho_idx = self.rho_idxs[list_idx]
-
 
                     # Replace mixing ratio
                     mass_term_new = mass_term.label_map(
@@ -527,12 +534,26 @@ class MeanMixingRatio(Augmentation):
                     )
 
                 print('form after changes')
+                print(mass_term_new)
                 print(mass_term_new.form)
                 print('\n')
 
+                # If this is a transport term, make this a term again
+                # instead of a labelled form
+                if term.has_label(transport):
+                    mass_term_new = Term(mass_term_new.form, term.labels)
+
                 #new_mass_weighted_term = Term(mass_term_new.form, term.labels)
+                # Update the mass_weighted part of the residual term,
+                # but be careful to get this correct for transport terms.
                 new_term = Term(term.form, term.labels)
                 new_term = mass_weighted.update_value(new_term, mass_term_new)
+
+                #print('what are the types of these terms?')
+                print(term)
+                print(term.get(mass_weighted))
+                print(new_term)
+                print(mass_term_new)
 
                 # Put this new term back in the residual:
                 self.residual = self.residual.label_map(
@@ -553,11 +574,13 @@ class MeanMixingRatio(Augmentation):
 
         print('\n')
         for term in self.residual:
+            print(term.get(subject))
             if term.has_label(mass_weighted):
                 print('advective form of a mass weighted term')
                 print(term.form)
                 print('the mass-weighted part')
                 print(term.get(mass_weighted).form)
+                print(term.get(mass_weighted))
                 print('\n')
             else:
                 print('Not')

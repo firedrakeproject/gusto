@@ -145,7 +145,7 @@ class MeanMixingRatioWeights():
                       end
                   end
                   """)
-        #lamda[i] = fmax(lamda[i],-min_value/(mean_field[i] - min_value))
+
         self._kernel = (domain, instrs)
 
     def apply(self, lamda, mX_field, mean_field):
