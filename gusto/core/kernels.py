@@ -10,7 +10,7 @@ tested.
 """
 
 from firedrake import dx
-from firedrake.parloops import par_loop, READ, WRITE, MIN, MAX, op2
+from firedrake.parloops import par_loop, READ, WRITE, INC, MIN, MAX, op2
 import numpy as np
 
 
@@ -112,6 +112,57 @@ class ClipZero():
         par_loop(self._kernel, dx,
                  {"field": (field, WRITE),
                   "field_in": (field_in, READ)})
+
+
+class MeanMixingRatioWeights():
+    """
+    Finds the lambda values for blending a mixing ratio and its
+    mean DG0 field in the MeanLimiter.
+
+    Each cell is looped over and the minimum value is computed.
+    If the value is negative, then a lamda weight is computed
+    that will ensure non-negativity in the limiting step.
+    """
+
+    def __init__(self, V):
+        """
+        Args:
+            V (:class:`FunctionSpace`): The space of the field to be clipped.
+        """
+        # Using DG1-equispaced, with 4 DOFs per cell
+        shapes = {'nDOFs': V.finat_element.space_dimension(),
+                  'nDOFs_base': int(V.finat_element.space_dimension() / 4)}
+        domain = "{{[i]: 0 <= i < {nDOFs_base}}}".format(**shapes)
+
+        instrs = ("""
+                  <float64> min_value1 = 0.0
+                  <float64> min_value2 = 0.0
+                  <float64> min_value = 0.0
+                  <float64> new_lamda = 0.0
+                  for i
+                      min_value1 = fmin(mX_field[i*4], mX_field[i*4+1])
+                      min_value2 = fmin(mX_field[i*4+2], mX_field[i*4+3])
+                      min_value = fmin(min_value1, min_value2)
+                      if min_value < 0.0
+                          lamda[i] = fmax(lamda[i],-min_value/(mean_field[i] - min_value))
+                      end
+                  end
+                  """)
+
+        self._kernel = (domain, instrs)
+
+    def apply(self, lamda, mX_field, mean_field):
+        """
+        Performs the par loop.
+
+        Args:
+            w (:class:`Function`): the field in which to store the weights. This
+                lives in the continuous target space.
+        """
+        par_loop(self._kernel, dx,
+                 {"lamda": (lamda, INC),
+                  "mX_field": (mX_field, READ),
+                  "mean_field": (mean_field, READ)})
 
 
 class MinKernel():
