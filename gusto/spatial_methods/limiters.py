@@ -262,9 +262,10 @@ class MixedFSLimiter(object):
             field = fields.subfunctions[self.field_idxs[field]]
             sublimiter.apply(field)
 
+
 class MeanLimiter(object):
     """
-    A mass-preseving limiter for a mixing ratio that ensures non-negativity 
+    A mass-preseving limiter for a mixing ratio that ensures non-negativity
     by blending the mixing ratio field with that of a mean mixing ratio.
     The blending factor is given by the DG0 function lamda.
     """
@@ -277,16 +278,17 @@ class MeanLimiter(object):
             ValueError: If the space is not appropriate for the limiter.
         """
 
-        # check that space is DG1.
-        # Should I have this code?
+        # Check that space is DG1.
+        # Should I have this?
         for space in spaces:
             degree = space.ufl_element().degree()
             if (space.ufl_element().sobolev_space.name != 'L2'
                 or ((type(degree) is tuple and np.any([deg != 1 for deg in degree]))
                     and degree != 1)):
-                raise NotImplementedError('MeanLimiter only implemented for mixing' +
-                                          'ratios in the DG1 space')
-        self.space = spaces[0] 
+                raise NotImplementedError('MeanLimiter only implemented for mixing'
+                                          + 'ratios in the DG1 space')
+
+        self.space = spaces[0]
         mesh = self.space.mesh()
 
         # Create equispaced DG1 space needed for limiting
@@ -303,14 +305,8 @@ class MeanLimiter(object):
         DG0 = FunctionSpace(mesh, 'DG', 0)
 
         self.lamda = Function(DG0)
-        #self.minus_lamda = Function(DG0)
         self.mX_field = Function(DG1_equispaced)
         self.mean_field = Function(DG0)
-
-        print(DG1_equispaced.finat_element.space_dimension())
-        print(DG0.finat_element.space_dimension())
-        print(self.space.finat_element.space_dimension())
-        print(self.space.mesh().topological_dimension())
 
         self._kernel = MeanMixingRatioWeights(self.space)
         self._clip_zero_kernel = ClipZero(self.space)
@@ -332,28 +328,13 @@ class MeanLimiter(object):
         for i in range(len(mX_fields)):
             # Update the weights, lamda
             self._kernel.apply(self.lamda, mX_fields[i], mean_fields[i])
-            #print(self.lamda.dat.data)
-
-        #self.minus_lamda.interpolate(Constant(1.0) - self.lamda)
-        
-        #As a hack for now, clip zero when required
 
         for i in range(len(mX_fields)):
-
-            #mX_fields[i].interpolate(self.minus_lamda*mX_fields[i] + self.lamda*mean_fields[i])
+            # Apply the lamda weights to force negative values
+            # to be non-negative.
             mX_fields[i].interpolate((Constant(1.0) - self.lamda)*mX_fields[i] + self.lamda*mean_fields[i])
-            #mX_fields[i].interpolate(self.one_m_lamda*mX_fields[i] + self.lamda*mean_fields[i])
-            #mX_fields[i].interpolate(self.lamda*mean_fields[i])
 
-            #As a hack for now, clip zero when required
+            # As a hack for now, clip zero when required. This is
+            # because rouding can leave very small, yet still
+            # negative values.
             self._clip_zero_kernel.apply(mX_fields[i], mX_fields[i])
-        
-        
-        # Compute the weights, lamda:
-        #self._kernel.apply(self.lamda, mX_field, mean_field)
-
-        #print('applying limiter')
-        #print(self.lamda.dat.data)
-
-        # Compute the blended field
-        #mX_field.interpolate((Constant(1.0) - self.lamda)*mX_field + self.lamda*mean_field)

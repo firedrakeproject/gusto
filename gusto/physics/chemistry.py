@@ -24,7 +24,7 @@ class TerminatorToy(PhysicsParametrisation):
     """
 
     def __init__(self, equation, k1=1, k2=1,
-                 species1_name='X_tracer', species2_name='X_tracer2'):
+                 species1_name='X_tracer', species2_name='X2_tracer'):
         """
         Args:
             equation (:class: 'PrognosticEquationSet'): the model's equation
@@ -35,7 +35,7 @@ class TerminatorToy(PhysicsParametrisation):
             species1_name(str, optional): Name of the first interacting species.
                 Defaults to 'X_tracer'.
             species2_name(str, optional): Name of the second interacting
-                species. Defaults to 'X_tracer2'.
+                species. Defaults to 'X2_tracer'.
         """
 
         label_name = 'terminator_toy'

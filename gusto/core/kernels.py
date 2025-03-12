@@ -113,12 +113,15 @@ class ClipZero():
                  {"field": (field, WRITE),
                   "field_in": (field_in, READ)})
 
+
 class MeanMixingRatioWeights():
     """
     Finds the lambda values for blending a mixing ratio and its
-    mean DG0 field in the MeanMixingRatioLimiter.
+    mean DG0 field in the MeanLimiter.
 
-    First, each cell is looped over and the minimum value is computed
+    Each cell is looped over and the minimum value is computed.
+    If the value is negative, then a lamda weight is computed
+    that will ensure non-negativity in the limiting step.
     """
 
     def __init__(self, V):
@@ -160,7 +163,6 @@ class MeanMixingRatioWeights():
                  {"lamda": (lamda, INC),
                   "mX_field": (mX_field, READ),
                   "mean_field": (mean_field, READ)})
-
 
 
 class MinKernel():
