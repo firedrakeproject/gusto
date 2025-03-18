@@ -348,7 +348,7 @@ class Fallout(PhysicsParametrisation):
 
         if moments != AdvectedMoments.M0:
             project_params = {
-                'quadrature_degree': equation.domain.max_quad_degree
+                'quadrature_degree': domain.max_quad_degree
             }
             self.determine_v = Projector(
                 -v_expression*domain.k, v,

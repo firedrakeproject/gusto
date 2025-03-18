@@ -428,7 +428,7 @@ class PrescribedTransport(Timestepper):
             raise RuntimeError('Prescribed velocity already set up!')
 
         project_params = {
-            'quadrature_degree': equation.domain.max_quad_degree
+            'quadrature_degree': self.equation.domain.max_quad_degree
         }
         self.velocity_projection = Projector(
             expr_func(self.t), self.fields('u'),
