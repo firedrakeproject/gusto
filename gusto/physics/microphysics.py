@@ -347,9 +347,12 @@ class Fallout(PhysicsParametrisation):
                 + 'AdvectedMoments.M0 and AdvectedMoments.M3')
 
         if moments != AdvectedMoments.M0:
+            project_params = {
+                'quadrature_degree': domain.max_quad_degree
+            }
             self.determine_v = Projector(
                 -v_expression*domain.k, v,
-                quadrature_degree=domain.max_quad_degree
+                form_compiler_parameters=project_params
             )
 
     def evaluate(self, x_in, dt, x_out=None):
