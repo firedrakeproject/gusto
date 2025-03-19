@@ -127,7 +127,8 @@ class MeanMixingRatioWeights():
     def __init__(self, V):
         """
         Args:
-            V (:class:`FunctionSpace`): The space of the field to be clipped.
+            V (:class:`FunctionSpace`): The space of the field for the mean
+            mixing ratio, which should be DG0.
         """
         # Using DG1-equispaced, with 4 DOFs per cell
         shapes = {'nDOFs': V.finat_element.space_dimension(),
