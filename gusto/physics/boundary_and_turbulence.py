@@ -296,9 +296,11 @@ class WindDrag(PhysicsParametrisation):
 
             du_expr = surface_expr * (u_np1_expr - u_hori) / self.dt
 
+            project_params = {
+                'quadrature_degree': equation.domain.max_quad_degree
+            }
             self.source_projector = Projector(
-                du_expr, source_u_proj,
-                quadrature_degree=equation.domain.max_quad_degree
+                du_expr, source_u_proj, form_compiler_parameters=project_params
             )
 
             source_expr = inner(test, source_u - k*dot(source_u, k)) * dx
