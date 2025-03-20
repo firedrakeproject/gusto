@@ -25,9 +25,7 @@ jobs:
     runs-on: [self-hosted, Linux]
     # The docker container to use.
     container:
-      # UNDO ME
-      # image: firedrakeproject/firedrake-vanilla-default:latest
-      image: firedrakeproject/firedrake-vanilla-default:roottest
+      image: firedrakeproject/firedrake-vanilla-default:latest
     env:
       # Make Gusto output logging information, this will *not* be printed to
       # the terminal because pytest will capture it. Instead it is written to

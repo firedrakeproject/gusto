@@ -22,9 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     # The docker container to use.
     container:
-      # UNDO ME
-      # image: firedrakeproject/firedrake-docdeps:latest
-      image: firedrakeproject/firedrake-docdeps:roottest
+      image: firedrakeproject/firedrake-docdeps:latest
     steps:
       - uses: actions/checkout@v4
       - name: Install Gusto
