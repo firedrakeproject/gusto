@@ -57,8 +57,8 @@ def schaer_mountain(
     cp = 1004.5              # specific heat capacity at constant pressure
     mu_dt = 1.2              # strength of sponge layer, no units
     exner_surf = 1.0         # maximum value of Exner pressure at surface
-    max_iterations = 100     # maximum number of hydrostatic balance iterations
-    tolerance = 1e-12        # tolerance for hydrostatic balance iteration
+    max_iterations = 20      # maximum number of hydrostatic balance iterations
+    tolerance = 1e-8         # tolerance for hydrostatic balance iteration
 
     # ------------------------------------------------------------------------ #
     # Our settings for this set up

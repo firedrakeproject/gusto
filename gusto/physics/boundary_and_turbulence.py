@@ -8,10 +8,10 @@ from firedrake import (
     SpatialCoordinate, dS_v
 )
 from firedrake.fml import subject
-from gusto.core.configuration import BoundaryLayerParameters
+from gusto.core.equation_configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.equations import CompressibleEulerEquations
-from gusto.core.labels import prognostic
+from gusto.core.labels import prognostic, source_label
 from gusto.core.logging import logger
 from gusto.equations import thermodynamics
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
@@ -69,15 +69,17 @@ class SurfaceFluxes(PhysicsParametrisation):
         self.implicit_formulation = implicit_formulation
         self.X = Function(equation.X.function_space())
         self.dt = Constant(0.0)
+        self.source = Function(equation.X.function_space())
 
         # -------------------------------------------------------------------- #
         # Extract prognostic variables
         # -------------------------------------------------------------------- #
         u_idx = equation.field_names.index('u')
         T_idx = equation.field_names.index('theta')
+        self.T_idx = T_idx
         rho_idx = equation.field_names.index('rho')
         if vapour_name is not None:
-            m_v_idx = equation.field_names.index(vapour_name)
+            self.m_v_idx = equation.field_names.index(vapour_name)
 
         X = self.X
         tests = TestFunctions(X.function_space()) if implicit_formulation else equation.tests
@@ -88,8 +90,8 @@ class SurfaceFluxes(PhysicsParametrisation):
         test_theta = tests[T_idx]
 
         if vapour_name is not None:
-            m_v = split(X)[m_v_idx]
-            test_m_v = tests[m_v_idx]
+            m_v = split(X)[self.m_v_idx]
+            test_m_v = tests[self.m_v_idx]
         else:
             m_v = None
 
@@ -126,22 +128,23 @@ class SurfaceFluxes(PhysicsParametrisation):
             self.source_interpolators = []
 
             # First specify T_np1 expression
-            Vtheta = equation.spaces[T_idx]
             T_np1_expr = ((T + C_H*u_hori_mag*T_surface_expr*self.dt/z_a)
                           / (1 + C_H*u_hori_mag*self.dt/z_a))
 
             # If moist formulation, determine next vapour value
             if vapour_name is not None:
-                source_mv = Function(Vtheta)
+                self.source_mv_int = self.source.subfunctions[self.m_v_idx]
+                self.source_mv = split(self.source)[self.m_v_idx]
                 mv_sat = thermodynamics.r_sat(equation.parameters, T, p)
                 mv_np1_expr = ((m_v + C_E*u_hori_mag*mv_sat*self.dt/z_a)
                                / (1 + C_E*u_hori_mag*self.dt/z_a))
                 dmv_expr = surface_expr * (mv_np1_expr - m_v) / self.dt
-                source_mv_expr = test_m_v * source_mv * dx
+                source_mv_expr = test_m_v * self.source_mv * dx
 
-                self.source_interpolators.append(Interpolator(dmv_expr, source_mv))
-                equation.residual -= self.label(subject(prognostic(source_mv_expr, vapour_name),
-                                                        X), self.evaluate)
+                self.source_interpolators.append(Interpolator(dmv_expr, self.source_mv_int))
+                equation.residual -= source_label(
+                    self.label(subject(prognostic(source_mv_expr, vapour_name), self.source), self.evaluate)
+                )
 
                 # Moisture needs including in theta_vd expression
                 # NB: still using old pressure here, which implies constant p?
@@ -152,12 +155,14 @@ class SurfaceFluxes(PhysicsParametrisation):
             else:
                 theta_np1_expr = thermodynamics.theta(equation.parameters, T_np1_expr, p)
 
-            source_theta_vd = Function(Vtheta)
+            self.source_theta_vd = split(self.source)[self.T_idx]
+            self.source_theta_vd_int = self.source.subfunctions[self.T_idx]
             dtheta_vd_expr = surface_expr * (theta_np1_expr - theta_vd) / self.dt
-            source_theta_expr = test_theta * source_theta_vd * dx
-            self.source_interpolators.append(Interpolator(dtheta_vd_expr, source_theta_vd))
-            equation.residual -= self.label(subject(prognostic(source_theta_expr, 'theta'),
-                                                    X), self.evaluate)
+            source_theta_expr = test_theta * self.source_theta_vd * dx
+            self.source_interpolators.append(Interpolator(dtheta_vd_expr, self.source_theta_vd_int))
+            equation.residual -= source_label(
+                self.label(subject(prognostic(source_theta_expr, 'theta'), self.source), self.evaluate)
+            )
 
         # General formulation ------------------------------------------------ #
         else:
@@ -186,7 +191,7 @@ class SurfaceFluxes(PhysicsParametrisation):
             equation.residual -= self.label(
                 subject(prognostic(source_theta_expr, 'theta'), X), self.evaluate)
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Evaluates the source term generated by the physics. This does nothing if
         the implicit formulation is not used.
@@ -195,6 +200,8 @@ class SurfaceFluxes(PhysicsParametrisation):
             x_in: (:class: 'Function'): the (mixed) field to be evolved.
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
 
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
@@ -205,6 +212,9 @@ class SurfaceFluxes(PhysicsParametrisation):
             self.rho_recoverer.project()
             for source_interpolator in self.source_interpolators:
                 source_interpolator.interpolate()
+            # If a source output is provided, assign the source term to it
+            if x_out is not None:
+                x_out.assign(self.source)
 
 
 class WindDrag(PhysicsParametrisation):
@@ -279,20 +289,24 @@ class WindDrag(PhysicsParametrisation):
         if implicit_formulation:
 
             # First specify T_np1 expression
-            Vu = equation.spaces[u_idx]
-            source_u = Function(Vu)
+            self.source = Function(equation.X.function_space())
+            source_u = split(self.source)[u_idx]
+            source_u_proj = self.source.subfunctions[u_idx]
             u_np1_expr = u_hori / (1 + C_D*u_hori_mag*self.dt/z_a)
 
             du_expr = surface_expr * (u_np1_expr - u_hori) / self.dt
 
+            project_params = {
+                'quadrature_degree': equation.domain.max_quad_degree
+            }
             self.source_projector = Projector(
-                du_expr, source_u,
-                quadrature_degree=equation.domain.max_quad_degree
+                du_expr, source_u_proj, form_compiler_parameters=project_params
             )
 
             source_expr = inner(test, source_u - k*dot(source_u, k)) * dx
-            equation.residual -= self.label(subject(prognostic(source_expr, 'u'),
-                                                    X), self.evaluate)
+            equation.residual -= source_label(
+                self.label(subject(prognostic(source_expr, 'u'), self.source), self.evaluate)
+            )
 
         # General formulation ------------------------------------------------ #
         else:
@@ -304,7 +318,7 @@ class WindDrag(PhysicsParametrisation):
 
             equation.residual -= self.label(subject(prognostic(source_expr, 'u'), X), self.evaluate)
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Evaluates the source term generated by the physics. This does nothing if
         the implicit formulation is not used.
@@ -313,6 +327,8 @@ class WindDrag(PhysicsParametrisation):
             x_in: (:class: 'Function'): the (mixed) field to be evolved.
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
 
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
@@ -321,6 +337,9 @@ class WindDrag(PhysicsParametrisation):
             self.X.assign(x_in)
             self.dt.assign(dt)
             self.source_projector.project()
+            # If a source output is provided, assign the source term to it
+            if x_out is not None:
+                x_out.assign(self.source)
 
 
 class StaticAdjustment(PhysicsParametrisation):
@@ -399,7 +418,7 @@ class StaticAdjustment(PhysicsParametrisation):
 
         equation.residual -= self.label(subject(prognostic(source_expr, 'theta'), equation.X), self.evaluate)
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Evaluates the source term generated by the physics. This does nothing if
         the implicit formulation is not used.
@@ -408,6 +427,8 @@ class StaticAdjustment(PhysicsParametrisation):
             x_in: (:class: 'Function'): the (mixed) field to be evolved.
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
 
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
@@ -421,6 +442,11 @@ class StaticAdjustment(PhysicsParametrisation):
             theta_column_data[col].sort()
         self.set_column_data(self.theta_to_sort, theta_column_data, index_data)
         self.set_theta_variable.interpolate()
+
+        if x_out is not None:
+            raise NotImplementedError("Static adjustment does not output a source term, "
+                                      "or a non-interpolated/projected expression and hence "
+                                      "cannot be used in a nonsplit physics formulation.")
 
 
 class SuppressVerticalWind(PhysicsParametrisation):
@@ -479,7 +505,7 @@ class SuppressVerticalWind(PhysicsParametrisation):
 
         equation.residual -= self.label(subject(prognostic(source_expr, 'u'), equation.X), self.evaluate)
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Evaluates the source term generated by the physics. This does nothing if
         the implicit formulation is not used.
@@ -488,6 +514,9 @@ class SuppressVerticalWind(PhysicsParametrisation):
             x_in: (:class: 'Function'): the (mixed) field to be evolved.
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
+                                                  This is unused.
         """
 
         if float(self.t) < float(self.spin_up_period):
@@ -625,7 +654,7 @@ class BoundaryLayerMixing(PhysicsParametrisation):
         equation.residual += self.label(
             subject(prognostic(source_expr, field_name), X), self.evaluate)
 
-    def evaluate(self, x_in, dt):
+    def evaluate(self, x_in, dt, x_out=None):
         """
         Evaluates the source term generated by the physics. This only recovers
         the density field.
@@ -634,9 +663,16 @@ class BoundaryLayerMixing(PhysicsParametrisation):
             x_in: (:class: 'Function'): the (mixed) field to be evolved.
             dt: (:class: 'Constant'): the timestep, which can be the time
                 interval for the scheme.
+            x_out: (:class:`Function`, optional): the (mixed) source
+                                                  field to be outputed.
         """
 
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
 
         self.X.assign(x_in)
         self.rho_recoverer.project()
+
+        if x_out is not None:
+            raise NotImplementedError("Boundary layer mixing does not output a source term, "
+                                      "or a non-interpolated/projected expression and hence "
+                                      "cannot be used in a nonsplit physics formulation.")

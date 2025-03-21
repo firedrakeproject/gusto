@@ -20,20 +20,20 @@ lint:
 
 test:
 	@echo "    Running all tests"
-	@python3 -m pytest unit-tests integration-tests examples $(PYTEST_ARGS)
+	@python3 -m pytest -q -s unit-tests integration-tests examples $(PYTEST_ARGS) --show-capture=no
 
 unit_test:
 	@echo "    Running all unit-tests"
-	@python3 -m pytest unit-tests $(PYTEST_ARGS)
+	@python3 -m pytest -q -s unit-tests $(PYTEST_ARGS) --show-capture=no
 
 integration_test:
 	@echo "    Running all integration-tests"
-	@python3 -m pytest integration-tests $(PYTEST_ARGS)
+	@python3 -m pytest -q -s integration-tests $(PYTEST_ARGS) --show-capture=no
 
 example:
 	@echo "    Running all examples"
-	@python3 -m pytest examples -v -m "not parallel" $(PYTEST_ARGS)
+	@python3 -m pytest -q -s examples -v -m "not parallel" $(PYTEST_ARGS) --show-capture=no
 
 parallel_example:
 	@echo "    Running all parallel examples"
-	@python3 -m pytest examples -v -m "parallel" $(PYTEST_ARGS)
+	@python3 -m pytest -q -s examples -v -m "parallel" $(PYTEST_ARGS) --show-capture=no

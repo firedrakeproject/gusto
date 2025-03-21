@@ -13,7 +13,7 @@ from firedrake.fml import identity, drop
 import pytest
 
 
-def run_surface_fluxes(dirname, moist, implicit_formulation):
+def run_surface_fluxes(dirname, moist, implicit_formulation, physics_coupling):
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -37,7 +37,7 @@ def run_surface_fluxes(dirname, moist, implicit_formulation):
     # Set up equation
     tracers = [WaterVapour()] if moist else None
     vapour_name = 'water_vapour' if moist else None
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqn = CompressibleEulerEquations(domain, parameters, active_tracers=tracers)
 
     # I/O
@@ -47,24 +47,36 @@ def run_surface_fluxes(dirname, moist, implicit_formulation):
     io = IO(domain, output)
 
     # Physics scheme
-    surf_params = BoundaryLayerParameters()
+    surf_params = BoundaryLayerParameters(mesh)
     T_surf = Constant(300.0)
-    physics_parametrisation = SurfaceFluxes(eqn, T_surf, vapour_name,
-                                            implicit_formulation, surf_params)
 
-    time_discretisation = ForwardEuler(domain) if implicit_formulation else BackwardEuler(domain)
+    if physics_coupling == "split":
+        physics_parametrisation = SurfaceFluxes(eqn, T_surf, vapour_name,
+                                                implicit_formulation, surf_params)
 
-    # time_discretisation = ForwardEuler(domain)
-    physics_schemes = [(physics_parametrisation, time_discretisation)]
+        time_discretisation = ForwardEuler(domain) if implicit_formulation else BackwardEuler(domain)
 
-    # Only want time derivatives and physics terms in equation, so drop the rest
-    eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
-                                          map_if_true=identity, map_if_false=drop)
+        # time_discretisation = ForwardEuler(domain)
+        physics_schemes = [(physics_parametrisation, time_discretisation)]
 
-    # Time stepper
-    scheme = ForwardEuler(domain)
-    stepper = SplitPhysicsTimestepper(eqn, scheme, io,
-                                      physics_schemes=physics_schemes)
+        # Only want time derivatives and physics terms in equation, so drop the rest
+        eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
+                                              map_if_true=identity, map_if_false=drop)
+
+        # Time stepper
+        scheme = ForwardEuler(domain)
+        stepper = SplitPhysicsTimestepper(eqn, scheme, io,
+                                          physics_schemes=physics_schemes)
+    else:
+        physics_parametrisation = [SurfaceFluxes(eqn, T_surf, vapour_name,
+                                                 implicit_formulation, surf_params)]
+        # Only want time derivatives and physics terms in equation, so drop the rest
+        eqn.residual = eqn.residual.label_map(lambda t: any(t.has_label(time_derivative, physics_label)),
+                                              map_if_true=identity, map_if_false=drop)
+
+        # Time stepper
+        scheme = ForwardEuler(domain) if implicit_formulation else BackwardEuler(domain)
+        stepper = Timestepper(eqn, scheme, io, physics_parametrisations=physics_parametrisation)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -120,10 +132,11 @@ def run_surface_fluxes(dirname, moist, implicit_formulation):
 
 @pytest.mark.parametrize("moist", [False, True])
 @pytest.mark.parametrize("implicit_formulation", [False, True])
-def test_surface_fluxes(tmpdir, moist, implicit_formulation):
+@pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
+def test_surface_fluxes(tmpdir, moist, implicit_formulation, physics_coupling):
 
     dirname = str(tmpdir)
-    eqn, stepper, T_true, mv_true = run_surface_fluxes(dirname, moist, implicit_formulation)
+    eqn, stepper, T_true, mv_true = run_surface_fluxes(dirname, moist, implicit_formulation, physics_coupling)
 
     # Back out temperature from prognostic fields
     theta_vd = stepper.fields('theta')

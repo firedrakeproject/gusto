@@ -5,12 +5,12 @@ Time discretisation objects discretise ∂y/∂t = F(y), for variable y, time t 
 operator F.
 """
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 import math
 
 from firedrake import (Function, TestFunction, TestFunctions, DirichletBC,
-                       Constant, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver)
+                       NonlinearVariationalProblem, NonlinearVariationalSolver,
+                       FunctionSpace)
 from firedrake.fml import (replace_subject, replace_test_function, Term,
                            all_terms, drop)
 from firedrake.formmanipulation import split_form
@@ -88,10 +88,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.domain = domain
         self.field_name = field_name
         self.equation = None
-
-        self.dt = Constant(0.0)
+        R = FunctionSpace(domain.mesh, "R", 0)
+        self.dt = Function(R, val=0.0)
         self.dt.assign(domain.dt)
-        self.original_dt = Constant(0.0)
+        self.original_dt = Function(R, val=0.0)
         self.original_dt.assign(self.dt)
         self.options = options
         self.limiter = limiter
@@ -365,34 +365,33 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
     def nlevels(self):
         return 1
 
-    @abstractproperty
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        l = self.residual.label_map(
+    @property
+    def res(self):
+        """Set up the discretisation's residual."""
+        residual = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.x_out, old_idx=self.idx),
-            map_if_false=drop)
-
-        return l.form
-
-    @abstractproperty
-    def rhs(self):
-        """Set up the time discretisation's right hand side."""
+            map_if_false=drop
+        )
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x1, old_idx=self.idx))
+            map_if_true=replace_subject(self.x1, old_idx=self.idx)
+        )
 
         r = r.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_false=lambda t: -self.dt*t)
+            map_if_false=lambda t: -self.dt * t
+        )
 
-        return r.form
+        residual -= r
+
+        return residual.form
 
     @cached_property
     def solver(self):
         """Set up the problem and the solver."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.x_out, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         solver = NonlinearVariationalSolver(
             problem,
@@ -419,7 +418,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
             # Cap number of subcycles
             if max_subcycles is not None:
-                if self.ncycles >= max_subcycles:
+                if self.ncycles > max_subcycles:
                     logger.warning(
                         'Adaptive subcycling: capping number of subcycles at '
                         f'{max_subcycles}'
@@ -524,20 +523,33 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             self.solver_parameters.setdefault('snes_lag_preconditioner_persists', None)
 
     @cached_property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        l = self.residual.label_map(
+    def res(self):
+        """Set up the discretisation's residual"""
+        residual = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
-            map_if_true=replace_subject(self.x_out, self.idx),
-            map_if_false=drop)
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+            map_if_false=drop
+        )
 
-        return l.form
+        r = self.residual.label_map(
+            all_terms,
+            map_if_true=replace_subject(self.x1, old_idx=self.idx)
+        )
+
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -self.dt * t
+        )
+
+        residual -= r
+
+        return residual.form
 
     @cached_property
     def solver(self):
         """Set up the problem and the solver."""
-        # setup linear solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs - self.rhs, self.x_out, bcs=self.bcs)
+        # setup linear solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
@@ -638,25 +650,27 @@ class BackwardEuler(TimeDiscretisation):
         self.x1 = Function(self.fs)
 
     @property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        l = self.residual.label_map(
+    def res(self):
+        """Set up the discretisation's residual."""
+        residual = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: self.dt*t)
-
-        return l.form
-
-    @property
-    def rhs(self):
-        """Set up the time discretisation's right hand side."""
+            map_if_true=replace_subject(
+                self.x_out, old_idx=self.idx
+            )
+        )
+        residual = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: self.dt*t
+        )
         r = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.x1, old_idx=self.idx),
-            map_if_false=drop)
+            map_if_false=drop
+        )
 
-        return r.form
+        residual -= r
+
+        return residual.form
 
     def apply_cycle(self, x_out, x_in):
         """
@@ -776,26 +790,27 @@ class ThetaMethod(TimeDiscretisation):
         self.x1 = Function(self.fs)
 
     @cached_property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative)."""
-        l = self.residual.label_map(
+    def res(self):
+        """Set up the discretisation's residual."""
+        residual = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: self.theta*self.dt*t)
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx)
+        )
+        residual = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: self.theta * self.dt * t
+        )
 
-        return l.form
-
-    @cached_property
-    def rhs(self):
-        """Set up the time discretisation's right hand side."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x1, old_idx=self.idx))
-        r = r.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: -(1-self.theta)*self.dt*t)
-
-        return r.form
+            map_if_true=replace_subject(self.x1, old_idx=self.idx)
+        )
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -(1 - self.theta) * self.dt * t
+        )
+        residual -= r
+        return residual.form
 
     def apply_cycle(self, x_out, x_in):
         """
@@ -919,60 +934,63 @@ class TR_BDF2(TimeDiscretisation):
         self.xn = Function(self.fs)
 
     @cached_property
-    def lhs(self):
-        """Set up the discretisation's left hand side (the time derivative) for the TR stage."""
-        l = self.residual.label_map(
+    def res(self):
+        """Set up the discretisation's residual for the TR stage."""
+        residual = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.xnpg, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: 0.5*self.gamma*self.dt*t)
+            map_if_true=replace_subject(self.xnpg, old_idx=self.idx)
+        )
+        residual = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: 0.5 * self.gamma * self.dt * t
+        )
 
-        return l.form
-
-    @cached_property
-    def rhs(self):
-        """Set up the time discretisation's right hand side for the TR stage."""
         r = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.xn, old_idx=self.idx))
-        r = r.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: -0.5*self.gamma*self.dt*t)
+            map_if_true=replace_subject(self.xn, old_idx=self.idx)
+        )
+        r = r.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: -0.5 * self.gamma * self.dt * t
+        )
+        residual -= r
 
-        return r.form
+        return residual.form
 
     @cached_property
-    def lhs_bdf2(self):
-        """Set up the discretisation's left hand side (the time derivative) for
-        the BDF2 stage."""
-        l = self.residual.label_map(
+    def res_bdf2(self):
+        """Set up the discretisation's residual for the BDF2 stage."""
+        residual = self.residual.label_map(
             all_terms,
-            map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        l = l.label_map(lambda t: t.has_label(time_derivative),
-                        map_if_false=lambda t: ((1.0-self.gamma)/(2.0-self.gamma))*self.dt*t)
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx)
+        )
+        residual = residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: (1.0 - self.gamma) / (2.0 - self.gamma) * self.dt * t
+        )
 
-        return l.form
-
-    @cached_property
-    def rhs_bdf2(self):
-        """Set up the time discretisation's right hand side for the BDF2 stage."""
         xn = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.xn, old_idx=self.idx),
-            map_if_false=drop)
+            map_if_false=drop
+        )
         xnpg = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_true=replace_subject(self.xnpg, old_idx=self.idx),
-            map_if_false=drop)
+            map_if_false=drop
+        )
 
-        r = (1.0/(self.gamma*(2.0-self.gamma)))*xnpg - ((1.0-self.gamma)**2/(self.gamma*(2.0-self.gamma)))*xn
+        r = (1.0 / (self.gamma * (2.0 - self.gamma))) * xnpg - \
+            ((1.0 - self.gamma) ** 2 / (self.gamma * (2.0 - self.gamma))) * xn
 
-        return r.form
+        residual -= r
+        return residual.form
 
     @cached_property
     def solver_tr(self):
         """Set up the problem and the solver."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs-self.rhs, self.xnpg, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res, self.xnpg, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_tr"
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)
@@ -980,8 +998,8 @@ class TR_BDF2(TimeDiscretisation):
     @cached_property
     def solver_bdf2(self):
         """Set up the problem and the solver."""
-        # setup solver using lhs and rhs defined in derived class
-        problem = NonlinearVariationalProblem(self.lhs_bdf2-self.rhs_bdf2, self.x_out, bcs=self.bcs)
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res_bdf2, self.x_out, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_bdf2"
         return NonlinearVariationalSolver(problem, solver_parameters=self.solver_parameters,
                                           options_prefix=solver_name)

@@ -2,13 +2,14 @@
 
 from os import path, makedirs
 import itertools
-from netCDF4 import Dataset
+from netCDF4 import Dataset, stringtochar
 import sys
 import time
 from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.core.meshes import get_flat_latlon_mesh
 from firedrake import (Function, functionspaceimpl, Constant, COMM_WORLD,
-                       DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
+                       DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile,
+                       MeshGeometry)
 from firedrake.output import VTKFile
 from pyop2.mpi import MPI
 import numpy as np
@@ -257,7 +258,7 @@ class IO(object):
         """
         if hasattr(equation, 'parameters') and equation.parameters is not None:
             logger.info("Physical parameters that take non-default values:")
-            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items()))
+            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items() if type(v) is not MeshGeometry))
 
     def setup_log_courant(self, state_fields, name='u', component="whole",
                           expression=None):
@@ -395,7 +396,7 @@ class IO(object):
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
 
             # Raising exceptions needs to be done in parallel
-            if self.mesh.comm.Get_rank() == 0:
+            if self.mesh.comm.rank == 0:
                 # Create results directory if it doesn't already exist
                 if not path.exists(self.dumpdir):
                     try:
@@ -446,7 +447,7 @@ class IO(object):
 
             if pick_up:
                 # Pick up t idx
-                if self.mesh.comm.Get_rank() == 0:
+                if self.mesh.comm.rank == 0:
                     nc_field_file = Dataset(self.nc_filename, 'r')
                     self.field_t_idx = len(nc_field_file['time'][:])
                     nc_field_file.close()
@@ -763,75 +764,93 @@ class IO(object):
                     self.dumpfile_ll.write(*self.to_dump_latlon)
 
     def create_nc_dump(self, filename, space_names):
-        my_rank = self.mesh.comm.Get_rank()
         self.field_t_idx = 0
 
-        if my_rank == 0:
-            nc_field_file = Dataset(filename, 'w')
+        comm = self.mesh.comm
+        nc_field_file, nc_supports_parallel = make_nc_dataset(filename, 'w', comm)
+
+        if nc_field_file:
             nc_field_file.createDimension('time', None)
             nc_field_file.createVariable('time', float, ('time',))
 
             # Add mesh metadata
+            nc_field_file.createDimension("dim_one", 1)
+            nc_field_file.createDimension("dim_string", 256)
             for metadata_key, metadata_value in self.domain.metadata.items():
                 # If the metadata is None or a Boolean, try converting to string
                 # This is because netCDF can't take these types as options
-                if type(metadata_value) in [type(None), type(True)]:
+                if metadata_value is None or isinstance(metadata_value, bool):
                     output_value = str(metadata_value)
                 else:
                     output_value = metadata_value
 
-                # Get the type from the metadata itself
-                nc_field_file.createVariable(metadata_key, type(output_value), [])
-                nc_field_file.variables[metadata_key][0] = output_value
-
-            # Add coordinates if they are not already in the file
-            for space_name in space_names:
-                if space_name not in self.domain.coords.chi_coords.keys():
-                    # Space not registered
-                    # TODO: we should fail here, but currently there are some spaces
-                    # that we can't output for so instead just skip outputting
-                    pass
+                # At present parallel netCDF crashes when saving strings. To get around this
+                # we instead save string metadata as char arrays of fixed length.
+                if isinstance(output_value, str):
+                    nc_field_file.createVariable(metadata_key, 'S1', ('dim_one', 'dim_string'))
+                    output_char_array = np.array([output_value], dtype='S256')
+                    nc_field_file[metadata_key][:] = stringtochar(output_char_array)
                 else:
-                    coord_fields = self.domain.coords.global_chi_coords[space_name]
-                    num_points = len(self.domain.coords.global_chi_coords[space_name][0])
+                    nc_field_file.createVariable(metadata_key, type(output_value), ('dim_one',))
+                    nc_field_file[metadata_key][0] = output_value
 
-                    nc_field_file.createDimension('coords_'+space_name, num_points)
+        # Add coordinates if they are not already in the file
+        for space_name in space_names:
+            if space_name not in self.domain.coords.chi_coords.keys():
+                # Space not registered
+                # TODO: we should fail here, but currently there are some spaces
+                # that we can't output for so instead just skip outputting
+                pass
+            else:
+                coord_fields = self.domain.coords.chi_coords[space_name]
+                ndofs = coord_fields[0].function_space().dim()
 
-                    for (coord_name, coord_field) in zip(self.domain.coords.coords_name, coord_fields):
-                        nc_field_file.createVariable(coord_name+'_'+space_name, float, 'coords_'+space_name)
-                        nc_field_file.variables[coord_name+'_'+space_name][:] = coord_field[:]
+                if nc_field_file:
+                    nc_field_file.createDimension(f'coords_{space_name}', ndofs)
 
-            # Create variable for storing the field values
-            for field in self.to_dump:
-                field_name = field.name()
-                space_name = field.function_space().name
-                if space_name not in self.domain.coords.chi_coords.keys():
-                    # Space not registered
-                    # TODO: we should fail here, but currently there are some spaces
-                    # that we can't output for so instead just skip outputting
-                    logger.warning(f'netCDF outputting for space {space_name} '
-                                   + 'not yet implemented, so unable to output '
-                                   + f'{field_name} field')
-                else:
+                for coord_name, coord_field in zip(self.domain.coords.coords_name, coord_fields):
+                    if nc_field_file:
+                        nc_field_file.createVariable(f'{coord_name}_{space_name}', float, f'coords_{space_name}')
+
+                    if nc_supports_parallel:
+                        start, stop = self.domain.coords.parallel_array_lims[space_name]
+                        nc_field_file.variables[f'{coord_name}_{space_name}'][start:stop] = coord_field.dat.data_ro
+                    else:
+                        global_coord_field = gather_field_data(coord_field, self.domain)
+                        if comm.rank == 0:
+                            nc_field_file.variables[f'{coord_name}_{space_name}'][...] = global_coord_field
+
+        # Create variable for storing the field values
+        for field in self.to_dump:
+            field_name = field.name()
+            space_name = field.function_space().name
+            if space_name not in self.domain.coords.chi_coords.keys():
+                # Space not registered
+                # TODO: we should fail here, but currently there are some spaces
+                # that we can't output for so instead just skip outputting
+                logger.warning(f'netCDF outputting for space {space_name} '
+                               + 'not yet implemented, so unable to output '
+                               + f'{field_name} field')
+            else:
+                if nc_field_file:
                     nc_field_file.createGroup(field_name)
-                    nc_field_file[field_name].createVariable('field_values', float, ('coords_'+space_name, 'time'))
-
+                    nc_field_file[field_name].createVariable('field_values', float, (f'coords_{space_name}', 'time'))
+        if nc_field_file:
             nc_field_file.close()
 
     def write_nc_dump(self, t):
-
         comm = self.mesh.comm
-        my_rank = comm.Get_rank()
-        comm_size = comm.Get_size()
+        nc_field_file, nc_supports_parallel = make_nc_dataset(self.nc_filename, 'a', comm)
 
-        # Open file to add time
-        if my_rank == 0:
-            nc_field_file = Dataset(self.nc_filename, 'a')
+        if nc_field_file and 'time' in nc_field_file.variables.keys():
+            # Unbounded variables need to be accessed collectively
+            # (https://unidata.github.io/netcdf4-python/#parallel-io)
+            if nc_supports_parallel:
+                nc_field_file['time'].set_collective(True)
             nc_field_file['time'][self.field_t_idx] = t
 
         # Loop through output field data here
-        num_fields = len(self.to_dump)
-        for i, field in enumerate(self.to_dump):
+        for field in self.to_dump:
             field_name = field.name()
             space_name = field.function_space().name
 
@@ -845,29 +864,16 @@ class IO(object):
             # Scalar elements
             # -------------------------------------------------------- #
             else:
-                j = 0
-                # For most processors send data to first processor
-                if my_rank != 0:
-                    # Make a tag to uniquely identify this call
-                    my_tag = comm_size*(num_fields*j + i) + my_rank
-                    comm.send(field.dat.data_ro[:], dest=0, tag=my_tag)
+                if nc_supports_parallel:
+                    nc_field_file[field_name]['field_values'].set_collective(True)
+                    start, stop = self.domain.coords.parallel_array_lims[space_name]
+                    nc_field_file[field_name]['field_values'][start:stop, self.field_t_idx] = field.dat.data_ro
                 else:
-                    # Set up array to store full data in
-                    total_data_size = self.domain.coords.parallel_array_lims[space_name][comm_size-1][1]+1
-                    single_proc_data = np.zeros(total_data_size)
-                    # Get data for this processor first
-                    (low_lim, up_lim) = self.domain.coords.parallel_array_lims[space_name][my_rank][:]
-                    single_proc_data[low_lim:up_lim+1] = field.dat.data_ro[:]
-                    # Receive data from other processors
-                    for procid in range(1, comm_size):
-                        my_tag = comm_size*(num_fields*j + i) + procid
-                        incoming_data = comm.recv(source=procid, tag=my_tag)
-                        (low_lim, up_lim) = self.domain.coords.parallel_array_lims[space_name][procid][:]
-                        single_proc_data[low_lim:up_lim+1] = incoming_data[:]
-                    # Store whole field data
-                    nc_field_file[field_name].variables['field_values'][:, self.field_t_idx] = single_proc_data[:]
+                    global_field_data = gather_field_data(field, self.domain)
+                    if comm.rank == 0:
+                        nc_field_file[field_name]['field_values'][:, self.field_t_idx] = global_field_data
 
-        if my_rank == 0:
+        if nc_field_file:
             nc_field_file.close()
 
         self.field_t_idx += 1
@@ -917,3 +923,71 @@ def topo_sort(field_deps):
                           if f not in schedule)
         raise RuntimeError("Field dependencies have a cycle:\n\n%s" % cycle)
     return list(map(name2field.__getitem__, schedule))
+
+
+def make_nc_dataset(filename, access, comm):
+    """Create a netCDF data set, possibly in parallel.
+
+    Args:
+        filename (str): The filename.
+        access (str): The access descriptor - ``r``, ``w`` or ``a``.
+        comm: The communicator.
+
+    Returns:
+        tuple: 2-tuple of :class:`netCDF4_netCDF4.Dataset` (or `None`) and `bool`
+            indicating whether netCDF supports parallel usage. If parallel is not
+            supported then the dataset will be `None` on all but rank 0.
+
+    A warning will be thrown if this function is called in parallel and a
+    non-parallel netCDF4 is installed.
+
+    """
+    try:
+        nc_field_file = Dataset(filename, access, parallel=True)
+        nc_supports_parallel = True
+    except ValueError:
+        # parallel netCDF not available, use the serial version instead
+        if comm.size > 1:
+            import warnings
+            warnings.warn(
+                "Serial netCDF in use even though you are running in parallel. This "
+                "is especially inefficient at high core counts. Please refer to the "
+                "documentation for information about installing a parallel version "
+                "of netCDF.",
+                UserWarning,
+            )
+
+        if comm.rank == 0:
+            nc_field_file = Dataset(filename, access, parallel=False)
+        else:
+            nc_field_file = None
+        nc_supports_parallel = False
+    return nc_field_file, nc_supports_parallel
+
+
+def gather_field_data(field, domain):
+    """Gather global field data into a single array on rank 0.
+
+    Args:
+        field (:class:`firedrake.Function`): The field to gather.
+        domain (:class:`Domain`): The domain.
+
+    Returns:
+        :class:`numpy.ndarray` that is the concatenation of all DoFs on
+        all ranks.
+
+    Note that this operation is *extremely inefficient* when run with large
+    amounts of parallelism. Avoid calling if at all possible.
+
+    """
+    comm = domain.mesh.comm
+
+    if comm.size == 1:
+        return field.dat.data_ro.copy()
+
+    gathered_data = comm.gather(field.dat.data_ro)
+    if comm.rank == 0:
+        return np.concatenate(gathered_data)
+    else:
+        assert gathered_data is None
+        return None

@@ -26,8 +26,8 @@ from gusto import (
     logger, SUPGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
     compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
-    SubcyclingOptions, dx, TestFunction, TrialFunction, ZComponent,
-    LinearVariationalProblem, LinearVariationalSolver
+    SubcyclingOptions, LinearVariationalProblem, LinearVariationalSolver,
+    TestFunction, TrialFunction, dx
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -115,7 +115,7 @@ def skamarock_klemp_nonhydrostatic(
             dump_vtus=False, dump_nc=True,
         )
 
-    diagnostic_fields = [Perturbation('theta'), ZComponent('u')]
+    diagnostic_fields = [Perturbation('theta')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
@@ -140,9 +140,7 @@ def skamarock_klemp_nonhydrostatic(
 
     # Linear solver
     if hydrostatic:
-        linear_solver = CompressibleSolver(
-            eqns, alpha=alpha
-        )
+        linear_solver = CompressibleSolver(eqns, alpha=alpha)
     else:
         linear_solver = CompressibleSolver(eqns)
 
