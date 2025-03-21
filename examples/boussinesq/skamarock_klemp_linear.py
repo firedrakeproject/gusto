@@ -63,7 +63,7 @@ def skamarock_klemp_linear_bouss(
     domain = Domain(mesh, dt, 'CG', element_order)
 
     # Equation
-    parameters = BoussinesqParameters(cs=cs)
+    parameters = BoussinesqParameters(mesh, cs=cs)
     eqns = LinearBoussinesqEquations(domain, parameters)
 
     # I/O

@@ -35,7 +35,7 @@ def run_suppress_vertical_wind(dirname, physics_coupling):
 
     # Set up equation
     tracers = [WaterVapour()]
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqn = CompressibleEulerEquations(domain, parameters, active_tracers=tracers)
 
     # I/O

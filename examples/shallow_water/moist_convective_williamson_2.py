@@ -76,7 +76,7 @@ def moist_convect_williamson_2(
     _, phi, _ = lonlatr_from_xyz(x, y, z)
 
     # Equations
-    parameters = ShallowWaterParameters(H=mean_depth, g=g)
+    parameters = ShallowWaterParameters(mesh, H=mean_depth, g=g)
     Omega = parameters.Omega
     fexpr = 2*Omega*z/radius
 
