@@ -850,7 +850,7 @@ class MoistThermalSWSolver(TimesteppingSolver):
 
         P_expr = (1/denominator) * (qv * (1 - qvbar*sat_expr*(nu*beta2/g)**2)
                                     + b * (nu*sat_expr/g + qvbar*beta2*((nu/g)**2))
-                                    + D * (sat_expr/Dbar - (qvbar*nu*beta2*sat_expr)/(g*Dbar)))
+                                    + D * (sat_expr/Dbar + (qvbar*nu*beta2*sat_expr)/(g*Dbar)))
 
 
         n = FacetNormal(equation.domain.mesh)
