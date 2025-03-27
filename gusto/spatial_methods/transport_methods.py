@@ -10,7 +10,7 @@ from firedrake.fml import Term, keep, drop
 from gusto.core.configuration import IntegrateByParts, TransportEquationType
 from gusto.core.labels import (
     prognostic, transport, transporting_velocity, ibp_label, mass_weighted,
-    all_but_last, horizontal_transport, vertical_transport, explicit
+    all_but_last, horizontal_transport, vertical_transport
 )
 from gusto.core.logging import logger
 from gusto.spatial_methods.spatial_methods import SpatialMethod
@@ -151,7 +151,8 @@ class TransportMethod(SpatialMethod):
                     map_if_true=lambda _: new_vertical_term)
             else:
                 raise RuntimeError('Found multiple transport terms for the same '
-                                    'variable in the equation where there should only be one')
+                                   'variable in the equation where there should only be one')
+
 
 # ---------------------------------------------------------------------------- #
 # TransportMethod for using underlying default transport form
