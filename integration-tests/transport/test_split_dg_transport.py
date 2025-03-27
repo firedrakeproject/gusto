@@ -21,7 +21,7 @@ def test_split_dg_transport_scalar(tmpdir, tracer_setup):
     eqn = AdvectionEquation(domain, V, "f")
     eqn = split_hv_advective_form(eqn, "f")
 
-    transport_method = Split_DGUpwind(eqn, "f")
+    transport_method = SplitDGUpwind(eqn, "f")
     transport_scheme = SSPRK3(domain)
 
     time_varying_velocity = False
@@ -48,7 +48,7 @@ def test_split_dg_transport_vector(tmpdir, tracer_setup):
     eqn = split_hv_advective_form(eqn, "f")
 
     transport_scheme = SSPRK3(domain)
-    transport_method = Split_DGUpwind(eqn, "f")
+    transport_method = SplitDGUpwind(eqn, "f")
 
     time_varying_velocity = False
     timestepper = PrescribedTransport(

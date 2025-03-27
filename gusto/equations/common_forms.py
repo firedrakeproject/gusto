@@ -7,7 +7,8 @@ from firedrake import (dx, dot, grad, div, inner, outer, cross, curl, split,
 from firedrake.fml import subject, drop
 from gusto.core.configuration import TransportEquationType
 from gusto.core.labels import (transport, transporting_velocity, diffusion,
-                               prognostic, linearisation, horizontal, vertical)
+                               prognostic, linearisation, horizontal_transport,
+                               vertical_transport)
 
 __all__ = ["advection_form", "advection_form_1d", "continuity_form",
            "continuity_form_1d", "vector_invariant_form",
@@ -385,8 +386,28 @@ def split_hv_advective_form(equation, field_name):
             u_vertical = k*inner(uadv, k)
             u_horizontal = uadv - u_vertical
 
-            vertical_adv_term = prognostic(vertical(transport(transporting_velocity(inner(test, dot(u_vertical, grad(q)))*dx, uadv), TransportEquationType.advective)), field_name)
-            horizontal_adv_term = prognostic(horizontal(transport(transporting_velocity(inner(test, dot(u_horizontal, grad(q)))*dx, uadv), TransportEquationType.advective)), field_name)
+            vertical_adv_term = prognostic(
+                vertical_transport(
+                    transport(
+                        transporting_velocity(
+                            inner(test, dot(u_vertical, grad(q))) * dx, uadv
+                        ),
+                        TransportEquationType.advective
+                    )
+                ),
+                field_name
+            )
+            horizontal_adv_term = prognostic(
+                horizontal_transport(
+                    transport(
+                        transporting_velocity(
+                            inner(test, dot(u_horizontal, grad(q))) * dx, uadv
+                        ),
+                        TransportEquationType.advective
+                    )
+                ),
+                field_name
+            )
 
             # Add linearisations of new terms if required
             if (t.has_label(linearisation)):
@@ -395,10 +416,26 @@ def split_hv_advective_form(equation, field_name):
                 u_trial_horiz = u_trial - u_trial_vert
                 qbar = split(equation.X_ref)[idx]
                 # Add linearisation to adv_term
-                linear_hori_term = horizontal(transport(transporting_velocity(test*dot(u_trial_horiz, grad(qbar))*dx, u_trial), TransportEquationType.advective))
+                linear_hori_term = horizontal_transport(
+                    transport(
+                        transporting_velocity(
+                            test * dot(u_trial_horiz, grad(qbar)) * dx,
+                            u_trial
+                        ),
+                        TransportEquationType.advective
+                    )
+                )
                 adv_horiz_term = linearisation(horizontal_adv_term, linear_hori_term)
                 # Add linearisation to div_term
-                linear_vert_term = horizontal(transport(transporting_velocity(test*dot(u_trial_vert, grad(qbar))*dx, u_trial), TransportEquationType.advective))
+                linear_vert_term = vertical_transport(
+                    transport(
+                        transporting_velocity(
+                            test * dot(u_trial_vert, grad(qbar)) * dx,
+                            u_trial
+                        ),
+                        TransportEquationType.advective
+                    )
+                )
                 adv_vert_term = linearisation(vertical_adv_term, linear_vert_term)
             else:
                 adv_vert_term = vertical_adv_term

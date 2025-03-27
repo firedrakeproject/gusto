@@ -15,19 +15,19 @@ class SpatialMethod(object):
     The base object for describing a spatial discretisation of some term.
     """
 
-    def __init__(self, equation, variable, term_label):
+    def __init__(self, equation, variable, term_labels):
         """
         Args:
             equation (:class:`PrognosticEquation`): the equation, which includes
                 the original type of this term.
             variable (str): name of the variable to set the method for
-            term_label (:class:`Label`): the label specifying which type of term
-                to be discretised.
+            term_labels (list of :class:`Label`, optional): the label specifying
+                which type of term to be discretised.
         """
         self.equation = equation
         self.variable = variable
         self.domain = self.equation.domain
-        self.term_label = term_label
+        self.term_labels = term_labels
 
         if hasattr(equation, "field_names"):
             # Equation with multiple prognostic variables
@@ -38,14 +38,16 @@ class SpatialMethod(object):
             self.field = equation.X
             self.test = equation.test
 
-        # Find the original term to be used
-        self.original_form = equation.residual.label_map(
-            lambda t: t.has_label(term_label) and t.get(prognostic) == variable,
-            map_if_true=keep, map_if_false=drop)
+        # Loop through terms
+        for term_label in term_labels:
+            # Find the original term to be used
+            self.original_form = equation.residual.label_map(
+                lambda t: t.has_label(term_label) and t.get(prognostic) == variable,
+                map_if_true=keep, map_if_false=drop)
 
-        num_terms = len(self.original_form.terms)
-        assert num_terms >= 1, f'Unable to find {term_label.label} term ' \
-            + f'for {variable}. {num_terms} found'
+            num_terms = len(self.original_form.terms)
+            assert num_terms == 1, f'Unable to find {term_label.label} term ' \
+                + f'for {variable}. {num_terms} found'
 
     def replace_form(self, equation):
         """
