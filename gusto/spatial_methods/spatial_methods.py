@@ -28,7 +28,7 @@ class SpatialMethod(object):
         self.variable = variable
         self.domain = self.equation.domain
         # Most schemes have only one term label
-        self.term_label = term_label[0]
+        self.term_label = term_labels[0]
 
         if hasattr(equation, "field_names"):
             # Equation with multiple prognostic variables
@@ -44,9 +44,14 @@ class SpatialMethod(object):
             lambda t: t.has_label(self.term_label) and t.get(prognostic) == variable,
             map_if_true=keep, map_if_false=drop)
 
-        num_terms_per_label = len(self.original_form.terms)/len(term_labels)
-        assert num_terms_per_label == 1, f'Unable to find {term_label.label} term ' \
-            + f'for {variable}. {num_terms} found'
+        num_terms_per_label = len(self.original_form.terms) // len(term_labels)
+        assert len(self.original_form.terms) % len(term_labels) == 0, (
+            "The terms do not divide evenly into labels."
+        )
+        assert num_terms_per_label == 1, (
+            f"Unable to find terms {[term.label for term in term_labels]} for "
+            f"{variable}. {num_terms_per_label} terms per expected term found"
+        )
 
     def replace_form(self, equation):
         """

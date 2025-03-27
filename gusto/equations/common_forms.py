@@ -348,6 +348,7 @@ def tracer_conservative_form(test, q, rho, ubar):
 
     return transport(form, TransportEquationType.tracer_conservative)
 
+
 def split_advection_form(test, q, ubar, ubar_full):
     u"""
     The form corresponding to the advective transport operator in either horzontal
@@ -369,6 +370,7 @@ def split_advection_form(test, q, ubar, ubar_full):
     form = transporting_velocity(L, ubar_full)
 
     return transport(form, TransportEquationType.advective)
+
 
 def split_linear_advection_form(test, qbar, ubar, ubar_full):
     """
