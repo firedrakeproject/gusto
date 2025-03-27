@@ -7,14 +7,15 @@ from firedrake import (dx, dot, grad, div, inner, outer, cross, curl, split,
 from firedrake.fml import subject, drop
 from gusto.core.configuration import TransportEquationType
 from gusto.core.labels import (transport, transporting_velocity, diffusion,
-                               prognostic, linearisation)
+                               prognostic, linearisation, horizontal_transport,
+                               vertical_transport)
 
 __all__ = ["advection_form", "advection_form_1d", "continuity_form",
            "continuity_form_1d", "vector_invariant_form",
            "kinetic_energy_form", "advection_equation_circulation_form",
            "diffusion_form", "diffusion_form_1d",
            "linear_advection_form", "linear_continuity_form",
-           "split_continuity_form", "tracer_conservative_form"]
+           "split_continuity_form", "tracer_conservative_form", "split_hv_advective_form"]
 
 
 def advection_form(test, q, ubar):
@@ -346,3 +347,126 @@ def tracer_conservative_form(test, q, rho, ubar):
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.tracer_conservative)
+
+
+def split_advection_form(test, q, ubar, ubar_full):
+    u"""
+    The form corresponding to the advective transport operator in either horzontal
+    or vertical directions (dependent on ubar).
+
+    This describes either u_h.(∇)q or w dq/dz, for transporting velocity u and transported q.
+
+    Args:
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity in a subset of dimensions.
+        ubar_full (:class:`ufl.Expr`): the transporting velocity in all dimensions.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    L = inner(test, dot(ubar, grad(q)))*dx
+    form = transporting_velocity(L, ubar_full)
+
+    return transport(form, TransportEquationType.advective)
+
+
+def split_linear_advection_form(test, qbar, ubar, ubar_full):
+    """
+    The form corresponding to the linearised advective transport operator in
+    either horzontal or vertical directions (dependent on ubar).
+
+    Args:
+        test (:class:`TestFunction`): the test function.
+        qbar (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity in a subset of dimensions.
+        ubar_full (:class:`ufl.Expr`): the transporting velocity in all dimensions.
+
+    Returns:
+        :class:`LabelledForm`: a labelled transport form.
+    """
+
+    L = test*dot(ubar, grad(qbar))*dx
+    form = transporting_velocity(L, ubar_full)
+
+    return transport(form, TransportEquationType.advective)
+
+
+def split_hv_advective_form(equation, field_name):
+    u"""
+    Splits advective term into horizontal and vertical terms.
+    This describes splitting u.∇(q) terms into u_h.(∇)q and w dq/dz,
+    for transporting velocity u and transported q.
+    Args:
+        equation (:class:`PrognosticEquation`): the model's equation.
+    Returns:
+        :class:`PrognosticEquation`: the model's equation.
+    """
+    k = equation.domain.k   # vertical unit vector
+    for t in equation.residual:
+        if (t.get(transport) == TransportEquationType.advective and t.get(prognostic) == field_name):
+            # Get fields and test functions
+            subj = t.get(subject)
+
+            # u is either a prognostic or prescribed field
+            if (hasattr(equation, "field_names")
+               and 'u' in equation.field_names):
+                idx = equation.field_names.index(field_name)
+                W = equation.function_space
+                test = TestFunctions(W)[idx]
+                q = split(subj)[idx]
+                u_idx = equation.field_names.index('u')
+                uadv = split(equation.X)[u_idx]
+            elif 'u' in equation.prescribed_fields._field_names:
+                uadv = equation.prescribed_fields('u')
+                q = subj
+                W = equation.function_space
+                test = TestFunction(W)
+            else:
+                raise ValueError('Cannot get velocity field')
+
+            # Create new advective and divergence terms
+            u_vertical = k*inner(uadv, k)
+            u_horizontal = uadv - u_vertical
+            vertical_adv_term = prognostic(
+                vertical_transport(
+                    split_advection_form(test, q, u_vertical, uadv)
+                ),
+                field_name
+            )
+            horizontal_adv_term = prognostic(
+                horizontal_transport(
+                    split_advection_form(test, q, u_horizontal, uadv)
+                ),
+                field_name
+            )
+
+            # Add linearisations of new terms if required
+            if (t.has_label(linearisation)):
+                u_trial = TrialFunctions(W)[u_idx]
+                u_trial_vert = k*inner(u_trial, k)
+                u_trial_horiz = u_trial - u_trial_vert
+                qbar = split(equation.X_ref)[idx]
+                # Add linearisations
+                linear_hori_term = horizontal_transport(
+                    split_linear_advection_form(test, qbar, u_trial_horiz, u_trial)
+                )
+                adv_horiz_term = linearisation(horizontal_adv_term, linear_hori_term)
+
+                linear_vert_term = vertical_transport(
+                    split_linear_advection_form(test, qbar, u_trial_vert, u_trial)
+                )
+                adv_vert_term = linearisation(vertical_adv_term, linear_vert_term)
+            else:
+                adv_vert_term = vertical_adv_term
+                adv_horiz_term = horizontal_adv_term
+            # Drop old term
+            equation.residual = equation.residual.label_map(
+                lambda t: t.get(transport) == TransportEquationType.advective and t.get(prognostic) == field_name,
+                map_if_true=drop)
+
+            # Add new terms onto residual
+            equation.residual += subject(adv_horiz_term, subj) + subject(adv_vert_term, subj)
+
+    return equation
