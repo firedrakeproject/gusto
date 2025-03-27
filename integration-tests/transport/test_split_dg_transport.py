@@ -12,9 +12,9 @@ def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
-
-def test_split_dg_transport_scalar(tmpdir, tracer_setup):
-    setup = tracer_setup(tmpdir, "slice")
+@pytest.mark.parametrize("geometry", ["slice", "sphere"])
+def test_split_dg_transport_scalar(tmpdir, geometry, tracer_setup):
+    setup = tracer_setup(tmpdir, geometry)
     domain = setup.domain
     V = domain.spaces("DG")
 
@@ -37,9 +37,9 @@ def test_split_dg_transport_scalar(tmpdir, tracer_setup):
     assert error < setup.tol, \
         'The transport error is greater than the permitted tolerance'
 
-
-def test_split_dg_transport_vector(tmpdir, tracer_setup):
-    setup = tracer_setup(tmpdir, "slice")
+@pytest.mark.parametrize("geometry", ["slice", "sphere"])
+def test_split_dg_transport_vector(tmpdir, geometry, tracer_setup):
+    setup = tracer_setup(tmpdir, geometry)
     domain = setup.domain
     gdim = domain.mesh.geometric_dimension()
     f_init = as_vector([setup.f_init]*gdim)

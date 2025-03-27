@@ -347,13 +347,9 @@ class SplitDGUpwind(TransportMethod):
         # Determine appropriate form to use
         # -------------------------------------------------------------------- #
         # first check for 1d mesh and scalar velocity space
-        if equation.domain.on_sphere:
-            raise NotImplementedError('Split hv Upwind transport scheme has not been '
-                                      + 'implemented for spherical geometry')
         if equation.domain.mesh.topological_dimension() == 1 and len(equation.domain.spaces("HDiv").shape) == 0:
             assert not vector_manifold_correction
             raise ValueError('You cannot do horizontal and vertical splitting in 1D')
-
         else:
             if self.transport_equation_type == TransportEquationType.advective:
 
