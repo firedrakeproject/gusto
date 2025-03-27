@@ -348,11 +348,53 @@ def tracer_conservative_form(test, q, rho, ubar):
 
     return transport(form, TransportEquationType.tracer_conservative)
 
+def split_advection_form(test, q, ubar, ubar_full):
+    u"""
+    The form corresponding to the advective transport operator in either horzontal
+    or vertical directions (dependent on ubar).
+
+    This describes either u_h.(∇)q or w dq/dz, for transporting velocity u and transported q.
+
+    Args:
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity in a subset of dimensions.
+        ubar_full (:class:`ufl.Expr`): the transporting velocity in all dimensions.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    L = inner(test, dot(ubar, grad(q)))*dx
+    form = transporting_velocity(L, ubar_full)
+
+    return transport(form, TransportEquationType.advective)
+
+def split_linear_advection_form(test, qbar, ubar, ubar_full):
+    """
+    The form corresponding to the linearised advective transport operator in
+    either horzontal or vertical directions (dependent on ubar).
+
+    Args:
+        test (:class:`TestFunction`): the test function.
+        qbar (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity in a subset of dimensions.
+        ubar_full (:class:`ufl.Expr`): the transporting velocity in all dimensions.
+
+    Returns:
+        :class:`LabelledForm`: a labelled transport form.
+    """
+
+    L = test*dot(ubar, grad(qbar))*dx
+    form = transporting_velocity(L, ubar_full)
+
+    return transport(form, TransportEquationType.advective)
+
 
 def split_hv_advective_form(equation, field_name):
     u"""
     Splits advective term into horizontal and vertical terms.
-    This describes splitting u.∇(q) terms into u.(∇_h)q and w dq/dz,
+    This describes splitting u.∇(q) terms into u_h.(∇)q and w dq/dz,
     for transporting velocity u and transported q.
     Args:
         equation (:class:`PrognosticEquation`): the model's equation.
@@ -385,26 +427,15 @@ def split_hv_advective_form(equation, field_name):
             # Create new advective and divergence terms
             u_vertical = k*inner(uadv, k)
             u_horizontal = uadv - u_vertical
-
             vertical_adv_term = prognostic(
                 vertical_transport(
-                    transport(
-                        transporting_velocity(
-                            inner(test, dot(u_vertical, grad(q))) * dx, uadv
-                        ),
-                        TransportEquationType.advective
-                    )
+                    split_advection_form(test, q, u_vertical, uadv)
                 ),
                 field_name
             )
             horizontal_adv_term = prognostic(
                 horizontal_transport(
-                    transport(
-                        transporting_velocity(
-                            inner(test, dot(u_horizontal, grad(q))) * dx, uadv
-                        ),
-                        TransportEquationType.advective
-                    )
+                    split_advection_form(test, q, u_horizontal, uadv)
                 ),
                 field_name
             )
@@ -415,26 +446,14 @@ def split_hv_advective_form(equation, field_name):
                 u_trial_vert = k*inner(u_trial, k)
                 u_trial_horiz = u_trial - u_trial_vert
                 qbar = split(equation.X_ref)[idx]
-                # Add linearisation to adv_term
+                # Add linearisations
                 linear_hori_term = horizontal_transport(
-                    transport(
-                        transporting_velocity(
-                            test * dot(u_trial_horiz, grad(qbar)) * dx,
-                            u_trial
-                        ),
-                        TransportEquationType.advective
-                    )
+                    split_linear_advection_form(test, qbar, u_trial_horiz, u_trial)
                 )
                 adv_horiz_term = linearisation(horizontal_adv_term, linear_hori_term)
-                # Add linearisation to div_term
+
                 linear_vert_term = vertical_transport(
-                    transport(
-                        transporting_velocity(
-                            test * dot(u_trial_vert, grad(qbar)) * dx,
-                            u_trial
-                        ),
-                        TransportEquationType.advective
-                    )
+                    split_linear_advection_form(test, qbar, u_trial_vert, u_trial)
                 )
                 adv_vert_term = linearisation(vertical_adv_term, linear_vert_term)
             else:

@@ -21,13 +21,14 @@ class SpatialMethod(object):
             equation (:class:`PrognosticEquation`): the equation, which includes
                 the original type of this term.
             variable (str): name of the variable to set the method for
-            term_labels (list of :class:`Label`, optional): the label specifying
+            term_labels (list of :class:`Label`): list of the labels specifying
                 which type of term to be discretised.
         """
         self.equation = equation
         self.variable = variable
         self.domain = self.equation.domain
-        self.term_labels = term_labels
+        # Most schemes have only one term label
+        self.term_label = term_label[0]
 
         if hasattr(equation, "field_names"):
             # Equation with multiple prognostic variables
@@ -38,16 +39,14 @@ class SpatialMethod(object):
             self.field = equation.X
             self.test = equation.test
 
-        # Loop through terms
-        for term_label in term_labels:
-            # Find the original term to be used
-            self.original_form = equation.residual.label_map(
-                lambda t: t.has_label(term_label) and t.get(prognostic) == variable,
-                map_if_true=keep, map_if_false=drop)
+        # Find the original term to be used (for first term label)
+        self.original_form = equation.residual.label_map(
+            lambda t: t.has_label(self.term_label) and t.get(prognostic) == variable,
+            map_if_true=keep, map_if_false=drop)
 
-            num_terms = len(self.original_form.terms)
-            assert num_terms == 1, f'Unable to find {term_label.label} term ' \
-                + f'for {variable}. {num_terms} found'
+        num_terms_per_label = len(self.original_form.terms)/len(term_labels)
+        assert num_terms_per_label == 1, f'Unable to find {term_label.label} term ' \
+            + f'for {variable}. {num_terms} found'
 
     def replace_form(self, equation):
         """
