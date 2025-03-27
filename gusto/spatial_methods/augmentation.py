@@ -258,13 +258,13 @@ class VorticityTransport(Augmentation):
 class MeanMixingRatio(Augmentation):
     """
     This augments a transport problem involving a mixing ratio to
-    include a mean mixing ratio field. This enables posivity to be 
+    include a mean mixing ratio field. This enables posivity to be
     ensured during conservative transport.
 
     Args:
         domain (:class:`Domain`): The domain object.
         eqns (:class:`PrognosticEquationSet`): The overarching equation set.
-        mX_names (:class: list): A list of mixing ratios that 
+        mX_names (:class: list): A list of mixing ratios that
         require augmented mean mixing ratio fields.
     """
 
@@ -327,8 +327,8 @@ class MeanMixingRatio(Augmentation):
         # Contruct projectors for computing the mean mixing ratios
         self.mX_ins = [Function(mX_spaces[i]) for i in range(self.mX_num)]
         self.mean_outs = [Function(mean_spaces[i]) for i in range(self.mX_num)]
-        self.compute_means = [Projector(self.mX_ins[i], self.mean_outs[i]) \
-                               for i in range(self.mX_num)]
+        self.compute_means = [Projector(self.mX_ins[i], self.mean_outs[i])
+                              for i in range(self.mX_num)]
 
         # Create the new mixed function space:
         self.fs = MixedFunctionSpace(exist_spaces)
@@ -362,7 +362,7 @@ class MeanMixingRatio(Augmentation):
         # Create the new residual
         new_residual = orig_residual
 
-        # For each mean mixing ratio, copy across the terms relating to 
+        # For each mean mixing ratio, copy across the terms relating to
         # the mixing ratio and replace the test function and trial function.
         for i in range(self.mX_num):
             mean_residual = equation.residual.label_map(
@@ -370,7 +370,7 @@ class MeanMixingRatio(Augmentation):
                 map_if_false=drop
             )
 
-            # Replace all instances of the original mixing ratio with 
+            # Replace all instances of the original mixing ratio with
             # the mean version:
             for j in range(self.mX_num):
                 mean_residual = mean_residual.label_map(
@@ -395,7 +395,7 @@ class MeanMixingRatio(Augmentation):
 
         self.residual = subject(new_residual, self.X)
 
-        #Check these two forms
+        # Check these two forms
         print('\n Original equation with residual of length, ', len(equation.residual))
         print('\n Augmented equation with residual of length, ', len(self.residual))
         print('\n')
@@ -419,19 +419,19 @@ class MeanMixingRatio(Augmentation):
                     # Replace mixing ratio
                     mass_term_new = mass_term.label_map(
                         all_terms,
-                        replace_subject(self.X, old_idx = mX_idx, new_idx = mX_idx)
+                        replace_subject(self.X, old_idx=mX_idx, new_idx=mX_idx)
                     )
 
                     # Replace density
                     mass_term_new = mass_term_new.label_map(
                         all_terms,
-                        replace_subject(self.X, old_idx = rho_idx, new_idx = rho_idx)
+                        replace_subject(self.X, old_idx=rho_idx, new_idx=rho_idx)
                     )
 
                     # Replace test function
                     mass_term_new = mass_term_new.label_map(
                         all_terms,
-                        replace_test_function(self.tests, old_idx = mX_idx, new_idx = mX_idx)
+                        replace_test_function(self.tests, old_idx=mX_idx, new_idx=mX_idx)
                     )
 
                 elif field in self.mean_names:
@@ -443,19 +443,19 @@ class MeanMixingRatio(Augmentation):
                     # Replace mixing ratio
                     mass_term_new = mass_term.label_map(
                         all_terms,
-                        replace_subject(self.X, old_idx = mX_idx, new_idx = mean_idx)
+                        replace_subject(self.X, old_idx=mX_idx, new_idx=mean_idx)
                     )
 
                     # Replace density
                     mass_term_new = mass_term_new.label_map(
                         all_terms,
-                        replace_subject(self.X, old_idx = rho_idx, new_idx = rho_idx)
+                        replace_subject(self.X, old_idx=rho_idx, new_idx=rho_idx)
                     )
 
                     # Replace test function
                     mass_term_new = mass_term_new.label_map(
                         all_terms,
-                        replace_test_function(self.tests, old_idx = mX_idx, new_idx = mean_idx)
+                        replace_test_function(self.tests, old_idx=mX_idx, new_idx=mean_idx)
                     )
 
                 # Carry across original labels here.
@@ -487,7 +487,6 @@ class MeanMixingRatio(Augmentation):
                 print(term.form)
                 print('\n')
 
-
     def pre_apply(self, x_in):
         """
         Sets the original fields, i.e. not the mean mixing ratios
@@ -517,7 +516,7 @@ class MeanMixingRatio(Augmentation):
 
     def update(self, x_in_mixed):
         """
-        Compute the mean mixing ratio field by projecting the mixing 
+        Compute the mean mixing ratio field by projecting the mixing
         ratio from DG1 into DG0.
 
         To DO: Shouldn't this be a conservative projection??!!
@@ -566,4 +565,3 @@ class MeanMixingRatio(Augmentation):
             print(np.max(mX_pre[i].dat.data))
             print(f'\n max of {self.mean_names[i]} field:')
             print(np.max(means[i].dat.data))
-
