@@ -227,7 +227,7 @@ class SplitPhysicsTimestepper(Timestepper):
 
         super().timestep()
 
-        print('just performed transport in split phyics timestepper')
+        print('Transport complete in the split phyics timestepper')
 
         for field in self.x.np1:
             print(np.min(field.dat.data))
@@ -235,10 +235,6 @@ class SplitPhysicsTimestepper(Timestepper):
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
                 scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
-
-        # Perform augmented limiting if required:
-        if self.augmentation is not None:
-            self.augmentation.limit(self.x.np1)
 
 
 class SplitPrescribedTransport(Timestepper):

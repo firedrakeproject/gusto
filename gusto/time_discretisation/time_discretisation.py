@@ -179,8 +179,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.idx = None
 
         if self.augmentation is not None:
-            print('we have an augmentation')
-            print(self.augmentation.name)
             self.fs = self.augmentation.fs
             self.residual = self.augmentation.residual
             self.idx = None
