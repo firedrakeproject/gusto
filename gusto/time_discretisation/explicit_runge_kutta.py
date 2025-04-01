@@ -450,6 +450,13 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
         for i in range(self.nStages):
             self.solve_stage(x_in, i)
+            print('\n solving RK stage', i)
+
+            # Apply limiting if using the mean mixing
+            # ratio augmentation.
+            if self.augmentation is not None:
+                if self.augmentation.name == 'mean_mixing_ratio':
+                    self.augmentation.limit(self.x1)
         x_out.assign(self.x1)
 
 
