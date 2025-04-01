@@ -236,10 +236,13 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         # Check if there are any mass-weighted terms:
         if len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0:
+            if self.augmentation is not None:
+                if self.augmentation.name == 'mean_mixing_ratio':
+                    field_names = self.augmentation.field_names
+            else:
+                field_names = equation.field_names
+
             for field in field_names:
-
-                print(field)
-
                 # Check if the mass term for this prognostic is mass-weighted
                 if len(self.residual.label_map((
                     lambda t: t.get(prognostic) == field
