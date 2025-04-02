@@ -23,8 +23,8 @@ from gusto.core.logging import (
     logger, DEBUG, logging_ksp_monitor_true_residual,
     attach_custom_monitor
 )
-from gusto.core.labels import linearisation, time_derivative, hydrostatic
-from gusto.equations import thermodynamics
+from gusto.core.labels import linearisation, time_derivative
+from gusto.equations import thermodynamics, HydrostaticCompressibleEulerEquations
 from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
@@ -135,7 +135,7 @@ class CompressibleSolver(TimesteppingSolver):
     (3) Reconstruct theta
     """
 
-    solver_parameters = {'mat_type': 'matfree',
+    hybrid_parameters = {'mat_type': 'matfree',
                          'ksp_type': 'preonly',
                          'pc_type': 'python',
                          'pc_python_type': 'firedrake.SCPC',
@@ -152,8 +152,33 @@ class CompressibleSolver(TimesteppingSolver):
                                                            'pc_type': 'bjacobi',
                                                            'sub_pc_type': 'ilu'}}}
 
-    def __init__(self, equations, alpha=0.5, tau_values=None,
-                 solver_parameters=None, overwrite_solver_parameters=False):
+    full_parameters = {
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'ksp_type': 'gmres',
+        'ksp_max_it': 100,
+        'ksp_gmres_restart': 50,
+        'pc_fieldsplit_schur_fact_type': 'FULL',
+        'pc_fieldsplit_schur_precondition': 'selfp',
+        'fieldsplit_0': {'ksp_type': 'preonly',
+                         'pc_type': 'bjacobi',
+                         'sub_pc_type': 'ilu'},
+        'fieldsplit_1': {'ksp_type': 'preonly',
+                         'pc_type': 'gamg',
+                         'mg_levels': {'ksp_type': 'chebyshev',
+                                       'ksp_chebyshev_esteig': True,
+                                       'ksp_max_it': 1,
+                                       'pc_type': 'bjacobi',
+                                       'sub_pc_type': 'ilu'}}
+    }
+
+    solver_parameters = None
+
+    def __init__(
+            self, equations, alpha=0.5, tau_values=None,
+            solver_parameters=None, overwrite_solver_parameters=False,
+            formulation='hybridized'
+    ):
         """
         Args:
             equations (:class:`PrognosticEquation`): the model's equation.
@@ -168,9 +193,20 @@ class CompressibleSolver(TimesteppingSolver):
                 `solver_parameters` that have been passed in. If False then
                 update the default parameters with the `solver_parameters`
                 passed in. Defaults to False.
+            formulation (str, optional): the formulation to use. Valid options
+                are 'hybridized' and 'full'. Defaults to 'hybridized'.
         """
+        assert formulation in ['hybridized', 'full'], \
+            f'Invalid solver formulation: {formulation}'
+
         self.equations = equations
         self.quadrature_degree = equations.domain.max_quad_degree
+        self.formulation = formulation
+
+        if formulation == 'hybridized':
+            self.solver_parameters = self.hybrid_parameters
+        elif formulation == 'full':
+            self.solver_parameters = self.full_parameters
 
         super().__init__(equations, alpha, tau_values, solver_parameters,
                          overwrite_solver_parameters)
@@ -178,43 +214,74 @@ class CompressibleSolver(TimesteppingSolver):
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
 
+        # Declare constants and relaxation parameters --------------------------
         equations = self.equations
         cp = equations.parameters.cp
         dt = self.dt
+
         # Set relaxation parameters. If an alternative has not been given, set
         # to semi-implicit off-centering factor
         beta_u = dt*self.tau_values.get("u", self.alpha)
         beta_t = dt*self.tau_values.get("theta", self.alpha)
         beta_r = dt*self.tau_values.get("rho", self.alpha)
 
-        Vu = equations.domain.spaces("HDiv")
-        Vu_broken = FunctionSpace(equations.domain.mesh, BrokenElement(Vu.ufl_element()))
-        Vtheta = equations.domain.spaces("theta")
-        Vrho = equations.domain.spaces("DG")
+        # Specify degree for some terms as estimated degree is too large -------
+        dx_qp = dx(degree=(equations.domain.max_quad_degree))
+        dS_v_qp = dS_v(degree=(equations.domain.max_quad_degree))
+        dS_h_qp = dS_h(degree=(equations.domain.max_quad_degree))
+        ds_v_qp = ds_v(degree=(equations.domain.max_quad_degree))
+        ds_tb_qp = (ds_t(degree=(equations.domain.max_quad_degree))
+                    + ds_b(degree=(equations.domain.max_quad_degree)))
 
-        h_deg = Vrho.ufl_element().degree()[0]
-        v_deg = Vrho.ufl_element().degree()[1]
-        Vtrace = FunctionSpace(equations.domain.mesh, "HDiv Trace", degree=(h_deg, v_deg))
-
-        # Split up the rhs vector (symbolically)
+        # Split up the rhs vector (symbolically) -------------------------------
         self.xrhs = Function(self.equations.function_space)
         u_in, rho_in, theta_in = split(self.xrhs)[0:3]
 
-        # Build the function space for "broken" u, rho, and pressure trace
-        M = MixedFunctionSpace((Vu_broken, Vrho, Vtrace))
-        w, phi, dl = TestFunctions(M)
-        u, rho, l0 = TrialFunctions(M)
+        # Get the function spaces ----------------------------------------------
+        Vu = equations.domain.spaces("HDiv")
+        Vtheta = equations.domain.spaces("theta")
+        Vrho = equations.domain.spaces("DG")
 
-        n = FacetNormal(equations.domain.mesh)
+        if self.formulation == 'hybridized':
+            h_deg = Vrho.ufl_element().degree()[0]
+            v_deg = Vrho.ufl_element().degree()[1]
+            Vtrace = FunctionSpace(equations.domain.mesh, "HDiv Trace", degree=(h_deg, v_deg))
+            Vu_broken = FunctionSpace(equations.domain.mesh, BrokenElement(Vu.ufl_element()))
 
-        # Get background fields
+            # Build the function space for "broken" u, rho, and pressure trace
+            M = MixedFunctionSpace((Vu_broken, Vrho, Vtrace))
+            w, phi, dl = TestFunctions(M)
+            u, rho, l0 = TrialFunctions(M)
+
+        elif self.formulation == 'full':
+            # Mixed function space is just for velocity and density
+            M = MixedFunctionSpace((Vu, Vrho))
+            w, phi = TestFunctions(M)
+            u, rho = TrialFunctions(M)
+
+        # Get background fields ------------------------------------------------
         _, rhobar, thetabar = split(equations.X_ref)[0:3]
         exnerbar = thermodynamics.exner_pressure(equations.parameters, rhobar, thetabar)
         exnerbar_rho = thermodynamics.dexner_drho(equations.parameters, rhobar, thetabar)
         exnerbar_theta = thermodynamics.dexner_dtheta(equations.parameters, rhobar, thetabar)
 
-        # Analytical (approximate) elimination of theta
+        # Set up elimination of theta  =========================================
         k = equations.domain.k             # Upward pointing unit vector
+        n = FacetNormal(equations.domain.mesh)
+
+        # Vertical projection
+        def V(u):
+            return k*inner(u, k)
+
+        # Hydrostatic projection
+        h_project = lambda u: u - k*inner(u, k)
+
+        if isinstance(self.equations, HydrostaticCompressibleEulerEquations):
+            u_mass = inner(w, (h_project(u) - u_in))*dx
+        else:
+            u_mass = inner(w, (u - u_in))*dx
+
+        # Analytical (approximate) elimination of theta
         theta = -dot(k, u)*dot(k, grad(thetabar))*beta_t + theta_in
 
         # Only include theta' (rather than exner') in the vertical
@@ -223,21 +290,6 @@ class CompressibleSolver(TimesteppingSolver):
         # The exner prime term (here, bars are for mean and no bars are
         # for linear perturbations)
         exner = exnerbar_theta*theta + exnerbar_rho*rho
-
-        # Vertical projection
-        def V(u):
-            return k*inner(u, k)
-
-        # hydrostatic projection
-        h_project = lambda u: u - k*inner(u, k)
-
-        # Specify degree for some terms as estimated degree is too large
-        dx_qp = dx(degree=(equations.domain.max_quad_degree))
-        dS_v_qp = dS_v(degree=(equations.domain.max_quad_degree))
-        dS_h_qp = dS_h(degree=(equations.domain.max_quad_degree))
-        ds_v_qp = ds_v(degree=(equations.domain.max_quad_degree))
-        ds_tb_qp = (ds_t(degree=(equations.domain.max_quad_degree))
-                    + ds_b(degree=(equations.domain.max_quad_degree)))
 
         # Add effect of density of water upon theta, using moisture reference profiles
         # TODO: Explore if this is the right thing to do for the linear problem
@@ -258,65 +310,92 @@ class CompressibleSolver(TimesteppingSolver):
             theta_w = theta
             thetabar_w = thetabar
 
-        _l0 = TrialFunction(Vtrace)
-        _dl = TestFunction(Vtrace)
-        a_tr = _dl('+')*_l0('+')*(dS_v_qp + dS_h_qp) + _dl*_l0*ds_v_qp + _dl*_l0*ds_tb_qp
+        cg_ilu_parameters = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
 
-        def L_tr(f):
-            return _dl('+')*avg(f)*(dS_v_qp + dS_h_qp) + _dl*f*ds_v_qp + _dl*f*ds_tb_qp
+        # Hybridization formulation ============================================
+        if self.formulation == 'hybridized':
+            _l0 = TrialFunction(Vtrace)
+            _dl = TestFunction(Vtrace)
+            a_tr = _dl('+')*_l0('+')*(dS_v_qp + dS_h_qp) + _dl*_l0*ds_v_qp + _dl*_l0*ds_tb_qp
 
-        cg_ilu_parameters = {'ksp_type': 'cg',
-                             'pc_type': 'bjacobi',
-                             'sub_pc_type': 'ilu'}
+            def L_tr(f):
+                return _dl('+')*avg(f)*(dS_v_qp + dS_h_qp) + _dl*f*ds_v_qp + _dl*f*ds_tb_qp
 
-        # Project field averages into functions on the trace space
-        rhobar_avg = Function(Vtrace)
-        exnerbar_avg = Function(Vtrace)
+            # Project field averages into functions on the trace space
+            rhobar_avg = Function(Vtrace)
+            exnerbar_avg = Function(Vtrace)
 
-        rho_avg_prb = LinearVariationalProblem(a_tr, L_tr(rhobar), rhobar_avg,
-                                               constant_jacobian=True)
-        exner_avg_prb = LinearVariationalProblem(a_tr, L_tr(exnerbar), exnerbar_avg,
-                                                 constant_jacobian=True)
+            rho_avg_prb = LinearVariationalProblem(
+                a_tr, L_tr(rhobar), rhobar_avg, constant_jacobian=True
+            )
+            exner_avg_prb = LinearVariationalProblem(
+                a_tr, L_tr(exnerbar), exnerbar_avg, constant_jacobian=True
+            )
 
-        self.rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
-                                                      solver_parameters=cg_ilu_parameters,
-                                                      options_prefix='rhobar_avg_solver')
-        self.exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
-                                                        solver_parameters=cg_ilu_parameters,
-                                                        options_prefix='exnerbar_avg_solver')
+            self.rho_avg_solver = LinearVariationalSolver(
+                rho_avg_prb, solver_parameters=cg_ilu_parameters,
+                options_prefix='rhobar_avg_solver'
+            )
+            self.exner_avg_solver = LinearVariationalSolver(
+                exner_avg_prb, solver_parameters=cg_ilu_parameters,
+                options_prefix='exnerbar_avg_solver'
+            )
 
-        # "broken" u, rho, and trace system
-        # NOTE: no ds_v integrals since equations are defined on
-        # a periodic (or sphere) base mesh.
-        if any([t.has_label(hydrostatic) for t in self.equations.residual]):
-            u_mass = inner(w, (h_project(u) - u_in))*dx
-        else:
-            u_mass = inner(w, (u - u_in))*dx
+            # Function for the hybridized solutions
+            self.urhol0 = Function(M)
 
-        eqn = (
-            # momentum equation
-            u_mass
-            - beta_u*cp*div(theta_w*V(w))*exnerbar*dx_qp
-            # following does nothing but is preserved in the comments
-            # to remind us why (because V(w) is purely vertical).
-            # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
-            + beta_u*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_h_qp
-            + beta_u*cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tb_qp
-            - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
-            # trace terms appearing after integrating momentum equation
-            + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_v_qp + dS_h_qp)
-            + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tb_qp + ds_v_qp)
-            # mass continuity equation
-            + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
-            + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
-            # term added because u.n=0 is enforced weakly via the traces
-            + beta_r*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v)
-            # constraint equation to enforce continuity of the velocity
-            # through the interior facets and weakly impose the no-slip
-            # condition
-            + dl('+')*jump(u, n=n)*(dS_v + dS_h)
-            + dl*dot(u, n)*(ds_t + ds_b + ds_v)
-        )
+            # "broken" u, rho, and trace system
+            # NOTE: no ds_v integrals since equations are defined on
+            # a periodic (or sphere) base mesh.
+
+            eqn = (
+                # momentum equation
+                u_mass
+                - beta_u*cp*div(theta_w*V(w))*exnerbar*dx_qp
+                # following does nothing but is preserved in the comments
+                # to remind us why (because V(w) is purely vertical).
+                # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
+                + beta_u*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_h_qp
+                + beta_u*cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tb_qp
+                - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
+                # trace terms appearing after integrating momentum equation
+                + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_v_qp + dS_h_qp)
+                + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tb_qp + ds_v_qp)
+                # mass continuity equation
+                + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
+                + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
+                # term added because u.n=0 is enforced weakly via the traces
+                + beta_r*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v)
+                # constraint equation to enforce continuity of the velocity
+                # through the interior facets and weakly impose the no-slip
+                # condition
+                + dl('+')*jump(u, n=n)*(dS_v + dS_h)
+                + dl*dot(u, n)*(ds_t + ds_b + ds_v)
+            )
+
+        # Full formulation =====================================================
+        elif self.formulation == 'full':
+            # Function to store result of u-rho solve
+            self.urho = Function(M)
+            one = Constant(1.0)
+            eqn = (
+                u_mass
+                - beta_u*cp*div(theta_w*V(w))*exnerbar*dx_qp
+                # following does nothing but is preserved in the comments
+                # to remind us why (because V(w) is purely vertical.
+                # + beta*cp*jump(theta*V(w),n)*avg(pibar)*dS_v_qp
+                - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
+                - (one - beta_u)*cp*div(thetabar_w*V(w))*exner*dx_qp
+                + beta_u*cp*jump(thetabar_w*w, n)*avg(exner)*dS_v_qp
+                + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
+                + beta_r*jump(phi*u, n)*avg(rhobar)*(dS_v + dS_h)
+            )
+
+        # Add additional terms =================================================
         # TODO: can we get this term using FML?
         # contribution of the sponge term
         if hasattr(self.equations, "mu"):
@@ -329,68 +408,99 @@ class CompressibleSolver(TimesteppingSolver):
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
-        # Function for the hybridized solutions
-        self.urhol0 = Function(M)
+        # Set up the problem ===================================================
+        if self.formulation == 'hybridized':
+            hybridized_prb = LinearVariationalProblem(
+                aeqn, Leqn, self.urhol0, constant_jacobian=True
+            )
+            hybridized_solver = LinearVariationalSolver(
+                hybridized_prb, solver_parameters=self.solver_parameters,
+                options_prefix='HybridImplicitSolver'
+            )
+            self.hybridized_solver = hybridized_solver
 
-        hybridized_prb = LinearVariationalProblem(aeqn, Leqn, self.urhol0,
-                                                  constant_jacobian=True)
-        hybridized_solver = LinearVariationalSolver(hybridized_prb,
-                                                    solver_parameters=self.solver_parameters,
-                                                    options_prefix='ImplicitSolver')
-        self.hybridized_solver = hybridized_solver
+            # Project broken u into the HDiv space using facet averaging.
+            # Weight function counting the dofs of the HDiv element:
+            self._weight = Function(Vu)
+            weight_kernel = AverageWeightings(Vu)
+            weight_kernel.apply(self._weight)
 
-        # Project broken u into the HDiv space using facet averaging.
-        # Weight function counting the dofs of the HDiv element:
-        self._weight = Function(Vu)
-        weight_kernel = AverageWeightings(Vu)
-        weight_kernel.apply(self._weight)
+            # Averaging kernel
+            self._average_kernel = AverageKernel(Vu)
 
-        # Averaging kernel
-        self._average_kernel = AverageKernel(Vu)
+            # HDiv-conforming velocity
+            self.u_hdiv = Function(Vu)
+            u_hdiv = self.u_hdiv
 
-        # HDiv-conforming velocity
-        self.u_hdiv = Function(Vu)
+            # Store boundary conditions for the div-conforming velocity to apply
+            # post-solve
+            self.bcs = self.equations.bcs['u']
 
-        # Reconstruction of theta
+        else:
+            # Boundary conditions (assumes extruded mesh)
+            self.bcs = [
+                DirichletBC(M.sub(0), 0.0, "bottom"),
+                DirichletBC(M.sub(0), 0.0, "top")
+            ]
+
+            # Solver for u, rho
+            urho_problem = LinearVariationalProblem(
+                aeqn, Leqn, self.urho, bcs=self.bcs
+            )
+            self.urho_solver = LinearVariationalSolver(
+                urho_problem, solver_parameters=self.solver_parameters,
+                options_prefix='ImplicitSolver'
+            )
+            # Velocity to appear in theta reconstruction
+            u_hdiv = self.urho.subfunctions[0]
+
+        # Reconstruction of theta ==============================================
         theta = TrialFunction(Vtheta)
         gamma = TestFunction(Vtheta)
 
         self.theta = Function(Vtheta)
         theta_eqn = gamma*(theta - theta_in
-                           + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta_t)*dx
+                           + dot(k, u_hdiv)*dot(k, grad(thetabar))*beta_t)*dx
 
-        theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta,
-                                                 constant_jacobian=True)
-        self.theta_solver = LinearVariationalSolver(theta_problem,
-                                                    solver_parameters=cg_ilu_parameters,
-                                                    options_prefix='thetabacksubstitution')
+        theta_problem = LinearVariationalProblem(
+            lhs(theta_eqn), rhs(theta_eqn), self.theta, constant_jacobian=True
+        )
+        self.theta_solver = LinearVariationalSolver(
+            theta_problem, solver_parameters=cg_ilu_parameters,
+            options_prefix='thetabacksubstitution'
+        )
 
-        # Store boundary conditions for the div-conforming velocity to apply
-        # post-solve
-        self.bcs = self.equations.bcs['u']
-
-        # Log residuals on hybridized solver
-        self.log_ksp_residuals(self.hybridized_solver.snes.ksp)
-        # Log residuals on the trace system too
-        python_context = self.hybridized_solver.snes.ksp.pc.getPythonContext()
-        attach_custom_monitor(python_context, logging_ksp_monitor_true_residual)
+        if self.formulation == 'hybridized':
+            # Log residuals on hybridized solver
+            self.log_ksp_residuals(self.hybridized_solver.snes.ksp)
+            # Log residuals on the trace system too
+            python_context = self.hybridized_solver.snes.ksp.pc.getPythonContext()
+            attach_custom_monitor(python_context, logging_ksp_monitor_true_residual)
+        elif self.formulation == 'full':
+            # Log residuals on mixed solver
+            self.log_ksp_residuals(self.urho_solver.snes.ksp)
 
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
-        with timed_region("Gusto:HybridProjectRhobar"):
-            logger.info('Compressible linear solver: rho average solve')
-            self.rho_avg_solver.solve()
 
-        with timed_region("Gusto:HybridProjectExnerbar"):
-            logger.info('Compressible linear solver: Exner average solve')
-            self.exner_avg_solver.solve()
+        if self.formulation == 'hydridized':
+            with timed_region("Gusto:HybridProjectRhobar"):
+                logger.info('Compressible linear solver: rho average solve')
+                self.rho_avg_solver.solve()
 
-        # Because the left hand side of the hybridised problem depends
-        # on the reference profile, the Jacobian matrix should change
-        # when the reference profiles are updated. This call will tell
-        # the hybridized_solver to reassemble the Jacobian next time
-        # `solve` is called.
-        self.hybridized_solver.invalidate_jacobian()
+            with timed_region("Gusto:HybridProjectExnerbar"):
+                logger.info('Compressible linear solver: Exner average solve')
+                self.exner_avg_solver.solve()
+
+            # Because the left hand side of the hybridised problem depends
+            # on the reference profile, the Jacobian matrix should change
+            # when the reference profiles are updated. This call will tell
+            # the hybridized_solver to reassemble the Jacobian next time
+            # `solve` is called.
+            self.hybridized_solver.invalidate_jacobian()
+
+        elif self.formulation == 'full':
+            self.urho_solver.invalidate_jacobian()
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -405,23 +515,30 @@ class CompressibleSolver(TimesteppingSolver):
         """
         self.xrhs.assign(xrhs)
 
-        # Solve the hybridized system
-        logger.info('Compressible linear solver: hybridized solve')
-        self.hybridized_solver.solve()
+        # MIXED SOLVE ==========================================================
+        if self.formulation == 'hybridized':
+            # Solve the hybridized system
+            logger.info('Compressible linear solver: hybridized solve')
+            self.hybridized_solver.solve()
 
-        broken_u, rho1, _ = self.urhol0.subfunctions
-        u1 = self.u_hdiv
+            broken_u, rho1, _ = self.urhol0.subfunctions
+            u1 = self.u_hdiv
 
-        # Project broken_u into the HDiv space
-        u1.assign(0.0)
+            # Project broken_u into the HDiv space
+            u1.assign(0.0)
 
-        with timed_region("Gusto:HybridProjectHDiv"):
-            logger.info('Compressible linear solver: restore continuity')
-            self._average_kernel.apply(u1, self._weight, broken_u)
+            with timed_region("Gusto:HybridProjectHDiv"):
+                logger.info('Compressible linear solver: restore continuity')
+                self._average_kernel.apply(u1, self._weight, broken_u)
 
-        # Reapply bcs to ensure they are satisfied
-        for bc in self.bcs:
-            bc.apply(u1)
+            # Reapply bcs to ensure they are satisfied
+            for bc in self.bcs:
+                bc.apply(u1)
+
+        elif self.formulation == 'full':
+            logger.info('Compressible linear solver: mixed solve')
+            self.urho_solver.solve()
+            u1, rho1 = self.urho.subfunctions
 
         # Copy back into u and rho cpts of dy
         u, rho, theta = dy.subfunctions[0:3]

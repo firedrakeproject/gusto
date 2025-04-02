@@ -423,7 +423,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                         'Adaptive subcycling: capping number of subcycles at '
                         f'{max_subcycles}'
                     )
-                    self.ncycles = max_subcycles
+                self.ncycles = min(self.ncycles, max_subcycles)
 
             logger.debug(f'Performing {self.ncycles} subcycles')
             self.dt.assign(self.original_dt/self.ncycles)
