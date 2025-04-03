@@ -27,12 +27,10 @@ def setup_sw(dirname):
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinements, degree=3)
     x = SpatialCoordinate(mesh)
-    mesh.init_cell_orientations(x)
-
     domain = Domain(mesh, dt, "BDM", degree=1)
 
     # Equation
-    parameters = ShallowWaterParameters(H=H)
+    parameters = ShallowWaterParameters(mesh, H=H)
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
@@ -44,9 +42,10 @@ def setup_sw(dirname):
 
     # Transport schemes
     transport_schemes = [ForwardEuler(domain, "D")]
+    transport_methods = [DefaultTransport(eqns, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes, transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

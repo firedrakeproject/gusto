@@ -1,0 +1,44 @@
+name: Check docs build cleanly
+
+on:
+  # Run on pushes to master
+  push:
+    branches:
+      - master
+  # And all pull requests
+  pull_request:
+
+concurrency:
+  # Cancels jobs running if new commits are pushed
+  group: >
+    ${{ github.workflow }}-
+    ${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_docs:
+    name: Run doc build
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    # The docker container to use.
+    container:
+      image: firedrakeproject/firedrake-docdeps:latest
+      options: --user root
+    env:
+      # Since we are running as root we need to set PYTHONPATH to be able to find the installed
+      # packages
+      PYTHONPATH: /home/firedrake/firedrake:/home/firedrake/.local/lib/python3.12/site-packages
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Gusto
+        run: python3 -m pip install --break-system-packages -e '.[docs]'
+      - name: Check documentation links
+        run: make -C docs linkcheck
+      - name: Build docs
+        run: make -C docs html
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          name: github-pages
+          path: /__w/gusto/gusto/docs/build/html
+          retention-days: 1

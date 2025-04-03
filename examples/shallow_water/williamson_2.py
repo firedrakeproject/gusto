@@ -1,94 +1,122 @@
 """
-The Williamson 2 shallow-water test case (solid-body rotation), solved with a
-discretisation of the non-linear shallow-water equations.
+Test Case 2 (solid-body rotation with geostrophically-balanced flow) of
+Williamson et al, 1992:
+``A standard test set for numerical approximations to the shallow water
+equations in spherical geometry'', JCP.
 
-This uses an icosahedral mesh of the sphere, and runs a series of resolutions
-to act as a convergence test.
+The example here uses the icosahedral sphere mesh and degree 1 spaces.
 """
 
-from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi
-import sys
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from firedrake import SpatialCoordinate, sin, cos, pi, Function
+from gusto import (
+    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
+    RelativeVorticity, PotentialVorticity, SteadyStateError,
+    ShallowWaterKineticEnergy, ShallowWaterPotentialEnergy,
+    ShallowWaterPotentialEnstrophy, rotated_lonlatr_coords,
+    ZonalComponent, MeridionalComponent, rotated_lonlatr_vectors,
+    GeneralIcosahedralSphereMesh, SubcyclingOptions
+)
 
-# ---------------------------------------------------------------------------- #
-# Test case parameters
-# ---------------------------------------------------------------------------- #
+williamson_2_defaults = {
+    'ncells_per_edge': 16,     # number of cells per icosahedron edge
+    'dt': 900.0,               # 15 minutes
+    'tmax': 5.*24.*60.*60.,    # 5 days
+    'dumpfreq': 96,            # once per day with default options
+    'dirname': 'williamson_2'
+}
 
-day = 24.*60.*60.
-if '--running-tests' in sys.argv:
-    ref_dt = {3: 3000.}
-    tmax = 3000.
-    ndumps = 1
-else:
-    # setup resolution and timestepping parameters for convergence test
-    ref_dt = {3: 4000., 4: 2000., 5: 1000., 6: 500.}
-    tmax = 5*day
-    ndumps = 5
 
-# setup shallow water parameters
-R = 6371220.
-H = 5960.
+def williamson_2(
+        ncells_per_edge=williamson_2_defaults['ncells_per_edge'],
+        dt=williamson_2_defaults['dt'],
+        tmax=williamson_2_defaults['tmax'],
+        dumpfreq=williamson_2_defaults['dumpfreq'],
+        dirname=williamson_2_defaults['dirname']
+):
 
-# setup input that doesn't change with ref level or dt
-parameters = ShallowWaterParameters(H=H)
+    # ------------------------------------------------------------------------ #
+    # Parameters for test case
+    # ------------------------------------------------------------------------ #
 
-for ref_level, dt in ref_dt.items():
+    radius = 6371220.                  # planetary radius (m)
+    mean_depth = 5960.                 # reference depth (m)
+    rotate_pole_to = (0.0, pi/3)       # location of North pole of mesh
+    u_max = 2*pi*radius/(12*24*60*60)  # Max amplitude of the zonal wind (m/s)
+
+    # ------------------------------------------------------------------------ #
+    # Our settings for this set up
+    # ------------------------------------------------------------------------ #
+
+    element_order = 1
+    u_eqn_type = 'vector_invariant_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain
-    mesh = IcosahedralSphereMesh(radius=R,
-                                 refinement_level=ref_level, degree=1)
-    x = SpatialCoordinate(mesh)
-    global_normal = x
-    mesh.init_cell_orientations(x)
-    domain = Domain(mesh, dt, 'BDM', 1)
+    mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
+    domain = Domain(mesh, dt, 'BDM', element_order, rotated_pole=rotate_pole_to)
+    xyz = SpatialCoordinate(mesh)
 
     # Equation
+    parameters = ShallowWaterParameters(mesh, H=mean_depth)
     Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
+    _, lat, _ = rotated_lonlatr_coords(xyz, rotate_pole_to)
+    e_lon, _, _ = rotated_lonlatr_vectors(xyz, rotate_pole_to)
+    fexpr = 2*Omega*sin(lat)
+    eqns = ShallowWaterEquations(
+        domain, parameters, fexpr=fexpr, u_transport_option=u_eqn_type)
 
     # I/O
-    dirname = "williamson_2_ref%s_dt%s" % (ref_level, dt)
-    dumpfreq = int(tmax / (ndumps*dt))
-    output = OutputParameters(dirname=dirname,
-                              dumpfreq=dumpfreq,
-                              dumplist_latlon=['D', 'D_error'],
-                              log_level='INFO')
-
-    diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
-                         ShallowWaterKineticEnergy(),
-                         ShallowWaterPotentialEnergy(parameters),
-                         ShallowWaterPotentialEnstrophy(),
-                         SteadyStateError('u'), SteadyStateError('D')]
+    output = OutputParameters(
+        dirname=dirname, dumpfreq=dumpfreq, dump_nc=True,
+        dumplist_latlon=['D', 'D_error'],
+    )
+    diagnostic_fields = [
+        RelativeVorticity(), SteadyStateError('RelativeVorticity'),
+        PotentialVorticity(), ShallowWaterKineticEnergy(),
+        ShallowWaterPotentialEnergy(parameters),
+        ShallowWaterPotentialEnstrophy(),
+        SteadyStateError('u'), SteadyStateError('D'),
+        MeridionalComponent('u', rotate_pole_to),
+        ZonalComponent('u', rotate_pole_to)
+    ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    transported_fields = [ImplicitMidpoint(domain, "u"),
-                          SSPRK3(domain, "D", subcycles=2)]
+    subcycling_options = SubcyclingOptions(fixed_subcycles=2)
+    transported_fields = [
+        TrapeziumRule(domain, "u"),
+        SSPRK3(domain, "D", subcycling_options=subcycling_options)]
+    transport_methods = [
+        DGUpwind(eqns, "u"),
+        DGUpwind(eqns, "D")
+    ]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields)
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
+    g = parameters.g
+
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
-    x = SpatialCoordinate(mesh)
-    u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
-    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
-    g = parameters.g
-    Dexpr = H - ((R * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R*R)))/g
+
+    uexpr = u_max*cos(lat)*e_lon
+    Dexpr = mean_depth - (radius * Omega * u_max + 0.5*u_max**2)*(sin(lat))**2/g
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
 
-    Dbar = Function(D0.function_space()).assign(H)
+    Dbar = Function(D0.function_space()).assign(mean_depth)
     stepper.set_reference_profiles([('D', Dbar)])
 
     # ------------------------------------------------------------------------ #
@@ -96,3 +124,48 @@ for ref_level, dt in ref_dt.items():
     # ------------------------------------------------------------------------ #
 
     stepper.run(t=0, tmax=tmax)
+
+# ---------------------------------------------------------------------------- #
+# MAIN
+# ---------------------------------------------------------------------------- #
+
+
+if __name__ == "__main__":
+
+    parser = ArgumentParser(
+        description=__doc__,
+        formatter_class=ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        '--ncells_per_edge',
+        help="The number of cells per edge of icosahedron",
+        type=int,
+        default=williamson_2_defaults['ncells_per_edge']
+    )
+    parser.add_argument(
+        '--dt',
+        help="The time step in seconds.",
+        type=float,
+        default=williamson_2_defaults['dt']
+    )
+    parser.add_argument(
+        "--tmax",
+        help="The end time for the simulation in seconds.",
+        type=float,
+        default=williamson_2_defaults['tmax']
+    )
+    parser.add_argument(
+        '--dumpfreq',
+        help="The frequency at which to dump field output.",
+        type=int,
+        default=williamson_2_defaults['dumpfreq']
+    )
+    parser.add_argument(
+        '--dirname',
+        help="The name of the directory to write to.",
+        type=str,
+        default=williamson_2_defaults['dirname']
+    )
+    args, unknown = parser.parse_known_args()
+
+    williamson_2(**vars(args))

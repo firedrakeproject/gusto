@@ -42,7 +42,7 @@ def setup_unsaturated(dirname, recovered):
         u_transport_option = "vector_advection_form"
     else:
         u_transport_option = "vector_invariant_form"
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     eqns = CompressibleEulerEquations(
         domain, parameters, u_transport_option=u_transport_option, active_tracers=tracers)
 
@@ -77,7 +77,13 @@ def setup_unsaturated(dirname, recovered):
     if recovered:
         transported_fields.append(SSPRK3(domain, "u", options=u_opts))
     else:
-        transported_fields.append(ImplicitMidpoint(domain, "u"))
+        transported_fields.append(TrapeziumRule(domain, "u"))
+
+    transport_methods = [DGUpwind(eqns, 'u'),
+                         DGUpwind(eqns, 'rho'),
+                         DGUpwind(eqns, 'theta'),
+                         DGUpwind(eqns, 'water_vapour'),
+                         DGUpwind(eqns, 'cloud_water')]
 
     # Linear solver
     linear_solver = CompressibleSolver(eqns)
@@ -87,6 +93,7 @@ def setup_unsaturated(dirname, recovered):
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+                                      transport_methods,
                                       linear_solver=linear_solver,
                                       physics_schemes=physics_schemes)
 

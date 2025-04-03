@@ -1,11 +1,13 @@
 """
-This tests the prescribed wind feature of the PrescribedTransport timestepper.
+This tests the prescribed wind feature of the PrescribedTransport and
+SplitPresribedTransport (with no physics schemes) timesteppers.
 A tracer is transported with a time-varying wind and the computed solution is
 compared with a true one to check that the transport is working correctly.
 """
 
 from gusto import *
 from firedrake import sin, cos, norm, pi, as_vector
+import pytest
 
 
 def run(timestepper, tmax, f_end):
@@ -13,7 +15,8 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-def test_prescribed_transport_setup(tmpdir, tracer_setup):
+@pytest.mark.parametrize('timestep_method', ['prescribed', 'split_prescribed'])
+def test_prescribed_transport_setup(tmpdir, tracer_setup, timestep_method):
 
     # Make domain using routine from conftest
     geometry = "slice"
@@ -25,15 +28,32 @@ def test_prescribed_transport_setup(tmpdir, tracer_setup):
     # Make equation
     eqn = AdvectionEquation(domain, V, "f")
 
+    transport_scheme = SSPRK3(domain)
+    time_varying_velocity = True
+
+    if timestep_method == 'prescribed':
+        transport_method = DGUpwind(eqn, 'f')
+        timestepper = PrescribedTransport(
+            eqn, transport_scheme, setup.io, time_varying_velocity,
+            transport_method
+        )
+
+    elif timestep_method == 'split_prescribed':
+        transport_method = [DGUpwind(eqn, 'f')]
+        timestepper = SplitPrescribedTransport(
+            eqn, transport_scheme, setup.io, time_varying_velocity,
+            transport_method
+        )
+
+    else:
+        raise NotImplementedError
+
     # Initialise fields
     def u_evaluation(t):
         return as_vector([2.0*cos(2*pi*t/setup.tmax),
                           sin(2*pi*t/setup.tmax)*sin(pi*z)])
 
-    transport_scheme = SSPRK3(domain)
-
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io,
-                                      prescribed_transporting_velocity=u_evaluation)
+    timestepper.setup_prescribed_expr(u_evaluation)
 
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)

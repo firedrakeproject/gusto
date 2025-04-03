@@ -15,6 +15,9 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
+# NB: The default vector transport test is not valid on the sphere as it is
+# designed for a 3-component vector function space, and not the space of tangent
+# vectors on the sphere
 @pytest.mark.parametrize("geometry", ["slice"])
 def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
 
@@ -41,7 +44,11 @@ def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
     # Make equation
     eqn = AdvectionEquation(domain, Vu, "f")
     transport_scheme = SSPRK3(domain, options=rec_opts)
-    timestepper = PrescribedTransport(eqn, transport_scheme, setup.io)
+    transport_method = DGUpwind(eqn, "f")
+    time_varying_velocity = False
+    timestepper = PrescribedTransport(
+        eqn, transport_scheme, setup.io, time_varying_velocity, transport_method
+    )
 
     # Initialise fields
     f_init = as_vector([setup.f_init]*gdim)

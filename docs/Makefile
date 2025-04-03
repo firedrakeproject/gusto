@@ -43,22 +43,18 @@ help:
 
 TARGETS = html dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes linkcheck doctest gettext
 
-GENERATED_FILES = source/teamgrid.rst # source/demos
-
 publish: html
-# Note that godaddy don't currently do rsync, unfortunately.
 # The raw IP address is used to circumvent some dns fiddling which
 # Imperial's ICT department are doing.
-	scp -r build/html/* 'o3ce6600@146.255.44.1:html/gusto/'
+	rsync --rsh=ssh -rv -r build/html/* 'cm3f3ymc8wnd@92.204.68.56:public_html/gusto/'
 
 scp:
-# Note that godaddy don't currently do rsync, unfortunately.
 # The raw IP address is used to circumvent some dns fiddling which
 # Imperial's ICT department are doing.
-	scp -r build/html/* 'o3ce6600@146.255.44.1:html/gusto/'
+	rsync --rsh=ssh -rv build/html/* 'cm3f3ymc8wnd@92.204.68.56:public_html/gusto/'
 
-livehtml: html
-	python server.py
+livehtml:
+	sphinx-autobuild -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
 
 serve: html
 	cd $(BUILDDIR)/html; python -m SimpleHTTPServer $(PORT)
@@ -71,9 +67,6 @@ copy_demos:
 	install -d source/demos
 	cp ../demos/*/*.rst ../demos/*/*.bib ../demos/*/*.geo ../demos/*/*.png source/demos
 	for file in source/demos/*.py.rst; do ../pylit/pylit.py $$file; done
-
-source/teamgrid.rst: source/team.py
-	cd source; python team.py
 
 apidoc: $(GENERATED_FILES) # copy_demos
 	sphinx-apidoc ../gusto -o source/ -f -T
