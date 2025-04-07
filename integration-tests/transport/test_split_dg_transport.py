@@ -8,6 +8,7 @@ from firedrake import norm, VectorFunctionSpace, as_vector
 from gusto import *
 import pytest
 
+
 def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
