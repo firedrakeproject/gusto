@@ -6,7 +6,7 @@ field is transported to the correct place.
 
 from firedrake import norm, VectorFunctionSpace, as_vector
 from gusto import *
-
+import pytest
 
 def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
