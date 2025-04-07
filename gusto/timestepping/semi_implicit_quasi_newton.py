@@ -35,7 +35,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
     def __init__(self, equation_set, io, transport_schemes, spatial_methods,
                  auxiliary_equations_and_schemes=None, linear_solver=None,
-                 diffusion_schemes=None, physics_schemes=None,
+                 diffusion_schemes=None, physics_schemes=None, N=1,
                  slow_physics_schemes=None, fast_physics_schemes=None,
                  alpha=0.5, off_centred_u=False,
                  num_outer=2, num_inner=2, accelerator=False,
@@ -119,6 +119,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.alpha = Function(R, val=float(alpha))
         self.predictor = predictor
         self.accelerator = accelerator
+        self.N = N
 
         # Options relating to reference profiles and spin-up
         self._alpha_original = float(alpha)  # float so as to not upset adjoint
@@ -295,7 +296,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             scheme.setup(self.equation, apply_bcs, diffusion)
         for parametrisation, scheme in self.all_physics_schemes:
             apply_bcs = True
-            scheme.setup(self.equation, apply_bcs, parametrisation.label)
+            scheme.setup(self.equation, self.N, apply_bcs, parametrisation.label)
 
     def copy_active_tracers(self, x_in, x_out):
         """
@@ -494,10 +495,15 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 logger.debug(f"Semi-implicit Quasi-Newton diffusing {name}")
                 scheme.apply(xnp1(name), xnp1(name))
 
-        if len(self.final_physics_schemes) > 0:
-            with timed_stage("Final Physics"):
-                for _, scheme in self.final_physics_schemes:
-                    scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
+        time = float(self.equation.domain.t)
+        physics_interval = float(self.dt*self.N)
+
+        if time % physics_interval == 0:
+            print("this is a time physics should be evaluated")
+            if len(self.final_physics_schemes) > 0:
+                with timed_stage("Final Physics"):
+                    for _, scheme in self.final_physics_schemes:
+                        scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
 
         logger.debug("Leaving Semi-implicit Quasi-Newton timestep method")
 

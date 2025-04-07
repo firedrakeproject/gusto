@@ -86,7 +86,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
     #  [ b_0  b_1  .       b_s]
     # ---------------------------------------------------------------------------
 
-    def __init__(self, domain, butcher_matrix, field_name=None,
+    def __init__(self, domain, butcher_matrix, N=1, field_name=None,
                  subcycling_options=None,
                  rk_formulation=RungeKuttaFormulation.increment,
                  solver_parameters=None, limiter=None, options=None,
@@ -126,7 +126,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         self.nStages = int(np.shape(self.butcher_matrix)[0])
         self.rk_formulation = rk_formulation
 
-    def setup(self, equation, apply_bcs=True, *active_labels):
+    def setup(self, equation, N, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
 
@@ -148,6 +148,10 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             raise NotImplementedError(
                 'Runge-Kutta formulation is not implemented'
             )
+
+        # this is to allow subcycling of the dynamics
+        self.dt.assign(N*self.dt)
+
 
     @cached_property
     def solver(self):
@@ -463,7 +467,7 @@ class ForwardEuler(ExplicitRungeKutta):
     y^(n+1) = y^n + dt*k0                                                     \n
     """
     def __init__(
-            self, domain, field_name=None, subcycling_options=None,
+            self, domain, N=1, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
             solver_parameters=None, limiter=None, options=None,
             augmentation=None
@@ -495,7 +499,7 @@ class ForwardEuler(ExplicitRungeKutta):
 
         butcher_matrix = np.array([1.]).reshape(1, 1)
 
-        super().__init__(domain, butcher_matrix, field_name=field_name,
+        super().__init__(domain, butcher_matrix, N=N, field_name=field_name,
                          subcycling_options=subcycling_options,
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
