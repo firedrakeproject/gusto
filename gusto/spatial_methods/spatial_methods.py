@@ -4,7 +4,7 @@ spatial discretisation of some term.
 """
 
 from firedrake import split
-from firedrake.fml import Term, keep, drop
+from firedrake.fml import Term, keep, drop, all_terms
 from gusto.core.labels import prognostic
 
 __all__ = ['SpatialMethod']
@@ -39,10 +39,17 @@ class SpatialMethod(object):
             self.field = equation.X
             self.test = equation.test
 
-        # Find the original term to be used (for first term label)
+        # Find the original terms to be used
         self.original_form = equation.residual.label_map(
-            lambda t: t.has_label(self.term_label) and t.get(prognostic) == variable,
-            map_if_true=keep, map_if_false=drop)
+            all_terms,
+            map_if_true=drop
+        )
+        for term in term_labels:
+            self.original_form += equation.residual.label_map(
+                lambda t: t.has_label(term) and t.get(prognostic) == variable,
+                map_if_true=keep,
+                map_if_false=drop
+            )
 
         num_terms_per_label = len(self.original_form.terms) // len(term_labels)
         assert len(self.original_form.terms) % len(term_labels) == 0, (
