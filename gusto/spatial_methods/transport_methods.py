@@ -26,18 +26,21 @@ class TransportMethod(SpatialMethod):
     The base object for describing a transport scheme.
     """
 
-    def __init__(self, equation, variable, term_labels=[transport]):
+    def __init__(self, equation, variable, *term_labels):
         """
         Args:
             equation (:class:`PrognosticEquation`): the equation, which includes
                 a transport term.
             variable (str): name of the variable to set the transport scheme for
-            term_labels (list of :class:`Label`, optional): the label specifying
-                which type of term to be discretised. Defaults to [transport].
+            term_labels (:class:`Label`): One or more labels specifying which type(s)
+                of terms should be discretized.
         """
 
         # Inherited init method extracts original term to be replaced
-        super().__init__(equation, variable, term_labels)
+        if not term_labels:
+            super().__init__(equation, variable, transport)
+        else:
+            super().__init__(equation, variable, *term_labels)
 
         # If this is term has a mass_weighted label, then we need to
         # use the tracer_conservative version of the transport method.
@@ -338,7 +341,7 @@ class SplitDGUpwind(TransportMethod):
                 boundaries, through exterior facet terms. Defaults to False.
         """
 
-        super().__init__(equation, variable, [horizontal_transport, vertical_transport])
+        super().__init__(equation, variable, horizontal_transport, vertical_transport)
         self.ibp = ibp
         self.vector_manifold_correction = vector_manifold_correction
         self.outflow = outflow

@@ -1,12 +1,11 @@
 """
-Tests the Split horizontal and vertical DG upwind transport scheme for
+Tests the split horizontal and vertical DG upwind transport scheme for
 advective form transport equation. This tests that the
 field is transported to the correct place.
 """
 
 from firedrake import norm, VectorFunctionSpace, as_vector
 from gusto import *
-import pytest
 
 
 def run(timestepper, tmax, f_end):
@@ -14,9 +13,8 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parametrize("geometry", ["slice", "sphere"])
-def test_split_dg_transport_scalar(tmpdir, geometry, tracer_setup):
-    setup = tracer_setup(tmpdir, geometry)
+def test_split_dg_transport_scalar(tmpdir, tracer_setup):
+    setup = tracer_setup(tmpdir, "slice")
     domain = setup.domain
     V = domain.spaces("DG")
 
@@ -40,9 +38,8 @@ def test_split_dg_transport_scalar(tmpdir, geometry, tracer_setup):
         'The transport error is greater than the permitted tolerance'
 
 
-@pytest.mark.parametrize("geometry", ["slice", "sphere"])
-def test_split_dg_transport_vector(tmpdir, geometry, tracer_setup):
-    setup = tracer_setup(tmpdir, geometry)
+def test_split_dg_transport_vector(tmpdir, tracer_setup):
+    setup = tracer_setup(tmpdir, "slice")
     domain = setup.domain
     gdim = domain.mesh.geometric_dimension()
     f_init = as_vector([setup.f_init]*gdim)

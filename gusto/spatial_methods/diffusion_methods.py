@@ -22,7 +22,7 @@ class DiffusionMethod(SpatialMethod):
         """
 
         # Inherited init method extracts original term to be replaced
-        super().__init__(equation, variable, [diffusion])
+        super().__init__(equation, variable, diffusion)
 
 
 def interior_penalty_diffusion_form(domain, test, q, parameters):
