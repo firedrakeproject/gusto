@@ -66,7 +66,7 @@ def skamarock_klemp_compressible_bouss(
     domain = Domain(mesh, dt, 'CG', element_order)
 
     # Equation
-    parameters = BoussinesqParameters(cs=cs)
+    parameters = BoussinesqParameters(mesh, cs=cs)
     eqns = BoussinesqEquations(domain, parameters)
 
     # I/O

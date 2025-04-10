@@ -14,40 +14,49 @@ equations involves an active buoyancy field.
 The example here uses the icosahedral sphere mesh and degree 1 spaces. An
 explicit RK4 timestepper is used.
 """
+import pytest
+import numpy as np
 
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
-    SpatialCoordinate, as_vector, pi, sqrt, min_value, exp, cos, sin
+    SpatialCoordinate, as_vector, pi, sqrt, min_value, exp, cos, sin, assemble, dx, inner, Function
 )
+from firedrake.adjoint import *
+from pyadjoint import get_working_tape
 from gusto import (
     Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
-    ShallowWaterParameters, ThermalShallowWaterEquations, Sum,
-    lonlatr_from_xyz, InstantRain, SWSaturationAdjustment, WaterVapour,
-    CloudWater, Rain, GeneralIcosahedralSphereMesh, RelativeVorticity,
-    ZonalComponent, MeridionalComponent
+    ShallowWaterParameters, ThermalShallowWaterEquations, lonlatr_from_xyz,
+    InstantRain, SWSaturationAdjustment, WaterVapour, CloudWater,
+    Rain, GeneralIcosahedralSphereMesh
 )
 
-moist_thermal_williamson_5_defaults = {
-    'ncells_per_edge': 16,     # number of cells per icosahedron edge
-    'dt': 300.0,               # 5 minutes
-    'tmax': 50.*24.*60.*60.,   # 50 days
-    'dumpfreq': 2880,          # once per 10 days with default options
-    'dirname': 'moist_thermal_williamson_5'
-}
+
+@pytest.fixture(autouse=True)
+def handle_taping():
+    yield
+    tape = get_working_tape()
+    tape.clear_tape()
 
 
-def moist_thermal_williamson_5(
-        ncells_per_edge=moist_thermal_williamson_5_defaults['ncells_per_edge'],
-        dt=moist_thermal_williamson_5_defaults['dt'],
-        tmax=moist_thermal_williamson_5_defaults['tmax'],
-        dumpfreq=moist_thermal_williamson_5_defaults['dumpfreq'],
-        dirname=moist_thermal_williamson_5_defaults['dirname']
+@pytest.fixture(autouse=True, scope="module")
+def handle_annotation():
+    from firedrake.adjoint import annotate_tape, continue_annotation
+    if not annotate_tape():
+        continue_annotation()
+    yield
+    # Ensure annotation is paused when we finish.
+    annotate = annotate_tape()
+    if annotate:
+        pause_annotation()
+
+
+def test_moist_thermal_williamson_5_sensitivity(
+        tmpdir, ncells_per_edge=8, dt=600, tmax=50.*24.*60.*60.,
+        dumpfreq=2880
 ):
-
+    assert get_working_tape()._blocks == []
     # ------------------------------------------------------------------------ #
     # Parameters for test case
     # ------------------------------------------------------------------------ #
-
     radius = 6371220.           # planetary radius (m)
     mean_depth = 5960           # reference depth (m)
     g = 9.80616                 # acceleration due to gravity (m/s^2)
@@ -106,13 +115,11 @@ def moist_thermal_williamson_5(
 
     # I/O
     output = OutputParameters(
-        dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq,
-        dump_vtus=True, dump_nc=False,
+        dirname=str(tmpdir), dumplist_latlon=['D'], dumpfreq=dumpfreq,
+        dump_vtus=True, dump_nc=False, log_courant=False,
         dumplist=['D', 'b', 'water_vapour', 'cloud_water']
     )
-    diagnostic_fields = [Sum('D', 'topography'), RelativeVorticity(),
-                         ZonalComponent('u'), MeridionalComponent('u')]
-    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+    io = IO(domain, output)
 
     # Physics ------------------------------------------------------------------
     # Saturation function -- first define simple expression
@@ -121,14 +128,14 @@ def moist_thermal_williamson_5(
 
     # Function to pass to physics (takes mixed function as argument)
     def phys_sat_func(x_in):
-        D = x_in.subfunctions[1]
-        b = x_in.subfunctions[2]
+        D = x_in.sub(1)
+        b = x_in.sub(2)
         return q_sat(b, D)
 
     # Feedback proportionality is dependent on D and b
     def gamma_v(x_in):
-        D = x_in.subfunctions[1]
-        b = x_in.subfunctions[2]
+        D = x_in.sub(1)
+        b = x_in.sub(2)
         return 1.0 / (1.0 + nu*beta2/g*q_sat(b, D))
 
     SWSaturationAdjustment(
@@ -194,50 +201,18 @@ def moist_thermal_williamson_5(
     # ----------------------------------------------------------------- #
     # Run
     # ----------------------------------------------------------------- #
+    stepper.run(t=0, tmax=dt)
 
-    stepper.run(t=0, tmax=tmax)
+    u_tf = stepper.fields('u')  # Final velocity field
+    D_tf = stepper.fields('D')  # Final depth field
 
-# ---------------------------------------------------------------------------- #
-# MAIN
-# ---------------------------------------------------------------------------- #
+    J = assemble(0.5*inner(u_tf, u_tf)*dx + 0.5*g*D_tf**2*dx)
 
+    Jhat = ReducedFunctional(J, Control(D0))
 
-if __name__ == "__main__":
-
-    parser = ArgumentParser(
-        description=__doc__,
-        formatter_class=ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument(
-        '--ncells_per_edge',
-        help="The number of cells per edge of icosahedron",
-        type=int,
-        default=moist_thermal_williamson_5_defaults['ncells_per_edge']
-    )
-    parser.add_argument(
-        '--dt',
-        help="The time step in seconds.",
-        type=float,
-        default=moist_thermal_williamson_5_defaults['dt']
-    )
-    parser.add_argument(
-        "--tmax",
-        help="The end time for the simulation in seconds.",
-        type=float,
-        default=moist_thermal_williamson_5_defaults['tmax']
-    )
-    parser.add_argument(
-        '--dumpfreq',
-        help="The frequency at which to dump field output.",
-        type=int,
-        default=moist_thermal_williamson_5_defaults['dumpfreq']
-    )
-    parser.add_argument(
-        '--dirname',
-        help="The name of the directory to write to.",
-        type=str,
-        default=moist_thermal_williamson_5_defaults['dirname']
-    )
-    args, unknown = parser.parse_known_args()
-
-    moist_thermal_williamson_5(**vars(args))
+    assert np.allclose(Jhat(D0), J)
+    with stop_annotating():
+        # Stop annotation to perform the Taylor test
+        h0 = Function(D0.function_space())
+        h0.assign(D0 * np.random.rand())
+        assert taylor_test(Jhat, D0, h0) > 1.95

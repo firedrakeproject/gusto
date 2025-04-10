@@ -43,7 +43,7 @@ def setup_zero_limiter(dirname, limiter=False, rain=False):
     x = SpatialCoordinate(mesh)
 
     # Equations
-    parameters = ShallowWaterParameters(H=H, g=g)
+    parameters = ShallowWaterParameters(mesh, H=H, g=g)
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
 
@@ -67,14 +67,14 @@ def setup_zero_limiter(dirname, limiter=False, rain=False):
 
     # Saturation function
     def sat_func(x_in):
-        D = x_in.split()[1]
-        b = x_in.split()[2]
+        D = x_in.subfunctions[1]
+        b = x_in.subfunctions[2]
         return q0/(g*D) * exp(20*(1 - b/g))
 
     # Feedback proportionality is dependent on h and b
     def gamma_v(x_in):
-        D = x_in.split()[1]
-        b = x_in.split()[2]
+        D = x_in.subfunctions[1]
+        b = x_in.subfunctions[2]
         return (1 + 10*(20*q0/g*D * exp(20*(1 - b/g))))**(-1)
 
     transport_methods = [DGUpwind(eqns, field_name) for field_name in eqns.field_names]

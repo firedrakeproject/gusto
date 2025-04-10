@@ -62,9 +62,9 @@ def shallow_water_1d_wave(
 
     # Diffusion
     delta = domain_length / ncells
-    u_diffusion_opts = DiffusionParameters(kappa=kappa)
-    v_diffusion_opts = DiffusionParameters(kappa=kappa, mu=10/delta)
-    D_diffusion_opts = DiffusionParameters(kappa=kappa, mu=10/delta)
+    u_diffusion_opts = DiffusionParameters(mesh, kappa=kappa)
+    v_diffusion_opts = DiffusionParameters(mesh, kappa=kappa, mu=10/delta)
+    D_diffusion_opts = DiffusionParameters(mesh, kappa=kappa, mu=10/delta)
     diffusion_options = [
         ("u", u_diffusion_opts),
         ("v", v_diffusion_opts),
@@ -72,7 +72,7 @@ def shallow_water_1d_wave(
     ]
 
     # Equation
-    parameters = ShallowWaterParameters(H=1/epsilon, g=1/epsilon)
+    parameters = ShallowWaterParameters(mesh, H=1/epsilon, g=1/epsilon)
     eqns = ShallowWaterEquations_1d(
         domain, parameters, fexpr=Constant(1/epsilon),
         diffusion_options=diffusion_options
