@@ -5,7 +5,7 @@ drag and turbulence."""
 from firedrake import (
     Interpolator, conditional, Function, dx, sqrt, dot, Constant, grad,
     TestFunctions, split, inner, Projector, exp, avg, outer, FacetNormal,
-    SpatialCoordinate, dS_v
+    SpatialCoordinate, dS_v, FunctionSpace
 )
 from firedrake.fml import subject
 from gusto.core.equation_configuration import BoundaryLayerParameters
@@ -601,11 +601,18 @@ class BoundaryLayerMixing(PhysicsParametrisation):
             C_D0 = parameters.coeff_drag_0
             C_D1 = parameters.coeff_drag_1
             C_D2 = parameters.coeff_drag_2
+            R = FunctionSpace(domain.mesh, "R", 0)
+            C_D3 = Function(R).assign(0.0)
 
-            C_D = conditional(u_hori_mag < 20.0, C_D0 + C_D1*u_hori_mag, C_D2)
+            C_D = conditional(u_hori_mag < 20.0,
+                              C_D0 + C_D1*u_hori_mag,
+                              # To avoid a free index error in UFL, don't just
+                              # have a single real in the False condition
+                              C_D2 + C_D3*u_hori_mag)
             K = conditional(p > p_top,
                             C_D*u_hori_mag*z_a,
                             C_D*u_hori_mag*z_a*exp(-((p_top - p)/p_strato)**2))
+
 
         else:
             C_E = parameters.coeff_evap
