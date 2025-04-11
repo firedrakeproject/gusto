@@ -139,7 +139,7 @@ class RayleighFriction(PhysicsParametrisation):
         Vu = equation.domain.spaces('HDiv')
         u_hori = u - k*dot(u, k)
 
-        boundary_method = BoundaryMethod.extruded if self.domain == 0 else None
+        boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
         self.rho_averaged = Function(Vt)
         self.exner = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
