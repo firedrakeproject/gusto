@@ -613,7 +613,6 @@ class BoundaryLayerMixing(PhysicsParametrisation):
                             C_D*u_hori_mag*z_a,
                             C_D*u_hori_mag*z_a*exp(-((p_top - p)/p_strato)**2))
 
-
         else:
             C_E = parameters.coeff_evap
             K = conditional(p > p_top,
