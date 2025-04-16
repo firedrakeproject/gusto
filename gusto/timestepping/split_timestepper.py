@@ -396,7 +396,7 @@ class SplitPrescribedTransport(Timestepper):
         print('Transport complete in split prescribed timestepper')
 
         for idx, field in enumerate(self.x.np1):
-            print(idx)
+            print(field.name())
             print(np.min(field.dat.data))
 
         with timed_stage("Physics"):
@@ -407,5 +407,5 @@ class SplitPrescribedTransport(Timestepper):
 
         # For mean mixing ratio debugging:
         for idx, field in enumerate(self.x.np1):
-            print(idx)
+            print(field.name())
             print(np.min(field.dat.data))

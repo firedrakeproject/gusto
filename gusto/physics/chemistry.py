@@ -1,8 +1,8 @@
 """Objects describe chemical conversion and reaction processes."""
 
-from firedrake import dx, split, Function, sqrt, exp, Constant, conditional, max_value, min_value
+from firedrake import dx, split, Function, sqrt, exp, Constant, conditional, max_value, min_value, interpolate, assemble
 from firedrake.fml import subject
-from gusto.core.labels import prognostic
+from gusto.core.labels import source_label
 from gusto.core.logging import logger
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
 
@@ -93,20 +93,24 @@ class TerminatorToy(PhysicsParametrisation):
             source1_expr = source_expr
             source2_expr = -source_expr/2.0
 
-            # Ensure the increments don't make a negative mixing ratio
-            # Check for X then X2
-
         else:
             Kx = k1*species2 - k2*(species1**2)
 
             source1_expr = 2*Kx
             source2_expr = -Kx
 
-            # source1_expr = test_1 * 2*Kx * dx
-            # source2_expr = test_2 * -Kx * dx
+        W = equation.function_space
+        V_idxs = [self.species1_idx, self.species2_idx]
 
-        equation.residual -= self.label(subject(prognostic(test1 * source1_expr * dx, species1_name), self.Xq), self.evaluate)
-        equation.residual -= self.label(subject(prognostic(test2 * source2_expr * dx, species2_name), self.Xq), self.evaluate)
+        self.source = Function(W)
+        self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
+        self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
+
+        self.source_interpolate = [interpolate(source1_expr, self.source_int[0]),
+                                   interpolate(source2_expr, self.source_int[1])]
+
+        equation.residual -= source_label(self.label(subject(test1 * self.source_expr[0] * dx, equation.X), self.evaluate))
+        equation.residual -= source_label(self.label(subject(test2 * self.source_expr[1] * dx, equation.X), self.evaluate))
 
     def evaluate(self, x_in, dt, x_out=None):
         """
@@ -120,6 +124,12 @@ class TerminatorToy(PhysicsParametrisation):
         """
 
         self.dt.assign(dt)
+
+        self.Xq.assign(x_in)
+
+        # Evaluate the source
+        for interpolator, src in zip(self.source_interpolate, self.source_int):
+            src.assign(assemble(interpolator))
 
         logger.info(f'Evaluating physics parametrisation {self.label.label}')
 
