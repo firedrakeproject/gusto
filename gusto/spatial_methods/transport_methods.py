@@ -10,12 +10,12 @@ from firedrake.fml import Term, keep, drop
 from gusto.core.configuration import IntegrateByParts, TransportEquationType
 from gusto.core.labels import (
     prognostic, transport, transporting_velocity, ibp_label, mass_weighted,
-    all_but_last
+    all_but_last, horizontal_transport, vertical_transport
 )
 from gusto.core.logging import logger
 from gusto.spatial_methods.spatial_methods import SpatialMethod
 
-__all__ = ["DefaultTransport", "DGUpwind"]
+__all__ = ["DefaultTransport", "DGUpwind", "SplitDGUpwind"]
 
 
 # ---------------------------------------------------------------------------- #
@@ -26,16 +26,21 @@ class TransportMethod(SpatialMethod):
     The base object for describing a transport scheme.
     """
 
-    def __init__(self, equation, variable):
+    def __init__(self, equation, variable, *term_labels):
         """
         Args:
             equation (:class:`PrognosticEquation`): the equation, which includes
                 a transport term.
             variable (str): name of the variable to set the transport scheme for
+            term_labels (:class:`Label`): One or more labels specifying which type(s)
+                of terms should be discretized.
         """
 
         # Inherited init method extracts original term to be replaced
-        super().__init__(equation, variable, transport)
+        if not term_labels:
+            super().__init__(equation, variable, transport)
+        else:
+            super().__init__(equation, variable, *term_labels)
 
         # If this is term has a mass_weighted label, then we need to
         # use the tracer_conservative version of the transport method.
@@ -111,8 +116,45 @@ class TransportMethod(SpatialMethod):
                 map_if_true=lambda t: new_term)
 
         else:
-            raise RuntimeError('Found multiple transport terms for '
-                               + f'{self.variable}. {len(original_form.terms)} found')
+            horizontal_form = equation.residual.label_map(
+                lambda t: t.has_label(transport) and t.has_label(horizontal_transport) and t.get(prognostic) == self.variable,
+                map_if_true=keep, map_if_false=drop
+            )
+            vertical_form = equation.residual.label_map(
+                lambda t: t.has_label(transport) and t.has_label(vertical_transport) and t.get(prognostic) == self.variable,
+                map_if_true=keep, map_if_false=drop
+            )
+            if len(horizontal_form.terms) == 1 and len(vertical_form.terms) == 1:
+
+                # Replace forms
+                horizontal_term = horizontal_form.terms[0]
+                vertical_term = vertical_form.terms[0]
+
+                # Update transporting velocity
+                new_horizontal_transporting_velocity = self.form_h.terms[0].get(transporting_velocity)
+                new_vertical_transporting_velocity = self.form_v.terms[0].get(transporting_velocity)
+                horizontal_term = transporting_velocity.update_value(horizontal_term, new_horizontal_transporting_velocity)
+                vertical_term = transporting_velocity.update_value(vertical_term, new_vertical_transporting_velocity)
+
+                # Create new terms
+                new_horizontal_term = Term(self.form_h.form, horizontal_term.labels)
+                new_vertical_term = Term(self.form_v.form, vertical_term.labels)
+
+                # Check if this is a conservative transport
+                if horizontal_term.has_label(mass_weighted) or vertical_term.has_label(mass_weighted):
+                    raise NotImplementedError('Mass weighted transport terms not yet supported for multiple terms')
+
+                # Replace original terms with new terms
+                equation.residual = equation.residual.label_map(
+                    lambda t: t.has_label(transport) and t.has_label(horizontal_transport) and t.get(prognostic) == self.variable,
+                    map_if_true=lambda _: new_horizontal_term)
+
+                equation.residual = equation.residual.label_map(
+                    lambda t: t.has_label(transport) and t.has_label(vertical_transport) and t.get(prognostic) == self.variable,
+                    map_if_true=lambda _: new_vertical_term)
+            else:
+                raise RuntimeError('Found multiple transport terms for the same '
+                                   'variable in the equation where there should only be one')
 
 
 # ---------------------------------------------------------------------------- #
@@ -277,9 +319,130 @@ class DGUpwind(TransportMethod):
         self.form = form
 
 
+class SplitDGUpwind(TransportMethod):
+    """
+    The Discontinuous Galerkin Upwind transport scheme applied separately in the
+    horizontal and vertical directions.
+    Discretises the gradient of a field weakly, taking the upwind value of the
+    transported variable at facets.
+    """
+    def __init__(self, equation, variable, ibp=IntegrateByParts.ONCE,
+                 vector_manifold_correction=False, outflow=False):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the equation, which includes
+                a transport term.
+            variable (str): name of the variable to set the transport scheme for
+            ibp (:class:`IntegrateByParts`, optional): an enumerator for how
+                many times to integrate by parts. Defaults to `ONCE`.
+            vector_manifold_correction (bool, optional): whether to include a
+                vector manifold correction term. Defaults to False.
+            outflow (bool, optional): whether to include outflow at the domain
+                boundaries, through exterior facet terms. Defaults to False.
+        """
+
+        super().__init__(equation, variable, horizontal_transport, vertical_transport)
+        self.ibp = ibp
+        self.vector_manifold_correction = vector_manifold_correction
+        self.outflow = outflow
+
+        # -------------------------------------------------------------------- #
+        # Determine appropriate form to use
+        # -------------------------------------------------------------------- #
+        # first check for 1d mesh and scalar velocity space
+        if equation.domain.mesh.topological_dimension() == 1 and len(equation.domain.spaces("HDiv").shape) == 0:
+            assert not vector_manifold_correction
+            raise ValueError('You cannot do horizontal and vertical splitting in 1D')
+        else:
+            if self.transport_equation_type == TransportEquationType.advective:
+
+                form_h, form_v = split_upwind_advection_form(self.domain, self.test,
+                                                             self.field,
+                                                             ibp=ibp, outflow=outflow)
+
+            else:
+                raise NotImplementedError('Split hv Upwind transport scheme has not been '
+                                          + 'implemented for this transport equation type')
+        self.form_v = form_v
+        self.form_h = form_h
+
+
 # ---------------------------------------------------------------------------- #
 # Forms for DG Upwind transport
 # ---------------------------------------------------------------------------- #
+def split_upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
+    u"""
+    The forms corresponding to the DG upwind advective transport operator in
+    the horizontal and vertical directions.
+    This discretises u_h.(∇_h)q and w dq/dz, for transporting velocity u and transported
+    variable q. An upwind discretisation is used for the facet terms when the
+    form is integrated by parts.
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ibp (:class:`IntegrateByParts`, optional): an enumerator representing
+            the number of times to integrate by parts. Defaults to
+            `IntegrateByParts.ONCE`.
+        outflow (bool, optional): whether to include outflow at the domain
+            boundaries, through exterior facet terms. Defaults to False.
+    Raises:
+        ValueError: Can only use outflow option when the integration by parts
+            option is not "never".
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    if outflow and ibp == IntegrateByParts.NEVER:
+        raise ValueError("outflow is True and ibp is None are incompatible options")
+    Vu = domain.spaces("HDiv")
+    k = domain.k
+    quad = domain.max_quad_degree
+    dS_ = (dS_v(degree=quad) + dS_h(degree=quad)) if Vu.extruded else dS
+    ubar = Function(Vu)
+    ubar_v = k*inner(ubar, k)
+    ubar_h = ubar - ubar_v
+
+    if ibp == IntegrateByParts.ONCE:
+        L_h = -inner(div(outer(test, ubar_h)), q)*dx(degree=quad)
+        L_v = -inner(div(outer(test, ubar_v)), q)*dx(degree=quad)
+    else:
+        L_h = inner(outer(test, ubar_h), grad(q))*dx(degree=quad)
+        L_v = inner(outer(test, ubar_v), grad(q))*dx(degree=quad)
+
+    if ibp != IntegrateByParts.NEVER:
+        n = FacetNormal(domain.mesh)
+        un_h = 0.5*(dot(ubar_h, n) + abs(dot(ubar_h, n)))
+
+        L_h += dot(jump(test), (un_h('+')*q('+') - un_h('-')*q('-')))*dS_
+
+        un_v = 0.5*(dot(ubar_v, n) + abs(dot(ubar_v, n)))
+
+        L_v += dot(jump(test), (un_v('+')*q('+') - un_v('-')*q('-')))*dS_
+
+        if ibp == IntegrateByParts.TWICE:
+            L_h -= (inner(test('+'), dot(ubar_h('+'), n('+')) * q('+'))
+                    + inner(test('-'), dot(ubar_h('-'), n('-')) * q('-'))) * dS_
+
+            L_v -= (inner(test('+'), dot(ubar_v('+'), n('+')) * q('+'))
+                    + inner(test('-'), dot(ubar_v('-'), n('-')) * q('-'))) * dS_
+
+    if outflow:
+        n = FacetNormal(domain.mesh)
+        un_h = 0.5*(dot(ubar_h, n) + abs(dot(ubar_h, n)))
+        L_h += test*un_h*q*(ds_v + ds_t + ds_b)
+
+        un_v = 0.5*(dot(ubar_v, n) + abs(dot(ubar_v, n)))
+        L_v += test*un_v*q*(ds_v + ds_t + ds_b)
+
+    form_h = transporting_velocity(L_h, ubar)
+    form_v = transporting_velocity(L_v, ubar)
+    labelled_form_h = ibp_label(transport(form_h, TransportEquationType.advective), ibp)
+    labelled_form_v = ibp_label(transport(form_v, TransportEquationType.advective), ibp)
+    return labelled_form_h, labelled_form_v
+
+
 def upwind_advection_form(domain, test, q, ibp=IntegrateByParts.ONCE, outflow=False):
     u"""
     The form corresponding to the DG upwind advective transport operator.
