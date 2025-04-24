@@ -23,10 +23,11 @@ jobs:
     # The docker container to use.
     container:
       image: firedrakeproject/firedrake-docdeps:latest
+
     steps:
       - uses: actions/checkout@v4
       - name: Install Gusto
-        run: python3 -m pip install --break-system-packages -e '.[docs]'
+        run: python3 -m pip install -e '.[docs]'
       - name: Check documentation links
         run: make -C docs linkcheck
       - name: Build docs
