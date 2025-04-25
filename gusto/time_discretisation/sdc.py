@@ -344,7 +344,7 @@ class SDC(object, metaclass=ABCMeta):
 
             r_source_k = self.residual.label_map(
                 lambda t: t.has_label(source_label),
-                map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
+                map_if_true=replace_subject(self.source_Uk[i+1], old_idx=self.idx),
                 map_if_false=drop)
             r_source_k = r_source_k.label_map(
                 all_terms,
