@@ -16,13 +16,17 @@ class PlotStats(Plotting):
                 s = (stat - stat[0])/stat[0]
             else:
                 s = stat
-            plt.plot(self.time, s, label=stat.name)
+            plt.plot(self.time, s[:], label=stat.name)
             if not same_plot:
                 plt.xlabel("time")
                 plt.show()
 
         if same_plot:
-            plt.xlabel("time")
+            plt.xlabel("time (days)")
+            xticks = [0, 864000, 1728000, 2592000, 3456000, 4320000]
+            xlabels = [0, 10, 20, 30, 40, 50]
+            plt.xticks(xticks, labels=xlabels)
+            plt.ylabel("normalised potential vorticity")
             plt.legend(loc='upper left')
             plt.show()
 
