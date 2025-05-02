@@ -19,6 +19,8 @@ from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
 from gusto.timestepping.semi_implicit_quasi_newton import Forcing
+from gusto.utility_scripts import (extract_data, create_function_space, 
+                                   plot_time_level_state, make_subplot)
 
 
 __all__ = ["TRBDF2QuasiNewton"]
@@ -35,7 +37,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
     """
 
     def __init__(self, equation_set, io, transport_schemes, spatial_methods,
-                 linear_solver=None,
+                 tr_solver=None,
+                 bdf_solver=None,
                  diffusion_schemes=None, 
                  physics_schemes=None,
                  slow_physics_schemes=None, 
@@ -110,8 +113,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         mesh = equation_set.domain.mesh
         R = FunctionSpace(mesh, "R", 0)
         self.gamma = Function(R, val=float(gamma))
-        self.gamma2 = Function(R, val=((1 - 2*float(gamma))/(2*(1 - float(gamma)))))
-        self.gamma3 = Function(R, val=((1 - float(self.gamma2))/(2*float(gamma))))
+        self.gamma2 = Function(R, val=((1 - 2*float(gamma))/(2 - 2*float(gamma))))
+        self.gamma3 = Function(R, val=((1-float(self.gamma2))/(2*float(gamma))))
 
         # Options relating to reference profiles 
         self.reference_update_freq = reference_update_freq
@@ -187,13 +190,20 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.xrhs = Function(W)
         self.xrhs_phys = Function(W)
         self.dy = Function(W)
-        if linear_solver is None:
-            self.linear_solver = LinearTimesteppingSolver(equation_set, self.gamma)
+
+        if tr_solver is None:
+            self.tr_solver = LinearTimesteppingSolver(equation_set, self.gamma)
         else:
-            self.linear_solver = linear_solver
+            self.tr_solver = tr_solver
+
+        if bdf_solver is None:
+            self.bdf_solver = LinearTimesteppingSolver(equation_set, self.gamma2)
+        else:
+            self.bdf_solver = bdf_solver
         
-        self.implicit_scaling = Function(R)
-        self.forcing = Forcing(equation_set, self.gamma, self.implicit_scaling)
+        dt = self.equation.domain.dt
+        self.tr_forcing = Forcing(equation_set, alpha=0.5, dt=2*self.gamma*dt)
+        self.bdf_forcing = Forcing(equation_set, alpha=self.gamma2, dt=dt)
         self.bcs = equation_set.bcs
 
 
@@ -202,8 +212,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         Set the zero boundary conditions in the velocity.
         """
         unp1 = X('u')
+       # breakpoint()
         for bc in self.bcs['u']:
-            bc.apply(unp1)
+            bc.apply(X('u'))
 
     @property
     def transporting_velocity(self):
@@ -288,7 +299,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 self.linear_solver.update_reference_profiles()
 
         elif self.to_update_ref_profile:
-            self.linear_solver.update_reference_profiles()
+            self.tr_solver.update_reference_profiles()
+            self.bdf_solver.update_reference_profiles()
             self.to_update_ref_profile = False
 
     def timestep(self):
@@ -305,6 +317,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         xrhs_phys = self.xrhs_phys
         dy = self.dy
         fname = self.equation.field_name 
+        dt = self.dt.dat.data[0]
 
         # Make first guess of xm
         xm(fname).assign(xn(fname))
@@ -321,21 +334,18 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                     scheme.apply(x_after_slow(scheme.field_name), x_after_slow(scheme.field_name))
 
         # TR step ==============================================================
-        self.implicit_scaling.assign(self.gamma)
-        self.linear_solver.alpha.assign(self.gamma)
-        self.linear_solver.update_reference_profiles()
-        self.forcing.solvers['implicit'].invalidate_jacobian()
 
         # Explicit forcing -----------------------------------------------------
         with timed_stage("Apply forcing terms"):
             logger.info('TR-BDF2 Quasi Newton: TR Explicit forcing')
             # Put explicit forcing into xstar
-            self.forcing.apply(x_after_slow, xn, xstar(self.field_name), "explicit")
+            self.tr_forcing.apply(x_after_slow, xn, xstar(self.field_name), "explicit")
 
         # set xp here so that variables that are not transported have
         # the correct values
         xp(self.field_name).assign(xstar(self.field_name))
-
+        title='TR-BDF2: TR step, explicit forcing applied'
+       # plot_time_level_state(xp, self.equation, field_name='w', save=False, title=title)
         # OUTER ----------------------------------------------------------------
         for outer in range(self.num_outer_tr):
 
@@ -356,24 +366,33 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
             xrhs_phys.assign(x_after_fast(self.field_name) - xp(self.field_name))
+            title=f'TR-BDF2: TR step, outer loop transport k={outer} '
+     #       plot_time_level_state(xp, self.equation, field_name='w', save=False, title=title)
 
             for inner in range(self.num_inner_tr):
 
                 # Implicit forcing ---------------------------------------------
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'TR-BDF2 Quasi Newton: TR Implicit forcing {(outer, inner)}')
-                    self.forcing.apply(xp, xm, xrhs, "implicit")
+                    self.tr_forcing.apply(xp, xm, xrhs, "implicit")
 
                 xrhs -= xm(self.field_name)
                 xrhs += xrhs_phys
-
+                title = f'TR-BDF2: TR step: rhs before solve k = {outer} l = {inner}'
+             #   plot_time_level_state(xrhs, self.equation, 'w', title=title, mixed_space=True, save=False)
+                title=f'TR-BDF2: TR step, inner loop, pre solve k = {outer}, l = {inner} '
+      #          plot_time_level_state(xm, self.equation, field_name='w', save=False, title=title)
                 # Linear solve -------------------------------------------------
+
                 with timed_stage("Implicit solve"):
                     logger.info(f'TR-BDF2 Quasi Newton: TR Mixed solve {(outer, inner)}')
-                    self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in dy
+                    self.tr_solver.solve(xrhs, dy)  # solves linear system and places result in dy
 
                 xmX = xm(self.field_name)
                 xmX += dy
+
+                title=f'TR-BDF2: TR step,inner loop, post solve k = {outer}, l = {inner} '
+         #       plot_time_level_state(xm, self.equation, field_name='w', save=False, title=title)
 
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xm)
@@ -381,14 +400,16 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             self._apply_bcs(xm)
         
         # BDF step =============================================================
-        self.implicit_scaling.assign(self.gamma2)
-        self.linear_solver.alpha.assign(self.gamma2)
-        self.linear_solver.update_reference_profiles()
-        self.forcing.solvers['implicit'].invalidate_jacobian()
+        title='TR-BDF2: TR step, End of TR step'
+       # plot_time_level_state(xm, self.equation, field_name='w', save=False, title=title)
+        
+
         # set xp here so that variables that are not transported have
         # the correct values
-        xp(self.field_name).assign(xn(self.field_name))
-        xpm(self.field_name).assign(xm(self.field_name))
+        xp(self.field_name).assign(xn(fname))
+        xpm(self.field_name).assign(xm(fname))
+        xnp1(self.field_name).assign(xm(fname))
+
 
         # OUTER ----------------------------------------------------------------
         for outer in range(self.num_outer_bdf):
@@ -408,6 +429,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             # Combine transported fields into a single variable
             xp(fname).assign((1 - self.gamma3)*xp(fname) + self.gamma3*xpm(fname))
 
+            title=f'TR-BDF2: BDF step, outer loop transport k = {outer}'
+           # plot_time_level_state(xp, self.equation, field_name='w', save=False, title=title)
+
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:
@@ -418,30 +442,43 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
             xrhs_phys.assign(x_after_fast(self.field_name) - xp(self.field_name))
-
             for inner in range(self.num_inner_bdf):
 
                 # Implicit forcing ---------------------------------------------
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'TR-BDF2 Quasi Newton: BDF Implicit forcing {(outer, inner)}')
-                    self.forcing.apply(xp, xnp1, xrhs, "implicit")
+                    self.bdf_forcing.apply(xp, xnp1, xrhs, "implicit")
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
+                title = f'TR-BDF2: BDF step: rhs before solve k = {outer} l = {inner}'
+              #  plot_time_level_state(xrhs, self.equation, 'w', title=title, mixed_space=True, save=False)
+                title=f'TR-BDF2: BDF step, inner loop, pre solve, k = {outer}, l={inner}'
+            #    plot_time_level_state(xp, self.equation, field_name='w', save=False, title=title)
 
                 # Linear solve -------------------------------------------------
                 with timed_stage("Implicit solve"):
                     logger.info(f'TR-BDF2 Quasi Newton: BDF Mixed solve {(outer, inner)}')
-                    self.linear_solver.solve(xrhs, dy)  # solves linear system and places result in dy
+                    self.bdf_solver.solve(xrhs, dy)  # solves linear system and places result in dy
 
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
 
+                title=f'TR-BDF2: BDF step, inner loop, post solve, k = {outer}, l={inner}'
+            #    plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
+
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xnp1)
 
+            
+        #    plot_time_level_state(xnp1, self.equation, field_name='w', save=False)
             self._apply_bcs(xnp1)
-
+        #    plot_time_level_state(xnp1, self.equation, field_name='w', save=False)
+        
+        title=f'TR-BDF2:end of step'
+       # plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
+        file_name = f"TR-BDF2-4_1-xnp1-xpm={self.step*dt}"
+        make_subplot([xn, xm, xnp1], ['xn', 'xm', 'xnp1'], self.equation, field_name='w', file_name=file_name)
         with timed_stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:
                 logger.debug(f"TR-BDF2 Quasi-Newton diffusing {name}")
