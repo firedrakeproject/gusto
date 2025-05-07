@@ -22,12 +22,16 @@ class PlotStats(Plotting):
                 plt.show()
 
         if same_plot:
-            plt.xlabel("time (days)")
-            xticks = [0, 864000, 1728000, 2592000, 3456000, 4320000]
-            xlabels = [0, 10, 20, 30, 40, 50]
-            plt.xticks(xticks, labels=xlabels)
-            plt.ylabel("normalised potential vorticity")
-            plt.legend(loc='upper left')
+            plt.xlabel("time (days)", fontsize="12")
+            # xticks = [0, 864000, 1728000, 2592000, 3456000, 4320000]
+            # xlabels = [0, 10, 20, 30, 40, 50]
+            xticks = [0, 432000, 864000, 1296000]
+            xlabels = [0, 5, 10, 15]
+            plt.xticks(xticks, labels=xlabels, fontsize="12")
+            plt.yticks(fontsize="12")
+            plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+            plt.ylabel("energy conservation error", fontsize="12")
+            # plt.legend(loc='upper left')
             plt.show()
 
 
