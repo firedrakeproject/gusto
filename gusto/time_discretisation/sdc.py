@@ -133,6 +133,7 @@ class SDC(object, metaclass=ABCMeta):
 
         # Rescale to be over [0,dt] rather than [0,1]
         self.nodes = float(self.dt_coarse)*self.nodes
+
         self.dtau = np.diff(np.append(0, self.nodes))
         self.Q = float(self.dt_coarse)*self.Q
         self.Qfin = float(self.dt_coarse)*self.weights
@@ -140,13 +141,14 @@ class SDC(object, metaclass=ABCMeta):
         self.formulation = formulation
         self.node_type = node_type
         self.quad_type = quad_type
+        # breakpoint()
+        # prin
 
         # Get Q_delta matrices
         self.Qdelta_imp = genQDeltaCoeffs(qdelta_imp, form=formulation,
                                           nodes=self.nodes, Q=self.Q, nNodes=M, nodeType=node_type, quadType=quad_type)
         self.Qdelta_exp = genQDeltaCoeffs(qdelta_exp, form=formulation,
                                           nodes=self.nodes, Q=self.Q, nNodes=M, nodeType=node_type, quadType=quad_type)
-
         # Set default linear and nonlinear solver options if none passed in
         if linear_solver_parameters is None:
             self.linear_solver_parameters = {'snes_type': 'ksponly',
@@ -427,9 +429,6 @@ class SDC(object, metaclass=ABCMeta):
         for m in range(self.M+1):
             for evaluate in self.evaluate_source:
                 evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
-        self.Udiff = Function(self.W)
-        self.Udiff.assign(self.Unodes[0] - self.Unodes[-1])
-        #breakpoint()
 
         # Iterate through correction sweeps
         k = 0
