@@ -25,41 +25,99 @@ jobs:
     runs-on: [self-hosted, Linux]
     # The docker container to use.
     container:
-      image: firedrakeproject/firedrake-vanilla:latest
+      image: firedrakeproject/firedrake-vanilla-default:latest
+    env:
+      # Make Gusto output logging information, this will *not* be printed to
+      # the terminal because pytest will capture it. Instead it is written to
+      # the file specified by '--log-file'.
+      GUSTO_PARALLEL_LOG: CONSOLE
+      PYOP2_CFLAGS: -O0
+      # Make sure that tests with >4 processes are not silently skipped
+      PYTEST_MPI_MAX_NPROCS: 4
+      EXTRA_PYTEST_ARGS: --durations=100 --timeout=3600 --timeout-method=thread -o faulthandler_timeout=3660 --show-capture=no --verbose gusto-repo/unit-tests gusto-repo/integration-tests gusto-repo/examples
     steps:
+      - name: Fix HOME
+        # For unknown reasons GitHub actions overwrite HOME to /github/home
+        # which will break everything unless fixed
+        # (https://github.com/actions/runner/issues/863)
+        run: echo "HOME=/root" >> "$GITHUB_ENV"
+
+      - name: Pre-cleanup
+        run: |
+          : # Wipe everything away in the current directory
+          find . -delete
+	  firedrake-clean
+
       - uses: actions/checkout@v4
-      - name: Cleanup
-        if: ${{ always() }}
-        run: |
-          cd ..
-          rm -rf build
+        with:
+          # Download Gusto into a subdirectory not called 'gusto' to make sure
+          # that the package installs correctly. Otherwise 'import gusto' may
+          # work even if the installation failed because it is a subdirectory.
+          path: gusto-repo
+
+      - name: Create virtual environment
+        # pass '--system-site-packages' so Firedrake can be found
+        run: python3 -m venv --system-site-packages venv-gusto
+
       - name: Install Gusto
+        id: install-one
         run: |
-          . /home/firedrake/firedrake/bin/activate
-          python -m pip install -r requirements.txt
-          python -m pip install -e .
-          python -m pip install  \
-            pytest-timeout pytest-xdist nbval ipympl
-      - name: Gusto tests
+          . venv-gusto/bin/activate
+          pip install ./gusto-repo
+          pip list
+
+      - name: Test serial-only netCDF
         run: |
-          . /home/firedrake/firedrake/bin/activate
-          firedrake-clean
-          export GUSTO_PARALLEL_LOG=FILE
-          export PYOP2_CFLAGS=-O0
-          python -m pytest \
-            -n 12 --dist worksteal \
-            --durations=100 \
-            --timeout=3600 \
-            --timeout-method=thread \
-            -o faulthandler_timeout=3660 \
-            -v unit-tests integration-tests examples
-        timeout-minutes: 120
-      - name: Prepare logs
-        if: always()
+          . venv-gusto/bin/activate
+          : # Run the serial tests
+          firedrake-run-split-tests 1 1 -n 12 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py  --log-file=gusto_netcdf_serial.log --show-capture=no
+          : # Run the parallel tests
+          firedrake-run-split-tests 2 6 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py --log-file=gusto_netcdf_parallel.log --show-capture=no
+        timeout-minutes: 10
+
+      - name: Install parallel netCDF
+        # Run even if the step above failed
+        if: success() || steps.install-one.conclusion == 'success'
+        id: install-two
         run: |
-          mkdir logs
-          cd /tmp/pytest-of-firedrake/pytest-*/
-          find . -name "*.log" -exec cp --parents {} /__w/gusto/gusto/logs/ \;
+          . venv-gusto/bin/activate
+          pip uninstall -y netCDF4
+          : # '--no-build-isolation' has to be passed for mpi4py to be found
+          : # but this means that we need to install any extra build
+          : # dependencies manually
+          pip install Cython
+          pip install --no-binary netCDF4 --no-build-isolation netCDF4
+
+      - name: Run tests (nprocs = 1)
+        run: |
+          . venv-gusto/bin/activate
+          : # Use pytest-xdist here so we can have a single collated output (not possible
+          : # for parallel tests)
+          firedrake-run-split-tests 1 1 -n 12 --dist worksteal "$EXTRA_PYTEST_ARGS" --log-file=gusto1.log
+        timeout-minutes: 60
+
+      - name: Run tests (nprocs = 2)
+        # Run even if earlier tests failed
+        if: success() || steps.install-two.conclusion == 'success'
+        run: |
+          . venv-gusto/bin/activate
+          firedrake-run-split-tests 2 6 "$EXTRA_PYTEST_ARGS" "--log-file=gusto2_{#}.log"
+        timeout-minutes: 30
+
+      - name: Run tests (nprocs = 3)
+        if: success() || steps.install-two.conclusion == 'success'
+        run: |
+          . venv-gusto/bin/activate
+          firedrake-run-split-tests 3 4 "$EXTRA_PYTEST_ARGS" "--log-file=gusto3_{#}.log"
+        timeout-minutes: 10
+
+      - name: Run tests (nprocs = 4)
+        if: success() || steps.install-two.conclusion == 'success'
+        run: |
+          . venv-gusto/bin/activate
+          firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS" "--log-file=gusto4_{#}.log"
+        timeout-minutes: 10
+
       - name: Gusto jupyter_notebooks
         run: |
           . /home/firedrake/firedrake/bin/activate
@@ -72,10 +130,25 @@ jobs:
             --nbval-lax \
             --nbval-cell-timeout=3000 \
             -v jupyter_notebooks
-      - name: Upload artifact
-        if: always()
-        uses: actions/upload-pages-artifact@v3
+
+      - name: Upload pytest log files
+        uses: actions/upload-artifact@v4
+        if: success() || steps.install-two.conclusion == 'success'
         with:
-          name: log-files
-          path: /__w/gusto/gusto/logs
+          name: pytest-logs
+          path: pytest_*.log
           retention-days: 5
+
+      - name: Upload Gusto log files
+        uses: actions/upload-artifact@v4
+        if: success() || steps.install-two.conclusion == 'success'
+        with:
+          name: gusto-logs
+          path: gusto*.log
+          retention-days: 5
+
+      - name: Post-cleanup
+        if: always()
+        run: |
+          find . -delete
+          firedrake-clean

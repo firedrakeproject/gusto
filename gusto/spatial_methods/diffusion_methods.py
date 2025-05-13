@@ -44,7 +44,8 @@ def interior_penalty_diffusion_form(domain, test, q, parameters):
         :class:`ufl.Form`: the diffusion form.
     """
 
-    dS_ = (dS_v + dS_h) if domain.mesh.extruded else dS
+    quad = domain.max_quad_degree
+    dS_ = (dS_v(degree=quad) + dS_h(degree=quad)) if domain.mesh.extruded else dS(degree=quad)
     kappa = parameters.kappa
     mu = parameters.mu
 
@@ -160,4 +161,5 @@ class CGDiffusion(DiffusionMethod):
             kappa = diffusion_parameters.kappa
             self.form = diffusion(kappa * self.test.dx(0) * self.field.dx(0) * dx)
         else:
-            raise NotImplementedError("CG diffusion only implemented in 1D")
+            kappa = diffusion_parameters.kappa
+            self.form = diffusion(kappa * inner(grad(self.test), grad(self.field)) * dx)

@@ -4,6 +4,10 @@ vertical slice gravity wave test case of Skamarock and Klemp, 1994:
 ``Efficiency and Accuracy of the Klemp-Wilhelmson Time-Splitting Technique'',
 MWR.
 
+The domain is smaller than the "hydrostatic" gravity wave test, so that there
+is difference between the hydrostatic and non-hydrostatic solutions. The test
+can be run with and without a hydrostatic switch.
+
 Potential temperature is transported using SUPG, and the degree 1 elements are
 used.
 """
@@ -19,19 +23,20 @@ from firedrake import (
 import numpy as np
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    SUPGOptions, CourantNumber, Perturbation, Gradient,
-    CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
-    compressible_hydrostatic_balance, logger, RichardsonNumber,
-    RungeKuttaFormulation, SubcyclingOptions
+    logger, SUPGOptions, Perturbation, CompressibleParameters,
+    CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
+    compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
+    SubcyclingOptions, hydrostatic_parameters
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
     'ncolumns': 150,
     'nlayers': 10,
     'dt': 6.0,
-    'tmax': 3600.,
-    'dumpfreq': 300,
-    'dirname': 'skamarock_klemp_nonhydrostatic'
+    'tmax': 3000.,
+    'dumpfreq': 250,
+    'dirname': 'skamarock_klemp_nonhydrostatic',
+    'hydrostatic': False
 }
 
 
@@ -41,7 +46,8 @@ def skamarock_klemp_nonhydrostatic(
         dt=skamarock_klemp_nonhydrostatic_defaults['dt'],
         tmax=skamarock_klemp_nonhydrostatic_defaults['tmax'],
         dumpfreq=skamarock_klemp_nonhydrostatic_defaults['dumpfreq'],
-        dirname=skamarock_klemp_nonhydrostatic_defaults['dirname']
+        dirname=skamarock_klemp_nonhydrostatic_defaults['dirname'],
+        hydrostatic=skamarock_klemp_nonhydrostatic_defaults['hydrostatic']
 ):
 
     # ------------------------------------------------------------------------ #
@@ -72,19 +78,26 @@ def skamarock_klemp_nonhydrostatic(
     domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
-    parameters = CompressibleParameters()
-    eqns = CompressibleEulerEquations(domain, parameters)
+    parameters = CompressibleParameters(mesh)
+    if hydrostatic:
+        eqns = HydrostaticCompressibleEulerEquations(domain, parameters)
+    else:
+        eqns = CompressibleEulerEquations(domain, parameters)
 
     # I/O
     points_x = np.linspace(0., domain_width, 100)
     points_z = [domain_height/2.]
     points = np.array([p for p in itertools.product(points_x, points_z)])
 
+    # Adjust default directory name
+    if hydrostatic and dirname == skamarock_klemp_nonhydrostatic_defaults['dirname']:
+        dirname = f'hyd_switch_{dirname}'
+
     # Dumping point data using legacy PointDataOutput is not supported in parallel
     if COMM_WORLD.size == 1:
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=True, dump_nc=False,
+            dump_vtus=False, dump_nc=True,
             point_data=[('theta_perturbation', points)],
         )
     else:
@@ -94,14 +107,10 @@ def skamarock_klemp_nonhydrostatic(
         )
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=True, dump_nc=True,
+            dump_vtus=False, dump_nc=True,
         )
 
-    diagnostic_fields = [
-        CourantNumber(), Gradient('u'), Perturbation('theta'),
-        Gradient('theta_perturbation'), Perturbation('rho'),
-        RichardsonNumber('theta', parameters.g/Tsurf), Gradient('theta')
-    ]
+    diagnostic_fields = [Perturbation('theta')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
@@ -125,7 +134,13 @@ def skamarock_klemp_nonhydrostatic(
     ]
 
     # Linear solver
-    linear_solver = CompressibleSolver(eqns)
+    if hydrostatic:
+        linear_solver = CompressibleSolver(
+            eqns, solver_parameters=hydrostatic_parameters,
+            overwrite_solver_parameters=True
+        )
+    else:
+        linear_solver = CompressibleSolver(eqns)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
@@ -222,6 +237,16 @@ if __name__ == "__main__":
         help="The name of the directory to write to.",
         type=str,
         default=skamarock_klemp_nonhydrostatic_defaults['dirname']
+    )
+    parser.add_argument(
+        '--hydrostatic',
+        help=(
+            "Whether to use the hydrostatic switch to emulate the "
+            + "hydrostatic equations. Otherwise use the full non-hydrostatic"
+            + "equations."
+        ),
+        action="store_true",
+        default=skamarock_klemp_nonhydrostatic_defaults['hydrostatic']
     )
     args, unknown = parser.parse_known_args()
 

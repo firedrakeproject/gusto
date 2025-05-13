@@ -20,7 +20,9 @@ lint:
 	@echo "    Linting gusto notebooks"
 	@python3 -m nbqa flake8 jupyter_notebooks/*.ipynb $(FLAKE8_FORMAT)
 
-test: unit_test integration_test example notebook_test
+test:
+	@echo "    Running all tests"
+	@python3 -m pytest -q -s unit-tests integration-tests examples notebook_test $(PYTEST_ARGS) --show-capture=no
 
 clean_cache:
 	@echo "    Cleaning caches"
@@ -28,19 +30,19 @@ clean_cache:
 
 unit_test: clean_cache
 	@echo "    Running all unit-tests"
-	@python3 -m pytest unit-tests $(PYTEST_ARGS)
+	@python3 -m pytest -q -s unit-tests $(PYTEST_ARGS) --show-capture=no
 
 integration_test: clean_cache
 	@echo "    Running all integration-tests"
-	@python3 -m pytest integration-tests $(PYTEST_ARGS)
+	@python3 -m pytest -q -s integration-tests $(PYTEST_ARGS) --show-capture=no
 
 example: clean_cache
 	@echo "    Running all examples"
-	@python3 -m pytest examples -v -m "not parallel" $(PYTEST_ARGS)
+	@python3 -m pytest -q -s examples -v -m "not parallel" $(PYTEST_ARGS) --show-capture=no
 
 parallel_example:
 	@echo "    Running all parallel examples"
-	@python3 -m pytest examples -v -m "parallel" $(PYTEST_ARGS)
+	@python3 -m pytest -q -s examples -v -m "parallel" $(PYTEST_ARGS) --show-capture=no
 
 notebook_test: clean_cache
 	@echo "    Running all Jupyter notebooks"

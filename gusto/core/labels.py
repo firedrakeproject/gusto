@@ -92,6 +92,9 @@ class PhysicsLabel(Label):
 # ---------------------------------------------------------------------------- #
 implicit = Label("implicit")
 explicit = Label("explicit")
+horizontal_transport = Label("horizontal_transport")
+vertical_transport = Label("vertical_transport")
+source_label = Label("source_label")
 transporting_velocity = Label("transporting_velocity", validator=lambda value: type(value) in [Function, ufl.tensors.ListTensor, ufl.indexed.Indexed])
 prognostic = Label("prognostic", validator=lambda value: type(value) == str)
 linearisation = Label("linearisation", validator=lambda value: type(value) in [LabelledForm, Term])

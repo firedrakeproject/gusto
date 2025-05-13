@@ -7,7 +7,7 @@ from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
 from gusto.core.labels import prognostic
 from gusto.equations import thermodynamics
-from gusto.core.configuration import HeldSuarezParameters
+from gusto.core.equation_configuration import HeldSuarezParameters
 from gusto.core import logger
 
 
@@ -26,7 +26,7 @@ class Relaxation(PhysicsParametrisation):
         """
         label_name = f'relaxation_{variable_name}'
         if hs_parameters is None:
-            hs_parameters = HeldSuarezParameters()
+            hs_parameters = HeldSuarezParameters(equation.domain.mesh)
             logger.warning('Using default Held-Suarez parameters')
         super().__init__(equation, label_name, hs_parameters)
 
@@ -121,7 +121,7 @@ class RayleighFriction(PhysicsParametrisation):
         """
         label_name = 'rayleigh_friction'
         if hs_parameters is None:
-            hs_parameters = HeldSuarezParameters()
+            hs_parameters = HeldSuarezParameters(equation.domain.mesh)
             logger.warning('Using default Held-Suarez parameters')
         super().__init__(equation, label_name, hs_parameters)
 
@@ -139,7 +139,7 @@ class RayleighFriction(PhysicsParametrisation):
         Vu = equation.domain.spaces('HDiv')
         u_hori = u - k*dot(u, k)
 
-        boundary_method = BoundaryMethod.extruded if self.domain == 0 else None
+        boundary_method = BoundaryMethod.extruded if equation.domain.vertical_degree == 0 else None
         self.rho_averaged = Function(Vt)
         self.exner = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
