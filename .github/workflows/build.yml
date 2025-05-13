@@ -46,7 +46,7 @@ jobs:
         run: |
           : # Wipe everything away in the current directory
           find . -delete
-	  firedrake-clean
+          firedrake-clean
 
       - uses: actions/checkout@v4
         with:
