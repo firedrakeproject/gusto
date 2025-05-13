@@ -114,7 +114,7 @@ jobs:
       - name: Gusto jupyter_notebooks
         run: |
           export GUSTO_PARALLEL_LOG=FILE
-          python -m pytest \
+          python3 -m pytest \
             -n 4 --dist loadscope \
             --timeout=1200 \
             --timeout-method=thread \
