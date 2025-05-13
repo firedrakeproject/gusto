@@ -55,8 +55,8 @@ class Parallel_RIDC(RIDC):
         # Checks for parallel RIDC
         if self.comm is None:
             raise ValueError("No communicator provided. Please provide a valid MPI communicator.")
-        if self.comm.ensemble_comm.size != self.K - 1:
-            raise ValueError("Number of ranks must be equal to K-1 for Parallel RIDC.")
+        if self.comm.ensemble_comm.size != self.K + 1:
+            raise ValueError("Number of ranks must be equal to K+1 for Parallel RIDC.")
         if self.M < self.K*(self.K+1)//2:
             raise ValueError("Number of subintervals M must be greater than K*(K+1)/2 for Parallel RIDC.")
 
