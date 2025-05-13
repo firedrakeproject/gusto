@@ -23,7 +23,7 @@ def run(timestepper, tmax, f_end):
 
 @pytest.mark.parametrize(
     "scheme", ["IMEX_SDC_Le(1,1)", "IMEX_SDC_R(2,2)", "BE_SDC_Lo(3,3)", "FE_SDC_Le(3,5)", "IMEX_RIDC_R(3)",
-                "BE_RIDC(4)", "FE_RIDC(4)"])
+               "BE_RIDC(4)", "FE_RIDC(4)"])
 def test_dc(tmpdir, scheme, tracer_setup):
     geometry = "sphere"
     setup = tracer_setup(tmpdir, geometry)

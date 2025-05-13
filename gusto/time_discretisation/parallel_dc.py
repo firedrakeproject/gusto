@@ -19,6 +19,7 @@ from gusto.time_discretisation.deferred_correction import SDC, RIDC
 
 __all__ = ["Parallel_RIDC", "Parallel_SDC"]
 
+
 class Parallel_RIDC(RIDC):
     """Class for Parallel Revisionist Integral Deferred Correction schemes."""
 
@@ -51,6 +52,13 @@ class Parallel_RIDC(RIDC):
                                             limiter, options, reduced=True)
         self.comm = communicator
 
+        # Checks for parallel RIDC
+        if self.comm is None:
+            raise ValueError("No communicator provided. Please provide a valid MPI communicator.")
+        if self.comm.ensemble_comm.size != self.K - 1:
+            raise ValueError("Number of ranks must be equal to K-1 for Parallel RIDC.")
+        if self.M < self.K*(self.K+1)//2:
+            raise ValueError("Number of subintervals M must be greater than K*(K+1)/2 for Parallel RIDC.")
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -71,9 +79,6 @@ class Parallel_RIDC(RIDC):
 
     @wrapper_apply
     def apply(self, x_out, x_in):
-
-        # Time parallelised code
-
         # Set up varibles on this rank
         x_out.assign(x_in)
         self.kval = self.comm.ensemble_comm.rank
@@ -87,7 +92,7 @@ class Parallel_RIDC(RIDC):
         self.solver_rhs.solve()
         self.fUnodes[0].assign(self.Urhs)
 
-        # On first communicator, we do the base timestepper
+        # On first communicator, we do the predictor step
         if (self.comm.ensemble_comm.rank == 0):
             # Base timestepper
             for m in range(self.M):
@@ -123,7 +128,7 @@ class Parallel_RIDC(RIDC):
                 # Compute
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-                #             + sum(j=1,M) s_mj*(F+S)(y^k)
+                #             + sum(j=1,M) s_mj*(F+S)(y_j^k)
                 self.solver.solve()
                 self.Unodes1[m+1].assign(self.U_DC)
 
@@ -232,11 +237,17 @@ class Parallel_SDC(SDC):
             communicator (MPI communicator, optional): communicator for parallel execution. Defaults to None.
         """
         super().__init__(base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
-                         formulation = "Z2N", field_name=field_name,
-                         linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters= nonlinear_solver_parameters,
+                         formulation="Z2N", field_name=field_name,
+                         linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters,
                          final_update=final_update,
                          limiter=limiter, options=options, initial_guess=initial_guess)
         self.comm = communicator
+
+        # Checks for parallel SDC
+        if self.comm is None:
+            raise ValueError("No communicator provided. Please provide a valid MPI communicator.")
+        if self.comm.ensemble_comm.size != self.M:
+            raise ValueError("Number of ranks must be equal to the number of nodes M for Parallel SDC.")
 
     def compute_quad(self):
         """
@@ -309,7 +320,6 @@ class Parallel_SDC(SDC):
             for evaluate in self.evaluate_source:
                 evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
 
-
             # Set Q or S matrix
             self.Q_.assign(self.quad[self.comm.ensemble_comm.rank])
 
@@ -350,7 +360,7 @@ class Parallel_SDC(SDC):
                 # Compute y_(n+1) = y_n + sum(j=1,M) q_j*F(y_j)
                 if self.comm.ensemble_comm.rank == self.M-1:
                     self.U_fin.assign(self.Unodes[-1])
-                self.comm.bcast(self.U_fin, self.M -1)
+                self.comm.bcast(self.U_fin, self.M-1)
                 self.solver_fin.solve()
                 # Apply limiter if required
                 if self.limiter is not None:
@@ -360,6 +370,6 @@ class Parallel_SDC(SDC):
                 # Take value at final quadrature node dtau_M
                 if self.comm.ensemble_comm.rank == self.M-1:
                     x_out.assign(self.Unodes[-1])
-                self.comm.bcast(x_out, self.M -1)
+                self.comm.bcast(x_out, self.M-1)
         else:
             x_out.assign(self.Unodes[-1])

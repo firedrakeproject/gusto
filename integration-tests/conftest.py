@@ -18,15 +18,20 @@ TracerSetup.__new__.__defaults__ = (None,)*len(opts)
 def tracer_sphere(tmpdir, degree, small_dt, ensemble):
     radius = 1
     if ensemble is not None:
-        dirname = str(tmpdir)+"comm"+str(ensemble.ensemble_comm.rank)
-        mesh = IcosahedralSphereMesh(radius=radius,
-                                 refinement_level=3,
-                                 degree=1, comm=ensemble.comm)
+        dirname = str(tmpdir) + "comm" + str(ensemble.ensemble_comm.rank)
+        mesh = IcosahedralSphereMesh(
+            radius=radius,
+            refinement_level=3,
+            degree=1,
+            comm=ensemble.comm
+        )
     else:
         dirname = str(tmpdir)
-        mesh = IcosahedralSphereMesh(radius=radius,
-                                 refinement_level=3,
-                                 degree=1)
+        mesh = IcosahedralSphereMesh(
+            radius=radius,
+            refinement_level=3,
+            degree=1
+        )
     x = SpatialCoordinate(mesh)
 
     # Parameters chosen so that dt != 1

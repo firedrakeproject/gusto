@@ -55,7 +55,7 @@ def pick_up_mesh(output, mesh_name, comm=COMM_WORLD):
     else:
         dumpdir = path.join("results", output.dirname)
         chkfile = path.join(dumpdir, "chkpt.h5")
-    with CheckpointFile(chkfile, 'r', comm=mesh.comm) as chk:
+    with CheckpointFile(chkfile, 'r') as chk:
         mesh = chk.load_mesh(mesh_name)
 
     if dumpdir:

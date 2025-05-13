@@ -449,6 +449,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             self.solve_stage(x_in, i)
         x_out.assign(self.x1)
 
+
 class ForwardEuler(ExplicitRungeKutta):
     """
     Implements the forward Euler timestepping scheme.

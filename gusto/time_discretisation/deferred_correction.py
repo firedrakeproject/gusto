@@ -1,67 +1,76 @@
-u"""
+"""
 Objects for discretising time derivatives using Deferred Correction (DC)
-Methods. We have Spectral Deferred Correction (SDC) and Serial Revisionist Integral
-Deferred Correction (RIDC) methods.
+Methods. This includes Spectral Deferred Correction (SDC) and Serial Revisionist
+Integral Deferred Correction (RIDC) methods.
 
-SDC and RIDC objects discretise ∂y/∂t = F(y), for variable y, time t and
-operator F.
+These methods discretise ∂y/∂t = F(y), for variable y, time t, and operator F.
 
-Written in Picard integral form this equation is
-y(t) = y_n + int[t_n,t] F(y(s)) ds
+In Picard integral form, this equation is:
+y(t) = y_n + ∫[t_n, t] F(y(s)) ds
 
 ================================================================================
-SDC Formulation:
+Spectral Deferred Correction (SDC) Formulation:
 ================================================================================
 
-SDC methods are based on the idea of integrating the function F(y) over the
-interval [t_n, t_n+1] using quadrature. We can then evaluate the function
-using some quadrature rule, we can evaluate y on a temporal quadrature node as
-y_m = y_n + sum[j=1,M] q_mj*F(y_j)
-where q_mj can be found by integrating Lagrange polynomials. This is similar to
-how Runge-Kutta methods are formed.
+SDC methods integrate the function F(y) over the interval [t_n, t_n+1] using
+quadrature. Evaluating y on temporal quadrature nodes gives:
+y_m = y_n + Σ[j=1,M] q_mj * F(y_j)
+where q_mj are derived from integrating Lagrange polynomials, similar to how
+Runge-Kutta methods are constructed.
 
-In matrix form this equation is:
-(I - dt*Q*F)(y)=y_n
+In matrix form:
+(I - dt * Q * F)(y) = y_n
 
-Computing y by Picard iteration through k we get:
-y^(k+1)=y^k + (y_n - (I - dt*Q*F)(y^k))
+Using Picard iteration:
+y^(k+1) = y^k + (y_n - (I - dt * Q * F)(y^k))
 
-Finally, to get our SDC method we precondition this system, using some approximation
-of Q, Q_delta:
-(I - dt*Q_delta*F)(y^(k+1)) = y_n + dt*(Q - Q_delta)F(y^k)
+Preconditioning this system with an approximation Q_delta gives:
+(I - dt * Q_delta * F)(y^(k+1)) = y_n + dt * (Q - Q_delta) * F(y^k)
 
-The zero-to-node (Z2N) formulation is then:
-y_m^(k+1) = y_n + sum(j=1,M) q'_mj*(F(y_j^(k+1)) - F(y_j^k))
-            + sum(j=1,M) q_mj*F(y_(m-1)^k)
-for entires q_mj in Q and q'_mj in Q_delta.
+Two formulations are commonly used:
+1. Zero-to-node (Z2N):
+    y_m^(k+1) = y_n + Σ[j=1,M] q'_mj * (F(y_j^(k+1)) - F(y_j^k))
+                    + Σ[j=1,M] q_mj * F(y_(j)^k)
+    where q_mj are entries in Q and q'_mj are entries in Q_delta.
 
-Node-wise from previous quadrature node (N2N formulation), the implicit SDC calculation is:
-y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k))
-            + sum(j=1,M) s_mj*F(y_(m-1)^k)
-where s_mj = q_mj - q_(m-1)j for entires q_ik in Q.
+2. Node-to-node (N2N):
+    y_m^(k+1) = y_(m-1)^(k+1) + dtau_m * (F(y_(m)^(k+1)) - F(y_(m)^k))
+                    + Σ[j=1,M] s_mj * F(y_(j)^k)
+    where s_mj = q_mj - q_(m-1)j for entries q_ik in Q.
 
-Key choices in our SDC method are:
-- Choice of quadrature node type (e.g. gauss-lobatto)
+Key choices in SDC:
+- Quadrature node type (e.g., Gauss-Lobatto)
 - Number of quadrature nodes
-- Number of iterations - each iteration increases the order of accuracy up to
-  the order of the underlying quadrature
-- Choice of Q_delta (e.g. Forward Euler, Backward Euler, LU-trick)
-- How to get initial solution on quadrature nodes
+- Number of iterations (each iteration increases accuracy up to the quadrature order)
+- Choice of Q_delta (e.g., Forward Euler, Backward Euler, LU-trick)
+- Initial solution on quadrature nodes
 
 ================================================================================
-RIDC Formulation:
+Revisionist Integral Deferred Correction (RIDC) Formulation:
 ================================================================================
 
-RIDC methods are closely related to SDC methods, but use equidistant nodes and
-a slightly different formulation, discretising the error equation in a different way.
-The idea is to use a low-order method to get an initial guess of the solution, and then
-correct this solution using a high-order method. The correction is done by solving
-the error equation, which is derived from the original equation.
-SDC can also be thought of in this way.
+RIDC methods are similar to SDC but use equidistant nodes and a different
+formulation for the error equation. The process involves:
+1. Using a low-order method (predictor) to compute an initial solution:
+    y_m^(0) = y_(m-1)^(0) + dt * F(y_(m)^(0))
 
-The error equation is:
+2. Performing K correction steps:
+    y_m^(k+1) = y_(m-1)^(k+1) + dt * (F(y_(m)^(k+1)) - F(y_(m)^k))
+                    + Σ[j=1,M] s_mj * F(y_(j)^k)
+We solve on N equispaced nodes on the interval [0, T] divided into J intervals,
+each further divided into M subintervals:
 
+     0 * * * * * | * * * * * | * * * * * | * * * * * | * * * * * T
+     |   J intervals, each with M subintervals                   |
 
+Here, M >> K, and M must be at least K * (K+1) / 2 for the reduced stencil RIDC method.
+dt = T / N, N = J * M.
+Each correction sweep increases accuracy up to the quadrature order.
+
+Key choices in RIDC:
+- Number of subintervals J
+- Number of quadrature nodes M + 1
+- Number of correction iterations K
 """
 
 from abc import ABCMeta
@@ -78,6 +87,7 @@ from gusto.core.labels import (time_derivative, implicit, explicit, source_label
 from qmat import genQCoeffs, genQDeltaCoeffs
 
 __all__ = ["SDC", "RIDC"]
+
 
 class SDC(object, metaclass=ABCMeta):
     """Class for Spectral Deferred Correction schemes."""
@@ -530,6 +540,7 @@ class SDC(object, metaclass=ABCMeta):
         else:
             x_out.assign(self.Unodes[-1])
 
+
 class RIDC(object, metaclass=ABCMeta):
     """Class for Revisionist Integral Deferred Correction schemes."""
 
@@ -600,7 +611,6 @@ class RIDC(object, metaclass=ABCMeta):
         else:
             self.nonlinear_solver_parameters = nonlinear_solver_parameters
 
-
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the RIDC time discretisation based on the equation.
@@ -661,7 +671,7 @@ class RIDC(object, metaclass=ABCMeta):
     def nlevels(self):
         return 1
 
-    def equidistant_nodes(self ,M):
+    def equidistant_nodes(self, M):
         """
         Returns a grid of M equispaced nodes from -1 to 1
         """
@@ -845,7 +855,6 @@ class RIDC(object, metaclass=ABCMeta):
             all_terms,
             lambda t: Constant(self.dt)*t)
         residual -= r_exp_k
-
 
         # Add on sum(j=1,M) s_mj*F(y_m^k), where s_mj = q_mj-q_m-1j
         # and s1j = q1j.

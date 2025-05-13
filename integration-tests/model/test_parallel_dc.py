@@ -16,7 +16,8 @@ def run(timestepper, tmax, f_end):
     print(norm(timestepper.fields("f") - f_end) / norm(f_end))
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
-@pytest.mark.parallel(nprocs=[2,4])
+
+@pytest.mark.parallel(nprocs=[2, 4])
 @pytest.mark.parametrize(
     "scheme", ["IMEX_SDC_R(3,3)", "IMEX_RIDC_R(3)"])
 def test_parallel_dc(tmpdir, scheme, tracer_setup):
@@ -45,7 +46,7 @@ def test_parallel_dc(tmpdir, scheme, tracer_setup):
         eqn.label_terms(lambda t: t.has_label(transport), explicit)
         base_scheme = IMEX_Euler(domain)
         scheme = Parallel_SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
-                     qdelta_exp, final_update=False, initial_guess="copy", communicator=ensemble)
+                              qdelta_exp, final_update=False, initial_guess="copy", communicator=ensemble)
     elif scheme == "IMEX_RIDC_R(3)":
         M = k*(k+1)//2 + 1
         eqn = ContinuityEquation(domain, V, "f")
@@ -66,5 +67,4 @@ def test_parallel_dc(tmpdir, scheme, tracer_setup):
     # Initial conditions
     timestepper.fields("f").interpolate(setup.f_init)
     timestepper.fields("u").project(setup.uexpr)
-    #run(timestepper, setup.tmax, setup.f_end)
-    #parallel_assert(run(timestepper, setup.tmax, setup.f_end) < setup.tol, "Error too large")
+    parallel_assert(run(timestepper, setup.tmax, setup.f_end) < setup.tol, "Error too large")
