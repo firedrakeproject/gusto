@@ -62,13 +62,11 @@ jobs:
       - name: Install Gusto
         id: install-one
         run: |
-          . venv-gusto/bin/activate
           pip install ./gusto-repo
           pip list
 
       - name: Test serial-only netCDF
         run: |
-          . venv-gusto/bin/activate
           : # Run the serial tests
           firedrake-run-split-tests 1 1 -n 12 --verbose gusto-repo/integration-tests/model/test_nc_outputting.py  --log-file=gusto_netcdf_serial.log --show-capture=no
           : # Run the parallel tests
@@ -80,7 +78,6 @@ jobs:
         if: success() || steps.install-one.conclusion == 'success'
         id: install-two
         run: |
-          . venv-gusto/bin/activate
           pip uninstall -y netCDF4
           : # '--no-build-isolation' has to be passed for mpi4py to be found
           : # but this means that we need to install any extra build
@@ -90,7 +87,6 @@ jobs:
 
       - name: Run tests (nprocs = 1)
         run: |
-          . venv-gusto/bin/activate
           : # Use pytest-xdist here so we can have a single collated output (not possible
           : # for parallel tests)
           firedrake-run-split-tests 1 1 -n 12 --dist worksteal "$EXTRA_PYTEST_ARGS" --log-file=gusto1.log
@@ -100,27 +96,23 @@ jobs:
         # Run even if earlier tests failed
         if: success() || steps.install-two.conclusion == 'success'
         run: |
-          . venv-gusto/bin/activate
           firedrake-run-split-tests 2 6 "$EXTRA_PYTEST_ARGS" "--log-file=gusto2_{#}.log"
         timeout-minutes: 30
 
       - name: Run tests (nprocs = 3)
         if: success() || steps.install-two.conclusion == 'success'
         run: |
-          . venv-gusto/bin/activate
           firedrake-run-split-tests 3 4 "$EXTRA_PYTEST_ARGS" "--log-file=gusto3_{#}.log"
         timeout-minutes: 10
 
       - name: Run tests (nprocs = 4)
         if: success() || steps.install-two.conclusion == 'success'
         run: |
-          . venv-gusto/bin/activate
           firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS" "--log-file=gusto4_{#}.log"
         timeout-minutes: 10
 
       - name: Gusto jupyter_notebooks
         run: |
-          . /home/firedrake/firedrake/bin/activate
           export GUSTO_PARALLEL_LOG=FILE
           python -m pytest \
             -n 4 --dist loadscope \
