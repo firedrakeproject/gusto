@@ -15,9 +15,16 @@ TracerSetup = namedtuple('TracerSetup', opts)
 TracerSetup.__new__.__defaults__ = (None,)*len(opts)
 
 
-def tracer_sphere(tmpdir, degree, small_dt):
+def tracer_sphere(tmpdir, degree, small_dt, ensemble):
     radius = 1
-    mesh = IcosahedralSphereMesh(radius=radius,
+    if ensemble is not None:
+        dirname = str(tmpdir)+"comm"+str(ensemble.ensemble_comm.rank)
+        mesh = IcosahedralSphereMesh(radius=radius,
+                                 refinement_level=3,
+                                 degree=1, comm=ensemble.comm)
+    else:
+        dirname = str(tmpdir)
+        mesh = IcosahedralSphereMesh(radius=radius,
                                  refinement_level=3,
                                  degree=1)
     x = SpatialCoordinate(mesh)
@@ -30,7 +37,7 @@ def tracer_sphere(tmpdir, degree, small_dt):
     else:
         dt = pi/3. * 0.02
 
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=15)
+    output = OutputParameters(dirname=dirname, dumpfreq=15)
     domain = Domain(mesh, dt, family="BDM", degree=degree)
     io = IO(domain, output)
 
@@ -47,9 +54,14 @@ def tracer_sphere(tmpdir, degree, small_dt):
                        uexpr, umax, radius, tol)
 
 
-def tracer_slice(tmpdir, degree, small_dt):
+def tracer_slice(tmpdir, degree, small_dt, ensemble):
     n = 30 if degree == 0 else 15
-    m = PeriodicIntervalMesh(n, 1.)
+    if ensemble is not None:
+        dirname = str(tmpdir)+"comm"+str(ensemble.ensemble_comm.rank)
+        m = PeriodicIntervalMesh(n, 1., comm=ensemble.comm)
+    else:
+        dirname = str(tmpdir)
+        m = PeriodicIntervalMesh(n, 1.)
     mesh = ExtrudedMesh(m, layers=n, layer_height=1./n)
 
     # Parameters chosen so that dt != 1 and u != 1
@@ -61,7 +73,7 @@ def tracer_slice(tmpdir, degree, small_dt):
     else:
         dt = 0.01
     tmax = 0.75
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
+    output = OutputParameters(dirname=dirname, dumpfreq=25)
     domain = Domain(mesh, dt, family="CG", degree=degree)
     io = IO(domain, output)
 
@@ -83,16 +95,21 @@ def tracer_slice(tmpdir, degree, small_dt):
     return TracerSetup(domain, tmax, io, f_init, f_end, degree, uexpr, tol=tol)
 
 
-def tracer_blob_slice(tmpdir, degree, small_dt):
+def tracer_blob_slice(tmpdir, degree, small_dt, ensemble):
     if small_dt:
         dt = 0.002
     else:
         dt = 0.01
     L = 10.
-    m = PeriodicIntervalMesh(10, L)
+    if ensemble is not None:
+        dirname = str(tmpdir)+"comm"+str(ensemble.ensemble_comm.rank)
+        m = PeriodicIntervalMesh(10, L, comm=ensemble.comm)
+    else:
+        dirname = str(tmpdir)
+        m = PeriodicIntervalMesh(10, L)
     mesh = ExtrudedMesh(m, layers=10, layer_height=1.)
 
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
+    output = OutputParameters(dirname=dirname, dumpfreq=25)
     domain = Domain(mesh, dt, family="CG", degree=degree)
     io = IO(domain, output)
 
@@ -106,14 +123,14 @@ def tracer_blob_slice(tmpdir, degree, small_dt):
 @pytest.fixture()
 def tracer_setup():
 
-    def _tracer_setup(tmpdir, geometry, blob=False, degree=1, small_dt=False):
+    def _tracer_setup(tmpdir, geometry, blob=False, degree=1, small_dt=False, ensemble=None):
         if geometry == "sphere":
             assert not blob
-            return tracer_sphere(tmpdir, degree, small_dt)
+            return tracer_sphere(tmpdir, degree, small_dt, ensemble=ensemble)
         elif geometry == "slice":
             if blob:
-                return tracer_blob_slice(tmpdir, degree, small_dt)
+                return tracer_blob_slice(tmpdir, degree, small_dt, ensemble=ensemble)
             else:
-                return tracer_slice(tmpdir, degree, small_dt)
+                return tracer_slice(tmpdir, degree, small_dt, ensemble=ensemble)
 
     return _tracer_setup

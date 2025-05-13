@@ -22,7 +22,6 @@ from gusto.core.labels import (time_derivative, prognostic, physics_label,
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
 from gusto.solvers import mass_parameters
-import numpy as np
 
 
 __all__ = ["TimeDiscretisation", "ExplicitTimeDiscretisation", "BackwardEuler",
