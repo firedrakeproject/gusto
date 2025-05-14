@@ -24,11 +24,11 @@ def run(timestepper, tmax, f_end):
     "scheme", ["IMEX_SDC_R(2,2)", "IMEX_RIDC_R(2)"])
 def test_parallel_dc(tmpdir, scheme):
 
-    if scheme == "IMEX_SDC_R(3,3)":
+    if scheme == "IMEX_SDC_R(2,2)":
         M = 2
         k = M
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(M))
-    elif scheme == "IMEX_RIDC_R(3)":
+    elif scheme == "IMEX_RIDC_R(2)":
         k = 1
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(k+1))
 
@@ -65,7 +65,7 @@ def test_parallel_dc(tmpdir, scheme):
     domain = domain
     V = domain.spaces("DG")
 
-    if scheme == "IMEX_SDC_R(3,3)":
+    if scheme == "IMEX_SDC_R(2,2)":
         quad_type = "RADAU-RIGHT"
         node_type = "LEGENDRE"
         qdelta_imp = "MIN-SR-FLEX"
@@ -77,7 +77,7 @@ def test_parallel_dc(tmpdir, scheme):
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
                                    qdelta_exp, final_update=False, initial_guess="copy", communicator=ensemble)
-    elif scheme == "IMEX_RIDC_R(3)":
+    elif scheme == "IMEX_RIDC_R(2)":
         M = k*(k+1)//2 + 1
         eqn = ContinuityEquation(domain, V, "f")
         eqn = split_continuity_form(eqn)
