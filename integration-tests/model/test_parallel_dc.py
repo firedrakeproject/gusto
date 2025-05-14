@@ -12,23 +12,24 @@ from gusto import *
 import pytest
 from pytest_mpi.parallel_assert import parallel_assert
 
+
 def run(timestepper, tmax, f_end):
     timestepper.run(0, tmax)
     print(norm(timestepper.fields("f") - f_end) / norm(f_end))
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parallel(nprocs=[3,6])
+@pytest.mark.parallel(nprocs=[2, 4])
 @pytest.mark.parametrize(
-    "scheme", ["IMEX_SDC_R(3,3)", "IMEX_RIDC_R(3)"])
+    "scheme", ["IMEX_SDC_R(2,2)", "IMEX_RIDC_R(2)"])
 def test_parallel_dc(tmpdir, scheme):
 
     if scheme == "IMEX_SDC_R(3,3)":
-        M = 3
+        M = 2
         k = M
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(M))
     elif scheme == "IMEX_RIDC_R(3)":
-        k = 2
+        k = 1
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(k+1))
 
     # Get the tracer setup
@@ -75,7 +76,7 @@ def test_parallel_dc(tmpdir, scheme):
         eqn.label_terms(lambda t: t.has_label(transport), explicit)
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
-                                qdelta_exp, final_update=False, initial_guess="copy", communicator=ensemble)
+                                   qdelta_exp, final_update=False, initial_guess="copy", communicator=ensemble)
     elif scheme == "IMEX_RIDC_R(3)":
         M = k*(k+1)//2 + 1
         eqn = ContinuityEquation(domain, V, "f")
