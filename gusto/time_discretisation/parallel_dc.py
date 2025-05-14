@@ -62,7 +62,7 @@ class Parallel_RIDC(RIDC):
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
-        Set up the SDC time discretisation based on the equation.n
+        Set up the RIDC time discretisation based on the equation.
 
         Args:
             equation (:class:`PrognosticEquation`): the model's equation.
@@ -372,4 +372,7 @@ class Parallel_SDC(SDC):
                     x_out.assign(self.Unodes[-1])
                 self.comm.bcast(x_out, self.M-1)
         else:
-            x_out.assign(self.Unodes[-1])
+            # Take value at final quadrature node dtau_M
+            if self.comm.ensemble_comm.rank == self.M-1:
+                x_out.assign(self.Unodes[-1])
+            self.comm.bcast(x_out, self.M-1)

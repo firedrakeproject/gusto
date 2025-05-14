@@ -19,17 +19,17 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parallel(nprocs=[2, 4])
+@pytest.mark.parallel(nprocs=[3, 6])
 @pytest.mark.parametrize(
-    "scheme", ["IMEX_SDC_R(2,2)", "IMEX_RIDC_R(2)"])
+    "scheme", ["IMEX_SDC_R(3,3)", "IMEX_RIDC_R(3)"])
 def test_parallel_dc(tmpdir, scheme):
 
-    if scheme == "IMEX_SDC_R(2,2)":
-        M = 2
+    if scheme == "IMEX_SDC_R(3,3)":
+        M = 3
         k = M
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(M))
-    elif scheme == "IMEX_RIDC_R(2)":
-        k = 1
+    elif scheme == "IMEX_RIDC_R(3)":
+        k = 2
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(k+1))
 
     # Get the tracer setup
@@ -65,7 +65,7 @@ def test_parallel_dc(tmpdir, scheme):
     domain = domain
     V = domain.spaces("DG")
 
-    if scheme == "IMEX_SDC_R(2,2)":
+    if scheme == "IMEX_SDC_R(3,3)":
         quad_type = "RADAU-RIGHT"
         node_type = "LEGENDRE"
         qdelta_imp = "MIN-SR-FLEX"
@@ -77,8 +77,8 @@ def test_parallel_dc(tmpdir, scheme):
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
                                    qdelta_exp, final_update=False, initial_guess="copy", communicator=ensemble)
-    elif scheme == "IMEX_RIDC_R(2)":
-        M = k*(k+1)//2 + 1
+    elif scheme == "IMEX_RIDC_R(3)":
+        M = k*(k+1)//2 + 4
         eqn = ContinuityEquation(domain, V, "f")
         eqn = split_continuity_form(eqn)
         eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
