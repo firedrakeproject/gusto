@@ -123,7 +123,7 @@ jobs:
         run: |
           . venv-gusto/bin/activate
           firedrake-run-split-tests 6 2 "$EXTRA_PYTEST_ARGS" "--log-file=gusto6_{#}.log"
-        timeout-minutes: 10
+        timeout-minutes: 30
 
       - name: Upload pytest log files
         uses: actions/upload-artifact@v4
