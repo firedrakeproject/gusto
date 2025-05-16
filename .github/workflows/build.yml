@@ -118,6 +118,13 @@ jobs:
           firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS" "--log-file=gusto4_{#}.log"
         timeout-minutes: 10
 
+      - name: Run tests (nprocs = 6)
+        if: success() || steps.install-two.conclusion == 'success'
+        run: |
+          . venv-gusto/bin/activate
+          firedrake-run-split-tests 6 2 "$EXTRA_PYTEST_ARGS" "--log-file=gusto6_{#}.log"
+        timeout-minutes: 10
+
       - name: Upload pytest log files
         uses: actions/upload-artifact@v4
         if: success() || steps.install-two.conclusion == 'success'
