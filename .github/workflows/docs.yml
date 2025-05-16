@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     # The docker container to use.
     container:
-      image: firedrakeproject/firedrake-docdeps:latest
+      image: firedrakeproject/firedrake-vanilla-default:latest
 
     steps:
       - uses: actions/checkout@v4
