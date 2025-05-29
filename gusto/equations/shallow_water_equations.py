@@ -421,8 +421,10 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             beta2 = self.parameters.beta2
 
             qsat_expr = self.compute_saturation(self.X)
-            qv = conditional(qt < qsat_expr, qt, qsat_expr)
-            qvbar = conditional(qtbar < qsat_expr, qtbar, qsat_expr)
+            #qv = conditional(qt < qsat_expr, qt, qsat_expr)
+            #qvbar = conditional(qtbar < qsat_expr, qtbar, qsat_expr)
+            qv = qt
+            qvbar = qtbar
             source_form = pressure_gradient(subject(prognostic(
                 -D * div(b*w) * dx - 0.5 * b * div(D*w) * dx
                 + jump(b*w, n) * avg(D) * dS + 0.5 * jump(D*w, n) * avg(b) * dS
@@ -436,11 +438,11 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 + jump(bbar*w, n) * avg(D_trial) * dS
                 + 0.5 * jump(Dbar*w, n) * avg(b_trial) * dS
                 - beta2 * D_trial * div(qvbar*w)*dx
-                - 0.5 * beta2 * qvbar * div(Dbar*w) * dx
+             #   - 0.5 * beta2 * qvbar * div(Dbar*w) * dx
                 + beta2 * jump(qvbar*w, n) * avg(D_trial) * dS
-                + 0.5 * beta2 * jump(Dbar*w, n) * avg(qvbar) * dS
-                - 0.5 * bbar * div(Dbar*w) * dx
-                + 0.5 * jump(Dbar*w, n) * avg(bbar) * dS
+             #   + 0.5 * beta2 * jump(Dbar*w, n) * avg(qvbar) * dS
+             #   - 0.5 * bbar * div(Dbar*w) * dx
+             #   + 0.5 * jump(Dbar*w, n) * avg(bbar) * dS
                 - 0.5 * bbar * div(D_trial*w) * dx
                 + 0.5 * jump(D_trial*w, n) * avg(bbar) * dS
                 - beta2 * 0.5 * qvbar * div(D_trial*w) * dx
