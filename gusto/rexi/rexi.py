@@ -1,7 +1,7 @@
 from gusto.rexi.rexi_coefficients import *
 from firedrake import Function, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver
-from gusto.core.labels import time_derivative, prognostic, linearisation
+from gusto.core.labels import time_derivative, prognostic, linearisation, constant_label
 from firedrake.fml import (
     Term, all_terms, drop, subject,
     replace_subject, replace_test_function, replace_trial_function
@@ -43,7 +43,13 @@ class Rexi(object):
             raise ValueError("cpx_type must be 'mixed' or 'vector'")
         self.cpx = cpx
 
+        print(len(equation.residual))
         residual = equation.residual.label_map(
+            lambda t: t.has_label(constant_label),
+            map_if_true=drop)
+        print(len(residual))
+
+        residual = residual.label_map(
             lambda t: t.has_label(linearisation),
             map_if_true=lambda t: Term(t.get(linearisation).form, t.labels),
             map_if_false=drop)
@@ -155,14 +161,14 @@ class Rexi(object):
         from slepc4py import SLEPc
         from firedrake import COMM_WORLD, Ensemble, assemble
 
-        print("this is mass.form:", type(mass.form))
-        print("this is function.form:", type(function.form))
+        #print("this is mass.form:", type(mass.form))
+        #print("this is function.form:", type(function.form))
 
-        print("this is the type of the assembled function.form:", type(assemble(function.form, mat_type='aij')))
-        print("this is the type of the assembled mass.form:", type(assemble(mass.form, mat_type='aij')))
+        #print("this is the type of the assembled function.form:", type(assemble(aL.form, mat_type='aij')))
+        #print("this is the type of the assembled mass.form:", type(assemble(aM.form, mat_type='aij')))
 
-        petsc_a = assemble(function.form, mat_type='aij').M.handle
-        petsc_m = assemble(mass.form, mat_type='aij').M.handle
+        #petsc_a = assemble(function.form, mat_type='aij').M.handle
+        #petsc_m = assemble(mass.form, mat_type='aij').M.handle
 
         #num_eigenvalues = 1
 
