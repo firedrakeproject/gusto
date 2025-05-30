@@ -1,12 +1,16 @@
 from gusto.rexi.rexi_coefficients import *
-from firedrake import Function, DirichletBC, \
+from firedrake import Function, DirichletBC, assemble,\
     LinearVariationalProblem, LinearVariationalSolver
-from gusto.core.labels import time_derivative, prognostic, linearisation, constant_label
+from gusto.core.labels import time_derivative, prognostic, linearisation, \
+    constant_label
 from firedrake.fml import (
     Term, all_terms, drop, subject,
     replace_subject, replace_test_function, replace_trial_function
 )
 from firedrake.formmanipulation import split_form
+from firedrake.petsc import PETSc
+from slepc4py import SLEPc
+from firedrake import assemble
 
 NullTerm = Term(None)
 
@@ -21,7 +25,7 @@ class Rexi(object):
     """
 
     def __init__(self, equation, rexi_parameters, *, solver_parameters=None,
-                 manager=None, cpx_type='mixed'):
+                 manager=None, cpx_type='mixed', compute_eigenvalues=False):
 
         """
         Args:
@@ -43,6 +47,8 @@ class Rexi(object):
             raise ValueError("cpx_type must be 'mixed' or 'vector'")
         self.cpx = cpx
 
+        self.equation = equation
+        self.compute_eigenvalues = compute_eigenvalues
         #residual = equation.residual.label_map(
         #    lambda t: t.has_label(linearisation),
         #    map_if_true=lambda t: Term(t.get(linearisation).form, t.labels),
@@ -169,50 +175,9 @@ class Rexi(object):
         self.bc = cpx.ComplexConstant(1)
 
         # alpha*M and tau*L
-        aM = cpx.BilinearForm(W, self.ac, form_mass)
-        aL, self.tau, _ = cpx.BilinearForm(W, 1, form_function, return_z=True)
-        a = aM - aL
-
-        # ----------------------------------------------------------------- #
-        #print("this is where to put in the eigenvalue calculation")
-        from firedrake.petsc import PETSc
-        from slepc4py import SLEPc
-        from firedrake import assemble
-
-        #print("this is mass.form:", type(mass.form))
-        #print("this is function.form:", type(function.form))
-
-        #print("this is the type of the assembled function.form:", type(assemble(aL.form, mat_type='aij')))
-        #print("this is the type of the assembled mass.form:", type(assemble(aM.form, mat_type='aij')))
-
-        petsc_a = assemble(aL.form, mat_type='aij').M.handle
-        petsc_m = assemble(aM.form, mat_type='aij').M.handle
-
-        num_eigenvalues = 1
-
-        opts = PETSc.Options()
-        opts.setValue("eps_gen_non_hermitian", None)
-        opts.setValue("st_pc_factor_shift_type", "NONZERO")
-        opts.setValue("eps_type", "krylovschur")
-        opts.setValue("eps_largest_imaginary", None)
-        opts.setValue("eps_tol", 1e-10)
-
-        es = SLEPc.EPS().create(comm=COMM_WORLD)
-        es.setDimensions(num_eigenvalues)
-        es.setOperators(petsc_a, petsc_m)
-        es.setFromOptions()
-        es.solve()
-
-        nconv = es.getConverged()
-        print("Converged n",nconv)
-
-        vr, vi = petsc_a.getVecs()
-
-        lam = es.getEigenpair(0, vr, vi)
-
-        print("Lambda", lam)
-        # ----------------------------------------------------------------- #
-
+        self.aM = cpx.BilinearForm(W, self.ac, form_mass)
+        self.aL, self.tau, _ = cpx.BilinearForm(W, 1, form_function, return_z=True)
+        a = self.aM - self.aL
 
         # right hand side is just U0
         b = cpx.LinearForm(W, 1, form_rhs)
@@ -242,6 +207,35 @@ class Rexi(object):
         self.solver = LinearVariationalSolver(
             rexi_prob, solver_parameters=solver_parameters)
 
+    def eigenvalue_calc(self):
+
+        petsc_a = assemble(self.aL.form, mat_type='aij').M.handle
+        petsc_m = assemble(self.aM.form, mat_type='aij').M.handle
+
+        num_eigenvalues = 1
+
+        opts = PETSc.Options()
+        opts.setValue("eps_gen_non_hermitian", None)
+        opts.setValue("st_pc_factor_shift_type", "NONZERO")
+        opts.setValue("eps_type", "krylovschur")
+        opts.setValue("eps_largest_imaginary", None)
+        opts.setValue("eps_tol", 1e-10)
+
+        es = SLEPc.EPS().create(comm=COMM_WORLD)
+        es.setDimensions(num_eigenvalues)
+        es.setOperators(petsc_a, petsc_m)
+        es.setFromOptions()
+        es.solve()
+
+        nconv = es.getConverged()
+        print("Converged n",nconv)
+
+        vr, vi = petsc_a.getVecs()
+
+        lam = es.getEigenpair(0, vr, vi)
+
+        print("Lambda", lam)
+        
     def solve(self, x_out, x_in, dt):
         """
         Solve method for approximating the matrix exponential by a
@@ -259,7 +253,12 @@ class Rexi(object):
         # assign tau and U0 and initialise solution to 0.
         self.tau.assign(dt)
         self.U0.assign(x_in)
+        self.X_ref.assign(self.equation.X_ref)
         x_out.assign(0.)
+
+        if self.compute_eigenvalues:
+            print("computing eigenvalues")
+            self.eigenvalue_calc()
 
         # loop over solvers, assigning a_i, solving and accumulating the sum
         for i in range(self.N):
