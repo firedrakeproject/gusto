@@ -4,7 +4,8 @@ from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg,
                        dS, split, conditional, exp)
 from firedrake.fml import subject, drop, Label
 from gusto.core.labels import (time_derivative, transport, prognostic,
-                               linearisation, pressure_gradient, coriolis, constant_label)
+                               linearisation, pressure_gradient, coriolis,
+                               constant_label, ref_label)
 from gusto.equations.common_forms import (
     advection_form, advection_form_1d, continuity_form,
     continuity_form_1d, vector_invariant_form,
@@ -452,7 +453,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 + 0.5 * beta2 * jump(Dbar*w, n) * avg(qvbar) * dS
                 - 0.5 * bbar * div(Dbar*w) * dx
                 + 0.5 * jump(Dbar*w, n) * avg(bbar) * dS,
-                'u'), self.X)))
+                'u'), self.X_ref)))
 
         else:
             source_form = pressure_gradient(

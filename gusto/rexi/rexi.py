@@ -43,19 +43,22 @@ class Rexi(object):
             raise ValueError("cpx_type must be 'mixed' or 'vector'")
         self.cpx = cpx
 
-        print(len(equation.residual))
+        #residual = equation.residual.label_map(
+        #    lambda t: t.has_label(linearisation),
+        #    map_if_true=lambda t: Term(t.get(linearisation).form, t.labels),
+        #    map_if_false=drop)
+
         residual = equation.residual.label_map(
             lambda t: t.has_label(constant_label),
             map_if_true=drop)
-        print(len(residual))
 
-        residual = residual.label_map(
-            lambda t: t.has_label(linearisation),
-            map_if_true=lambda t: Term(t.get(linearisation).form, t.labels),
+        const_rhs = equation.residual.label_map(
+            lambda t: t.has_label(constant_label),
             map_if_false=drop)
-        residual = residual.label_map(
-            all_terms,
-            lambda t: replace_trial_function(t.get(subject))(t))
+        
+        #residual = residual.label_map(
+        #    all_terms,
+        #    lambda t: replace_trial_function(t.get(subject))(t))
 
         # Get the Rexi Coefficients, given the values of h and M in
         # rexi_parameters
@@ -90,6 +93,7 @@ class Rexi(object):
         W = cpx.FunctionSpace(W_)
 
         self.U0 = Function(W_)   # right hand side function
+        self.X_ref = Function(W_)   # reference profiles
         self.w = Function(W)     # solution
         self.wrk = Function(W_)  # working buffer
 
@@ -115,6 +119,20 @@ class Rexi(object):
                 all_terms,
                 replace_subject(trials))
             return m
+
+        def form_const(*trials_and_tests):
+            trials = trials_and_tests[:ncpts]
+            tests = trials_and_tests[ncpts:]
+            c = const_rhs.label_map(
+                all_terms,
+                replace_test_function(tests))
+            c = c.label_map(
+                all_terms,
+                replace_subject(self.X_ref))
+            c = c.label_map(
+                all_terms,
+                lambda t: -self.tau*t)
+            return c
 
         # generate ufl for linear operator over given trial/tests
         def form_function(*trials_and_tests):
@@ -144,7 +162,7 @@ class Rexi(object):
 
         # generate ufl for right hand side over given trial/tests
         def form_rhs(*tests):
-            return form_mass(*self.U0.subfunctions, *tests)
+            return form_mass(*self.U0.subfunctions, *tests) + form_const(*self.X_ref.subfunctions, *tests)
 
         # complex Constants for alpha and beta values
         self.ac = cpx.ComplexConstant(1)
@@ -156,10 +174,10 @@ class Rexi(object):
         a = aM - aL
 
         # ----------------------------------------------------------------- #
-        print("this is where to put in the eigenvalue calculation")
-        from firedrake.petsc import PETSc
-        from slepc4py import SLEPc
-        from firedrake import COMM_WORLD, Ensemble, assemble
+        #print("this is where to put in the eigenvalue calculation")
+        #from firedrake.petsc import PETSc
+        #from slepc4py import SLEPc
+        #from firedrake import COMM_WORLD, Ensemble, assemble
 
         #print("this is mass.form:", type(mass.form))
         #print("this is function.form:", type(function.form))
@@ -245,6 +263,7 @@ class Rexi(object):
 
         # loop over solvers, assigning a_i, solving and accumulating the sum
         for i in range(self.N):
+            print("solving: ", i)
             j = self.idx + i
             self.ac.real.assign(self.alpha[j].real)
             self.ac.imag.assign(self.alpha[j].imag)

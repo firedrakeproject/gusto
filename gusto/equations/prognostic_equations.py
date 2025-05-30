@@ -6,12 +6,13 @@ from firedrake import (
     TrialFunction, DirichletBC, split, action
 )
 from firedrake.fml import (
-    Term, all_terms, keep, drop, Label, subject,
+    Term, all_terms, keep, drop, Label, subject, LabelledForm,
     replace_subject, replace_trial_function
 )
 from gusto.core import PrescribedFields
 from gusto.core.labels import (nonlinear_time_derivative, time_derivative,
-                               prognostic, linearisation, mass_weighted)
+                               prognostic, linearisation, mass_weighted,
+                               constant_label)
 from gusto.equations.common_forms import (
     advection_form, continuity_form, tracer_conservative_form
 )
@@ -232,16 +233,23 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         All labels are carried over, and the original linearisations containing
         the trial function are kept as labels to the new terms.
         """
+        def linearise_part(old):
+            new = old.get(linearisation)
+            if type(new) is Term:
+                return Term(new.form, old.labels | new.labels)
+            elif type(new) is LabelledForm:
+                return new
 
         # Replace all terms with their linearisations, drop terms without
         self.residual = self.residual.label_map(
             lambda t: t.has_label(linearisation),
-            map_if_true=lambda t: Term(t.get(linearisation).form, t.labels),
+            map_if_true=linearise_part,
             map_if_false=drop)
 
         # Replace trial functions with the prognostics
         self.residual = self.residual.label_map(
-            all_terms, replace_trial_function(self.X))
+            lambda t: t.has_label(constant_label),
+            map_if_false=replace_trial_function(self.X))
 
     # ======================================================================== #
     # Boundary Condition Routines
