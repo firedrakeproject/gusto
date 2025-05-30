@@ -10,7 +10,7 @@ from firedrake.fml import (
 from firedrake.formmanipulation import split_form
 from firedrake.petsc import PETSc
 from slepc4py import SLEPc
-from firedrake import assemble
+from firedrake import assemble, COMM_WORLD
 
 NullTerm = Term(None)
 
