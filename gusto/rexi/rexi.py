@@ -175,9 +175,9 @@ class Rexi(object):
 
         # ----------------------------------------------------------------- #
         #print("this is where to put in the eigenvalue calculation")
-        #from firedrake.petsc import PETSc
-        #from slepc4py import SLEPc
-        #from firedrake import COMM_WORLD, Ensemble, assemble
+        from firedrake.petsc import PETSc
+        from slepc4py import SLEPc
+        from firedrake import assemble
 
         #print("this is mass.form:", type(mass.form))
         #print("this is function.form:", type(function.form))
@@ -185,32 +185,32 @@ class Rexi(object):
         #print("this is the type of the assembled function.form:", type(assemble(aL.form, mat_type='aij')))
         #print("this is the type of the assembled mass.form:", type(assemble(aM.form, mat_type='aij')))
 
-        #petsc_a = assemble(function.form, mat_type='aij').M.handle
-        #petsc_m = assemble(mass.form, mat_type='aij').M.handle
+        petsc_a = assemble(aL.form, mat_type='aij').M.handle
+        petsc_m = assemble(aM.form, mat_type='aij').M.handle
 
-        #num_eigenvalues = 1
+        num_eigenvalues = 1
 
-        #opts = PETSc.Options()
-        #opts.setValue("eps_gen_non_hermitian", None)
-        #opts.setValue("st_pc_factor_shift_type", "NONZERO")
-        #opts.setValue("eps_type", "krylovschur")
-        #opts.setValue("eps_largest_imaginary", None)
-        #opts.setValue("eps_tol", 1e-10)
+        opts = PETSc.Options()
+        opts.setValue("eps_gen_non_hermitian", None)
+        opts.setValue("st_pc_factor_shift_type", "NONZERO")
+        opts.setValue("eps_type", "krylovschur")
+        opts.setValue("eps_largest_imaginary", None)
+        opts.setValue("eps_tol", 1e-10)
 
-        #es = SLEPc.EPS().create(comm=COMM_WORLD)
-        #es.setDimensions(num_eigenvalues)
-        #es.setOperators(petsc_a, petsc_m)
-        #es.setFromOptions()
-        #es.solve()
+        es = SLEPc.EPS().create(comm=COMM_WORLD)
+        es.setDimensions(num_eigenvalues)
+        es.setOperators(petsc_a, petsc_m)
+        es.setFromOptions()
+        es.solve()
 
-        #nconv = es.getConverged()
-        #print("Converged n",nconv)
+        nconv = es.getConverged()
+        print("Converged n",nconv)
 
-        #vr, vi = petsc_a.getVecs()
+        vr, vi = petsc_a.getVecs()
 
-        #lam = es.getEigenpair(0, vr, vi)
+        lam = es.getEigenpair(0, vr, vi)
 
-        #print("Lambda", lam)
+        print("Lambda", lam)
         # ----------------------------------------------------------------- #
 
 
