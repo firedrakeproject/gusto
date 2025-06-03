@@ -17,8 +17,8 @@ __all__ = ["RichardsonNumber", "Entropy", "PhysicalEntropy", "DynamicEntropy",
            "CompressibleKineticEnergy", "Exner", "Theta_e", "InternalEnergy",
            "PotentialEnergy", "ThermodynamicKineticEnergy",
            "Temperature", "Theta_d", "RelativeHumidity", "Pressure", "Exner_Vt",
-           "HydrostaticImbalance", "Precipitation", "BruntVaisalaFrequencySquared",
-           "WetBulbTemperature", "DewpointTemperature"]
+           "HydrostaticImbalance", "Precipitation", "BruntVaisalaFrequencySquared", 
+           "ScorerParameterSquared", "WetBulbTemperature", "DewpointTemperature"]
 
 
 class RichardsonNumber(DiagnosticField):
@@ -245,6 +245,44 @@ class BruntVaisalaFrequencySquared(DiagnosticField):
         self.expr = self.parameters.g/theta * dot(domain.k, grad(theta))
         super().setup(domain, state_fields)
 
+
+class ScorerParameterSquared(DiagnosticField):
+    """The Scorer parameter diagnostic field."""
+    name = "ScorerParameter"
+
+    def __init__(self, equations, space=None, method='interpolate'):
+        """
+        Args:
+            equations (:class:`Prognostic EquationSet`): the equation set being
+                solved by the model.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.    
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        # Work out required fields
+        if isinstance(equations, CompressibleEulerEquations):
+            required_fields = ['u', 'Brunt-Vaisala_squared']
+        else:
+            raise NotImplementedError(
+                f'Scorer parameter diagnostic not implemented for {type(equations)}')
+        super().__init__(space=space, method=method, required_fields=tuple(required_fields))
+    
+    def setup(self, domain, state_fields, space=None):
+        
+        u = state_fields('u')
+        k = domain.k
+        u_z = dot(k, u)
+        N2 = state_fields('Brunt-Vaisala_squared')
+        du_dz = dot(k, grad(u))
+        du2_dz2 = dot(k, grad(du_dz))
+        #self.expr = (N2/u_z - du2_dz2) / u_z
+        # leading term only for now, as it often dominates 
+        self.expr = N2 / u_z**2
+        super().setup(domain, state_fields)
+    
 
 # TODO: unify thermodynamic diagnostics
 class ThermodynamicDiagnostic(DiagnosticField):
