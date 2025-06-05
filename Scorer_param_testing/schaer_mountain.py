@@ -105,7 +105,7 @@ def schaer_mountain(
         domain, parameters, sponge_options=sponge, u_transport_option=u_eqn_type
     )
 
-    # I/O
+    # I/Oapps
     output = OutputParameters(
         dirname=dirname, dumpfreq=dumpfreq, dump_vtus=True, dump_nc=True
     )
