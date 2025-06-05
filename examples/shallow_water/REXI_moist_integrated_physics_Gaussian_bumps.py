@@ -123,9 +123,9 @@ qtbar.interpolate(vexpr)
 
 rexi_params = RexiParameters(M=M, h=h)
 if parallel:
-    rexi = Rexi(eqns, rexi_params, manager=ensemble)
+    rexi = Rexi(eqns, rexi_params, manager=ensemble, compute_eigenvalues=True)
 else:
-    rexi = Rexi(eqns, rexi_params)
+    rexi = Rexi(eqns, rexi_params, compute_eigenvalues=True)
 
 # output initial conditions
 rexi_output.write(u0, D0, b_e0, q_t0)
