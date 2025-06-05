@@ -104,7 +104,7 @@ def plot_time_level_state(state, equation, field_name,file_name=None,
     else:
         plt.show()
 
-def make_subplot(states, state_names, equation, field_name, file_name=None, save=True):
+def make_subplot(states, state_names, equation, field_name, file_name=None, save=True, dir=None):
     """
     Create a subplot for the field data.
     
@@ -137,10 +137,15 @@ def make_subplot(states, state_names, equation, field_name, file_name=None, save
         ax.set_xlabel("X-axis")
         ax.set_ylabel("Y-axis")
     
-
+    
     if save:
+        
         if file_name is None:
            raise ValueError(f"Please provide a file name to save the plot.")
+        if dir is None:
+            raise ValueError(f"Please provide a directory to save the plot.")
+        
+
         save_plot(fig, file_name)
         print(f'saving plot to {file_name}')
     else:

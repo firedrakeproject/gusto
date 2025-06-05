@@ -477,8 +477,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         
         title=f'TR-BDF2:end of step'
        # plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
-        file_name = f"TR-BDF2-4_1-xnp1-xpm={self.step*dt}"
-        make_subplot([xn, xm, xnp1], ['xn', 'xm', 'xnp1'], self.equation, field_name='w', file_name=file_name)
+        dir = '/home/d-witt/firedrake/src/gusto/gusto/utility_scripts/results/testing_plots/'
+        file_name = f"TR-BDF2-2_2-xnp1-xpm={self.step*dt}"
+        make_subplot([xn, xm, xnp1], ['xn', 'xm', 'xnp1'], self.equation, field_name='w', file_name=file_name, save=True, dir=dir)
         with timed_stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:
                 logger.debug(f"TR-BDF2 Quasi-Newton diffusing {name}")
