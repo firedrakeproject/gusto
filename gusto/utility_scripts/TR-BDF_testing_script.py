@@ -38,6 +38,7 @@ skamarock_klemp_nonhydrostatic_defaults = {
     'dirname': 'skamarock_klemp_nonhydrostatic',
     'hydrostatic': False,
     'gamma': (1-sqrt(2)/2), 
+    'perturbed': False
 }
 
 
@@ -49,7 +50,8 @@ def skamarock_klemp_nonhydrostatic(
         dumpfreq=skamarock_klemp_nonhydrostatic_defaults['dumpfreq'],
         dirname=skamarock_klemp_nonhydrostatic_defaults['dirname'],
         hydrostatic=skamarock_klemp_nonhydrostatic_defaults['hydrostatic'],
-        gamma=skamarock_klemp_nonhydrostatic_defaults['gamma']
+        gamma=skamarock_klemp_nonhydrostatic_defaults['gamma'],
+        perturbed=skamarock_klemp_nonhydrostatic_defaults['perturbed']
 ):
 
     # ------------------------------------------------------------------------ #
@@ -181,8 +183,13 @@ def skamarock_klemp_nonhydrostatic(
         deltaTheta * sin(pi*z/domain_height)
         / (1 + (x - domain_width/2)**2 / pert_width**2)
     )
-    
-    theta0.interpolate(theta_b) #+ theta_pert)
+    if perturbed:
+        logger.info("Using perturbed initial conditions")
+        theta0.interpolate(theta_b + theta_pert)
+
+    else:
+        logger.info("Using unperturbed initial conditions")
+        theta0.interpolate(theta_b) #+ theta_pert)
     rho0.assign(rho_b)
     u0.project(as_vector([wind_initial, 0.0]))
 
@@ -257,8 +264,18 @@ if __name__ == "__main__":
         help=(
             'Off-centering parameter between the TR and BDF2 step'
         ),
-        type='float',
+        type=float,
         default=skamarock_klemp_nonhydrostatic_defaults['gamma']
+    )
+
+    parser.add_argument(
+        '--perturbed',
+        help=(
+            'Whether to use a perturbation in the initial conditions. '
+            + 'If not specified, no perturbation is used.'
+        ),
+        type=bool,
+        default=skamarock_klemp_nonhydrostatic_defaults['perturbed']
     )
     args, unknown = parser.parse_known_args()
 
