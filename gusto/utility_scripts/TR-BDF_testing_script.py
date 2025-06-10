@@ -143,7 +143,7 @@ def skamarock_klemp_nonhydrostatic(
     # Time stepper
     stepper = TRBDF2QuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        tr_solver=linear_solver, bdf_solver=linear_solver, gamma=0.5
+        tr_solver=linear_solver, bdf_solver=linear_solver, gamma=gamma
     )
     #stepper = SemiImplicitQuasiNewton(
     #    eqns, io, transported_fields, transport_methods,
