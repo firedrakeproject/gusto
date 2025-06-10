@@ -18,7 +18,7 @@ PETSc.Sys.popErrorHandler()
 import itertools
 from firedrake import (
     as_vector, SpatialCoordinate, PeriodicIntervalMesh, ExtrudedMesh, exp, sin,
-    Function, pi, COMM_WORLD
+    Function, pi, COMM_WORLD, sqrt
 )
 import numpy as np
 from gusto import (
@@ -36,7 +36,8 @@ skamarock_klemp_nonhydrostatic_defaults = {
     'tmax': 3000.,
     'dumpfreq': 250,
     'dirname': 'skamarock_klemp_nonhydrostatic',
-    'hydrostatic': False
+    'hydrostatic': False,
+    'gamma': (1-sqrt(2)/2), 
 }
 
 
@@ -47,7 +48,8 @@ def skamarock_klemp_nonhydrostatic(
         tmax=skamarock_klemp_nonhydrostatic_defaults['tmax'],
         dumpfreq=skamarock_klemp_nonhydrostatic_defaults['dumpfreq'],
         dirname=skamarock_klemp_nonhydrostatic_defaults['dirname'],
-        hydrostatic=skamarock_klemp_nonhydrostatic_defaults['hydrostatic']
+        hydrostatic=skamarock_klemp_nonhydrostatic_defaults['hydrostatic'],
+        gamma=skamarock_klemp_nonhydrostatic_defaults['gamma']
 ):
 
     # ------------------------------------------------------------------------ #
@@ -141,7 +143,7 @@ def skamarock_klemp_nonhydrostatic(
     # Time stepper
     stepper = TRBDF2QuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        tr_solver=linear_solver, bdf_solver=linear_solver,gamma=0.5
+        tr_solver=linear_solver, bdf_solver=linear_solver, gamma=0.5
     )
     #stepper = SemiImplicitQuasiNewton(
     #    eqns, io, transported_fields, transport_methods,
@@ -248,6 +250,15 @@ if __name__ == "__main__":
         ),
         action="store_true",
         default=skamarock_klemp_nonhydrostatic_defaults['hydrostatic']
+    )
+
+    parser.add_argument(
+        '--gamma',
+        help=(
+            'Off-centering parameter between the TR and BDF2 step'
+        ),
+        type='float',
+        default=skamarock_klemp_nonhydrostatic_defaults['gamma']
     )
     args, unknown = parser.parse_known_args()
 
