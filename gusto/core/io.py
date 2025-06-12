@@ -736,7 +736,7 @@ class IO(object):
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
             print("making a new checkpointfile now...")
-            chkpt_file = path.join(self.chkpt_dir, "chkpt"+str(t)+".h5")
+            chkpt_file = path.join(self.chkpt_path, "chkpt"+str(t)+".h5")
             print("now the checkpoint file should be made, called:", chkpt_file)
             if self.output.checkpoint_method == 'dumbcheckpoint':
                 for field_name in self.to_pick_up:
