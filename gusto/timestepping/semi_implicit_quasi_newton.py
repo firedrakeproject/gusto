@@ -474,6 +474,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
             for inner in range(self.num_inner):
 
+                # Set the first guess of xnp1 to be xp
+                if outer == 0 and inner == 0:
+                    xnp1(self.field_name).assign(xp(self.field_name))
+
                 # Implicit forcing ---------------------------------------------
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'Semi-implicit Quasi Newton: Implicit forcing {(outer, inner)}')
