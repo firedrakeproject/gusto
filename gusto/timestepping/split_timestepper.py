@@ -1,13 +1,15 @@
 """Split timestepping methods for generically solving terms separately."""
 
-from firedrake import Projector
+from firedrake import Projector, Function
 from firedrake.fml import Label, drop
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import time_derivative, physics_label
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper, Timestepper
+from gusto.core.kernels import ClipZero
 from numpy import ones
+import numpy as np
 
 __all__ = ["SplitTimestepper", "SplitPhysicsTimestepper", "SplitPrescribedTransport"]
 
@@ -226,6 +228,11 @@ class SplitPhysicsTimestepper(Timestepper):
 
         super().timestep()
 
+        print('Transport complete in the split phyics timestepper')
+
+        for field in self.x.np1:
+            print(np.min(field.dat.data))
+
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
                 scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
@@ -297,6 +304,17 @@ class SplitPrescribedTransport(Timestepper):
 
     def setup_scheme(self):
         self.setup_equation(self.equation)
+
+        if self.scheme.augmentation is not None:
+            if self.scheme.augmentation.name == 'mean_mixing_ratio':
+                # For the mean mixing ratio residual,
+                # go through and label all non-physics terms with a "dynamics" label
+                dynamics = Label('dynamics')
+                self.scheme.augmentation.residual = self.scheme.augmentation.residual.label_map(
+                    lambda t: not any(t.has_label(time_derivative, physics_label)),
+                    map_if_true=lambda t: dynamics(t)
+                )
+
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
         self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics_label)), dynamics)
@@ -376,6 +394,36 @@ class SplitPrescribedTransport(Timestepper):
 
         super().timestep()
 
+        print('Transport complete in split prescribed timestepper')
+
+        for idx, field in enumerate(self.x.np1):
+            print(field.name())
+            print(np.min(field.dat.data))
+
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
                 scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+
+        print('Physics complete in split prescribed timestepper')
+
+        # For mean mixing ratio debugging:
+        for idx, field in enumerate(self.x.np1):
+            print('\n')
+            print(field.name())
+            print('min')
+            print(np.min(field.dat.data))
+            print('max')
+            print(np.max(field.dat.data))
+
+            # Exits if limiters aren't working:
+            #if np.min(field.dat.data) < 0.0:
+            #    print('exiting due to negative mixing ratio')
+            #    import sys; sys.exit()
+            #if (field.name() == 'X_tracer') and (np.max(field.dat.data) > 1.):
+            #    print('exiting due to X too large')
+            #    import sys; sys.exit()
+            #if (field.name() == 'X2_tracer') and (np.max(field.dat.data) > 1.):
+            #    print('exiting due to X2 too large')
+            #    import sys; sys.exit()
+
+
