@@ -325,16 +325,26 @@ class MeanLimiter(object):
         # Set the weights, lamda, to zero
         self.lamda.interpolate(Constant(0.0))
 
+        # New, use a separate lambda for each field:
         for i in range(len(mX_fields)):
             # Update the weights, lamda
             self._kernel.apply(self.lamda, mX_fields[i], mean_fields[i])
+            mX_fields[i].interpolate((Constant(1.0) - self.lamda)*mX_fields[i] + self.lamda*mean_fields[i])
+            
+            # Clip small zeroes where necessary:
+            self._clip_zero_kernel.apply(mX_fields[i], mX_fields[i])
 
-        for i in range(len(mX_fields)):
+        #for i in range(len(mX_fields)):
+        #    self.upper_vals_field.interpolate(Constant(upper_vals[i]))
+            # Update the weights, lamda
+        #    self._kernel.apply(self.lamda, mX_fields[i], mean_fields[i], self.upper_vals_field)
+
+        #for i in range(len(mX_fields)):
             # Apply the lamda weights to force negative values
             # to be non-negative.
-            mX_fields[i].interpolate((Constant(1.0) - self.lamda)*mX_fields[i] + self.lamda*mean_fields[i])
+        #    mX_fields[i].interpolate((Constant(1.0) - self.lamda)*mX_fields[i] + self.lamda*mean_fields[i])
 
             # As a hack for now, clip zero when required. This is
             # because rouding can leave very small, yet still
             # negative values.
-            self._clip_zero_kernel.apply(mX_fields[i], mX_fields[i])
+        #    self._clip_zero_kernel.apply(mX_fields[i], mX_fields[i])
