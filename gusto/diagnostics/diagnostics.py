@@ -963,7 +963,6 @@ class Perturbation(Difference):
 
         super().setup(domain, state_fields)
 
-
 class TracerDensity(DiagnosticField):
     """Diagnostic for computing the density of a tracer. This is
     computed as the product of a mixing ratio and dry density"""
@@ -989,10 +988,12 @@ class TracerDensity(DiagnosticField):
                 for this diagnostic. Valid options are 'interpolate', 'project' and
                 'assign'. Defaults to 'interpolate'.
         """
+        self.solve_implemented = True
         super().__init__(space=space, method=method, required_fields=(mixing_ratio_name, density_name))
 
         self.mixing_ratio_name = mixing_ratio_name
         self.density_name = density_name
+        self.method = method
 
     def setup(self, domain, state_fields):
         """
@@ -1006,7 +1007,23 @@ class TracerDensity(DiagnosticField):
         rho_d = state_fields(self.density_name)
         self.expr = m_X*rho_d
 
-        if self.space is None:
+        # Set the solve method to compute a cell mean 
+        # Tracer Density
+        if self.method == 'solve':
+            #self.space = FunctionSpace(domain.mesh, 'DG', 0)
+            if not hasattr(domain.spaces, "DG0"):
+                self.space = domain.spaces.create_space("DG0", "DG", 0)
+            else:
+                self.space = domain.spaces("DG0")
+            super().setup(domain, state_fields, space=self.space)
+            test = TestFunction(self.space)
+            trial = TrialFunction(self.space)
+            a = inner(trial, test)*dx
+            L = inner(self.expr, test)*dx
+            prob = LinearVariationalProblem(a, L, self.field,
+                                            constant_jacobian=True)
+            self.evaluator = LinearVariationalSolver(prob)
+        elif self.space is None:
             # Construct a space for the diagnostic that has enough
             # degrees to accurately capture the tracer density. This
             # will be the sum of the degrees of the individual mixing ratio
