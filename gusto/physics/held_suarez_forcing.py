@@ -1,8 +1,9 @@
 import numpy as np
 from firedrake import (Function, dx, pi, SpatialCoordinate,
-                       split, conditional, ge, sin, dot, ln, cos, inner, Projector)
+                       split, conditional, ge, sin, dot, ln, cos, inner, 
+                       Projector, assemble, interpolate)
 from firedrake.fml import subject
-from firedrake.__future__ import Interpolator
+from firedrake.__future__ import interpolate
 from gusto.core.coord_transforms import lonlatr_from_xyz
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
@@ -52,9 +53,10 @@ class Relaxation(PhysicsParametrisation):
         self.rho_averaged = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
         self.exner = Function(Vt)
-        self.exner_interpolator = Interpolator(
-            thermodynamics.exner_pressure(equation.parameters,
-                                          self.rho_averaged, self.theta), self.exner)
+        self.exner_interpolator = lambda: assemble(
+            interpolate(thermodynamics.exner_pressure(equation.parameters, self.rho_averaged, self.theta), Vt),
+            tensor=self.exner
+        )
         self.sigma = Function(Vt)
         kappa = equation.parameters.kappa
 
@@ -77,7 +79,7 @@ class Relaxation(PhysicsParametrisation):
 
         # Create source for forcing
         self.source_relaxation = Function(Vt)
-        self.source_interpolator = Interpolator(forcing_expr, self.source_relaxation)
+        self.source_interpolator = lambda: assemble(interpolate(forcing_expr, Vt), tensor=self.source_relaxation)
 
         # Add relaxation term to residual
         test = equation.tests[theta_idx]
@@ -144,9 +146,10 @@ class RayleighFriction(PhysicsParametrisation):
         self.rho_averaged = Function(Vt)
         self.exner = Function(Vt)
         self.rho_recoverer = Recoverer(rho, self.rho_averaged, boundary_method=boundary_method)
-        self.exner_interpolator = Interpolator(
-            thermodynamics.exner_pressure(equation.parameters,
-                                          self.rho_averaged, self.theta), self.exner)
+        self.exner_interpolator = lambda: assemble(
+            interpolate(thermodynamics.exner_pressure(equation.parameters, self.rho_averaged, self.theta), Vt),
+            tensor=self.exner
+        )
 
         self.sigma = Function(Vt)
         sigmab = hs_parameters.sigmab
