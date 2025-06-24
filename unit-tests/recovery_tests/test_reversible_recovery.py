@@ -10,8 +10,9 @@ This is tested for:
 
 from firedrake import (IntervalMesh, CubedSphereMesh, IcosahedralSphereMesh,
                        SpatialCoordinate, FunctionSpace,
-                       Projector, Function, norm, errornorm, as_vector)
-from firedrake.__future__ import Interpolator
+                       Projector, Function, norm, errornorm, as_vector,
+                       assemble, interpolate)
+from firedrake.__future__ import interpolate
 from gusto import *
 import numpy as np
 import pytest
@@ -58,7 +59,7 @@ def expr(geometry, mesh):
 def low_projector(method, field_in, field_out):
 
     if method == 'interpolate':
-        operator = Interpolator(field_in, field_out)
+        operator = lambda: assemble(interpolate(field_in, field_out), tensor=field_out)
     elif method == 'project':
         operator = Projector(field_in, field_out)
     elif method == 'broken':
@@ -134,7 +135,7 @@ def test_reversible_recovery(geometry, mesh, method):
 
     # perform scalar recovery and check if answers are correct
     scalar_recoverer.project()
-    scalar_back_operator.interpolate() if method == 'interpolate' else scalar_back_operator.project()
+    scalar_back_operator() if method == 'interpolate' else scalar_back_operator.project()
 
     rho_diff = errornorm(rho_high, rho_high_true) / norm(rho_high_true)
     assert rho_diff < rec_tol, error_message.format(test='recovery',
