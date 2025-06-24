@@ -5,9 +5,9 @@ drag and turbulence."""
 from firedrake import (
     conditional, Function, dx, sqrt, dot, Constant, grad,
     TestFunctions, split, inner, Projector, exp, avg, outer, FacetNormal,
-    SpatialCoordinate, dS_v, FunctionSpace
+    SpatialCoordinate, dS_v, FunctionSpace, assemble, interpolate
 )
-from firedrake.__future__ import Interpolator
+from firedrake.__future__ import interpolate
 from firedrake.fml import subject
 from gusto.core.equation_configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
@@ -142,7 +142,9 @@ class SurfaceFluxes(PhysicsParametrisation):
                 dmv_expr = surface_expr * (mv_np1_expr - m_v) / self.dt
                 source_mv_expr = test_m_v * self.source_mv * dx
 
-                self.source_interpolators.append(Interpolator(dmv_expr, self.source_mv_int))
+                self.source_interpolators.append(
+                    lambda: assemble(interpolate(dmv_expr, self.source), tensor=self.source_mv_int)
+                )
                 equation.residual -= source_label(
                     self.label(subject(prognostic(source_mv_expr, vapour_name), self.source), self.evaluate)
                 )
@@ -160,7 +162,9 @@ class SurfaceFluxes(PhysicsParametrisation):
             self.source_theta_vd_int = self.source.subfunctions[self.T_idx]
             dtheta_vd_expr = surface_expr * (theta_np1_expr - theta_vd) / self.dt
             source_theta_expr = test_theta * self.source_theta_vd * dx
-            self.source_interpolators.append(Interpolator(dtheta_vd_expr, self.source_theta_vd_int))
+            self.source_interpolators.append(
+                lambda: assemble(interpolate(dtheta_vd_expr, self.source), tensor=self.source_theta_vd_int)
+            )
             equation.residual -= source_label(
                 self.label(subject(prognostic(source_theta_expr, 'theta'), self.source), self.evaluate)
             )
@@ -392,11 +396,11 @@ class StaticAdjustment(PhysicsParametrisation):
             Rd = equation.parameters.R_d
             mv_idx = equation.field_names.index('water_vapour')
             mv = self.X.subfunctions[mv_idx]
-            self.get_theta_variable = Interpolator(theta / (1 + mv*Rv/Rd), self.theta_to_sort)
-            self.set_theta_variable = Interpolator(self.theta_to_sort * (1 + mv*Rv/Rd), sorted_theta)
+            self.get_theta_variable = lambda: assemble(interpolate(theta / (1 + mv*Rv/Rd), Vt), tensor=self.theta_to_sort)
+            self.set_theta_variable = lambda: assemble(interpolate(self.theta_to_sort * (1 + mv*Rv/Rd), Vt), tensor=sorted_theta)
         else:
-            self.get_theta_variable = Interpolator(theta, self.theta_to_sort)
-            self.set_theta_variable = Interpolator(self.theta_to_sort, sorted_theta)
+            self.get_theta_variable = lambda: assemble(interpolate(theta, Vt), tensor=self.theta_to_sort)
+            self.set_theta_variable = lambda: assemble(interpolate(self.theta_to_sort, Vt), tensor=sorted_theta)
 
         # -------------------------------------------------------------------- #
         # Set up routines to reshape data
