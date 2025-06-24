@@ -13,8 +13,8 @@ from firedrake import (BrokenElement, Constant, DirichletBC, FiniteElement,
                        Function, FunctionSpace, Projector,
                        SpatialCoordinate, TensorProductElement,
                        VectorFunctionSpace, as_vector, function, interval,
-                       VectorElement, assemble)
-from firedrake.__future__ import interpolate, Interpolator
+                       VectorElement, assemble, interpolate)
+from firedrake.__future__ import interpolate
 from gusto.recovery import Averager
 from .recovery_kernels import (BoundaryRecoveryExtruded, BoundaryRecoveryHCurl,
                                BoundaryGaussianElimination)
@@ -221,7 +221,7 @@ class Recoverer(object):
 
         self.method = method
         if method == 'interpolate':
-            self.broken_op = Interpolator(x_in, x_brok)
+            self.broken_op = lambda: assemble(interpolate(x_in, V_brok), tensor=x_brok)
         elif method == 'project':
             self.broken_op = Projector(x_in, x_brok)
         else:
@@ -272,7 +272,9 @@ class Recoverer(object):
                     # so need to extract component and restore it after the boundary recovery is done
                     for i in range(V_out.value_size):
                         x_out_scalars.append(Function(CG1))
-                        self.interpolate_to_scalars.append(Interpolator(self.x_out[i], x_out_scalars[i]))
+                        self.interpolate_to_scalars.append(
+                            lambda: assemble(interpolate(self.x_out[i], CG1), tensor=x_out_scalars[i])
+                        )
                         self.boundary_recoverers.append(BoundaryRecoverer(x_out_scalars[i],
                                                                           method=BoundaryMethod.taylor,
                                                                           eff_coords=eff_coords[i]))
@@ -282,7 +284,7 @@ class Recoverer(object):
         """Perform the whole recovery step."""
 
         # Initial averaging step
-        self.broken_op.project() if self.method == 'project' else self.broken_op.interpolate()
+        self.broken_op.project() if self.method == 'project' else self.broken_op()
         self.averager.project()
 
         # Boundary recovery
@@ -291,7 +293,7 @@ class Recoverer(object):
             if self.vector_function_space:
                 for (interpolate_to_scalar, boundary_recoverer) \
                         in zip(self.interpolate_to_scalars, self.boundary_recoverers):
-                    interpolate_to_scalar.interpolate()
+                    interpolate_to_scalar()
                     # Correct at boundaries
                     boundary_recoverer.apply()
                 # Combine the components to obtain the vector field
