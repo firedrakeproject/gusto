@@ -9,8 +9,9 @@ This is tested for:
 """
 
 from firedrake import (IntervalMesh, CubedSphereMesh, IcosahedralSphereMesh,
-                       SpatialCoordinate, FunctionSpace, Interpolator,
+                       SpatialCoordinate, FunctionSpace,
                        Projector, Function, norm, errornorm, as_vector)
+from firedrake.__future__ import Interpolator
 from gusto import *
 import numpy as np
 import pytest

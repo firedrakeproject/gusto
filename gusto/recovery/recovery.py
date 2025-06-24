@@ -10,11 +10,11 @@ from enum import Enum
 
 import ufl
 from firedrake import (BrokenElement, Constant, DirichletBC, FiniteElement,
-                       Function, FunctionSpace, Interpolator, Projector,
+                       Function, FunctionSpace, Projector,
                        SpatialCoordinate, TensorProductElement,
                        VectorFunctionSpace, as_vector, function, interval,
                        VectorElement, assemble)
-from firedrake.__future__ import interpolate
+from firedrake.__future__ import interpolate, Interpolator
 from gusto.recovery import Averager
 from .recovery_kernels import (BoundaryRecoveryExtruded, BoundaryRecoveryHCurl,
                                BoundaryGaussianElimination)
