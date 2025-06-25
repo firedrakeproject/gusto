@@ -1010,7 +1010,6 @@ class TracerDensity(DiagnosticField):
         # Set the solve method to compute a cell mean 
         # Tracer Density
         if self.method == 'solve':
-            #self.space = FunctionSpace(domain.mesh, 'DG', 0)
             if not hasattr(domain.spaces, "DG0"):
                 self.space = domain.spaces.create_space("DG0", "DG", 0)
             else:
