@@ -273,7 +273,7 @@ class Recoverer(object):
                     for i in range(V_out.value_size):
                         x_out_scalars.append(Function(CG1))
                         self.interpolate_to_scalars.append(
-                            lambda: assemble(interpolate(self.x_out[i], CG1), tensor=x_out_scalars[i])
+                            lambda i=i: assemble(interpolate(self.x_out[i], CG1), tensor=x_out_scalars[i])
                         )
                         self.boundary_recoverers.append(BoundaryRecoverer(x_out_scalars[i],
                                                                           method=BoundaryMethod.taylor,
