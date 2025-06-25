@@ -1,7 +1,7 @@
 import numpy as np
 from firedrake import (Function, dx, pi, SpatialCoordinate,
-                       split, conditional, ge, sin, dot, ln, cos, inner, 
-                       Projector, assemble, interpolate)
+                       split, conditional, ge, sin, dot, ln, cos, inner,
+                       Projector, assemble)
 from firedrake.fml import subject
 from firedrake.__future__ import interpolate
 from gusto.core.coord_transforms import lonlatr_from_xyz

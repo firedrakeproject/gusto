@@ -5,7 +5,7 @@ drag and turbulence."""
 from firedrake import (
     conditional, Function, dx, sqrt, dot, Constant, grad,
     TestFunctions, split, inner, Projector, exp, avg, outer, FacetNormal,
-    SpatialCoordinate, dS_v, FunctionSpace, assemble, interpolate
+    SpatialCoordinate, dS_v, FunctionSpace, assemble
 )
 from firedrake.__future__ import interpolate
 from firedrake.fml import subject

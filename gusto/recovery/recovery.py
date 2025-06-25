@@ -13,7 +13,7 @@ from firedrake import (BrokenElement, Constant, DirichletBC, FiniteElement,
                        Function, FunctionSpace, Projector,
                        SpatialCoordinate, TensorProductElement,
                        VectorFunctionSpace, as_vector, function, interval,
-                       VectorElement, assemble, interpolate)
+                       VectorElement, assemble)
 from firedrake.__future__ import interpolate
 from gusto.recovery import Averager
 from .recovery_kernels import (BoundaryRecoveryExtruded, BoundaryRecoveryHCurl,
