@@ -963,6 +963,7 @@ class Perturbation(Difference):
 
         super().setup(domain, state_fields)
 
+
 class TracerDensity(DiagnosticField):
     """Diagnostic for computing the density of a tracer. This is
     computed as the product of a mixing ratio and dry density"""
@@ -974,19 +975,20 @@ class TracerDensity(DiagnosticField):
         densities are used."""
         return "TracerDensity_"+self.mixing_ratio_name+'_'+self.density_name
 
-    def __init__(self, mixing_ratio_name, density_name, space=None, method='interpolate'):
+    def __init__(self, mixing_ratio_name, density_name, space=None, method='solve'):
         """
         Args:
             mixing_ratio_name (str): the name of the tracer mixing ratio variable
             density_name (str): the name of the tracer density variable
             space (:class:`FunctionSpace`, optional): the function space to
                 evaluate the diagnostic field in. Defaults to None, in which
-                case a new space will be constructed for this diagnostic. This
-                space will have enough a high enough degree to accurately compute
-                the product of the mixing ratio and density.
+                case a new space will be constructed for this diagnostic. If using the
+                solve method, this will be DG0, else this space will be set with a
+                high enough degree to accurately compute the product of the mixing
+                ratio and density.
             method (str, optional): a string specifying the method of evaluation
-                for this diagnostic. Valid options are 'interpolate', 'project' and
-                'assign'. Defaults to 'interpolate'.
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign', and 'solve'. Defaults to 'solve'.
         """
         self.solve_implemented = True
         super().__init__(space=space, method=method, required_fields=(mixing_ratio_name, density_name))
@@ -1007,9 +1009,9 @@ class TracerDensity(DiagnosticField):
         rho_d = state_fields(self.density_name)
         self.expr = m_X*rho_d
 
-        # Set the solve method to compute a cell mean 
-        # Tracer Density
         if self.method == 'solve':
+            # Compute a cell mean Tracer Density
+            # with the solve method
             if not hasattr(domain.spaces, "DG0"):
                 self.space = domain.spaces.create_space("DG0", "DG", 0)
             else:
