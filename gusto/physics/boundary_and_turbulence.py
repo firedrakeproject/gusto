@@ -143,7 +143,7 @@ class SurfaceFluxes(PhysicsParametrisation):
                 source_mv_expr = test_m_v * self.source_mv * dx
 
                 self.source_interpolators.append(
-                    lambda: assemble(interpolate(dmv_expr, self.source), tensor=self.source_mv_int)
+                    lambda expr=dmv_expr: assemble(interpolate(dmv_expr, self.source_theta_vd_int), tensor=self.source_mv_int)
                 )
                 equation.residual -= source_label(
                     self.label(subject(prognostic(source_mv_expr, vapour_name), self.source), self.evaluate)
@@ -163,7 +163,7 @@ class SurfaceFluxes(PhysicsParametrisation):
             dtheta_vd_expr = surface_expr * (theta_np1_expr - theta_vd) / self.dt
             source_theta_expr = test_theta * self.source_theta_vd * dx
             self.source_interpolators.append(
-                lambda: assemble(interpolate(dtheta_vd_expr, self.source), tensor=self.source_theta_vd_int)
+                lambda: assemble(interpolate(dtheta_vd_expr, self.source_theta_vd_int), tensor=self.source_theta_vd_int)
             )
             equation.residual -= source_label(
                 self.label(subject(prognostic(source_theta_expr, 'theta'), self.source), self.evaluate)
@@ -216,7 +216,7 @@ class SurfaceFluxes(PhysicsParametrisation):
             self.dt.assign(dt)
             self.rho_recoverer.project()
             for source_interpolator in self.source_interpolators:
-                source_interpolator.interpolate()
+                source_interpolator()
             # If a source output is provided, assign the source term to it
             if x_out is not None:
                 x_out.assign(self.source)
@@ -441,12 +441,12 @@ class StaticAdjustment(PhysicsParametrisation):
         self.X.assign(x_in)
         self.dt.assign(dt)
 
-        self.get_theta_variable.interpolate()
+        self.get_theta_variable()
         theta_column_data, index_data = self.get_column_data()
         for col in range(theta_column_data.shape[0]):
             theta_column_data[col].sort()
         self.set_column_data(self.theta_to_sort, theta_column_data, index_data)
-        self.set_theta_variable.interpolate()
+        self.set_theta_variable()
 
         if x_out is not None:
             raise NotImplementedError("Static adjustment does not output a source term, "
