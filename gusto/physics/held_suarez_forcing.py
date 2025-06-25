@@ -98,7 +98,7 @@ class Relaxation(PhysicsParametrisation):
         """
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        self.exner_interpolator.interpolate()
+        self.exner_interpolator()
 
         # Determine sigma:= exner / exner_surf
         exner_columnwise, index_data = self.domain.coords.get_column_data(self.exner, self.domain)
@@ -107,7 +107,7 @@ class Relaxation(PhysicsParametrisation):
             sigma_columnwise[col, :] = exner_columnwise[col, :] / exner_columnwise[col, 0]
         self.domain.coords.set_field_from_column_data(self.sigma, sigma_columnwise, index_data)
 
-        self.source_interpolator.interpolate()
+        self.source_interpolator()
 
 
 class RayleighFriction(PhysicsParametrisation):
@@ -181,7 +181,7 @@ class RayleighFriction(PhysicsParametrisation):
         """
         self.X.assign(x_in)
         self.rho_recoverer.project()
-        self.exner_interpolator.interpolate()
+        self.exner_interpolator()
         # Determine sigma:= exner / exner_surf
         exner_columnwise, index_data = self.domain.coords.get_column_data(self.exner, self.domain)
         sigma_columnwise = np.zeros_like(exner_columnwise)
