@@ -143,7 +143,7 @@ class SurfaceFluxes(PhysicsParametrisation):
                 source_mv_expr = test_m_v * self.source_mv * dx
 
                 self.source_interpolators.append(
-                    lambda: assemble(interpolate(dmv_expr, self.source_theta_vd_int), tensor=self.source_mv_int)
+                    lambda: assemble(interpolate(dmv_expr, self.source_mv_int), tensor=self.source_mv_int)
                 )
                 equation.residual -= source_label(
                     self.label(subject(prognostic(source_mv_expr, vapour_name), self.source), self.evaluate)
