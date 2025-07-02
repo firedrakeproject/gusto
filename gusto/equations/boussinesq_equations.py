@@ -1,10 +1,13 @@
 """Defines the Boussinesq equations."""
 
-from firedrake import inner, dx, div, cross, split, as_vector
+from firedrake import (
+    inner, dx, div, cross, split, as_vector, FunctionSpace, Function, 
+    SpatialCoordinate, sin, conditional, pi
+)
 from firedrake.fml import subject
 from gusto.core.labels import (
     time_derivative, transport, prognostic, linearisation,
-    pressure_gradient, coriolis, divergence, gravity, incompressible
+    pressure_gradient, coriolis, divergence, gravity, incompressible, sponge
 )
 from gusto.equations.common_forms import (
     advection_form, vector_invariant_form,
@@ -44,7 +47,8 @@ class BoussinesqEquations(PrognosticEquationSet):
                  linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
-                 active_tracers=None):
+                 active_tracers=None,
+                 sponge_options=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -198,6 +202,24 @@ class BoussinesqEquations(PrognosticEquationSet):
             coriolis_form = coriolis(subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, 'u'), self.X))
             residual += coriolis_form
+
+        if sponge_options is not None:
+            W_DG = FunctionSpace(domain.mesh, 'DG', 2)
+            dx_qp = dx(degree=(domain.max_quad_degree))
+            x = SpatialCoordinate(domain.mesh)
+            z = x[len(x) - 1] # unsure on this line
+            H = sponge_options.H
+            zc = sponge_options.z_level
+            assert float(zc) < float(H), \
+                "The sponge level is set above the height the your domain"
+            mubar = sponge_options.mubar
+            muexpr = conditional(z <= zc,
+                                 0.0,
+                                 mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
+            self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
+
+            residual += sponge(subject(prognostic(
+                self.mu*inner(w, domain.k)*inner(u, domain.k)*dx_qp, 'u'), self.X))
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
@@ -233,7 +255,8 @@ class LinearBoussinesqEquations(BoussinesqEquations):
                  linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
-                 active_tracers=None):
+                 active_tracers=None,
+                 sponge_options=False):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -281,7 +304,8 @@ class LinearBoussinesqEquations(BoussinesqEquations):
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
-                         active_tracers=active_tracers)
+                         active_tracers=active_tracers,
+                         sponge_options=sponge_options)
 
         # Use the underlying routine to do a first linearisation of
         # the equations
