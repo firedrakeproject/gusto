@@ -3,9 +3,8 @@
 
 from firedrake import (
     dx, TestFunction, TrialFunction, grad, inner, curl, Function, assemble,
-    LinearVariationalProblem, LinearVariationalSolver, conditional
+    LinearVariationalProblem, LinearVariationalSolver, conditional, interpolate
 )
-from firedrake.__future__ import interpolate
 from gusto.diagnostics.diagnostics import DiagnosticField, Energy
 
 __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
