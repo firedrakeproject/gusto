@@ -8,8 +8,7 @@ the form of classes with "evaluate" methods.
 """
 
 from abc import ABCMeta, abstractmethod
-from firedrake import Function, dx, Projector, assemble, split
-from firedrake.__future__ import interpolate
+from firedrake import Function, dx, Projector, assemble, split, interpolate
 from firedrake.fml import subject
 from gusto.core.labels import PhysicsLabel, source_label
 from gusto.core.logging import logger

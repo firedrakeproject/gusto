@@ -11,8 +11,7 @@ This is tested for:
 from firedrake import (IntervalMesh, CubedSphereMesh, IcosahedralSphereMesh,
                        SpatialCoordinate, FunctionSpace,
                        Projector, Function, norm, errornorm, as_vector,
-                       assemble)
-from firedrake.__future__ import interpolate
+                       assemble, interpolate)
 from gusto import *
 import numpy as np
 import pytest
