@@ -6,7 +6,7 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 """
 
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
-                       FiniteElement, TensorProductElement, Constant)
+                       FiniteElement, TensorProductElement, Constant, assemble, dx, ufl)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.core.kernels import LimitMidpoints, ClipZero, MeanMixingRatioWeights
 
@@ -308,8 +308,9 @@ class MeanLimiter(object):
         self.mX_field = Function(DG1_equispaced)
         self.mean_field = Function(DG0)
 
-        self._kernel = MeanMixingRatioWeights(self.space)
+        self._kernel = MeanMixingRatioWeights(DG1_equispaced, DG0)
         self._clip_zero_kernel = ClipZero(self.space)
+        self._clip_means_kernel = ClipZero(DG0)
 
     def apply(self, mX_fields, mean_fields):
         """
@@ -322,22 +323,57 @@ class MeanLimiter(object):
              AssertionError: If the field is not in the correct space.
          """
 
-        # Set the weights, lamda, to zero
-        self.lamda.interpolate(Constant(0.0))
+        # New implementation, using interpolates
+        for i in range(len(mX_fields)):
+            self.mX_field.interpolate(mX_fields[i])
+            self.mean_field.interpolate(mean_fields[i])
+
+            # Set the weights, lamda, to zero
+            self.lamda.interpolate(Constant(0.0))
+
+            # Update the weights, lamda
+            self._kernel.apply(self.lamda, self.mX_field, self.mean_field)
+
+            self.lamda.interpolate(Constant(0.0))
+
+            #mX_fields[i].interpolate((Constant(1.0) - self.lamda)*self.mX_field + self.lamda*self.mean_field)
+
+            self.mX_field.interpolate((Constant(1.0) - self.lamda)*self.mX_field + self.lamda*self.mean_field)
+            mX_fields[i].interpolate(self.mX_field)
+        #    
+            total_dx = assemble(
+            1*dx(domain=ufl.domain.extract_unique_domain(self.lamda))
+        )
+            print('Average lambda is', assemble(self.lamda*dx)/total_dx)
+
+            # Check lamda:
+            if max(self.lamda.dat.data > 1.0):
+                print('Max lamda is too large: ', max(self.lamda.dat.data))
+                import sys; sys.exit()
+
+
+        #    # Clip small zeroes where necessary
+             # This does appear to affect conservation to a non-negligible degree ... 
+            #self._clip_zero_kernel.apply(mX_fields[i], mX_fields[i])
+
+        #Old versions:
+        # # Set the weights, lamda, to zero
+         #   self.lamda.interpolate(Constant(0.0))
 
         # New, use a separate lambda for each field:
-        for i in range(len(mX_fields)):
-            # Update the weights, lamda
-            self._kernel.apply(self.lamda, mX_fields[i], mean_fields[i])
-            mX_fields[i].interpolate((Constant(1.0) - self.lamda)*mX_fields[i] + self.lamda*mean_fields[i])
-            
-            # Clip small zeroes where necessary:
-            self._clip_zero_kernel.apply(mX_fields[i], mX_fields[i])
-
+        # The 'two lambda' approach for the Terminator Toy
         #for i in range(len(mX_fields)):
-        #    self.upper_vals_field.interpolate(Constant(upper_vals[i]))
+        #    # Update the weights, lamda
+        #    self._kernel.apply(self.lamda, mX_fields[i], mean_fields[i])
+        #    mX_fields[i].interpolate((Constant(1.0) - self.lamda)*mX_fields[i] + self.lamda*mean_fields[i])
+        #    
+        #    # Clip small zeroes where necessary:
+        #    self._clip_zero_kernel.apply(mX_fields[i], mX_fields[i])
+
+        # Previous implementation with a single lambda
+        #for i in range(len(mX_fields)):
             # Update the weights, lamda
-        #    self._kernel.apply(self.lamda, mX_fields[i], mean_fields[i], self.upper_vals_field)
+        #    self._kernel.apply(self.lamda, mX_fields[i], mean_fields[i])
 
         #for i in range(len(mX_fields)):
             # Apply the lamda weights to force negative values

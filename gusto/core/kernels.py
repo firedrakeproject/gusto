@@ -113,6 +113,50 @@ class ClipZero():
                  {"field": (field, WRITE),
                   "field_in": (field_in, READ)})
 
+class MeanValue():
+    """
+    Computes the mean value in a DG1_equispaced cell
+    """
+
+    def __init__(self, V):
+        """
+        Args:
+            V (:class:`FunctionSpace`): The space of the field for which 
+            a mean is being computed.
+        """
+        # Loop over DG1-equispaced DoFs and determine the most negative value.
+        # Set lambda accordingly from this.
+        shapes = {'nDOFs': V.finat_element.space_dimension()}
+        domain = "{{[i]: 0 <= i < {nDOFs}}}".format(**shapes)
+
+        instrs = ("""
+                  <float64> rho_sum = 0.0
+                  <float64> rho_m_sum = 0.0
+
+                  for i
+                      rho_sum = rho_sum + rho_field[i]
+                      rho_m_sum = rho_m_sum + rho_field[i] * mX_field[i]
+                  end
+
+                  mean_field[0] = rho_m_sum/rho_sum
+
+                  """)
+
+        self._kernel = (domain, instrs)
+
+    def apply(self, mean_field, rho_field, mX_field):
+        """
+        Performs the par loop.
+
+        Args:
+            w (:class:`Function`): the field in which to store the weights. This
+                lives in the continuous target space.
+        """
+        par_loop(self._kernel, dx,
+                 {"mean_field": (mean_field, INC),
+                  "rho_field": (rho_field, READ),
+                  "mX_field": (mX_field, READ)})
+
 
 class MeanMixingRatioWeights():
     """
@@ -124,30 +168,28 @@ class MeanMixingRatioWeights():
     that will ensure non-negativity in the limiting step.
     """
 
-    def __init__(self, V):
+    def __init__(self, V_DG1, V_DG0):
         """
         Args:
             V (:class:`FunctionSpace`): The space of the field for the mean
             mixing ratio, which should be DG0.
         """
-        # Using DG1-equispaced, with 4 DOFs per cell
-        shapes = {'nDOFs': V.finat_element.space_dimension(),
-                  'nDOFs_base': int(V.finat_element.space_dimension() / 4)}
-        domain = "{{[i]: 0 <= i < {nDOFs_base}}}".format(**shapes)
+        # Loop over DG1-equispaced DoFs and determine the most negative value.
+        # Set lambda accordingly from this.
+        shapes = {'nDOFs_DG1': V_DG1.finat_element.space_dimension(),
+                  'nDOFs_DG0': V_DG1.finat_element.space_dimension() / 4}
+        domain = "{{[i,j]: 0 <= i < {nDOFs_DG1}}} and  0 <= j < {nDOFs_DG0}".format(**shapes)
 
         instrs = ("""
-                  <float64> min_value1 = 0.0
-                  <float64> min_value2 = 0.0
                   <float64> min_value = 0.0
-                  <float64> new_lamda = 0.0
+
                   for i
-                      min_value1 = fmin(mX_field[i*4], mX_field[i*4+1])
-                      min_value2 = fmin(mX_field[i*4+2], mX_field[i*4+3])
-                      min_value = fmin(min_value1, min_value2)
-                      if min_value < 0.0
-                          lamda[i] = fmax(lamda[i],-min_value/(mean_field[i] - min_value))
-                      end
+                      min_value = fmin(min_value, mX_field[i])
                   end
+
+
+                  lamda[0] = fmax(lamda[0],-min_value/(mean_field[0] - min_value))
+
                   """)
 
         self._kernel = (domain, instrs)

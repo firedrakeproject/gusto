@@ -10,7 +10,7 @@ from firedrake import (
     ds_b, ds_v, ds_t, ds, FacetNormal, TestFunction, TrialFunction,
     transpose, nabla_grad, outer, dS, dS_h, dS_v, sign, jump, div,
     Constant, sqrt, cross, curl, FunctionSpace, assemble, DirichletBC,
-    Projector
+    Projector, FiniteElement, TensorProductElement
 )
 from firedrake.fml import (
     subject, all_terms, replace_subject, replace_test_function,
@@ -21,6 +21,8 @@ from gusto import (
     logger, prognostic, mass_weighted
 )
 from gusto.spatial_methods.limiters import MeanLimiter
+from gusto.core.kernels import MeanValue
+from gusto.core.conservative_projection import ConservativeProjector
 import numpy as np
 
 
@@ -314,7 +316,7 @@ class MeanMixingRatio(Augmentation):
 
             # Determine if this is a conservatively transported tracer.
             # If so, extract the corresponding density name, if not
-            # set this to none.
+            # set this to None.
             for tracer in eqns.active_tracers:
                 if tracer.name == mX_name:
                     if tracer.density_name is not None:
@@ -329,6 +331,36 @@ class MeanMixingRatio(Augmentation):
         self.mean_outs = [Function(mean_spaces[i]) for i in range(self.mX_num)]
         self.compute_means = [Projector(self.mX_ins[i], self.mean_outs[i])
                               for i in range(self.mX_num)]
+
+        DG1 = FunctionSpace(domain.mesh, "DG", 1)
+        DG1_equispaced = domain.spaces('DG1_equispaced')
+
+        self.DG1_field = Function(DG1)
+        self.rho_field = Function(DG1)
+        self.rho0_field = Function(FunctionSpace(domain.mesh, "DG", 0))
+        self.DG0_field = Function(FunctionSpace(domain.mesh, "DG", 0))
+        self.mean_evaluator = MeanValue(DG1)
+
+        self.compute_mean_rho = Projector(self.rho_field, self.rho0_field)
+        self.compute_mean_mX = ConservativeProjector(self.rho_field, self.rho0_field, self.DG1_field, self.DG0_field)
+
+        #self.DG1_field = Function(domain.spaces('DG1_equispaced'))
+        #self.DG0_field = Function(FunctionSpace(domain.mesh, "DG", 0))
+        #self.mean_evaluator = MeanValue(domain.spaces('DG1_equispaced'))
+
+        #cell = domain.mesh._base_mesh.ufl_cell().cellname()
+        #DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
+        #DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
+        #DG1_element = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
+        #DG1_equispaced = FunctionSpace(domain.mesh, DG1_element)
+
+        #DG1_equispaced = domain.spaces('DG1')
+
+        #self.mX_ins = [Function(DG1_equispaced) for i in range(self.mX_num)]
+        #self.mean_outs = [Function(mean_spaces[i]) for i in range(self.mX_num)]
+        #self.compute_means = [Projector(self.mX_ins[i], self.mean_outs[i])
+        #                      for i in range(self.mX_num)]
+        
 
         # Create the new mixed function space:
         self.fs = MixedFunctionSpace(exist_spaces)
@@ -496,8 +528,6 @@ class MeanMixingRatio(Augmentation):
         """
 
         for idx in range(self.idx_orig):
-            print(np.min(x_in.subfunctions[idx].dat.data))
-            print('\n')
             self.x_in.subfunctions[idx].assign(x_in.subfunctions[idx])
 
     def post_apply(self, x_out):
@@ -510,8 +540,6 @@ class MeanMixingRatio(Augmentation):
         """
 
         for idx in range(self.idx_orig):
-            print(np.min(self.x_out.subfunctions[idx].dat.data))
-            print('\n')
             x_out.subfunctions[idx].assign(self.x_out.subfunctions[idx])
 
     def update(self, x_in_mixed):
@@ -519,24 +547,103 @@ class MeanMixingRatio(Augmentation):
         Compute the mean mixing ratio field by projecting the mixing
         ratio from DG1 into DG0.
 
-        To DO: Shouldn't this be a conservative projection??!!
-        This requires density fields...
-
         Args:
             x_in_mixed (:class:`Function`): The mixed function to update.
         """
 
         for i in range(self.mX_num):
-            self.mX_ins[i].assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
-            print('\n min of mX field:')
-            print(np.min(self.mX_ins[i].dat.data))
-            self.compute_means[i].project()
-            self.x_in.subfunctions[self.mean_idxs[i]].assign(self.mean_outs[i])
+            # Original implementation
+            #self.mX_ins[i].assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
+            #print('\n min of mX field:')
+            #print(np.min(self.mX_ins[i].dat.data))
+            #self.compute_means[i].project()
+            #self.x_in.subfunctions[self.mean_idxs[i]].assign(self.mean_outs[i])
+            #x_in_mixed.subfunctions[self.mean_idxs[i]].assign(self.mean_outs[i])
+
+            # Check that the projection correctly preserved the mixing ratio:
+            #if self.rho_idxs[i] == 'None':
+                # Dirty hack for now:
+            #    self.rho_field.assign(x_in_mixed.subfunctions[0])
+            #else:
+            #    self.rho_field.assign(x_in_mixed.subfunctions[self.rho_idxs[i]])
+            #DG1_sum = assemble(self.rho_field*self.mX_ins[i]*dx)
+            #DG0_sum = assemble(self.rho_field*self.mean_outs[i]*dx)
+            #proj_err = np.abs(DG1_sum - DG0_sum)
+            #print('rho*DG1*dx is', DG1_sum)
+            #print('rho*DG0*dx is', DG0_sum)
+            #print('What is the projection error? ', proj_err)
+            #if proj_err > 1e-16:
+            #    import sys; sys.exit()
+
+            # New method, using mean value
+            #self.DG1_field.assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
+            #self.DG0_field.interpolate(Constant(0.0))
+            #self.mean_evaluator.apply(self.DG0_field, self.DG1_field)
+            #self.x_in.subfunctions[self.mean_idxs[i]].assign(self.DG0_field)
+
+            # New method, using mean value and rho field
+            #self.DG1_field.assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
+            #if self.rho_idxs[i] == 'None':
+                # Dirty hack for now:
+            #    self.rho_field.assign(x_in_mixed.subfunctions[0])
+            #else:
+            #    self.rho_field.assign(x_in_mixed.subfunctions[self.rho_idxs[i]])
+            #self.DG0_field.interpolate(Constant(0.0))
+            #self.mean_evaluator.apply(self.DG0_field, self.rho_field, self.DG1_field)
+            #self.x_in.subfunctions[self.mean_idxs[i]].assign(self.DG0_field)
+
+            # Apply conservative projection
+            if self.rho_idxs[i] == 'None':
+            #    # Dirty hack for now:
+                self.rho_field.assign(x_in_mixed.subfunctions[0])
+            else:
+                self.rho_field.assign(x_in_mixed.subfunctions[self.rho_idxs[i]])
+           # 
+            self.compute_mean_rho.project()
+            self.DG1_field.assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
+            #self.DG1_field.interpolate(x_in_mixed.subfunctions[self.mX_idxs[i]])
+            self.compute_mean_mX.project()
+
+            print(f'\n min of mX field is {np.min(self.DG1_field.dat.data)}')
+
+            print(f'\n min of mean field is {np.min(self.DG0_field.dat.data)}')
+
+            # Clip zero values if needed:
+            self.limiters._clip_means_kernel.apply(self.DG0_field, self.DG0_field)
+
+            print(f'\n min of mean field after clipping is {np.min(self.DG0_field.dat.data)}')
+
+            x_in_mixed.subfunctions[self.mean_idxs[i]].assign(self.DG0_field)
+
+
+            DG1_sum = assemble(self.rho_field*self.DG1_field*dx)
+            DG0_sum = assemble(self.rho_field*self.DG0_field*dx)
+            rel_proj_err = np.abs(DG1_sum - DG0_sum)/DG1_sum
+            print('rho*DG1*dx is', DG1_sum)
+            print('rho*DG0*dx is', DG0_sum)
+            print('What is the projection error? \n', rel_proj_err)
+            #if rel_proj_err > 1e-14:
+            #    import sys; sys.exit()
+
+
+            # Check that the projection correctly preserved the mixing ratio:
+            #DG1_sum = np.sum(self.DG1_field.dat.data)
+            #DG0_sum = np.sum(self.DG0_field.dat.data)
+            #proj_err = np.abs(DG1_sum - 4*DG0_sum)
+            #print('DG1 sum is', DG1_sum)
+            #print('4*DG0 sum is', 4*DG0_sum)
+            #print('What is the projection error? ', proj_err)
+            #if proj_err > 1e-16:
+            #    import sys; sys.exit()
 
     def limit(self, x_in_mixed):
         # Ensure non-negativity by applying the blended limiter
         mX_pre = []
         means = []
+        old_vals = []
+
+        self.rho_field.assign(x_in_mixed.subfunctions[0])
+
         print('Values after transport')
         for i in range(self.mX_num):
             mX_pre.append(x_in_mixed.subfunctions[self.mX_idxs[i]])
@@ -550,8 +657,24 @@ class MeanMixingRatio(Augmentation):
             print(np.max(mX_pre[i].dat.data))
             print(f'\n max of {self.mean_names[i]} field:')
             print(np.max(means[i].dat.data))
+            print('Total of m_X field:')
+            print(assemble(mX_pre[i]*dx))
+            print('Total of mean field:')
+            print(assemble(means[i]*dx))
+            old_vals.append(assemble(self.rho_field*mX_pre[i]*dx))
 
-        self.limiters.apply(mX_pre, means)
+            # Check difference in fields:
+            DG1_sum = assemble(self.rho_field*mX_pre[i]*dx)
+            DG0_sum = assemble(self.rho_field*means[i]*dx)
+            rel_proj_err = np.abs(DG1_sum - DG0_sum)/DG1_sum
+            print('rho*DG1*dx is', DG1_sum)
+            print('rho*DG0*dx is', DG0_sum)
+            print('What is the projection error? ', rel_proj_err)
+            #if rel_proj_err > 1e-9:
+            #    import sys; sys.exit()
+
+
+        #self.limiters.apply(mX_pre, means)
 
         print('\n After applying blended limiter')
 
@@ -565,3 +688,13 @@ class MeanMixingRatio(Augmentation):
             print(np.max(mX_pre[i].dat.data))
             print(f'\n max of {self.mean_names[i]} field:')
             print(np.max(means[i].dat.data))
+
+            print('\n Comparing tracer densities after limiting')
+            new_sum = assemble(self.rho_field*mX_pre[i]*dx)
+            rel_lim_err = np.abs(new_sum - old_vals[i])/old_vals[i]
+            print('rho*m_old*dx is', old_vals[i])
+            print('rho*m_new*dx is', new_sum)
+            print('What is the projection error? ', rel_lim_err)
+            if rel_lim_err > 1e-15:
+                import sys; sys.exit()
+
