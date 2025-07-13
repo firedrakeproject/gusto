@@ -18,7 +18,7 @@ PETSc.Sys.popErrorHandler()
 import itertools
 from firedrake import (
     as_vector, SpatialCoordinate, PeriodicIntervalMesh, ExtrudedMesh, exp, sin,
-    Function, pi, COMM_WORLD
+    Function, pi, COMM_WORLD, sqrt
 )
 import numpy as np
 from gusto import (
@@ -36,7 +36,9 @@ skamarock_klemp_nonhydrostatic_defaults = {
     'tmax': 3000.,
     'dumpfreq': 250,
     'dirname': 'skamarock_klemp_nonhydrostatic',
-    'hydrostatic': False
+    'hydrostatic': False,
+    'gamma': (1-sqrt(2)/2), 
+    'perturbed': False
 }
 
 
@@ -47,7 +49,9 @@ def skamarock_klemp_nonhydrostatic(
         tmax=skamarock_klemp_nonhydrostatic_defaults['tmax'],
         dumpfreq=skamarock_klemp_nonhydrostatic_defaults['dumpfreq'],
         dirname=skamarock_klemp_nonhydrostatic_defaults['dirname'],
-        hydrostatic=skamarock_klemp_nonhydrostatic_defaults['hydrostatic']
+        hydrostatic=skamarock_klemp_nonhydrostatic_defaults['hydrostatic'],
+        gamma=skamarock_klemp_nonhydrostatic_defaults['gamma'],
+        perturbed=skamarock_klemp_nonhydrostatic_defaults['perturbed']
 ):
 
     # ------------------------------------------------------------------------ #
@@ -84,10 +88,6 @@ def skamarock_klemp_nonhydrostatic(
     else:
         eqns = CompressibleEulerEquations(domain, parameters)
 
-    # I/O
-    points_x = np.linspace(0., domain_width, 100)
-    points_z = [domain_height/2.]
-    points = np.array([p for p in itertools.product(points_x, points_z)])
 
     # Adjust default directory name
     if hydrostatic and dirname == skamarock_klemp_nonhydrostatic_defaults['dirname']:
@@ -96,9 +96,8 @@ def skamarock_klemp_nonhydrostatic(
     # Dumping point data using legacy PointDataOutput is not supported in parallel
     if COMM_WORLD.size == 1:
         output = OutputParameters(
-            dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
+            dirname=dirname, dumpfreq=dumpfreq, 
             dump_vtus=True, dump_nc=True
-            
         )
     else:
         logger.warning(
@@ -146,7 +145,7 @@ def skamarock_klemp_nonhydrostatic(
     # Time stepper
     stepper = TRBDF2QuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, gamma=0.5
+        tr_solver=linear_solver, bdf_solver=linear_solver, gamma=gamma
     )
     #stepper = SemiImplicitQuasiNewton(
     #    eqns, io, transported_fields, transport_methods,
@@ -184,7 +183,13 @@ def skamarock_klemp_nonhydrostatic(
         deltaTheta * sin(pi*z/domain_height)
         / (1 + (x - domain_width/2)**2 / pert_width**2)
     )
-    theta0.interpolate(theta_b + theta_pert)
+    if perturbed:
+        logger.info("Using perturbed initial conditions")
+        theta0.interpolate(theta_b + theta_pert)
+
+    else:
+        logger.info("Using unperturbed initial conditions")
+        theta0.interpolate(theta_b) #+ theta_pert)
     rho0.assign(rho_b)
     u0.project(as_vector([wind_initial, 0.0]))
 
@@ -252,6 +257,25 @@ if __name__ == "__main__":
         ),
         action="store_true",
         default=skamarock_klemp_nonhydrostatic_defaults['hydrostatic']
+    )
+
+    parser.add_argument(
+        '--gamma',
+        help=(
+            'Off-centering parameter between the TR and BDF2 step'
+        ),
+        type=float,
+        default=skamarock_klemp_nonhydrostatic_defaults['gamma']
+    )
+
+    parser.add_argument(
+        '--perturbed',
+        help=(
+            'Whether to use a perturbation in the initial conditions. '
+            + 'If not specified, no perturbation is used.'
+        ),
+        type=bool,
+        default=skamarock_klemp_nonhydrostatic_defaults['perturbed']
     )
     args, unknown = parser.parse_known_args()
 

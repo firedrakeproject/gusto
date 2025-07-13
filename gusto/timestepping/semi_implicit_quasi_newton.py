@@ -18,9 +18,10 @@ from gusto.solvers import LinearTimesteppingSolver, mass_parameters
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
+from gusto.utility_scripts import make_subplot, plot_time_level_state
 
 
-__all__ = ["SemiImplicitQuasiNewton"]
+__all__ = ["SemiImplicitQuasiNewton", "Forcing"]
 
 
 class SemiImplicitQuasiNewton(BaseTimestepper):
@@ -235,7 +236,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.linear_solver = LinearTimesteppingSolver(equation_set, self.alpha)
         else:
             self.linear_solver = linear_solver
-        self.forcing = Forcing(equation_set, self.alpha)
+        self.forcing = Forcing(equation_set,self.alpha)
         self.bcs = equation_set.bcs
 
         if self.predictor is not None:
@@ -437,7 +438,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # set xp here so that variables that are not transported have
         # the correct values
         xp(self.field_name).assign(xstar(self.field_name))
-
+        title='SIQN, explicit forcing applied '
+        plot_time_level_state(xp, self.equation, field_name='w', save=False, title=title)
         # OUTER ----------------------------------------------------------------
         for outer in range(self.num_outer):
 
@@ -457,7 +459,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
             xrhs_phys.assign(x_after_fast(self.field_name) - xp(self.field_name))
-
+            title=f'SIQN: outer loop transport k={outer} '
+            plot_time_level_state(xp, self.equation, field_name='w', save=False, title=title)
             for inner in range(self.num_inner):
 
                 # Implicit forcing ---------------------------------------------
@@ -471,6 +474,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
 
+                title=f'SIQN: inner loop, pre solve k = {outer}, l = {inner} '
+                plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
+
                 # Linear solve -------------------------------------------------
                 with timed_stage("Implicit solve"):
                     logger.info(f'Semi-implicit Quasi Newton: Mixed solve {(outer, inner)}')
@@ -479,11 +485,19 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
 
+                title=f'SIQN: inner loop, post solve k = {outer}, l = {inner} '
+                plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
+
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xnp1)
 
             self._apply_bcs()
 
+
+        title=f'SIQN: end of step'
+        plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
+        dt = self.dt.dat.data[0]
+      #  make_subplot([xn, xp, xnp1], ['xn', 'xp', 'xnp1'], self.equation, field_name='w', step=self.step, dt=dt)
         for name, scheme in self.auxiliary_schemes:
             # transports a field from xn and puts result in xnp1
             logger.debug(f"Semi-implicit Quasi-Newton auxiliary scheme for {name}")
@@ -536,19 +550,24 @@ class Forcing(object):
     semi-implicit time discretisation.
     """
 
-    def __init__(self, equation, alpha):
+    def __init__(self, equation, alpha, dt=None):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the prognostic equations
                 containing the forcing terms.
-            alpha (:class:`Function`): semi-implicit off-centering factor. An
-                alpha of 0 corresponds to fully explicit, while a factor of 1
-                corresponds to fully implicit.
+           explicit_scaling (:class:`Expr`): Off-centering parameter for 
+                explicit forcing evaluation. For Semi-Implicit Quasi-Newton, 
+                this corresponds to 1 - alpha.
+           implicit_scaling (:class:`Expr`): Off-centering parameter for 
+                implicit forcing evaluation.For Semi-Implicit Quasi-Newton, 
+                this corresponds to alpha.
         """
 
         self.field_name = equation.field_name
         implicit_terms = [incompressible, sponge]
-        dt = equation.domain.dt
+
+        if dt is None:
+            dt = equation.domain.dt
 
         W = equation.function_space
         self.x0 = Function(W)
@@ -569,16 +588,14 @@ class Forcing(object):
                                replace_subject(trials),
                                map_if_false=drop)
 
-        # the explicit forms are multiplied by (1-alpha) and moved to the rhs
-        one_minus_alpha = Function(alpha.function_space(), val=1-alpha)
-        L_explicit = -one_minus_alpha*dt*residual.label_map(
+        L_explicit = -(1 - alpha)*dt*residual.label_map(
             lambda t:
                 any(t.has_label(time_derivative, hydrostatic, *implicit_terms,
                                 return_tuple=True)),
             drop,
             replace_subject(self.x0))
 
-        # the implicit forms are multiplied by alpha and moved to the rhs
+        # the implicit forms are multiplied by implicit scaling and moved to the rhs
         L_implicit = -alpha*dt*residual.label_map(
             lambda t:
                 any(t.has_label(
