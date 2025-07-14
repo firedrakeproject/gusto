@@ -122,7 +122,7 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         super().setup(equation, apply_bcs, *active_labels)
 
-        # Check all terms are labeled implicit, exlicit
+        # Check all terms are labeled implicit, explicit
         for t in self.residual:
             if ((not t.has_label(implicit)) and (not t.has_label(explicit))
                and (not t.has_label(time_derivative)) and (not t.has_label(source_label))):
