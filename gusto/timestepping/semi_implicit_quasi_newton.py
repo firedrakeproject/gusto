@@ -36,6 +36,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     def __init__(self, equation_set, io, transport_schemes, spatial_methods,
                  auxiliary_equations_and_schemes=None, linear_solver=None,
                  diffusion_schemes=None, physics_schemes=None,
+                 final_physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
                  ultra_fast_physics_schemes=None,
                  alpha=0.5, off_centred_u=False,
@@ -61,6 +62,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 ``(field_name, scheme)`` indicating the fields to diffuse, and
                 the :class:`~.TimeDiscretisation` to use. Defaults to None.
             physics_schemes: (list, optional): a list of tuples of the form
+                (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`),
+                pairing physics parametrisations and timestepping schemes to use
+                for each. Timestepping schemes for physics must be explicit.
+                These schemes are all evaluated with forcing, both explicitly and 
+                implicitly. Defaults to None.
+            final_physics_schemes: (list, optional): a list of tuples of the form
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`),
                 pairing physics parametrisations and timestepping schemes to use
                 for each. Timestepping schemes for physics must be explicit.
@@ -143,7 +150,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.spatial_methods = spatial_methods
 
         if physics_schemes is not None:
-            self.final_physics_schemes = physics_schemes
+            self.physics_schemes = physics_schemes
+        if final_physics_schemes is not None:
+            self.final_physics_schemes = final_physics_schemes
         else:
             self.final_physics_schemes = []
         if slow_physics_schemes is not None:
@@ -161,7 +170,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.all_physics_schemes = (self.slow_physics_schemes
                                     + self.fast_physics_schemes
                                     + self.ultra_fast_physics_schemes
-                                    + self.final_physics_schemes)
+                                    + self.final_physics_schemes
+                                    + self.physics_schemes)
 
         for parametrisation, scheme in self.all_physics_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
@@ -280,7 +290,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             # If there is any simultaneous transport, add an extra 'simult' field:
             self.x.add_fields(self.equation, levels=("star", "p", "simult", "after_slow", "after_fast"))
         else:
-            self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast", "before_ultra_fast", "after_ultra_fast"))
+            self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast", "implicit_phys", "explicit_phys"))
         for aux_eqn, _ in self.auxiliary_equations_and_schemes:
             self.x.add_fields(aux_eqn)
         # Prescribed fields for auxiliary eqns should come from prognostics of
@@ -417,11 +427,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xp = self.x.p
         x_after_slow = self.x.after_slow
         x_after_fast = self.x.after_fast
-        x_before_ultra_fast = self.x.before_ultra_fast
-        x_after_ultra_fast = self.x.after_ultra_fast
         xrhs = self.xrhs
         xrhs_phys = self.xrhs_phys
         xrhs_inner_phys = self.xrhs_inner_phys
+        x_explicit_phys = self.x.explicit_phys
+        x_implicit_phys = self.x.implicit_phys
         dy = self.dy
 
         # Update reference profiles --------------------------------------------
@@ -447,6 +457,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             logger.info('Semi-implicit Quasi Newton: Explicit forcing')
             # Put explicit forcing into xstar
             self.forcing.apply(x_after_slow, xn, xstar(self.field_name), "explicit")
+
+        # Explicit physics
+        for _, scheme in self.physics_schemes:
+            logger.info("Semi-implicit Quasi-Newton: Explicit physics")
+            # Add explicit physics to xstar
+            scheme.apply(x_explicit_phys(scheme.field_name), xn(scheme.field_name))
+            xstar(self.field_name).assign(xstar(self.field_name) + x_explicit_phys(self.field_name))
 
         # set xp here so that variables that are not transported have
         # the correct values
@@ -486,22 +503,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                         # Zero implicit forcing to accelerate solver convergence
                         self.forcing.zero_forcing_terms(self.equation, xp, xrhs, self.transported_fields)
 
-                # ultra-fast physics
-                xrhs_inner_phys.assign(0)
-                if outer == 0 and inner == 0:
-                    x_before_ultra_fast(self.field_name).assign(xp(self.field_name))
-                else:
-                    x_before_ultra_fast(self.field_name).assign(xnp1(self.field_name))
-                    self.copy_active_tracers(xp, x_before_ultra_fast)
-                if len(self.ultra_fast_physics_schemes) > 0:
-                    with timed_stage("Ultra-fast physics"):
-                        logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
-                        for _, scheme in self.ultra_fast_physics_schemes:
-                            scheme.apply(x_after_ultra_fast(scheme.field_name), x_before_ultra_fast(scheme.field_name))
-
-                        xrhs_inner_phys.assign(x_after_ultra_fast(self.field_name)- x_before_ultra_fast(self.field_name))
-
-                xrhs += xrhs_inner_phys
+                # Implicit physics
+                logger.info(f'Semi-implicit Quasi Newton: Implicit physics {(outer, inner)}')
+                for _, scheme in self.physics_schemes:
+                    scheme.apply(x_implicit_phys(self.field_name), xnp1(self.field_name))
+                    xrhs += x_implicit_phys(self.field_name)
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys

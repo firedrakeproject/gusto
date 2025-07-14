@@ -189,7 +189,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
                  cloud_name='cloud_water', convective_feedback=False,
                  beta1=None, thermal_feedback=False, beta2=None, gamma_v=1,
                  time_varying_gamma_v=False, tau=None,
-                 parameters=None):
+                 parameters=None, off_centring=0.5):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the model's equation
@@ -233,6 +233,8 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             parameters (:class:`Configuration`, optional): parameters containing
                 the values of constants. Defaults to None, in which case the
                 parameters are obtained from the equation.
+            off_centring (float, optional): Off-centring parameter for implicit/
+                explicit physics. Defaults to 0.5.
         """
 
         self.explicit_only = True
@@ -305,7 +307,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         # Saturation adjustment expression, adjusted to stop negative values
         self.water_v = Function(Vv)
         self.cloud = Function(Vc)
-        sat_adj_expr = (self.water_v - self.saturation_curve) / self.tau
+        sat_adj_expr = off_centring*(self.water_v - self.saturation_curve) / self.tau
         sat_adj_expr = conditional(sat_adj_expr < 0,
                                    max_value(sat_adj_expr,
                                              -self.cloud / self.tau),
