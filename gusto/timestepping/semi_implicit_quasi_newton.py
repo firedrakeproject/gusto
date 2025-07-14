@@ -39,7 +39,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  final_physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
                  ultra_fast_physics_schemes=None,
-                 alpha=0.5, off_centred_u=False,
+                 alpha=0.5, off_centred_u=False, physics_beta=0.5,
                  num_outer=2, num_inner=2, accelerator=False,
                  predictor=None, reference_update_freq=None,
                  spinup_steps=0):
@@ -91,6 +91,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             off_centred_u (bool, optional): option to offcentre the transporting
                 velocity. Defaults to False, in which case transporting velocity
                 is centred. If True offcentring uses value of alpha.
+            physics_beta (float, optional): the semi-implicit off-centering
+                parameter for physics schemes. A value of 1 corresponds to fully
+                implicit, while 0 corresponds to fully explicit. Defaults to 0.5.
             num_outer (int, optional): number of outer iterations in the semi-
                 implicit algorithm. The outer loop includes transport and any
                 fast physics schemes. Defaults to 2. Note that default used by
@@ -148,6 +151,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.alpha_u = Function(R, val=float(alpha)) if off_centred_u else Function(R, val=0.5)
 
         self.spatial_methods = spatial_methods
+
+        self.physics_beta = physics_beta
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
@@ -463,7 +468,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             logger.info("Semi-implicit Quasi-Newton: Explicit physics")
             # Add explicit physics to xstar
             scheme.apply(x_explicit_phys(scheme.field_name), xn(scheme.field_name))
-            xstar(self.field_name).assign(xstar(self.field_name) + x_explicit_phys(self.field_name))
+            xstar(self.field_name).assign(xstar(self.field_name) + (1 - self.physics_beta)*(x_explicit_phys(self.field_name) - xn(self.field_name)))
 
         # set xp here so that variables that are not transported have
         # the correct values
@@ -492,8 +497,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             for inner in range(self.num_inner):
 
                 # Set the first guess of xnp1 to be xp
-                if outer == 0 and inner == 0:
-                    xnp1(self.field_name).assign(xp(self.field_name))
+                # if outer == 0 and inner == 0:
+                #     xnp1(self.field_name).assign(xp(self.field_name))
 
                 # Implicit forcing ---------------------------------------------
                 with timed_stage("Apply forcing terms"):
@@ -507,7 +512,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 logger.info(f'Semi-implicit Quasi Newton: Implicit physics {(outer, inner)}')
                 for _, scheme in self.physics_schemes:
                     scheme.apply(x_implicit_phys(self.field_name), xnp1(self.field_name))
-                    xrhs += x_implicit_phys(self.field_name)
+                    xrhs += self.physics_beta*(x_implicit_phys(self.field_name) - xnp1(self.field_name))
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
