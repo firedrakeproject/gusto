@@ -13,9 +13,9 @@ class PlotStats(Plotting):
 
         for stat in self.stats:
             if self.normalise:
-                s = (stat - stat[0])/stat[0]
+                s = (stat[:] - stat[0])/stat[0]
             else:
-                s = stat
+                s = stat[:]
             plt.plot(self.time, s, label=stat.name)
             if not same_plot:
                 plt.xlabel("time")
