@@ -4,6 +4,7 @@ import inspect
 
 
 __all__ = [
+    "EquationParameters",
     "BoussinesqParameters", "CompressibleParameters",
     "ShallowWaterParameters",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters",
