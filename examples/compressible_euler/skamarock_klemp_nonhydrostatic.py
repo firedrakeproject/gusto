@@ -23,7 +23,7 @@ from firedrake import (
 import numpy as np
 from gusto import (
     Domain, IO, OutputParameters, TRBDF2QuasiNewton, SSPRK3, DGUpwind,
-    logger, SUPGOptions, Perturbation, CompressibleParameters,
+    SUPGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
     compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
     SubcyclingOptions, hydrostatic_parameters, SemiImplicitQuasiNewton
@@ -59,7 +59,7 @@ def skamarock_klemp_nonhydrostatic(
     Tsurf = 300.              # Temperature at surface (K)
     wind_initial = 20.        # Initial wind in x direction (m/s)
     pert_width = 5.0e3        # Width parameter of perturbation (m)
-    deltaTheta = 1.0e-2       # Magnitude of theta perturbation (K)
+    deltaTheta = 0.0e-2       # Magnitude of theta perturbation (K)
     N = 0.01                  # Brunt-Vaisala frequency (1/s)
 
     # ------------------------------------------------------------------------ #
@@ -85,37 +85,20 @@ def skamarock_klemp_nonhydrostatic(
         eqns = CompressibleEulerEquations(domain, parameters)
 
     # I/O
-    points_x = np.linspace(0., domain_width, 100)
-    points_z = [domain_height/2.]
-    points = np.array([p for p in itertools.product(points_x, points_z)])
-
     # Adjust default directory name
     if hydrostatic and dirname == skamarock_klemp_nonhydrostatic_defaults['dirname']:
         dirname = f'hyd_switch_{dirname}'
 
-    # Dumping point data using legacy PointDataOutput is not supported in parallel
-    if COMM_WORLD.size == 1:
-        output = OutputParameters(
-            dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=True, dump_nc=True
-            
-        )
-    else:
-        logger.warning(
-            'Dumping point data using legacy PointDataOutput is not'
-            ' supported in parallel\nDisabling PointDataOutput'
-        )
-        output = OutputParameters(
-            dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=True, dump_nc=True, 
-        )
+    output = OutputParameters(
+        dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
+        dump_vtus=True, dump_nc=True,
+    )
 
     diagnostic_fields = [Perturbation('theta')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
     theta_opts = SUPGOptions()
-    #subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
     subcycling_options = None
     transported_fields = [
         SSPRK3(domain, "u", subcycling_options=subcycling_options),
@@ -144,14 +127,10 @@ def skamarock_klemp_nonhydrostatic(
         linear_solver = CompressibleSolver(eqns)
 
     # Time stepper
-    stepper = TRBDF2QuasiNewton(
+    stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, gamma=0.5
+        linear_solver=linear_solver
     )
-    #stepper = SemiImplicitQuasiNewton(
-    #    eqns, io, transported_fields, transport_methods,
-    #    linear_solver=linear_solver
-    #)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

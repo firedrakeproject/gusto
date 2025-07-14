@@ -32,13 +32,12 @@ from gusto import (
 skamarock_klemp_nonhydrostatic_defaults = {
     'ncolumns': 150,
     'nlayers': 10,
-    'dt': 6.0,
+    'dt': 6.0 * 0.5 / (1-sqrt(2)/2),
     'tmax': 3000.,
     'dumpfreq': 250,
-    'dirname': 'skamarock_klemp_nonhydrostatic',
+    'dirname': 'tr_bdf2_skamarock_klemp_nonhydrostatic',
     'hydrostatic': False,
-    'gamma': (1-sqrt(2)/2), 
-    'perturbed': False
+    'gamma': (1-sqrt(2)/2)
 }
 
 
@@ -51,7 +50,6 @@ def skamarock_klemp_nonhydrostatic(
         dirname=skamarock_klemp_nonhydrostatic_defaults['dirname'],
         hydrostatic=skamarock_klemp_nonhydrostatic_defaults['hydrostatic'],
         gamma=skamarock_klemp_nonhydrostatic_defaults['gamma'],
-        perturbed=skamarock_klemp_nonhydrostatic_defaults['perturbed']
 ):
 
     # ------------------------------------------------------------------------ #
@@ -63,7 +61,7 @@ def skamarock_klemp_nonhydrostatic(
     Tsurf = 300.              # Temperature at surface (K)
     wind_initial = 20.        # Initial wind in x direction (m/s)
     pert_width = 5.0e3        # Width parameter of perturbation (m)
-    deltaTheta = 1.0e-2       # Magnitude of theta perturbation (K)
+    deltaTheta = 0.0e-2       # Magnitude of theta perturbation (K)
     N = 0.01                  # Brunt-Vaisala frequency (1/s)
 
     # ------------------------------------------------------------------------ #
@@ -93,28 +91,16 @@ def skamarock_klemp_nonhydrostatic(
     if hydrostatic and dirname == skamarock_klemp_nonhydrostatic_defaults['dirname']:
         dirname = f'hyd_switch_{dirname}'
 
-    # Dumping point data using legacy PointDataOutput is not supported in parallel
-    if COMM_WORLD.size == 1:
-        output = OutputParameters(
-            dirname=dirname, dumpfreq=dumpfreq, 
-            dump_vtus=True, dump_nc=True
-        )
-    else:
-        logger.warning(
-            'Dumping point data using legacy PointDataOutput is not'
-            ' supported in parallel\nDisabling PointDataOutput'
-        )
-        output = OutputParameters(
-            dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=True, dump_nc=True, 
-        )
+    output = OutputParameters(
+        dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
+        dump_vtus=True, dump_nc=True,
+    )
 
     diagnostic_fields = [Perturbation('theta')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
     theta_opts = SUPGOptions()
-    #subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
     subcycling_options = None
     transported_fields = [
         SSPRK3(domain, "u", subcycling_options=subcycling_options),
@@ -135,22 +121,17 @@ def skamarock_klemp_nonhydrostatic(
 
     # Linear solver
     if hydrostatic:
-        linear_solver = CompressibleSolver(
-            eqns, solver_parameters=hydrostatic_parameters,
-            overwrite_solver_parameters=True
-        )
+        raise NotImplementedError
     else:
-        linear_solver = CompressibleSolver(eqns)
+        tr_solver = CompressibleSolver(eqns, alpha=gamma)
+        gamma2 = (1 - 2*gamma)/(2 - 2*gamma)
+        bdf_solver = CompressibleSolver(eqns, alpha=gamma2)
 
     # Time stepper
     stepper = TRBDF2QuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        tr_solver=linear_solver, bdf_solver=linear_solver, gamma=gamma
+        tr_solver=tr_solver, bdf_solver=bdf_solver, gamma=gamma
     )
-    #stepper = SemiImplicitQuasiNewton(
-    #    eqns, io, transported_fields, transport_methods,
-    #    linear_solver=linear_solver
-    #)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -183,13 +164,8 @@ def skamarock_klemp_nonhydrostatic(
         deltaTheta * sin(pi*z/domain_height)
         / (1 + (x - domain_width/2)**2 / pert_width**2)
     )
-    if perturbed:
-        logger.info("Using perturbed initial conditions")
-        theta0.interpolate(theta_b + theta_pert)
 
-    else:
-        logger.info("Using unperturbed initial conditions")
-        theta0.interpolate(theta_b) #+ theta_pert)
+    theta0.interpolate(theta_b + theta_pert)
     rho0.assign(rho_b)
     u0.project(as_vector([wind_initial, 0.0]))
 
@@ -268,15 +244,6 @@ if __name__ == "__main__":
         default=skamarock_klemp_nonhydrostatic_defaults['gamma']
     )
 
-    parser.add_argument(
-        '--perturbed',
-        help=(
-            'Whether to use a perturbation in the initial conditions. '
-            + 'If not specified, no perturbation is used.'
-        ),
-        type=bool,
-        default=skamarock_klemp_nonhydrostatic_defaults['perturbed']
-    )
     args, unknown = parser.parse_known_args()
 
     skamarock_klemp_nonhydrostatic(**vars(args))
