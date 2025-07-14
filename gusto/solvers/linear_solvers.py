@@ -848,9 +848,13 @@ class MoistThermalSWSolver(TimesteppingSolver):
         # Try including gamma_v in linearisation of P
         denominator = 1 + 2*nu*beta2*sat_expr/g + (nu*beta2*sat_expr/g)**2
 
-        P_expr = (1/denominator) * (qv * (1 - qvbar*sat_expr*(nu*beta2/g)**2)
-                                    + b * (nu*sat_expr/g + qvbar*beta2*((nu/g)**2))
-                                    + D * (sat_expr/Dbar + (qvbar*nu*beta2*sat_expr)/(g*Dbar)))
+        # P_expr = (1/denominator) * (qv * (1 - qvbar*sat_expr*(nu*beta2/g)**2)
+        #                             + b * (nu*sat_expr/g + qvbar*beta2*((nu/g)**2))
+        #                             + D * (sat_expr/Dbar + (qvbar*nu*beta2*sat_expr)/(g*Dbar)))
+
+        P_expr = (qv) + sat_expr*(1/Dbar*(D)
+                                         + nu/g*(b)
+                                         - nu*beta2/g*(qv))
 
 
         n = FacetNormal(equation.domain.mesh)
