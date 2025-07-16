@@ -317,7 +317,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         xrhs_phys = self.xrhs_phys
         dy = self.dy
         fname = self.equation.field_name
-        dt = self.dt.dat.data[0]
 
         # Make first guess of xm
         xm(fname).assign(xn(fname))
@@ -366,10 +365,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
             xrhs_phys.assign(x_after_fast(self.field_name) - xp(self.field_name))
-            title=f'TR-BDF2: TR step, outer loop transport k={outer} '
-            # plot_time_level_state(xp, self.equation, field_name='w', save=True, title=title, file_name=f'w_{self.step:02d}_0{outer}01_tr_xp')
-            # plot_time_level_state(xp, self.equation, field_name='theta', save=True, title=title, file_name=f'theta_{self.step:02d}_0{outer}01_tr_xp')
-            # plot_time_level_state(xp, self.equation, field_name='rho', save=True, title=title, file_name=f'rho_{self.step:02d}_0{outer}01_tr_xp')
 
             for inner in range(self.num_inner_tr):
 
@@ -381,16 +376,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 xrhs -= xm(self.field_name)
                 xrhs += xrhs_phys
 
-                title = f'TR-BDF2: TR step: rhs before solve k = {outer} l = {inner}'
-                # plot_time_level_state(xrhs, self.equation, 'w', title=title, mixed_space=True, save=True, file_name=f'w_{self.step:02d}_0{outer}{inner}2_tr_xrhs')
-                # plot_time_level_state(xrhs, self.equation, 'theta', title=title, mixed_space=True, save=True, file_name=f'theta_{self.step:02d}_0{outer}{inner}2_tr_xrhs')
-                # plot_time_level_state(xrhs, self.equation, 'rho', title=title, mixed_space=True, save=True, file_name=f'rho_{self.step:02d}_0{outer}{inner}2_tr_xrhs')
-
-                title=f'TR-BDF2: TR step, inner loop, pre solve k = {outer}, l = {inner} '
-                # plot_time_level_state(xm, self.equation, field_name='w', save=True, title=title, file_name=f'w_{self.step:02d}_0{outer}{inner}3_tr_xm1')
-                # plot_time_level_state(xm, self.equation, field_name='theta', save=True, title=title, file_name=f'theta_{self.step:02d}_0{outer}{inner}3_tr_xm1')
-                # plot_time_level_state(xm, self.equation, field_name='rho', save=True, title=title, file_name=f'rho_{self.step:02d}_0{outer}{inner}3_tr_xm1')
-
                 # Linear solve -------------------------------------------------
 
                 with timed_stage("Implicit solve"):
@@ -400,26 +385,12 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 xmX = xm(self.field_name)
                 xmX += dy
 
-                title=f'TR-BDF2: TR step,inner loop, post solve k = {outer}, l = {inner} '
-                # plot_time_level_state(xm, self.equation, field_name='w', save=True, title=title, file_name=f'w_{self.step:02d}_0{outer}{inner}4_tr_xm2')
-                # plot_time_level_state(xm, self.equation, field_name='theta', save=True, title=title, file_name=f'theta_{self.step:02d}_0{outer}{inner}4_tr_xm2')
-                # plot_time_level_state(xm, self.equation, field_name='rho', save=True, title=title, file_name=f'rho_{self.step:02d}_0{outer}{inner}4_tr_xm2')
-
-                title=f'TR-BDF2: TR step: inner loop, increment k = {outer}, l = {inner} '
-                # plot_time_level_state(dy, self.equation, field_name='w', mixed_space=True, save=True, title=title, file_name=f'w_{self.step:02d}_0{outer}{inner}5_tr_dy')
-                # plot_time_level_state(dy, self.equation, field_name='theta', mixed_space=True, save=True, title=title, file_name=f'theta_{self.step:02d}_0{outer}{inner}5_tr_dy')
-                # plot_time_level_state(dy, self.equation, field_name='rho', mixed_space=True, save=True, title=title, file_name=f'rho_{self.step:02d}_0{outer}{inner}5_tr_dy')
-
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xm)
 
             self._apply_bcs(xm)
 
         # BDF step =============================================================
-        title='TR-BDF2: TR step, End of TR step'
-        # plot_time_level_state(xm, self.equation, field_name='w', save=True, title=title, file_name=f'w_{self.step:02d}_1000_bdf_xm')
-        # plot_time_level_state(xm, self.equation, field_name='theta', save=True, title=title, file_name=f'theta_{self.step:02d}_1000_bdf_xm')
-        # plot_time_level_state(xm, self.equation, field_name='rho', save=True, title=title, file_name=f'rho_{self.step:02d}_1000_bdf_xm')
 
         # set xp here so that variables that are not transported have
         # the correct values
@@ -444,23 +415,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                                     message=f'BDF n: transporting velocity, outer iteration {outer}')
                 self.transport_fields(f'BDF n:{outer}', xn, xp)
 
-            title=f'TR-BDF2: BDF step, outer loop xpm k = {outer}'
-            # plot_time_level_state(xpm, self.equation, field_name='w', save=True, title=title, file_name=f'w_{self.step:02d}_1{outer}01_bdf_xpm')
-            # plot_time_level_state(xpm, self.equation, field_name='theta', save=True, title=title, file_name=f'theta_{self.step:02d}_1{outer}01_bdf_xpm')
-            # plot_time_level_state(xpm, self.equation, field_name='rho', save=True, title=title, file_name=f'rho_{self.step:02d}_1{outer}01_bdf_xpm')
-
-            title=f'TR-BDF2: BDF step, outer loop xp k = {outer}'
-            # plot_time_level_state(xp, self.equation, field_name='w', save=True, title=title, file_name=f'w_{self.step:02d}_1{outer}02_bdf_xp')
-            # plot_time_level_state(xp, self.equation, field_name='theta', save=True, title=title, file_name=f'theta_{self.step:02d}_1{outer}02_bdf_xp')
-            # plot_time_level_state(xp, self.equation, field_name='rho', save=True, title=title, file_name=f'rho_{self.step:02d}_1{outer}02_bdf_xp')
-
             # Combine transported fields into a single variable
             xp(fname).assign((1 - self.gamma3)*xp(fname) + self.gamma3*xpm(fname))
-
-            title=f'TR-BDF2: BDF step, outer loop combined xp k = {outer}'
-            # plot_time_level_state(xp, self.equation, field_name='w', save=True, title=title, file_name=f'w_{self.step:02d}_1{outer}03_bdf_xp')
-            # plot_time_level_state(xp, self.equation, field_name='theta', save=True, title=title, file_name=f'theta_{self.step:02d}_1{outer}03_bdf_xp')
-            # plot_time_level_state(xp, self.equation, field_name='rho', save=True, title=title, file_name=f'rho_{self.step:02d}_1{outer}03_bdf_xp')
 
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))
@@ -481,15 +437,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
-                title = f'TR-BDF2: BDF step: rhs before solve k = {outer} l = {inner}'
-                # plot_time_level_state(xrhs, self.equation, 'w', title=title, mixed_space=True, save=True, file_name=f'w_{self.step:02d}_1{outer}{inner}4_bdf_xrhs')
-                # plot_time_level_state(xrhs, self.equation, 'theta', title=title, mixed_space=True, save=True, file_name=f'theta_{self.step:02d}_1{outer}{inner}4_bdf_xrhs')
-                # plot_time_level_state(xrhs, self.equation, 'rho', title=title, mixed_space=True, save=True, file_name=f'rho_{self.step:02d}_1{outer}{inner}4_bdf_xrhs')
-
-                title=f'TR-BDF2: BDF step: inner loop, pre solve, k = {outer}, l={inner}'
-                # plot_time_level_state(xm, self.equation, field_name='w', save=True, title=title, file_name=f'w_{self.step:02d}_1{outer}{inner}5_bdf_xm1')
-                # plot_time_level_state(xm, self.equation, field_name='theta', save=True, title=title, file_name=f'theta_{self.step:02d}_1{outer}{inner}5_bdf_xm1')
-                # plot_time_level_state(xm, self.equation, field_name='rho', save=True, title=title, file_name=f'rho_{self.step:02d}_1{outer}{inner}5_bdf_xm1')
 
                 # Linear solve -------------------------------------------------
                 with timed_stage("Implicit solve"):
@@ -499,24 +446,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
 
-                title=f'TR-BDF2: BDF step, inner loop, post solve, k = {outer}, l={inner}'
-                # plot_time_level_state(xm, self.equation, field_name='w', save=True, title=title, file_name=f'w_{self.step:02d}_1{outer}{inner}6_bdf_xm2')
-                # plot_time_level_state(xm, self.equation, field_name='theta', save=True, title=title, file_name=f'theta_{self.step:02d}_1{outer}{inner}6_bdf_xm2')
-                # plot_time_level_state(xm, self.equation, field_name='rho', save=True, title=title, file_name=f'rho_{self.step:02d}_1{outer}{inner}6_bdf_xm2')
-
-                title=f'TR-BDF2: BDF step: inner loop, increment k = {outer}, l = {inner} '
-                # plot_time_level_state(dy, self.equation, field_name='w', mixed_space=True, save=True, title=title, file_name=f'w_{self.step:02d}_1{outer}{inner}7_bdf_dy')
-                # plot_time_level_state(dy, self.equation, field_name='theta', mixed_space=True, save=True, title=title, file_name=f'theta_{self.step:02d}_1{outer}{inner}7_bdf_dy')
-                # plot_time_level_state(dy, self.equation, field_name='rho', mixed_space=True, save=True, title=title, file_name=f'rho_{self.step:02d}_1{outer}{inner}7_bdf_dy')
-
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xnp1)
             self._apply_bcs(xnp1)
-
-        title=f'TR-BDF2:end of step'
-        plot_time_level_state(xm, self.equation, field_name='w', save=True, title=title, file_name=f'w_{self.step:02d}_2000_xnp1')
-        plot_time_level_state(xm, self.equation, field_name='theta', save=True, title=title, file_name=f'theta_{self.step:02d}_2000_xnp1')
-        plot_time_level_state(xm, self.equation, field_name='rho', save=True, title=title, file_name=f'rho_{self.step:02d}_2000_xnp1')
 
         with timed_stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:
