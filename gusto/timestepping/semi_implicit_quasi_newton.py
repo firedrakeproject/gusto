@@ -39,7 +39,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
                  alpha=0.5, off_centred_u=False,
-                 num_outer=2, num_inner=2, accelerator=False,
+                 num_outer=8, num_inner=1, accelerator=False,
                  predictor=None, reference_update_freq=None,
                  spinup_steps=0):
         """

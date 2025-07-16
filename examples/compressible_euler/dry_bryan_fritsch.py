@@ -13,7 +13,7 @@ from firedrake import (
     LinearVariationalProblem, LinearVariationalSolver
 )
 from gusto import (
-    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    Domain, IO, OutputParameters, TRBDF2QuasiNewton, SSPRK3, DGUpwind,
     RecoverySpaces, BoundaryMethod, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, CompressibleSolver,
     compressible_hydrostatic_balance
@@ -22,9 +22,9 @@ from gusto import (
 dry_bryan_fritsch_defaults = {
     'ncolumns': 100,
     'nlayers': 100,
-    'dt': 2.0,
+    'dt': 2.5,
     'tmax': 1000.,
-    'dumpfreq': 500,
+    'dumpfreq': 400,
     'dirname': 'dry_bryan_fritsch'
 }
 
@@ -103,12 +103,15 @@ def dry_bryan_fritsch(
     ]
 
     # Linear solver
-    linear_solver = CompressibleSolver(eqns)
+    gamma = 1 - sqrt(2)/2
+    gamma2 = (1 - 2*gamma)/(2 - 2*gamma)
+    tr_solver = CompressibleSolver(eqns, alpha=gamma, tau_values={'rho': gamma, 'theta': gamma})
+    bdf_solver = CompressibleSolver(eqns, alpha=gamma2, tau_values={'rho': gamma2, 'theta': gamma2})
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(
+    stepper = TRBDF2QuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
+        tr_solver=tr_solver, bdf_solver=bdf_solver, gamma=gamma
     )
 
     # ------------------------------------------------------------------------ #

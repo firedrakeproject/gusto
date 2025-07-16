@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import numpy as np
-from firedrake import (Function, dot)
+from firedrake import (Function, dot, SpatialCoordinate)
 from firedrake.pyplot import tricontourf
 
 def extract_data (state, field_name, mixed_space=False):
@@ -23,15 +23,11 @@ def create_function_space(state, equation, field_name, mixed_space=False):
 
     elif field_name == 'theta':
         V = state.theta.function_space()
-        plotting_space = Function(V)
-        values = extract_data(state, field_name)
-        plotting_space.dat.data[:] = values
+        plotting_space = Function(V).interpolate(state.theta)
 
     elif field_name == 'rho':
         V = equation.domain.spaces('DG')
-        plotting_space = Function(V)
-        values = extract_data(state, field_name)
-        plotting_space.dat.data[:] = values
+        plotting_space = Function(V).interpolate(state.rho)
 
     return plotting_space
 
@@ -47,10 +43,12 @@ def extract_mixed_space(mixed_space, equation, field_name):
         index = 1
         V = equation.domain.spaces('DG')
         plotting_space = Function(V)
-        plotting_space.dat.data[:] = mixed_space.subfunction[0].dat.data[:]
+        plotting_space.dat.data[:] = mixed_space.subfunctions[1].dat.data[:]
     elif field_name == 'theta':
         index = 2
         V = equation.domain.spaces('theta')
+        plotting_space = Function(V)
+        plotting_space.dat.data[:] = mixed_space.subfunctions[2].dat.data[:]
 
     return plotting_space
 
@@ -71,10 +69,16 @@ def plot_time_level_state(state, equation, field_name,file_name=None,
         save: Boolean indicating whether to save the plot (default is False).
     """
 
+    return None
+
     if mixed_space:
         plotting_space = extract_mixed_space(state, equation, field_name)
     else:
         plotting_space = create_function_space(state, equation, field_name, mixed_space=False)
+
+    x_coord, z_coord = SpatialCoordinate(equation.domain.mesh)
+    x = Function(plotting_space.function_space()).interpolate(x_coord)
+    z = Function(plotting_space.function_space()).interpolate(z_coord)
 
     # Create a figure and axis
     fig, ax = plt.subplots()
@@ -82,7 +86,8 @@ def plot_time_level_state(state, equation, field_name,file_name=None,
     # Plot the data using tricontourf
     cmap = plt.cm.coolwarm
     norm = colors.CenteredNorm()
-    contours = tricontourf(plotting_space, axes=ax, cmap=cmap, norm=norm)
+    contours = ax.tricontourf(x.dat.data, z.dat.data,
+                              plotting_space.dat.data, axes=ax, cmap=cmap, norm=norm)
     fig.colorbar(contours)
 
     # Set title and labels
@@ -96,12 +101,9 @@ def plot_time_level_state(state, equation, field_name,file_name=None,
     if save:
         if file_name is None:
            raise ValueError(f"Please provide a file name to save the plot.")
-
         save_plot(fig, file_name)
         print(f'saving plot to {file_name}')
-       # file_name = f"{field_name}_{time_level_name if time_level_name else 'default'}_step={step*dt}"
-       # save_plot(fig, file_name)
-       # print(f'saving plot to {file_name}')
+
     else:
         plt.show()
 
@@ -152,7 +154,7 @@ def make_subplot(states, state_names, equation, field_name, file_name=None, save
     else:
         plt.show()
 
-def save_plot(fig, filename, dir='/home/d-witt/firedrake/src/gusto/results/TR-BDF-debug-plots/'):
+def save_plot(fig, filename, dir='/home/thomas/venv-firedrake/gusto/results/tr_bdf2_sk_gw'):
     """
     Save the plot to a file.
 

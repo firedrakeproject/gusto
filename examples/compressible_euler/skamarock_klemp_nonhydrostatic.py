@@ -124,12 +124,12 @@ def skamarock_klemp_nonhydrostatic(
             overwrite_solver_parameters=True
         )
     else:
-        linear_solver = CompressibleSolver(eqns)
+        linear_solver = CompressibleSolver(eqns, alpha=0.5)
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
+        linear_solver=linear_solver, alpha=0.5
     )
 
     # ------------------------------------------------------------------------ #

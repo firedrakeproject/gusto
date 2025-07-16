@@ -29,15 +29,18 @@ from gusto import (
     SubcyclingOptions, hydrostatic_parameters, SemiImplicitQuasiNewton
 )
 
+gamma = (1-sqrt(2)/2)
+gamma2 = (1 - 2*gamma)/(2 - 2*gamma)
+dt = 12.0
+
 skamarock_klemp_nonhydrostatic_defaults = {
     'ncolumns': 150,
     'nlayers': 10,
-    'dt': 6.0 * 0.5 / (1-sqrt(2)/2),
-    'tmax': 3000.,
-    'dumpfreq': 250,
+    'dt': dt,
+    'tmax': 3000.0,
+    'dumpfreq': 125,
     'dirname': 'tr_bdf2_skamarock_klemp_nonhydrostatic',
-    'hydrostatic': False,
-    'gamma': (1-sqrt(2)/2)
+    'hydrostatic': False
 }
 
 
@@ -49,7 +52,6 @@ def skamarock_klemp_nonhydrostatic(
         dumpfreq=skamarock_klemp_nonhydrostatic_defaults['dumpfreq'],
         dirname=skamarock_klemp_nonhydrostatic_defaults['dirname'],
         hydrostatic=skamarock_klemp_nonhydrostatic_defaults['hydrostatic'],
-        gamma=skamarock_klemp_nonhydrostatic_defaults['gamma'],
 ):
 
     # ------------------------------------------------------------------------ #
@@ -61,7 +63,7 @@ def skamarock_klemp_nonhydrostatic(
     Tsurf = 300.              # Temperature at surface (K)
     wind_initial = 20.        # Initial wind in x direction (m/s)
     pert_width = 5.0e3        # Width parameter of perturbation (m)
-    deltaTheta = 0.0e-2       # Magnitude of theta perturbation (K)
+    deltaTheta = 1.0e-2       # Magnitude of theta perturbation (K)
     N = 0.01                  # Brunt-Vaisala frequency (1/s)
 
     # ------------------------------------------------------------------------ #
@@ -123,9 +125,9 @@ def skamarock_klemp_nonhydrostatic(
     if hydrostatic:
         raise NotImplementedError
     else:
-        tr_solver = CompressibleSolver(eqns, alpha=gamma)
+        tr_solver = CompressibleSolver(eqns, alpha=gamma, tau_values={'rho': gamma, 'theta': gamma})
         gamma2 = (1 - 2*gamma)/(2 - 2*gamma)
-        bdf_solver = CompressibleSolver(eqns, alpha=gamma2)
+        bdf_solver = CompressibleSolver(eqns, alpha=gamma2, tau_values={'rho': gamma2, 'theta': gamma2})
 
     # Time stepper
     stepper = TRBDF2QuasiNewton(
@@ -233,15 +235,6 @@ if __name__ == "__main__":
         ),
         action="store_true",
         default=skamarock_klemp_nonhydrostatic_defaults['hydrostatic']
-    )
-
-    parser.add_argument(
-        '--gamma',
-        help=(
-            'Off-centering parameter between the TR and BDF2 step'
-        ),
-        type=float,
-        default=skamarock_klemp_nonhydrostatic_defaults['gamma']
     )
 
     args, unknown = parser.parse_known_args()
