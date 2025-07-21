@@ -579,20 +579,22 @@ class RIDC(object, metaclass=ABCMeta):
         self.reduced = reduced
         self.dt = Constant(float(self.dt_coarse)/(self.M))
 
-        # Use equidistant nodes
-        self.nodes = np.arange(0, (M+1)*float(self.dt), float(self.dt))
-
         if reduced:
             self.Q = []
             for l in range(1, self.K+1):
-                integration_matrix = self.lagrange_integration_matrix(l+1)
-                integration_matrix = 0.5 * (l) * float(self.dt) * integration_matrix
-                self.Q.append(integration_matrix)
+                _, _, Q = genQCoeffs("Collocation", nNodes=l+1,
+                                                      nodeType="EQUID",
+                                                      quadType="LOBATTO",
+                                                      form="N2N")
+                Q = l* float(self.dt) * Q
+                self.Q.append(Q)
         else:
             # Get integration weights
-            integration_matrix = self.lagrange_integration_matrix(self.K+1)
-            # Rescale integration matrix to be over [0, self.dt_coarse] rather than [-1, 1]
-            self.Q = 0.5 * (self.K) * float(self.dt) * integration_matrix
+            _, _, self.Q = genQCoeffs("Collocation", nNodes=K+1,
+                                                      nodeType="EQUID",
+                                                      quadType="LOBATTO",
+                                                      form="N2N")
+            self.Q = self.K*float(self.dt)*self.Q
 
         # Set default linear and nonlinear solver options if none passed in
         if linear_solver_parameters is None:

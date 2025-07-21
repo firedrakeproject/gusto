@@ -103,10 +103,12 @@ class Parallel_RIDC(RIDC):
 
                 # Send base guess to k+1 correction
                 self.comm.send(self.Unodes[m+1], dest=self.kval+1, tag=100+m+1)
+                self.comm.send(self.source_Uk[m+1], dest=self.kval+1, tag=200+m+1)
         else:
             for m in range(1, self.kval + 1):
                 # Recieve and evaluate the stencil of guesses we need to correct
                 self.comm.recv(self.Unodes[m], source=self.kval-1, tag=100+m)
+                self.comm.recv(self.source_Uk[m], source=self.kval-1, tag=200+m)
                 self.Uin.assign(self.Unodes[m])
                 for evaluate in self.evaluate_source:
                     evaluate(self.Uin, self.base.dt, x_out=self.source_in)
@@ -121,8 +123,11 @@ class Parallel_RIDC(RIDC):
                 self.Ukp1_m.assign(self.Unodes1[m])
                 self.Uk_mp1.assign(self.Unodes[m+1])
                 self.Uk_m.assign(self.Unodes[m])
-                self.source_Ukp1_m.assign(self.source_Ukp1[m])
-                self.source_Uk_m.assign(self.source_Uk[m])
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk_m)
+                    evaluate(self.Unodes1[m], self.base.dt, x_out=self.source_Ukp1_m)
+                # self.source_Ukp1_m.assign(self.source_Ukp1[m])
+                # self.source_Uk_m.assign(self.source_Uk[m])
                 self.U_DC.assign(self.Unodes[m+1])
 
                 # Compute
@@ -142,10 +147,12 @@ class Parallel_RIDC(RIDC):
                 # Send our updated value to next communicator
                 if self.kval < self.K:
                     self.comm.send(self.Unodes1[m+1], dest=self.kval+1, tag=100+m+1)
+                    self.comm.send(self.source_Ukp1[m+1], dest=self.kval+1, tag=200+m+1)
 
             for m in range(self.kval, self.M):
                 # Recieve the guess we need to correct and evaluate the rhs
                 self.comm.recv(self.Unodes[m+1], source=self.kval-1, tag=100+m+1)
+                self.comm.recv(self.source_Uk[m+1], source=self.kval-1, tag=200+m+1)
                 self.Uin.assign(self.Unodes[m+1])
                 for evaluate in self.evaluate_source:
                     evaluate(self.Uin, self.base.dt, x_out=self.source_in)
@@ -160,8 +167,11 @@ class Parallel_RIDC(RIDC):
                 self.Ukp1_m.assign(self.Unodes1[m])
                 self.Uk_mp1.assign(self.Unodes[m+1])
                 self.Uk_m.assign(self.Unodes[m])
-                self.source_Ukp1_m.assign(self.source_Ukp1[m])
-                self.source_Uk_m.assign(self.source_Uk[m])
+                # self.source_Ukp1_m.assign(self.source_Ukp1[m])
+                # self.source_Uk_m.assign(self.source_Uk[m])
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk_m)
+                    evaluate(self.Unodes1[m], self.base.dt, x_out=self.source_Ukp1_m)
                 self.U_DC.assign(self.Unodes[m+1])
 
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
@@ -181,6 +191,7 @@ class Parallel_RIDC(RIDC):
                 # Send our updated value to next communicator
                 if self.kval < self.K:
                     self.comm.send(self.Unodes1[m+1], dest=self.kval+1, tag=100+m+1)
+                    self.comm.send(self.source_Ukp1[m+1], dest=self.kval+1, tag=200+m+1)
 
         if (self.kval == self.K):
             # Broadcast the final result to all other ranks
