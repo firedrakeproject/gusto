@@ -581,20 +581,26 @@ class RIDC(object, metaclass=ABCMeta):
 
         if reduced:
             self.Q = []
-            for l in range(1, self.K+1):
-                _, _, Q = genQCoeffs("Collocation", nNodes=l+1,
-                                                      nodeType="EQUID",
-                                                      quadType="LOBATTO",
-                                                      form="N2N")
-                Q = l* float(self.dt) * Q
+            for l in range(1, self.K + 1):
+                _, _, Q = genQCoeffs(
+                    "Collocation",
+                    nNodes=l + 1,
+                    nodeType="EQUID",
+                    quadType="LOBATTO",
+                    form="N2N"
+                )
+                Q = l * float(self.dt) * Q
                 self.Q.append(Q)
         else:
             # Get integration weights
-            _, _, self.Q = genQCoeffs("Collocation", nNodes=K+1,
-                                                      nodeType="EQUID",
-                                                      quadType="LOBATTO",
-                                                      form="N2N")
-            self.Q = self.K*float(self.dt)*self.Q
+            _, _, self.Q = genQCoeffs(
+                "Collocation",
+                nNodes=self.K + 1,
+                nodeType="EQUID",
+                quadType="LOBATTO",
+                form="N2N"
+            )
+            self.Q = self.K * float(self.dt) * self.Q
 
         # Set default linear and nonlinear solver options if none passed in
         if linear_solver_parameters is None:
