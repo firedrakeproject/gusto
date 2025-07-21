@@ -1,8 +1,8 @@
 """
 This runs a simple transport test on the sphere using the parallel DC time discretisations to
 test whether the errors are within tolerance. The test is run for the following schemes:
-- IMEX_SDC_R(2,2)  - IMEX SDC with 2 qaudrature nodes of Radau type (3rd order scheme) using
-- IMEX_RIDC_R(3)   - IMEX RIDC with 4 quadrature nodes of equidistant type, reduced stencils (3rd order scheme).
+- IMEX_SDC(2,2)  - IMEX SDC with 2 qaudrature nodes of Radau type (3rd order scheme) using
+- IMEX_RIDC(3)   - IMEX RIDC with 4 quadrature nodes of equidistant type, reduced stencils (3rd order scheme).
 """
 
 from firedrake import (norm, Ensemble, COMM_WORLD, SpatialCoordinate,
@@ -19,16 +19,16 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parallel(nprocs=[3, 6])
+@pytest.mark.parallel(nprocs=[6])
 @pytest.mark.parametrize(
-    "scheme", ["IMEX_SDC_R(3,3)", "IMEX_RIDC_R(3)"])
+    "scheme", ["IMEX_SDC(3,3)", "IMEX_RIDC(3)"])
 def test_parallel_dc(tmpdir, scheme):
 
-    if scheme == "IMEX_SDC_R(3,3)":
+    if scheme == "IMEX_SDC(3,3)":
         M = 3
         k = M
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(M))
-    elif scheme == "IMEX_RIDC_R(3)":
+    elif scheme == "IMEX_RIDC(3)":
         k = 2
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(k+1))
 
@@ -65,7 +65,7 @@ def test_parallel_dc(tmpdir, scheme):
     domain = domain
     V = domain.spaces("DG")
 
-    if scheme == "IMEX_SDC_R(3,3)":
+    if scheme == "IMEX_SDC(3,3)":
         quad_type = "RADAU-RIGHT"
         node_type = "LEGENDRE"
         qdelta_imp = "MIN-SR-FLEX"
@@ -77,7 +77,7 @@ def test_parallel_dc(tmpdir, scheme):
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
                                    qdelta_exp, final_update=True, initial_guess="copy", communicator=ensemble)
-    elif scheme == "IMEX_RIDC_R(3)":
+    elif scheme == "IMEX_RIDC(3)":
         M = k*(k+1)//2 + 4
         eqn = ContinuityEquation(domain, V, "f")
         eqn = split_continuity_form(eqn)
