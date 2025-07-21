@@ -76,7 +76,7 @@ def test_parallel_dc(tmpdir, scheme):
         eqn.label_terms(lambda t: t.has_label(transport), explicit)
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
-                                   qdelta_exp, final_update=False, initial_guess="copy", communicator=ensemble)
+                                   qdelta_exp, final_update=True, initial_guess="copy", communicator=ensemble)
     elif scheme == "IMEX_RIDC_R(3)":
         M = k*(k+1)//2 + 4
         eqn = ContinuityEquation(domain, V, "f")
