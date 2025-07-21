@@ -123,11 +123,8 @@ class Parallel_RIDC(RIDC):
                 self.Ukp1_m.assign(self.Unodes1[m])
                 self.Uk_mp1.assign(self.Unodes[m+1])
                 self.Uk_m.assign(self.Unodes[m])
-                for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk_m)
-                    evaluate(self.Unodes1[m], self.base.dt, x_out=self.source_Ukp1_m)
-                # self.source_Ukp1_m.assign(self.source_Ukp1[m])
-                # self.source_Uk_m.assign(self.source_Uk[m])
+                self.source_Ukp1_m.assign(self.source_Ukp1[m])
+                self.source_Uk_m.assign(self.source_Uk[m])
                 self.U_DC.assign(self.Unodes[m+1])
 
                 # Compute
@@ -167,11 +164,8 @@ class Parallel_RIDC(RIDC):
                 self.Ukp1_m.assign(self.Unodes1[m])
                 self.Uk_mp1.assign(self.Unodes[m+1])
                 self.Uk_m.assign(self.Unodes[m])
-                # self.source_Ukp1_m.assign(self.source_Ukp1[m])
-                # self.source_Uk_m.assign(self.source_Uk[m])
-                for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk_m)
-                    evaluate(self.Unodes1[m], self.base.dt, x_out=self.source_Ukp1_m)
+                self.source_Ukp1_m.assign(self.source_Ukp1[m])
+                self.source_Uk_m.assign(self.source_Uk[m])
                 self.U_DC.assign(self.Unodes[m+1])
 
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
