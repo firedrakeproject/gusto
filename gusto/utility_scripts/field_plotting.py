@@ -139,14 +139,14 @@ def make_subplot(states, state_names, equation, field_name, file_name=None, save
     
     
     if save:
-        
+
         if file_name is None:
            raise ValueError(f"Please provide a file name to save the plot.")
         if dir is None:
             raise ValueError(f"Please provide a directory to save the plot.")
         
 
-        save_plot(fig, file_name)
+        save_plot(fig, file_name, dir)
         print(f'saving plot to {file_name}')
     else:
         plt.show()
