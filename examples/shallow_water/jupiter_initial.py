@@ -4,32 +4,53 @@ import scipy
 import numpy as np
 import time
 
-# setup shallow water parameters
+### options changed in Cheng Li 2020
 Bu = 10
-# H = 5e4
-g = 24.79
-Omega = 1.74e-4
-R = 71.4e6
+Ro = 0.23
+b = 1.5
 
+### setup grid parameters
 nx = 256
 ny = nx
 Lx = 7e7
 Ly = Lx
 
-b = 1.5               # Steepness parameter
-Ro = 0.23             # Rossby Number
+# setup shallow water parameters
+# Bu = 10
+# H = 5e4
+g = 24.79
+Omega = 1.74e-4
+R = 71.4e6
+
+# b = 1.5               # Steepness parameter
+# Ro = 0.23             # Rossby Number
 f0 = 2 * Omega        # Planetary vorticity
 rm = 1e6              # Radius of vortex (m)
 vm = Ro * f0 * rm     # Calculate speed with Ro
 
 phi0 = Bu * (f0*rm)**2
 H = phi0/g
-
 t_day = 2*pi/Omega
+
+### timing options
 dt = 250.          # timestep (in seconds)
 tmax = 50*t_day       # duration of the simulation (in seconds)
+dump_freq = 10    # dump frequency of output
 
-folder_name = 'jupiter_initial_multi'
+### vortex locations
+south_lat_deg = [90., 83., 83., 83., 83., 83., 70.]
+south_lon_deg = [0., 72., 144., 216., 288., 0., 0.]
+
+### name
+# folder_name = 'jupiter_initial_multi'
+setup = 'intruder'
+bint, bdec = str(b).split('.')
+Roint, Rodec = str(Ro).split('.')
+if bint == '0':
+    bint = ''
+if Roint == '0':
+    Roint = ''
+folder_name = f'{setup}_Bu{Bu}b{bint}p{bdec}Ro{Roint}p{Rodec}_l{round(tmax/t_day)}dt{int(dt)}df{dump_freq}'
 
 # Set up the mesh
 mesh = PeriodicRectangleMesh(nx=nx, ny=ny, Lx=Lx, Ly=Ly, quadrilateral=True)
@@ -190,7 +211,7 @@ ftrap = conditional(r < rstar, fexpr, 2*Omega)
 eqns = ShallowWaterEquations(domain, parameters, fexpr=ftrap)
 logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
-output = OutputParameters(dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}', dumpfreq=10)
+output = OutputParameters(dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}', dumpfreq=dump_freq, dump_nc=True, checkpoint=True)
 
 # diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D'),
 #                      RelativeVorticity(), PotentialVorticity(),
@@ -214,8 +235,7 @@ u0 = stepper.fields("u")
 D0 = stepper.fields("D")
 
 # south_lat_deg = [90., 85., 85., 85., 85., 75.]
-south_lat_deg = [90., 83., 83., 83., 83., 83., 70.]
-south_lon_deg = [0., 72., 144., 216., 288., 0., 0.]
+
 
 # south_lat = [deg*pi/180. for deg in south_lat_deg]
 # south_lon = [deg*pi/180. for deg in south_lon_deg]
