@@ -674,7 +674,7 @@ class MeanMixingRatio(Augmentation):
             #    import sys; sys.exit()
 
 
-        #self.limiters.apply(mX_pre, means)
+        self.limiters.apply(mX_pre, means)
 
         print('\n After applying blended limiter')
 

@@ -335,6 +335,7 @@ class MeanLimiter(object):
             self._kernel.apply(self.lamda, self.mX_field, self.mean_field)
 
             self.lamda.interpolate(Constant(0.0))
+            print('Zeroed lambda is', assemble(self.lamda*dx))
 
             #mX_fields[i].interpolate((Constant(1.0) - self.lamda)*self.mX_field + self.lamda*self.mean_field)
 
