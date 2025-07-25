@@ -3,24 +3,18 @@ The TR-BDF2 Quasi-Newton timestepper.
 """
 
 from firedrake import (
-    Function, Constant, TrialFunctions, DirichletBC, div, assemble,
-    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace,
-    sqrt
+    Function, FunctionSpace, sqrt
 )
-from firedrake.fml import drop, replace_subject
-from firedrake.__future__ import interpolate
+
+
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
-from gusto.core.labels import (transport, diffusion, time_derivative,
-                               hydrostatic, physics_label, sponge,
-                               incompressible)
-from gusto.solvers import LinearTimesteppingSolver, mass_parameters
-from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
+from gusto.core.labels import (transport, diffusion)
+from gusto.solvers import LinearTimesteppingSolver
+from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
 from gusto.timestepping.semi_implicit_quasi_newton import Forcing
-from gusto.utility_scripts import (extract_data, create_function_space,
-                                   plot_time_level_state, make_subplot)
 
 
 __all__ = ["TRBDF2QuasiNewton"]
@@ -135,10 +129,12 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             self.slow_physics_schemes = []
         if fast_physics_schemes is not None:
             self.fast_physics_schemes = fast_physics_schemes
-            raise NotImplementedError('Fast physics schemes are not yet ' \
-            'implemented for TR-BDF timestepper. this is because the time ' \
-            'discretisations used by the physics schemes need to take into ' \
-            'account the appropriate gamma factors for their timestep' )
+            raise NotImplementedError(
+                'Fast physics schemes are not yet implemented for TR-BDF ' \
+                'timestepper. this is because the time discretisations used by ' \
+                'the physics schemes need to take into account the appropriate ' \
+                'gamma factors for their timestep'
+            )
         else:
             self.fast_physics_schemes = []
         self.all_physics_schemes = (self.slow_physics_schemes
@@ -206,13 +202,10 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.bdf_forcing = Forcing(equation_set, alpha=1.0, dt=self.gamma2*dt)
         self.bcs = equation_set.bcs
 
-
     def _apply_bcs(self, X):
         """
         Set the zero boundary conditions in the velocity.
         """
-        unp1 = X('u')
-       # breakpoint()
         for bc in self.bcs['u']:
             bc.apply(X('u'))
 
@@ -224,7 +217,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         """Update transporting velocity by combining uk and ukp1"""
         # note: factor takes into account different timestep scalings
         self.ubar.assign(factor*0.5*(uk + ukp1))
-
 
     def setup_fields(self):
         """Sets up time levels"""
@@ -462,7 +454,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
         logger.debug("Leaving TR-BDF2 Quasi-Newton timestep method")
 
-
     def run(self, t, tmax, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax.
@@ -486,5 +477,3 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             self.to_update_ref_profile = True
 
         super().run(t, tmax, pick_up=pick_up)
-
-
