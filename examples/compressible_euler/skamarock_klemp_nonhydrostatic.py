@@ -22,11 +22,11 @@ from firedrake import (
 )
 import numpy as np
 from gusto import (
-    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
+    Domain, IO, OutputParameters, TRBDF2QuasiNewton, SSPRK3, DGUpwind,
     logger, SUPGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
     compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
-    SubcyclingOptions, hydrostatic_parameters
+    SubcyclingOptions, hydrostatic_parameters, SemiImplicitQuasiNewton
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -97,8 +97,8 @@ def skamarock_klemp_nonhydrostatic(
     if COMM_WORLD.size == 1:
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=False, dump_nc=True,
-            point_data=[('theta_perturbation', points)],
+            dump_vtus=True, dump_nc=True
+            
         )
     else:
         logger.warning(
@@ -107,7 +107,7 @@ def skamarock_klemp_nonhydrostatic(
         )
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=False, dump_nc=True,
+            dump_vtus=True, dump_nc=True, 
         )
 
     diagnostic_fields = [Perturbation('theta')]
@@ -115,7 +115,8 @@ def skamarock_klemp_nonhydrostatic(
 
     # Transport schemes
     theta_opts = SUPGOptions()
-    subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
+    #subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
+    subcycling_options = None
     transported_fields = [
         SSPRK3(domain, "u", subcycling_options=subcycling_options),
         SSPRK3(
@@ -143,10 +144,14 @@ def skamarock_klemp_nonhydrostatic(
         linear_solver = CompressibleSolver(eqns)
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(
+    stepper = TRBDF2QuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
+        linear_solver=linear_solver, gamma=0.5
     )
+    #stepper = SemiImplicitQuasiNewton(
+    #    eqns, io, transported_fields, transport_methods,
+    #    linear_solver=linear_solver
+    #)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
