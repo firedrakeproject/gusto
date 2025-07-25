@@ -144,7 +144,7 @@ class InstantRain(PhysicsParametrisation):
         self.source_interpolate = interpolate(conditional(
             self.water_v > self.saturation_curve,
             (1/self.tau)*gamma_r*(self.water_v - self.saturation_curve),
-            0), self.source_int)
+            0), self.source_int.function_space())
 
     def evaluate(self, x_in, dt, x_out=None):
         """
@@ -169,7 +169,7 @@ class InstantRain(PhysicsParametrisation):
             self.tau.assign(dt)
         self.water_v.assign(x_in.subfunctions[self.Vv_idx])
 
-        self.source_int.assign(assemble(self.source_interpolate))
+        assemble(self.source_interpolate, tensor=self.source_int)
 
         if x_out is not None:
             x_out.assign(self.source)
