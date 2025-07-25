@@ -3,10 +3,11 @@ Objects to describe physics parametrisations for the boundary layer, such as
 drag and turbulence."""
 
 from firedrake import (
-    Interpolator, conditional, Function, dx, sqrt, dot, Constant, grad,
+    conditional, Function, dx, sqrt, dot, Constant, grad,
     TestFunctions, split, inner, Projector, exp, avg, outer, FacetNormal,
-    SpatialCoordinate, dS_v
+    SpatialCoordinate, dS_v, FunctionSpace, assemble
 )
+from firedrake.__future__ import interpolate
 from firedrake.fml import subject
 from gusto.core.equation_configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
@@ -141,7 +142,9 @@ class SurfaceFluxes(PhysicsParametrisation):
                 dmv_expr = surface_expr * (mv_np1_expr - m_v) / self.dt
                 source_mv_expr = test_m_v * self.source_mv * dx
 
-                self.source_interpolators.append(Interpolator(dmv_expr, self.source_mv_int))
+                self.source_interpolators.append(
+                    lambda: assemble(interpolate(dmv_expr, self.source_mv_int), tensor=self.source_mv_int)
+                )
                 equation.residual -= source_label(
                     self.label(subject(prognostic(source_mv_expr, vapour_name), self.source), self.evaluate)
                 )
@@ -159,7 +162,9 @@ class SurfaceFluxes(PhysicsParametrisation):
             self.source_theta_vd_int = self.source.subfunctions[self.T_idx]
             dtheta_vd_expr = surface_expr * (theta_np1_expr - theta_vd) / self.dt
             source_theta_expr = test_theta * self.source_theta_vd * dx
-            self.source_interpolators.append(Interpolator(dtheta_vd_expr, self.source_theta_vd_int))
+            self.source_interpolators.append(
+                lambda: assemble(interpolate(dtheta_vd_expr, self.source_theta_vd_int), tensor=self.source_theta_vd_int)
+            )
             equation.residual -= source_label(
                 self.label(subject(prognostic(source_theta_expr, 'theta'), self.source), self.evaluate)
             )
@@ -211,7 +216,7 @@ class SurfaceFluxes(PhysicsParametrisation):
             self.dt.assign(dt)
             self.rho_recoverer.project()
             for source_interpolator in self.source_interpolators:
-                source_interpolator.interpolate()
+                source_interpolator()
             # If a source output is provided, assign the source term to it
             if x_out is not None:
                 x_out.assign(self.source)
@@ -391,11 +396,11 @@ class StaticAdjustment(PhysicsParametrisation):
             Rd = equation.parameters.R_d
             mv_idx = equation.field_names.index('water_vapour')
             mv = self.X.subfunctions[mv_idx]
-            self.get_theta_variable = Interpolator(theta / (1 + mv*Rv/Rd), self.theta_to_sort)
-            self.set_theta_variable = Interpolator(self.theta_to_sort * (1 + mv*Rv/Rd), sorted_theta)
+            self.get_theta_variable = lambda: assemble(interpolate(theta / (1 + mv*Rv/Rd), Vt), tensor=self.theta_to_sort)
+            self.set_theta_variable = lambda: assemble(interpolate(self.theta_to_sort * (1 + mv*Rv/Rd), Vt), tensor=sorted_theta)
         else:
-            self.get_theta_variable = Interpolator(theta, self.theta_to_sort)
-            self.set_theta_variable = Interpolator(self.theta_to_sort, sorted_theta)
+            self.get_theta_variable = lambda: assemble(interpolate(theta, Vt), tensor=self.theta_to_sort)
+            self.set_theta_variable = lambda: assemble(interpolate(self.theta_to_sort, Vt), tensor=sorted_theta)
 
         # -------------------------------------------------------------------- #
         # Set up routines to reshape data
@@ -436,12 +441,12 @@ class StaticAdjustment(PhysicsParametrisation):
         self.X.assign(x_in)
         self.dt.assign(dt)
 
-        self.get_theta_variable.interpolate()
+        self.get_theta_variable()
         theta_column_data, index_data = self.get_column_data()
         for col in range(theta_column_data.shape[0]):
             theta_column_data[col].sort()
         self.set_column_data(self.theta_to_sort, theta_column_data, index_data)
-        self.set_theta_variable.interpolate()
+        self.set_theta_variable()
 
         if x_out is not None:
             raise NotImplementedError("Static adjustment does not output a source term, "
@@ -601,8 +606,14 @@ class BoundaryLayerMixing(PhysicsParametrisation):
             C_D0 = parameters.coeff_drag_0
             C_D1 = parameters.coeff_drag_1
             C_D2 = parameters.coeff_drag_2
+            R = FunctionSpace(domain.mesh, "R", 0)
+            C_D3 = Function(R).assign(0.0)
 
-            C_D = conditional(u_hori_mag < 20.0, C_D0 + C_D1*u_hori_mag, C_D2)
+            C_D = conditional(u_hori_mag < 20.0,
+                              C_D0 + C_D1*u_hori_mag,
+                              # To avoid a free index error in UFL, don't just
+                              # have a single real in the False condition
+                              C_D2 + C_D3*u_hori_mag)
             K = conditional(p > p_top,
                             C_D*u_hori_mag*z_a,
                             C_D*u_hori_mag*z_a*exp(-((p_top - p)/p_strato)**2))
