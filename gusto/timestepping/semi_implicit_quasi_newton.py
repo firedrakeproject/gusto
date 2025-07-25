@@ -18,7 +18,6 @@ from gusto.solvers import LinearTimesteppingSolver, mass_parameters
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
-from gusto.utility_scripts import make_subplot, plot_time_level_state
 
 
 __all__ = ["SemiImplicitQuasiNewton", "Forcing"]
@@ -236,7 +235,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.linear_solver = LinearTimesteppingSolver(equation_set, self.alpha)
         else:
             self.linear_solver = linear_solver
-        self.forcing = Forcing(equation_set,self.alpha)
+        self.forcing = Forcing(equation_set, self.alpha)
         self.bcs = equation_set.bcs
 
         if self.predictor is not None:
@@ -438,8 +437,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # set xp here so that variables that are not transported have
         # the correct values
         xp(self.field_name).assign(xstar(self.field_name))
-        title='SIQN, explicit forcing applied '
-        plot_time_level_state(xp, self.equation, field_name='w', save=False, title=title)
+
         # OUTER ----------------------------------------------------------------
         for outer in range(self.num_outer):
 
@@ -459,8 +457,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
             xrhs_phys.assign(x_after_fast(self.field_name) - xp(self.field_name))
-            title=f'SIQN: outer loop transport k={outer} '
-            plot_time_level_state(xp, self.equation, field_name='w', save=False, title=title)
             for inner in range(self.num_inner):
 
                 # Implicit forcing ---------------------------------------------
@@ -474,11 +470,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
 
-                title = f'SIQN: rhs before solve k = {outer} l = {inner}'
-                plot_time_level_state(xrhs, self.equation, 'w', title=title, mixed_space=True, save=False)
-                title=f'SIQN: inner loop, pre solve k = {outer}, l = {inner} '
-                plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
-
                 # Linear solve -------------------------------------------------
                 with timed_stage("Implicit solve"):
                     logger.info(f'Semi-implicit Quasi Newton: Mixed solve {(outer, inner)}')
@@ -487,22 +478,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
 
-                title=f'SIQN: inner loop, post solve k = {outer}, l = {inner} '
-                plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
-                title=f'SIQN: inner loop, increment k = {outer}, l = {inner} '
-                plot_time_level_state(dy, self.equation, field_name='w', mixed_space=True, save=False, title=title)
-
-
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xnp1)
-
             self._apply_bcs()
 
-
-        title=f'SIQN: end of step'
-        plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
-        dt = self.dt.dat.data[0]
-      #  make_subplot([xn, xp, xnp1], ['xn', 'xp', 'xnp1'], self.equation, field_name='w', step=self.step, dt=dt)
         for name, scheme in self.auxiliary_schemes:
             # transports a field from xn and puts result in xnp1
             logger.debug(f"Semi-implicit Quasi-Newton auxiliary scheme for {name}")

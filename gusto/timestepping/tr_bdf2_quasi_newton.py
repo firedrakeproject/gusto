@@ -130,10 +130,10 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         if fast_physics_schemes is not None:
             self.fast_physics_schemes = fast_physics_schemes
             raise NotImplementedError(
-                'Fast physics schemes are not yet implemented for TR-BDF ' \
-                'timestepper. this is because the time discretisations used by ' \
-                'the physics schemes need to take into account the appropriate ' \
-                'gamma factors for their timestep'
+                "Fast physics schemes are not yet implemented for the TR-BDF "
+                "timestepper. This is because the time discretisations used by the "
+                "physics schemes need to take into account the appropriate gamma "
+                "factors for their timestep."
             )
         else:
             self.fast_physics_schemes = []
