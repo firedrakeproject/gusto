@@ -19,7 +19,7 @@ from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
 from gusto.timestepping.semi_implicit_quasi_newton import Forcing
-from gusto.utility_scripts import (extract_data, create_function_space, 
+from gusto.utility_scripts import (extract_data, create_function_space,
                                    plot_time_level_state, make_subplot)
 
 
@@ -31,21 +31,21 @@ class TRBDF2QuasiNewton(BaseTimestepper):
     Implements a TR-BDF2 quasi-Newton discretisation,
     with Strang splitting and auxiliary semi-Lagrangian transport.
 
-    The timestep consists of a two stage timestep in which an initial SIQN 
+    The timestep consists of a two stage timestep in which an initial SIQN
     step is followed by a BDF2 stage.
-     
+
     """
 
     def __init__(self, equation_set, io, transport_schemes, spatial_methods,
                  tr_solver=None,
                  bdf_solver=None,
-                 diffusion_schemes=None, 
+                 diffusion_schemes=None,
                  physics_schemes=None,
-                 slow_physics_schemes=None, 
+                 slow_physics_schemes=None,
                  fast_physics_schemes=None,
-                 gamma=(1-sqrt(2)/2), 
-                 num_outer_tr=2, num_inner_tr=2,
-                 num_outer_bdf=2, num_inner_bdf=2,
+                 gamma=(1-sqrt(2)/2),
+                 num_outer_tr=4, num_inner_tr=1,
+                 num_outer_bdf=4, num_inner_bdf=1,
                  reference_update_freq=None,
                  ):
         """
@@ -77,24 +77,24 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`).
                 These schemes are evaluated within the outer loop. Defaults to
                 None.
-            gamma (`float, optional): the off-centering parameter for the 
-                timestep between 0 and 0.5. A value of 0.5 corresponds to a SIQN 
+            gamma (`float, optional): the off-centering parameter for the
+                timestep between 0 and 0.5. A value of 0.5 corresponds to a SIQN
                 scheme with alpha = 0.5. Defaults to 1 - sqrt(2)/2, which makes
-                the scheme L-stable. 
-            num_outer_tr (int, optional): number of outer iterations in the 
+                the scheme L-stable.
+            num_outer_tr (int, optional): number of outer iterations in the
                 trapeziodal step. The outer loop includes transport and any
-                fast physics schemes. Defaults to 2. 
-            num_inner_tr (int, optional): number of inner iterations in the 
+                fast physics schemes. Defaults to 2.
+            num_inner_tr (int, optional): number of inner iterations in the
                 trapeziodal step. The inner loop includes the evaluation of
                 implicit forcing (pressure gradient and Coriolis) terms, and the
-                linear solve. Defaults to 2. 
-            num_outer_bdf (int, optional): number of outer iterations in the 
+                linear solve. Defaults to 2.
+            num_outer_bdf (int, optional): number of outer iterations in the
                 BDF step. The outer loop includes transport and any
-                fast physics schemes. Defaults to 2. 
-            num_inner_bdf (int, optional): number of inner iterations in the 
+                fast physics schemes. Defaults to 2.
+            num_inner_bdf (int, optional): number of inner iterations in the
                 BDF step. The inner loop includes the evaluation of
                 implicit forcing (pressure gradient and Coriolis) terms, and the
-                linear solve. Defaults to 2. 
+                linear solve. Defaults to 2.
             reference_update_freq (float, optional): frequency with which to
                 update the reference profile with the n-th time level state
                 fields. This variable corresponds to time in seconds, and
@@ -116,11 +116,11 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.gamma2 = Function(R, val=((1 - 2*float(gamma))/(2 - 2*float(gamma))))
         self.gamma3 = Function(R, val=((1-float(self.gamma2))/(2*float(gamma))))
 
-        # Options relating to reference profiles 
+        # Options relating to reference profiles
         self.reference_update_freq = reference_update_freq
         self.to_update_ref_profile = False
 
-        # Set transporting velocity to be average 
+        # Set transporting velocity to be average
         self.alpha_u = Function(R, val=0.5)
 
         self.spatial_methods = spatial_methods
@@ -200,10 +200,10 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             self.bdf_solver = LinearTimesteppingSolver(equation_set, self.gamma2)
         else:
             self.bdf_solver = bdf_solver
-        
+
         dt = self.equation.domain.dt
-        self.tr_forcing = Forcing(equation_set, alpha=0.5, dt=2*self.gamma*dt)
-        self.bdf_forcing = Forcing(equation_set, alpha=self.gamma2, dt=dt)
+        self.tr_forcing = Forcing(equation_set, alpha=0.5, dt=2.0*self.gamma*dt)
+        self.bdf_forcing = Forcing(equation_set, alpha=1.0, dt=self.gamma2*dt)
         self.bcs = equation_set.bcs
 
 
@@ -219,11 +219,11 @@ class TRBDF2QuasiNewton(BaseTimestepper):
     @property
     def transporting_velocity(self):
         return self.ubar
-    
+
     def update_transporting_velocity(self, uk, ukp1, factor):
         """Update transporting velocity by combining uk and ukp1"""
         # note: factor takes into account different timestep scalings
-        self.ubar.assign(factor*(uk + self.alpha_u*(ukp1 - uk)))
+        self.ubar.assign(factor*0.5*(uk + ukp1))
 
 
     def setup_fields(self):
@@ -232,7 +232,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast", "m", "pm"))
         # Only the prescribed fields of the main equation need passing to StateFields
         self.fields = StateFields(self.x, self.equation.prescribed_fields,
-                                  *self.io.output.dumplist) 
+                                  *self.io.output.dumplist)
         self.ubar = Function(self.x.n('u').function_space())
 
     def setup_scheme(self):
@@ -281,7 +281,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                   the transport.
         """
         for name, scheme in self.active_transport:
-            
+
             logger.info(f'TR-BDF2 Quasi Newton: Transport {outer}: {name}')
             # transports a single field from x_in and puts the result in x_out
             scheme.apply(x_out(name), x_in(name))
@@ -316,8 +316,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         xrhs = self.xrhs
         xrhs_phys = self.xrhs_phys
         dy = self.dy
-        fname = self.equation.field_name 
-        dt = self.dt.dat.data[0]
+        fname = self.equation.field_name
 
         # Make first guess of xm
         xm(fname).assign(xn(fname))
@@ -344,13 +343,13 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         # set xp here so that variables that are not transported have
         # the correct values
         xp(self.field_name).assign(xstar(self.field_name))
-        #title='TR-BDF2: TR step, explicit forcing applied'
-       # plot_time_level_state(xp, self.equation, field_name='w', save=False, title=title)
+
         # OUTER ----------------------------------------------------------------
         for outer in range(self.num_outer_tr):
 
             # Transport --------------------------------------------------------
             with timed_stage("Transport"):
+                # Transport by 0.5*(u^n + u^m) for 2*gamma*dt
                 self.update_transporting_velocity(xn('u'), xm('u'), 2*self.gamma)
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'TR: transporting velocity, outer iteration {outer}')
@@ -366,8 +365,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
             xrhs_phys.assign(x_after_fast(self.field_name) - xp(self.field_name))
-            #title=f'TR-BDF2: TR step, outer loop transport k={outer} '
-     #       plot_time_level_state(xp, self.equation, field_name='w', save=False, title=title)
 
             for inner in range(self.num_inner_tr):
 
@@ -378,10 +375,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
                 xrhs -= xm(self.field_name)
                 xrhs += xrhs_phys
-               # title = f'TR-BDF2: TR step: rhs before solve k = {outer} l = {inner}'
-             #   plot_time_level_state(xrhs, self.equation, 'w', title=title, mixed_space=True, save=False)
-              #  title=f'TR-BDF2: TR step, inner loop, pre solve k = {outer}, l = {inner} '
-      #          plot_time_level_state(xm, self.equation, field_name='w', save=False, title=title)
+
                 # Linear solve -------------------------------------------------
 
                 with timed_stage("Implicit solve"):
@@ -391,46 +385,38 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 xmX = xm(self.field_name)
                 xmX += dy
 
-              #  title=f'TR-BDF2: TR step,inner loop, post solve k = {outer}, l = {inner} '
-         #       plot_time_level_state(xm, self.equation, field_name='w', save=False, title=title)
-
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xm)
 
             self._apply_bcs(xm)
-        
+
         # BDF step =============================================================
-      #  title='TR-BDF2: TR step, End of TR step'
-       # plot_time_level_state(xm, self.equation, field_name='w', save=False, title=title)
-        
 
         # set xp here so that variables that are not transported have
         # the correct values
         xp(self.field_name).assign(xn(fname))
         xpm(self.field_name).assign(xm(fname))
-        xnp1(self.field_name).assign(xm(fname))
-
+        xnp1(self.field_name).assign(xn(fname))  # First guess doesn't seem to make much difference
 
         # OUTER ----------------------------------------------------------------
         for outer in range(self.num_outer_bdf):
 
             # Transport --------------------------------------------------------
             with timed_stage("Transport"):
-                self.update_transporting_velocity(xm('u'), xnp1('u'), 1-2*self.gamma)
+                # Transport by u^np1 for (1-2*gamma)*dt, so scale u by (1-2*gamma)
+                self.update_transporting_velocity(xnp1('u'), xnp1('u'), 1-2*self.gamma)
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'BDF m: transporting velocity, outer iteration {outer}')
                 self.transport_fields(f'BDF m: {outer}', xm, xpm)
 
-                self.update_transporting_velocity(xn('u'), xnp1('u'), 1)
+                # Transport by u^np1 for dt, so scale u by 1
+                self.update_transporting_velocity(xnp1('u'), xnp1('u'), 1)
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'BDF n: transporting velocity, outer iteration {outer}')
                 self.transport_fields(f'BDF n:{outer}', xn, xp)
 
             # Combine transported fields into a single variable
             xp(fname).assign((1 - self.gamma3)*xp(fname) + self.gamma3*xpm(fname))
-
-           # title=f'TR-BDF2: BDF step, outer loop transport k = {outer}'
-           # plot_time_level_state(xp, self.equation, field_name='w', save=False, title=title)
 
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))
@@ -451,10 +437,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
-           #     title = f'TR-BDF2: BDF step: rhs before solve k = {outer} l = {inner}'
-              #  plot_time_level_state(xrhs, self.equation, 'w', title=title, mixed_space=True, save=False)
-           #     title=f'TR-BDF2: BDF step, inner loop, pre solve, k = {outer}, l={inner}'
-            #    plot_time_level_state(xp, self.equation, field_name='w', save=False, title=title)
 
                 # Linear solve -------------------------------------------------
                 with timed_stage("Implicit solve"):
@@ -464,22 +446,10 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
 
-             #   title=f'TR-BDF2: BDF step, inner loop, post solve, k = {outer}, l={inner}'
-            #    plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
-
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xnp1)
-
-            
-        #    plot_time_level_state(xnp1, self.equation, field_name='w', save=False)
             self._apply_bcs(xnp1)
-        #    plot_time_level_state(xnp1, self.equation, field_name='w', save=False)
-        
-       # title=f'TR-BDF2:end of step'
-       # plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
-        dir = '/home/d-witt/firedrake/src/gusto/gusto/utility_scripts/results/testing_plots/'
-        file_name = f"TR-BDF2-2_2-xnp1-xpm={self.step*dt}"
-        make_subplot([xn, xm, xnp1], ['xn', 'xm', 'xnp1'], self.equation, field_name='w', file_name=file_name, save=True, dir=dir)
+
         with timed_stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:
                 logger.debug(f"TR-BDF2 Quasi-Newton diffusing {name}")
@@ -491,7 +461,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                     scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
 
         logger.debug("Leaving TR-BDF2 Quasi-Newton timestep method")
-        
+
 
     def run(self, t, tmax, pick_up=False):
         """

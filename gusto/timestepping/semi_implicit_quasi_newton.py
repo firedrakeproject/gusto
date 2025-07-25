@@ -39,7 +39,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
                  alpha=0.5, off_centred_u=False,
-                 num_outer=2, num_inner=2, accelerator=False,
+                 num_outer=8, num_inner=1, accelerator=False,
                  predictor=None, reference_update_freq=None,
                  spinup_steps=0):
         """
@@ -474,6 +474,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
 
+                title = f'SIQN: rhs before solve k = {outer} l = {inner}'
+                plot_time_level_state(xrhs, self.equation, 'w', title=title, mixed_space=True, save=False)
                 title=f'SIQN: inner loop, pre solve k = {outer}, l = {inner} '
                 plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
 
@@ -487,6 +489,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                 title=f'SIQN: inner loop, post solve k = {outer}, l = {inner} '
                 plot_time_level_state(xnp1, self.equation, field_name='w', save=False, title=title)
+                title=f'SIQN: inner loop, increment k = {outer}, l = {inner} '
+                plot_time_level_state(dy, self.equation, field_name='w', mixed_space=True, save=False, title=title)
+
 
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xnp1)
@@ -555,11 +560,11 @@ class Forcing(object):
         Args:
             equation (:class:`PrognosticEquationSet`): the prognostic equations
                 containing the forcing terms.
-           explicit_scaling (:class:`Expr`): Off-centering parameter for 
-                explicit forcing evaluation. For Semi-Implicit Quasi-Newton, 
+           explicit_scaling (:class:`Expr`): Off-centering parameter for
+                explicit forcing evaluation. For Semi-Implicit Quasi-Newton,
                 this corresponds to 1 - alpha.
-           implicit_scaling (:class:`Expr`): Off-centering parameter for 
-                implicit forcing evaluation.For Semi-Implicit Quasi-Newton, 
+           implicit_scaling (:class:`Expr`): Off-centering parameter for
+                implicit forcing evaluation.For Semi-Implicit Quasi-Newton,
                 this corresponds to alpha.
         """
 
@@ -623,10 +628,11 @@ class Forcing(object):
                 drop)
 
         # now we can set up the explicit and implicit problems
-        explicit_forcing_problem = LinearVariationalProblem(
-            a.form, L_explicit.form, self.xF, bcs=bcs,
-            constant_jacobian=True
-        )
+        if alpha != 1.0:
+            explicit_forcing_problem = LinearVariationalProblem(
+                a.form, L_explicit.form, self.xF, bcs=bcs,
+                constant_jacobian=True
+            )
 
         implicit_forcing_problem = LinearVariationalProblem(
             a.form, L_implicit.form, self.xF, bcs=bcs,
@@ -636,11 +642,12 @@ class Forcing(object):
         self.solver_parameters = mass_parameters(W, equation.domain.spaces)
 
         self.solvers = {}
-        self.solvers["explicit"] = LinearVariationalSolver(
-            explicit_forcing_problem,
-            solver_parameters=self.solver_parameters,
-            options_prefix="ExplicitForcingSolver"
-        )
+        if alpha != 1.0:
+            self.solvers["explicit"] = LinearVariationalSolver(
+                explicit_forcing_problem,
+                solver_parameters=self.solver_parameters,
+                options_prefix="ExplicitForcingSolver"
+            )
         self.solvers["implicit"] = LinearVariationalSolver(
             implicit_forcing_problem,
             solver_parameters=self.solver_parameters,
@@ -648,7 +655,8 @@ class Forcing(object):
         )
 
         if logger.isEnabledFor(DEBUG):
-            self.solvers["explicit"].snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
+            if alpha != 1.0:
+                self.solvers["explicit"].snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
             self.solvers["implicit"].snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
 
     def apply(self, x_in, x_nl, x_out, label):
