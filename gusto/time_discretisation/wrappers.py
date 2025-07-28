@@ -7,9 +7,8 @@ called.
 from abc import ABCMeta, abstractmethod
 from firedrake import (
     FunctionSpace, Function, BrokenElement, Projector, Constant, as_ufl, dot, grad,
-    TestFunction, MixedFunctionSpace, assemble
+    TestFunction, MixedFunctionSpace, assemble, interpolate
 )
-from firedrake.__future__ import interpolate
 from firedrake.fml import Term
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
 from gusto.recovery import Recoverer, ReversibleRecoverer, ConservativeRecoverer

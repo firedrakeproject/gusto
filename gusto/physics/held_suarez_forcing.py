@@ -1,9 +1,8 @@
 import numpy as np
 from firedrake import (Function, dx, pi, SpatialCoordinate,
                        split, conditional, ge, sin, dot, ln, cos, inner,
-                       Projector, assemble)
+                       Projector, assemble, interpolate)
 from firedrake.fml import subject
-from firedrake.__future__ import interpolate
 from gusto.core.coord_transforms import lonlatr_from_xyz
 from gusto.recovery import Recoverer, BoundaryMethod
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
