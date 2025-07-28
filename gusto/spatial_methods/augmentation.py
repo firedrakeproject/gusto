@@ -13,7 +13,7 @@ from firedrake import (
     Projector, FiniteElement, TensorProductElement
 )
 from firedrake.fml import (
-    subject, all_terms, replace_subject, replace_test_function,
+    subject, all_terms, replace_subject, replace_test_function, replace_trial_function,
     drop, Term, LabelledForm
 )
 from gusto import (
@@ -490,10 +490,13 @@ class MeanMixingRatio(Augmentation):
         self.residual = subject(new_residual, self.X)
 
         # Check these two forms
-        print('\n Original equation with residual of length, ', len(equation.residual))
-        print('\n Augmented equation with residual of length, ', len(self.residual))
-        print('\n')
+        #print('\n Original equation with residual of length, ', len(equation.residual))
+        #print('\n Augmented equation with residual of length, ', len(self.residual))
+        #print('\n')
 
+        # Check for any mass_weighted terms, and if so
+        # replace the subject and test functions for 
+        # the mass-weighted form.
         for term in self.residual:
             if term.has_label(mass_weighted):
                 field = term.get(prognostic)
@@ -502,7 +505,10 @@ class MeanMixingRatio(Augmentation):
                 # Transport terms are Terms not LabelledForms,
                 # so this change this to use the label_map
                 if term.has_label(transport):
+                    old_mass_weighted_labels = mass_term.labels
                     mass_term = LabelledForm(mass_term)
+                else:
+                    old_mass_weighted_labels = mass_term.terms[0].labels
 
                 if field in self.mX_names:
                     # Replace using mX_indices
@@ -552,10 +558,25 @@ class MeanMixingRatio(Augmentation):
                         replace_test_function(self.tests, old_idx=mX_idx, new_idx=mean_idx)
                     )
 
-                # Carry across original labels here.
-                mass_term_new = Term(mass_term_new.form, term.labels)
+                    # Need to extract labels from the mass weighted part!!!
+                
+                # Update the mass weighted part of the label
+                # to point to the new mass weighted term
 
-                # Update the mass_weighted part of the term
+                # Extract the labels from the previous mass weighted part.
+
+                # Carry across original labels here.
+                mass_term_new = Term(mass_term_new.form, old_mass_weighted_labels)
+                mass_term_new = subject(mass_term_new, self.X)
+
+                # Remove mass_weighted label from mass_weighted part
+                #mass_term_new = mass_weighted.remove(mass_term_new)
+
+                #if term.has_label(transport):
+                #    mass_term_new = transport.update_value(mass_term_new, TransportEquationType.tracer_conservative)
+
+                # Make a new term, where the 
+                # mass_weighted part is corrected.
                 new_term = Term(term.form, term.labels)
                 new_term = mass_weighted.update_value(new_term, mass_term_new)
 
@@ -563,7 +584,9 @@ class MeanMixingRatio(Augmentation):
                 self.residual = self.residual.label_map(
                     lambda t: t == term,
                     map_if_true=lambda t: new_term
-                )
+            )
+
+        self.residual = subject(self.residual, self.X)
 
         print('Original residual')
         print('\n')
@@ -576,6 +599,7 @@ class MeanMixingRatio(Augmentation):
                 print('the mass-weighted part')
                 print(term.get(mass_weighted).form)
                 print(term.get(mass_weighted))
+                #print(term.get(mass_weighted).labels)
                 print('\n')
             else:
                 print('Not')
@@ -593,13 +617,15 @@ class MeanMixingRatio(Augmentation):
                 print('the mass-weighted part')
                 print(term.get(mass_weighted).form)
                 print(term.get(mass_weighted))
+                yo = term.get(mass_weighted)
+                #print(term.get(mass_weighted).labels)
                 print('\n')
             else:
                 print('Not')
                 print(term.form)
                 print('\n')
 
-    #    import sys; sys.exit()
+       # import sys; sys.exit()
 
     def pre_apply(self, x_in):
         """
@@ -662,9 +688,6 @@ class MeanMixingRatio(Augmentation):
             print('What is the projection error? \n', rel_proj_err)
 
     def limit(self, x_in_mixed):
-        pass
-
-    def limit2(self, x_in_mixed):
         # Ensure non-negativity by applying the blended limiter
         mX_pre = []
         means = []
@@ -702,7 +725,7 @@ class MeanMixingRatio(Augmentation):
             #    import sys; sys.exit()
 
 
-        #self.limiters.apply(mX_pre, means)
+        self.limiters.apply(mX_pre, means)
 
         print('\n After applying blended limiter')
 
@@ -723,6 +746,6 @@ class MeanMixingRatio(Augmentation):
             print('rho*m_old*dx is', old_vals[i])
             print('rho*m_new*dx is', new_sum)
             print('What is the projection error? ', rel_lim_err)
-            if rel_lim_err > 1e-15:
-                import sys; sys.exit()
+            #if rel_lim_err > 1e-15:
+            #    import sys; sys.exit()
 
