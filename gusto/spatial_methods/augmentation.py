@@ -288,8 +288,12 @@ class MeanMixingRatio(Augmentation):
         exist_spaces = eqns.spaces
         self.idx_orig = len(exist_spaces)
 
+        print(self.idx_orig)
+
         # Define the mean mixing ratio(s) in the DG0 space
         DG0 = FunctionSpace(domain.mesh, "DG", 0)
+        DG1 = FunctionSpace(domain.mesh, "DG", 1)
+        DG1_equispaced = domain.spaces('DG1_equispaced')
 
         # Set up fields and names for each mixing ratio
         self.mean_names = []
@@ -300,6 +304,13 @@ class MeanMixingRatio(Augmentation):
         self.limiters = []
         self.rho_names = []
         self.rho_idxs = []
+        
+        self.rho_name = self.field_names[0]
+
+        # Define a lowest order density field
+        self.mean_rho_idx = self.idx_orig
+        exist_spaces.append(DG1)
+        self.field_names.append('mean_rho')
 
         for i in range(self.mX_num):
             mX_name = mX_names[i]
@@ -307,7 +318,7 @@ class MeanMixingRatio(Augmentation):
             self.field_names.append(self.mean_names[-1])
             mean_spaces.append(DG0)
             exist_spaces.append(DG0)
-            self.mean_idxs.append(self.idx_orig + i)
+            self.mean_idxs.append(self.idx_orig + i + 1)
 
             # Extract the mixing ratio in question:
             mX_idx = eqns.field_names.index(mX_name)
@@ -320,29 +331,40 @@ class MeanMixingRatio(Augmentation):
             for tracer in eqns.active_tracers:
                 if tracer.name == mX_name:
                     if tracer.density_name is not None:
-                        self.rho_idxs.append(eqns.field_names.index(tracer.density_name))
+                        #self.rho_idxs.append(eqns.field_names.index(tracer.density_name))
+                        self.rho_idxs.append(self.mean_rho_idx)
                     else:
                         self.rho_idxs.append('None')
 
         self.limiters = MeanLimiter(mX_spaces)
 
         # Contruct projectors for computing the mean mixing ratios
-        self.mX_ins = [Function(mX_spaces[i]) for i in range(self.mX_num)]
-        self.mean_outs = [Function(mean_spaces[i]) for i in range(self.mX_num)]
-        self.compute_means = [Projector(self.mX_ins[i], self.mean_outs[i])
-                              for i in range(self.mX_num)]
+        #self.mX_ins = [Function(mX_spaces[i]) for i in range(self.mX_num)]
+        #self.mean_outs = [Function(mean_spaces[i]) for i in range(self.mX_num)]
+        #self.compute_means = [Projector(self.mX_ins[i], self.mean_outs[i])
+        #                      for i in range(self.mX_num)]
 
-        DG1 = FunctionSpace(domain.mesh, "DG", 1)
-        DG1_equispaced = domain.spaces('DG1_equispaced')
+        #self.mX_ins = [Function(DG0) for i in range(self.mX_num + 1)]
+        #self.mean_outs = [Function(DG0) for i in range(self.mX_num + 1)]
+        #self.compute_means = [Projector(self.mX_ins[i], self.mean_outs[i])
+        #                      for i in range(self.mX_num + 1)]
 
         self.DG1_field = Function(DG1)
         self.rho_field = Function(DG1)
-        self.rho0_field = Function(FunctionSpace(domain.mesh, "DG", 0))
-        self.DG0_field = Function(FunctionSpace(domain.mesh, "DG", 0))
+        self.rho_mean_field = Function(DG0)
+        self.rho0_field = Function(DG0)
+        self.DG0_field = Function(DG0)
         self.mean_evaluator = MeanValue(DG1)
 
         self.compute_mean_rho = Projector(self.rho_field, self.rho0_field)
-        self.compute_mean_mX = ConservativeProjector(self.rho_field, self.rho0_field, self.DG1_field, self.DG0_field)
+
+        # Add the subtract mean component in the future.
+        #self.compute_mean_mX = ConservativeProjector(self.rho_field, self.rho0_field, self.DG1_field, self.DG0_field)
+
+        self.compute_mean_mX = ConservativeProjector(self.rho_field, self.rho_field, self.DG1_field, self.DG0_field)
+
+        #self.compute_mean_mX = Projector(self.DG1_field, self.DG0_field)
+
 
         #self.DG1_field = Function(domain.spaces('DG1_equispaced'))
         #self.DG0_field = Function(FunctionSpace(domain.mesh, "DG", 0))
@@ -366,6 +388,16 @@ class MeanMixingRatio(Augmentation):
         self.fs = MixedFunctionSpace(exist_spaces)
         self.X = Function(self.fs)
         self.tests = TestFunctions(self.fs)
+
+        # New, keep the original function spaces the same
+        #self.fs = eqns.function_space
+        #self.X = eqns.X
+        #self.tests = eqns.tests
+
+        # Create the mean residual functions space
+        #self.mean_fs = MixedFunctionSpace([DG0, DG0, DG0])
+        #self.mean_X = Function(self.mean_fs)
+        #self.mean_tests = TestFunctions(self.mean_fs)
 
         self.bcs = None
 
@@ -393,6 +425,36 @@ class MeanMixingRatio(Augmentation):
 
         # Create the new residual
         new_residual = orig_residual
+
+        # New: Info for the lowest order density
+
+        #### NEW
+        # Now, do the same for the mean density:
+        mean_rho_residual = equation.residual.label_map(
+                lambda t: t.get(prognostic) == self.rho_name,
+                map_if_false=drop
+            )
+        
+        print(len(mean_rho_residual))
+
+        mean_rho_residual = mean_rho_residual.label_map(
+            all_terms,
+            replace_subject(self.X, old_idx=0, new_idx=self.mean_rho_idx)
+        )
+
+        # Replace test function from the new mixed space
+        mean_rho_residual = mean_rho_residual.label_map(
+            all_terms,
+            replace_test_function(self.tests, old_idx=0, new_idx=self.mean_rho_idx)
+        )
+
+        # Update the name of the prognostic:
+        mean_rho_residual = mean_rho_residual.label_map(
+            all_terms,
+            lambda t: prognostic.update_value(t, 'mean_rho')
+        )
+
+        new_residual += mean_rho_residual
 
         # For each mean mixing ratio, copy across the terms relating to
         # the mixing ratio and replace the test function and trial function.
@@ -454,10 +516,10 @@ class MeanMixingRatio(Augmentation):
                         replace_subject(self.X, old_idx=mX_idx, new_idx=mX_idx)
                     )
 
-                    # Replace density
+                    # Replace original density
                     mass_term_new = mass_term_new.label_map(
                         all_terms,
-                        replace_subject(self.X, old_idx=rho_idx, new_idx=rho_idx)
+                        replace_subject(self.X, old_idx=0, new_idx=0)
                     )
 
                     # Replace test function
@@ -481,7 +543,7 @@ class MeanMixingRatio(Augmentation):
                     # Replace density
                     mass_term_new = mass_term_new.label_map(
                         all_terms,
-                        replace_subject(self.X, old_idx=rho_idx, new_idx=rho_idx)
+                        replace_subject(self.X, old_idx=0, new_idx=rho_idx)
                     )
 
                     # Replace test function
@@ -503,10 +565,11 @@ class MeanMixingRatio(Augmentation):
                     map_if_true=lambda t: new_term
                 )
 
-        # For debugging, check that all the replacements have worked:
+        print('Original residual')
         print('\n')
-        for term in self.residual:
+        for term in equation.residual:
             print(term.get(subject))
+            print(term.labels)
             if term.has_label(mass_weighted):
                 print('advective form of a mass weighted term')
                 print(term.form)
@@ -519,9 +582,28 @@ class MeanMixingRatio(Augmentation):
                 print(term.form)
                 print('\n')
 
+        # For debugging, check that all the replacements have worked:
+        print('\n')
+        for term in self.residual:
+            print(term.get(subject))
+            print(term.labels)
+            if term.has_label(mass_weighted):
+                print('advective form of a mass weighted term')
+                print(term.form)
+                print('the mass-weighted part')
+                print(term.get(mass_weighted).form)
+                print(term.get(mass_weighted))
+                print('\n')
+            else:
+                print('Not')
+                print(term.form)
+                print('\n')
+
+    #    import sys; sys.exit()
+
     def pre_apply(self, x_in):
         """
-        Sets the original fields, i.e. not the mean mixing ratios
+        Sets the original fields, i.e. not the mean fields
 
         Args:
             x_in (:class:`Function`): The input fields
@@ -532,8 +614,7 @@ class MeanMixingRatio(Augmentation):
 
     def post_apply(self, x_out):
         """
-        Apply the limiters.
-        Sets the output fields, i.e. not the mean mixing ratios
+        Sets the output fields, i.e. not the mean fields
 
         Args:
             x_out (:class:`Function`): The output fields
@@ -551,61 +632,17 @@ class MeanMixingRatio(Augmentation):
             x_in_mixed (:class:`Function`): The mixed function to update.
         """
 
+        # Update the density field for the mean mixing ratios
+        self.rho_field.assign(x_in_mixed.subfunctions[0])
+        x_in_mixed.subfunctions[self.mean_rho_idx].assign(x_in_mixed.subfunctions[0])
+
+        # Update the mean mixing ratios:
         for i in range(self.mX_num):
-            # Original implementation
-            #self.mX_ins[i].assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
-            #print('\n min of mX field:')
-            #print(np.min(self.mX_ins[i].dat.data))
-            #self.compute_means[i].project()
-            #self.x_in.subfunctions[self.mean_idxs[i]].assign(self.mean_outs[i])
-            #x_in_mixed.subfunctions[self.mean_idxs[i]].assign(self.mean_outs[i])
-
-            # Check that the projection correctly preserved the mixing ratio:
-            #if self.rho_idxs[i] == 'None':
-                # Dirty hack for now:
-            #    self.rho_field.assign(x_in_mixed.subfunctions[0])
-            #else:
-            #    self.rho_field.assign(x_in_mixed.subfunctions[self.rho_idxs[i]])
-            #DG1_sum = assemble(self.rho_field*self.mX_ins[i]*dx)
-            #DG0_sum = assemble(self.rho_field*self.mean_outs[i]*dx)
-            #proj_err = np.abs(DG1_sum - DG0_sum)
-            #print('rho*DG1*dx is', DG1_sum)
-            #print('rho*DG0*dx is', DG0_sum)
-            #print('What is the projection error? ', proj_err)
-            #if proj_err > 1e-16:
-            #    import sys; sys.exit()
-
-            # New method, using mean value
-            #self.DG1_field.assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
-            #self.DG0_field.interpolate(Constant(0.0))
-            #self.mean_evaluator.apply(self.DG0_field, self.DG1_field)
-            #self.x_in.subfunctions[self.mean_idxs[i]].assign(self.DG0_field)
-
-            # New method, using mean value and rho field
-            #self.DG1_field.assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
-            #if self.rho_idxs[i] == 'None':
-                # Dirty hack for now:
-            #    self.rho_field.assign(x_in_mixed.subfunctions[0])
-            #else:
-            #    self.rho_field.assign(x_in_mixed.subfunctions[self.rho_idxs[i]])
-            #self.DG0_field.interpolate(Constant(0.0))
-            #self.mean_evaluator.apply(self.DG0_field, self.rho_field, self.DG1_field)
-            #self.x_in.subfunctions[self.mean_idxs[i]].assign(self.DG0_field)
-
-            # Apply conservative projection
-            if self.rho_idxs[i] == 'None':
-            #    # Dirty hack for now:
-                self.rho_field.assign(x_in_mixed.subfunctions[0])
-            else:
-                self.rho_field.assign(x_in_mixed.subfunctions[self.rho_idxs[i]])
-           # 
-            self.compute_mean_rho.project()
+            # Compute the mean mixing ratio with conservative projection
             self.DG1_field.assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
-            #self.DG1_field.interpolate(x_in_mixed.subfunctions[self.mX_idxs[i]])
             self.compute_mean_mX.project()
 
             print(f'\n min of mX field is {np.min(self.DG1_field.dat.data)}')
-
             print(f'\n min of mean field is {np.min(self.DG0_field.dat.data)}')
 
             # Clip zero values if needed:
@@ -615,28 +652,19 @@ class MeanMixingRatio(Augmentation):
 
             x_in_mixed.subfunctions[self.mean_idxs[i]].assign(self.DG0_field)
 
-
+            # Debugging
             DG1_sum = assemble(self.rho_field*self.DG1_field*dx)
             DG0_sum = assemble(self.rho_field*self.DG0_field*dx)
+            #DG0_sum = assemble(self.rho0_field*self.DG0_field*dx)
             rel_proj_err = np.abs(DG1_sum - DG0_sum)/DG1_sum
             print('rho*DG1*dx is', DG1_sum)
             print('rho*DG0*dx is', DG0_sum)
             print('What is the projection error? \n', rel_proj_err)
-            #if rel_proj_err > 1e-14:
-            #    import sys; sys.exit()
-
-
-            # Check that the projection correctly preserved the mixing ratio:
-            #DG1_sum = np.sum(self.DG1_field.dat.data)
-            #DG0_sum = np.sum(self.DG0_field.dat.data)
-            #proj_err = np.abs(DG1_sum - 4*DG0_sum)
-            #print('DG1 sum is', DG1_sum)
-            #print('4*DG0 sum is', 4*DG0_sum)
-            #print('What is the projection error? ', proj_err)
-            #if proj_err > 1e-16:
-            #    import sys; sys.exit()
 
     def limit(self, x_in_mixed):
+        pass
+
+    def limit2(self, x_in_mixed):
         # Ensure non-negativity by applying the blended limiter
         mX_pre = []
         means = []
@@ -674,7 +702,7 @@ class MeanMixingRatio(Augmentation):
             #    import sys; sys.exit()
 
 
-        self.limiters.apply(mX_pre, means)
+        #self.limiters.apply(mX_pre, means)
 
         print('\n After applying blended limiter')
 
