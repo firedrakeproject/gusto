@@ -64,25 +64,21 @@ def test_parallel_dc(tmpdir, scheme):
 
     domain = domain
     V = domain.spaces("DG")
+    eqn = ContinuityEquation(domain, V, "f")
+    eqn = split_continuity_form(eqn)
+    eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
+    eqn.label_terms(lambda t: t.has_label(transport), explicit)
 
     if scheme == "IMEX_SDC(3,3)":
         quad_type = "RADAU-RIGHT"
         node_type = "LEGENDRE"
         qdelta_imp = "MIN-SR-FLEX"
         qdelta_exp = "MIN-SR-NS"
-        eqn = ContinuityEquation(domain, V, "f")
-        eqn = split_continuity_form(eqn)
-        eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
-        eqn.label_terms(lambda t: t.has_label(transport), explicit)
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
                                    qdelta_exp, final_update=True, initial_guess="copy", communicator=ensemble)
     elif scheme == "IMEX_RIDC(3)":
         M = k*(k+1)//2 + 4
-        eqn = ContinuityEquation(domain, V, "f")
-        eqn = split_continuity_form(eqn)
-        eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
-        eqn.label_terms(lambda t: t.has_label(transport), explicit)
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_RIDC(base_scheme, domain, M, k, communicator=ensemble)
 
@@ -95,4 +91,5 @@ def test_parallel_dc(tmpdir, scheme):
 
     timestepper.fields("f").interpolate(f_init)
     timestepper.fields("u").project(uexpr)
-    parallel_assert(run(timestepper, tmax, f_end) < tol, "Error too large")
+    error = run(timestepper, tmax, f_end)
+    parallel_assert(error < tol, f"Error too large, Error: {error}, tol: {tol}")
