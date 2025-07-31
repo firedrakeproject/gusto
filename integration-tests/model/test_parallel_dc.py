@@ -26,7 +26,7 @@ def test_parallel_dc(tmpdir, scheme):
 
     if scheme == "IMEX_SDC(2,2)":
         M = 2
-        k = M
+        k = 3
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(M))
     elif scheme == "IMEX_RIDC(2)":
         k = 1
@@ -65,11 +65,11 @@ def test_parallel_dc(tmpdir, scheme):
     domain = domain
     V = domain.spaces("DG")
     eqn = ContinuityEquation(domain, V, "f")
-    eqn = split_continuity_form(eqn)
-    eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
-    eqn.label_terms(lambda t: t.has_label(transport), explicit)
 
     if scheme == "IMEX_SDC(2,2)":
+        eqn = ContinuityEquation(domain, V, "f")
+        eqn.label_terms(lambda t: not t.has_label(time_derivative), implicit)
+
         quad_type = "RADAU-RIGHT"
         node_type = "LEGENDRE"
         qdelta_imp = "MIN-SR-FLEX"
@@ -78,6 +78,10 @@ def test_parallel_dc(tmpdir, scheme):
         time_scheme = Parallel_SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
                                    qdelta_exp, final_update=True, initial_guess="base", communicator=ensemble)
     elif scheme == "IMEX_RIDC(2)":
+        eqn = split_continuity_form(eqn)
+        eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
+        eqn.label_terms(lambda t: t.has_label(transport), explicit)
+
         M = 5
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_RIDC(base_scheme, domain, M, k, communicator=ensemble)
