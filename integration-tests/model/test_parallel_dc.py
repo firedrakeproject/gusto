@@ -19,7 +19,7 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parallel(nprocs=[2,4])
+@pytest.mark.parallel(nprocs=[2, 4])
 @pytest.mark.parametrize(
     "scheme", ["IMEX_SDC(2,2)", "IMEX_RIDC(2)"])
 def test_parallel_dc(tmpdir, scheme):
@@ -76,9 +76,9 @@ def test_parallel_dc(tmpdir, scheme):
         qdelta_exp = "MIN-SR-NS"
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
-                                   qdelta_exp, final_update=True, initial_guess="copy", communicator=ensemble)
+                                   qdelta_exp, final_update=True, initial_guess="base", communicator=ensemble)
     elif scheme == "IMEX_RIDC(2)":
-        M = k*(k+1)//2 + 4
+        M = 5
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_RIDC(base_scheme, domain, M, k, communicator=ensemble)
 
