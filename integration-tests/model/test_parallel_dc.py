@@ -19,17 +19,17 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parallel(nprocs=[6])
+@pytest.mark.parallel(nprocs=[2,4])
 @pytest.mark.parametrize(
-    "scheme", ["IMEX_SDC(3,3)", "IMEX_RIDC(3)"])
+    "scheme", ["IMEX_SDC(2,2)", "IMEX_RIDC(2)"])
 def test_parallel_dc(tmpdir, scheme):
 
-    if scheme == "IMEX_SDC(3,3)":
-        M = 3
+    if scheme == "IMEX_SDC(2,2)":
+        M = 2
         k = M
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(M))
-    elif scheme == "IMEX_RIDC(3)":
-        k = 2
+    elif scheme == "IMEX_RIDC(2)":
+        k = 1
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(k+1))
 
     # Get the tracer setup
@@ -69,7 +69,7 @@ def test_parallel_dc(tmpdir, scheme):
     eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
     eqn.label_terms(lambda t: t.has_label(transport), explicit)
 
-    if scheme == "IMEX_SDC(3,3)":
+    if scheme == "IMEX_SDC(2,2)":
         quad_type = "RADAU-RIGHT"
         node_type = "LEGENDRE"
         qdelta_imp = "MIN-SR-FLEX"
@@ -77,7 +77,7 @@ def test_parallel_dc(tmpdir, scheme):
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
                                    qdelta_exp, final_update=True, initial_guess="copy", communicator=ensemble)
-    elif scheme == "IMEX_RIDC(3)":
+    elif scheme == "IMEX_RIDC(2)":
         M = k*(k+1)//2 + 4
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_RIDC(base_scheme, domain, M, k, communicator=ensemble)
