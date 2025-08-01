@@ -5,11 +5,7 @@ full REXI approximation.
 
 from gusto.rexi import *
 from firedrake import exp, sqrt, pi
-
-params = RexiParameters()
-mu = params.mu
-L = params.L
-a = params.a
+import pytest
 
 
 def exactGaussian(x, h):
@@ -30,11 +26,16 @@ def approx_exp_as_Gaussian(h, M, x):
     return sum
 
 
-def approxGaussian(x, h):
+def approxGaussian(x, params):
     """
     Approximation of Gaussian basis function as a sum of complex rational
     functions.
     """
+    h = params.h
+    consts = RexiConstants(params.coefficients)
+    mu = consts.mu
+    a = consts.a
+    L = consts.L
     x /= h
     sum = 0
     for t in range(0, len(a)):
@@ -43,16 +44,18 @@ def approxGaussian(x, h):
     return sum
 
 
-def approx_e_ix(x, h, M, use_Gaussian_approx):
+def approx_e_ix(x, params, use_Gaussian_approx):
     """
     Approximation of e^(ix), either with Gaussians approximated as fractions
     or with the full REXI approximation (writing the sum of Gaussians and the
     sum of rational functions as a single sum).
     """
-    b = b_coefficients(h, M)
     sum = 0
     if use_Gaussian_approx:
         # this is REXI with Gaussians approximated as fractions
+        h = params.h
+        M = params.M
+        b = b_coefficients(h, M)
         for m in range(-M, M+1):
             sum += b[m+M] * approxGaussian(x+m*h, h)
     else:
@@ -88,11 +91,12 @@ def test_sum_of_gaussian_approx():
 # ------------------------------------------------------------------------ #
 
 
-def test_gaussian_approx():
-    h = 0.2
+@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+def test_gaussian_approx(coefficients):
+    params = RexiParameters(coefficients=coefficients)
     for x in range(10):
-        exact = exactGaussian(x, h)
-        approx = approxGaussian(x, h)
+        exact = exactGaussian(x, params.h)
+        approx = approxGaussian(x, params)
         assert abs(exact - approx) < 7.15344e-13
 
 # ------------------------------------------------------------------------ #
@@ -102,12 +106,14 @@ def test_gaussian_approx():
 # ------------------------------------------------------------------------ #
 
 
-def test_exponential_approx():
-    h = 0.2
-    M = 64
+@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+def test_exponential_approx(coefficients):
+    params = RexiParameters(coefficients=coefficients)
+    h = params.h
+    M = params.h
     for x in range(-int(h*M)+1, int(h*M)):
         exact = exp(1j*x)
-        approx = approx_e_ix(x, h, M, True)
+        approx = approx_e_ix(x, params, True)
         assert abs(exact - approx) < 2.e-11
 
 # ------------------------------------------------------------------------ #
@@ -116,10 +122,12 @@ def test_exponential_approx():
 # ------------------------------------------------------------------------ #
 
 
-def test_rexi_exponential_approx():
-    h = 0.2
-    M = 64
+@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+def test_rexi_exponential_approx(coefficients):
+    params = RexiParameters(coefficients=coefficients)
+    h = params.h
+    M = params.M
     for x in range(-int(h*M)+1, int(h*M)):
         exact = exp(1j*x)
-        approx = approx_e_ix(x, h, M, False)
+        approx = approx_e_ix(x, params, False)
         assert abs(exact - approx) < 2.e-11
