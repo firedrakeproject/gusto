@@ -354,6 +354,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             self.field_i[stage+1].assign(self.field_i[stage])
             if self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
+            elif self.augmentation is not None:
+                if self.augmentation.name == 'mean_mixing_ratio':
+                    self.augmentation.limit(self.field_i[stage])
 
             for evaluate in self.evaluate_source:
                 evaluate(self.field_i[stage], self.dt, x_out=self.source_i[stage])
@@ -365,6 +368,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 self.x1.assign(self.field_i[stage+1])
                 if self.limiter is not None:
                     self.limiter.apply(self.x1)
+                elif self.augmentation is not None:
+                    if self.augmentation.name == 'mean_mixing_ratio':
+                        self.augmentation.limit(self.x1)
 
         elif self.rk_formulation == RungeKuttaFormulation.linear:
 
@@ -446,30 +452,33 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         # TODO: is this limiter application necessary?
         if self.limiter is not None:
             self.limiter.apply(x_in)
+        elif self.augmentation is not None:
+            if self.augmentation.name == 'mean_mixing_ratio':
+                self.augmentation.limit(x_in)
 
         self.x1.assign(x_in)
 
         for i in range(self.nStages):
 
-            if i > 0:
-                if self.augmentation is not None:
-                    if self.augmentation.name == 'mean_mixing_ratio':
-                        print('\n Updating the mean fields within transport subcycling')
-                        self.augmentation.update(self.x1)
+            #if i > 0:
+            #    if self.augmentation is not None:
+            #        if self.augmentation.name == 'mean_mixing_ratio':
+            #            print('\n Updating the mean fields within transport subcycling')
+            #            self.augmentation.update(self.x1)
 
-            for idx, field in enumerate(self.x1):
+            #for idx, field in enumerate(self.x1):
                 #print(field.name)
-                print(assemble(field*dx))
+            #    print(assemble(field*dx))
 
 
-            self.solve_stage(x_in, i)
             print('\n solving RK stage', i)
+            self.solve_stage(x_in, i)
 
             # Apply limiting if using the mean mixing
             # ratio augmentation.
-            if self.augmentation is not None:
-                if self.augmentation.name == 'mean_mixing_ratio':
-                    self.augmentation.limit(self.x1)
+            #if self.augmentation is not None:
+            #    if self.augmentation.name == 'mean_mixing_ratio':
+            #        self.augmentation.limit(self.x1)
         x_out.assign(self.x1)
 
 

@@ -6,7 +6,9 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 """
 
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
-                       FiniteElement, TensorProductElement, Constant, assemble, dx, ufl)
+                       FiniteElement, TensorProductElement, Constant, assemble, dx, ufl,
+                       TestFunction, TrialFunction, LinearVariationalProblem, LinearVariationalSolver,
+                       NonlinearVariationalProblem, NonlinearVariationalSolver, MixedFunctionSpace)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.core.kernels import LimitMidpoints, ClipZero, MeanMixingRatioWeights
 
@@ -303,16 +305,71 @@ class MeanLimiter(object):
 
         DG1_equispaced = FunctionSpace(mesh, DG1_element)
         DG0 = FunctionSpace(mesh, 'DG', 0)
+        DG1 = FunctionSpace(mesh, 'DG', 1)
 
         self.lamda = Function(DG0)
+        self.lamda_DG1 = Function(DG1_equispaced)
+        self.inv_lamda = Function(DG0)
         self.mX_field = Function(DG1_equispaced)
         self.mean_field = Function(DG0)
 
-        self._kernel = MeanMixingRatioWeights(DG1_equispaced, DG0)
-        self._clip_zero_kernel = ClipZero(self.space)
+        self._lamda_kernel = MeanMixingRatioWeights(DG1_equispaced, DG0)
+        self._limiter_kernel = ConservativeMixingRatioLimiting(DG1_equispaced, DG0)
+
+        self._clip_zero_kernel = ClipZero(DG1_equispaced)
+        self._clip_DG1_field = ClipZero(DG1)
         self._clip_means_kernel = ClipZero(DG0)
 
-    def apply(self, mX_fields, mean_fields):
+        self.rho = Function(DG1_equispaced)
+        self.rho0 = Function(DG0)
+        self.mX_new = Function(DG1_equispaced)
+        mX_trial = TrialFunction(DG1_equispaced)
+        test = TestFunction(DG1_equispaced)
+
+        # Make a solver for the updated mean field
+        a = self.rho*mX_trial*test*dx
+        L = (Constant(1.0) - self.lamda)*self.rho*self.mX_field*test*dx + self.lamda*self.rho0*self.mean_field*test*dx
+
+        #L = (Constant(1.0) - self.lamda)*self.rho*self.mX_field*test*dx + self.lamda*self.rho*self.mX_field*test*dx
+
+        problem = LinearVariationalProblem(a, L, self.mX_new)
+        self.solver = LinearVariationalSolver(problem)
+
+        # New, more complicated solver:
+        #X_test = TestFunction(DG1_equispaced)
+        #X2_test = TestFunction(DG1_equispaced)
+        #rho_test = TestFunction(DG1_equispaced)
+
+        #X_trial = TrialFunction(DG1_equispaced)
+        #X2_trial = TrialFunction(DG1_equispaced)
+        #rho_trial = TrialFunction(DG1_equispaced)
+
+        #self.X_DG1 = Function(DG1_equispaced)
+        #self.X2_DG1 = Function(DG1_equispaced)
+        #self.rho_DG1 = Function(DG1_equispaced)
+
+        #elf.X_DG0 = Function(DG0)
+        #self.X2_DG0 = Function(DG0)
+        #self.rho_DG0 = Function(DG0)
+
+        #mixed_fs = MixedFunctionSpace(DG1_equispaced,DG1_equispaced,DG1_equispaced)
+        #tests = TestFunctions(mixed_fs)
+        #trials = TrialFunctions(mixed_fs)
+        #elf.limited_sol = Function(mixed_fs)
+
+        #F = (trials[0]*tests[0] + trials[0]*trials[1]*tests[1] + trials[0]*trials[2]*tests[2])*dx
+        #    - ( (Constant(1.0) - self.lamda)*self.rho_DG1*self.X_DG1*X_test*dx + self.lamda*self.rho_DG0*self.X_DG0*X_test +
+        #      (Constant(1.0) - self.lamda)*self.rho_DG1*self.X2_DG1*X2_test*dx + self.lamda*self.rho_DG0*self.X2_DG0*X2_test +  
+        #      (Constant(1.0) - self.lamda)*self.rho_DG1*rho_test*dx + self.lamda*self.rho_DG0*rho_test           
+        #) * dx
+
+       # nonlin_prob = NonlinearVariationalProblem(F, self.limited_sol)
+       # self.nonlin_solver = NonlinearVariationalSolver(nonlin_prob)
+
+
+
+    #def apply(self, mX_fields, mean_fields, rho_field, rho0_field):
+    def apply(self, mX_fields, mean_fields, rho_field):
         """
         The application of the limiter to the field.
 
@@ -323,34 +380,94 @@ class MeanLimiter(object):
              AssertionError: If the field is not in the correct space.
          """
 
-        # New implementation, using interpolates
+        # Move the density to DG1 equispaced
+        self.rho.interpolate(rho_field)
+        #self.rho0.assign(rho0_field)
+
+        self.lamda.interpolate(Constant(0.0))
+
+        # New implementation, using interpolate
         for i in range(len(mX_fields)):
             self.mX_field.interpolate(mX_fields[i])
             self.mean_field.interpolate(mean_fields[i])
 
+            print(f'\n min of mX field:')
+            print(np.min(self.mX_field.dat.data))
+
+            print(f'\n min of mean field:')
+            print(np.min(self.mean_field.dat.data))
+
             # Set the weights, lamda, to zero
-            self.lamda.interpolate(Constant(0.0))
+            #self.lamda.interpolate(Constant(0.0))
 
             # Update the weights, lamda
-            self._kernel.apply(self.lamda, self.mX_field, self.mean_field)
-
-            self.lamda.interpolate(Constant(0.0))
-            print('Zeroed lambda is', assemble(self.lamda*dx))
-
-            #mX_fields[i].interpolate((Constant(1.0) - self.lamda)*self.mX_field + self.lamda*self.mean_field)
-
-            self.mX_field.interpolate((Constant(1.0) - self.lamda)*self.mX_field + self.lamda*self.mean_field)
-            mX_fields[i].interpolate(self.mX_field)
-        #    
+            self._lamda_kernel.apply(self.lamda, self.mX_field, self.mean_field)
             total_dx = assemble(
             1*dx(domain=ufl.domain.extract_unique_domain(self.lamda))
         )
             print('Average lambda is', assemble(self.lamda*dx)/total_dx)
+            print('max lambda is', max(self.lamda.dat.data))
+
+        #self.X_DG1.interpolate(mX_fields[0])
+        #self.X2_DG1.interpolate(mX_fields[1])
+        #self.rho_DG1.interpolate(rho_field)
+        #self.X_DG0.assign(mean_fields[0])
+        #self.X2_DG0.assign(mean_fields[1])
+        #self.rho_DG0.assign(rho0_field)
+
+        #self.nonlin_solver.solve()
+        #rho_field.interpolate(self.limited_sol.subfunctions[0])
+        #mX_fields[0].interpolate(self.limited_sol.subfunctions[1])
+        #mX_fields[1].interpolate(self.limited_sol.subfunctions[2])
+
+        for i in range(len(mX_fields)):
+            self.mX_field.interpolate(mX_fields[i])
+            self.mean_field.interpolate(mean_fields[i])
+
+            # Dumb test:
+            #self.lamda.interpolate(Constant(0.5))
+
+            # With two kernels
+            #self._limiter_kernel.apply(self.lamda, self.mX_new, self.mX_field, self.mean_field)
+            #mX_fields[i].interpolate(self.mX_new)
+
+            # Move straight back to original space
+            self.mX_new.interpolate((Constant(1.0) - self.lamda)*self.mX_field + self.lamda*self.mean_field)
+
+            #self.lamda_DG1.interpolate(Constant(1.0) - self.lamda)
+            #print('Average 1- lambda is', assemble(self.lamda_DG1*dx)/total_dx)
+            #print('total lambda', assemble(self.lamda_DG1*dx)/total_dx + assemble(self.lamda*dx)/total_dx)
+            #self.mX_new.interpolate(self.lamda_DG1*self.mX_field + self.lamda*self.mean_field)
+
+            #self.mX_new.interpolate(self.lamda_DG1*self.mX_field + self.lamda*self.mX_field)
+
+            # Clip zero within the equispaced DG1 space
+            #print(assemble(self.mX_field*dx))
+            #self.mX_intermediate.interpolate((Constant(1.0) - self.lamda)*self.mX_field + self.lamda*self.mean_field)
+            #print(assemble(self.mX_intermediate*dx))
+            
+            # Clip zero within the equispaced DG1 space
+            #self._clip_zero_kernel.apply(self.mX_new, self.mX_new)
+            mX_fields[i].interpolate(self.mX_new)
+            
+            
+            # New, using a linear variational solver:
+            #print(assemble(self.rho*self.mX_field*dx))
+            #self.solver.solve()
+            #print(assemble(self.rho*self.mX_new*dx))
+            
+           # mX_fields[i].interpolate(self.mX_new)
+        #    
+            #total_dx = assemble(
+            #1*dx(domain=ufl.domain.extract_unique_domain(self.lamda))
+        #)
+        #    print('Average lambda is', assemble(self.lamda*dx)/total_dx)
+        #    print('max lambda is', max(self.lamda.dat.data))
 
             # Check lamda:
-            if max(self.lamda.dat.data > 1.0):
-                print('Max lamda is too large: ', max(self.lamda.dat.data))
-                import sys; sys.exit()
+            #if max(self.lamda.dat.data > 1.0):
+            #    print('Max lamda is too large: ', max(self.lamda.dat.data))
+            #    import sys; sys.exit()
 
 
         #    # Clip small zeroes where necessary

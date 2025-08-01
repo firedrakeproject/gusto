@@ -318,8 +318,10 @@ class SplitPrescribedTransport(Timestepper):
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
         self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics_label)), dynamics)
+
         apply_bcs = True
         self.scheme.setup(self.equation, apply_bcs, dynamics)
+
         self.setup_transporting_velocity(self.scheme)
         if self.io.output.log_courant:
             self.scheme.courant_max = self.io.courant_max

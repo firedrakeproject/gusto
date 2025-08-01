@@ -187,8 +187,9 @@ class MeanMixingRatioWeights():
                       min_value = fmin(min_value, mX_field[i])
                   end
 
-
-                  lamda[0] = fmax(lamda[0],-min_value/(mean_field[0] - min_value))
+                  if min_value < 0.0
+                    lamda[0] = fmax(lamda[0],-min_value/(mean_field[0] - min_value))
+                  end
 
                   """)
 
