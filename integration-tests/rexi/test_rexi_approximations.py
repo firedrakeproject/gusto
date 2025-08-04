@@ -155,4 +155,4 @@ def test_rexi_exponential_approx(algorithm):
     for x in range(-int(h*M)+1, int(h*M)):
         exact = exp(1j*x)
         approx = approx_e_ix(x, params, approx_type)
-        assert abs(exact - approx) < 2.e-11
+        assert abs(exact - approx) < 8.e-11

@@ -228,7 +228,7 @@ def RexiiCoefficients(rexi_parameters):
         L1 = max(-L, n-M)
         L2 = min(L, n+M)
         alpha[n+N] = h*(mu + 1j*n)
-        for k in range(L1, L2):
+        for k in range(L1, L2+1):
             c1[n+N] += b[n-k+M]*h*a.real[k+L]
             c2[n+N] += b[n-k+M]*h*a.imag[k+L]
 
