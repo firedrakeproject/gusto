@@ -190,3 +190,46 @@ def RexiCoefficients(rexi_parameters):
     alpha = numpy.concatenate((alpha, -alpha))
 
     return alpha, beta, beta2
+
+
+def RexiiCoefficients(rexi_parameters):
+    """
+    Compute the C_1,n and C_2,n coefficients in the REXII sum
+
+    Returns 3 numpy arrays and a scalar:
+    alpha contains the alpha_n coefficients
+    c1 and c2 contain the c_n coefficients
+    mu is the mu parameter which is required in the REXII summation
+
+    :arg rexi_parameters: class containing the parameters (h, M)
+    necessary to compute the coefficients
+
+    """
+
+    h = float(rexi_parameters.h)
+    M = int(float(rexi_parameters.M))
+
+    # get L, mu and the a coefficients
+    constants = RexiConstants(rexi_parameters.coefficients)
+    L = constants.L
+    mu = constants.mu
+    a = constants.a
+
+    # calculate the b coefficients
+    b = b_coefficients(h, M)
+
+    # allocate arrays for alpha, beta_re and beta_im
+    N = M + L
+    alpha = numpy.zeros((2*N+1,), dtype=numpy.complex128)
+    c1 = numpy.zeros((2*N+1,), dtype=numpy.complex128)
+    c2 = numpy.zeros((2*N+1,), dtype=numpy.complex128)
+
+    for n in range(-N, N):
+        L1 = max(-L, n-M)
+        L2 = min(L, n+M)
+        alpha[n+N] = h*(mu + 1j*n)
+        for k in range(L1, L2):
+            c1[n+N] += b[n-k+M]*h*a.real[k+L]
+            c2[n+N] += b[n-k+M]*h*a.imag[k+L]
+
+    return alpha, c1, c2, mu

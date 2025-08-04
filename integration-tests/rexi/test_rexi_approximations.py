@@ -44,26 +44,38 @@ def approxGaussian(x, params):
     return sum
 
 
-def approx_e_ix(x, params, use_Gaussian_approx):
+def approx_e_ix(x, params, approx_type):
     """
     Approximation of e^(ix), either with Gaussians approximated as fractions
-    or with the full REXI approximation (writing the sum of Gaussians and the
+    or with the full REXI/REXII approximation (writing the sum of Gaussians and the
     sum of rational functions as a single sum).
     """
     sum = 0
-    if use_Gaussian_approx:
+    if approx_type == "Gaussian":
         # this is REXI with Gaussians approximated as fractions
         h = params.h
         M = params.M
         b = b_coefficients(h, M)
         for m in range(-M, M+1):
             sum += b[m+M] * approxGaussian(x+m*h, h)
-    else:
+    elif approx_type == "REXI":
         # this is the full REXI (combining the sums)
         alpha, beta, beta2 = RexiCoefficients(params)
         for n in range(len(alpha)):
             denom = (1j*x + alpha[n])
             sum += beta[n] / denom
+    elif approx_type == "REXII":
+        # This is the REXII scheme from Caliari et al
+        h = params.h
+        M = params.M
+        alpha, c1, c2, mu = RexiiCoefficients(params)
+        N = int((len(alpha) - 1)/2)
+        for n in range(-N, N):
+            numer = c1[n+N]*h*mu + c2[n+N]*(x + h*n)
+            denom = (alpha[-n+N] - 1j*x) * (alpha[n+N] + 1j*x)
+            sum += numer / denom
+    else:
+        raise ValueError(f"approx_type must be one of Gaussian, REXI or REXII but received {approx_type}")
 
     return sum
 
@@ -122,12 +134,25 @@ def test_exponential_approx(coefficients):
 # ------------------------------------------------------------------------ #
 
 
-@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
-def test_rexi_exponential_approx(coefficients):
-    params = RexiParameters(coefficients=coefficients)
+@pytest.mark.parametrize("algorithm", ["REXI_Haut", "REXI_Caliari", "REXII_Caliari"])
+def test_rexi_exponential_approx(algorithm):
+
+    match algorithm:
+        case "REXI_Haut":
+            params = RexiParameters(coefficients="Haut")
+            approx_type = "REXI"
+        case "REXI_Caliari":
+            params = RexiParameters(coefficients="Caliari")
+            approx_type = "REXI"
+        case "REXII_Caliari":
+            params = RexiParameters(coefficients="Caliari")
+            approx_type = "REXII"
+        case _:
+            raise ValueError("Algorithm must be one of: REXI_Haut, REXI_Caliari or REXII_Caliari.")
+
     h = params.h
     M = params.M
     for x in range(-int(h*M)+1, int(h*M)):
         exact = exp(1j*x)
-        approx = approx_e_ix(x, params, False)
+        approx = approx_e_ix(x, params, approx_type)
         assert abs(exact - approx) < 2.e-11
