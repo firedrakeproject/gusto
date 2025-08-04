@@ -224,7 +224,7 @@ def RexiiCoefficients(rexi_parameters):
     c1 = numpy.zeros((2*N+1,), dtype=numpy.complex128)
     c2 = numpy.zeros((2*N+1,), dtype=numpy.complex128)
 
-    for n in range(-N, N):
+    for n in range(-N, N+1):
         L1 = max(-L, n-M)
         L2 = min(L, n+M)
         alpha[n+N] = h*(mu + 1j*n)
