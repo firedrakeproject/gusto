@@ -314,7 +314,6 @@ class MeanLimiter(object):
         self.mean_field = Function(DG0)
 
         self._lamda_kernel = MeanMixingRatioWeights(DG1_equispaced, DG0)
-        self._limiter_kernel = ConservativeMixingRatioLimiting(DG1_equispaced, DG0)
 
         self._clip_zero_kernel = ClipZero(DG1_equispaced)
         self._clip_DG1_field = ClipZero(DG1)

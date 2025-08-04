@@ -662,8 +662,9 @@ class MeanMixingRatio(Augmentation):
 
     def update(self, x_in_mixed):
         """
-        Compute the mean mixing ratio field by projecting the mixing
-        ratio from DG1 into DG0.
+        Compute the mean mixing ratio field by conservative projection,
+        where both the target and source density are in the higher-order
+        space.
 
         Args:
             x_in_mixed (:class:`Function`): The mixed function to update.
@@ -671,12 +672,6 @@ class MeanMixingRatio(Augmentation):
 
         # Update the density field for the mean mixing ratios
         self.rho_field.assign(x_in_mixed.subfunctions[0])
-        
-        #x_in_mixed.subfunctions[self.mean_rho_idx].assign(self.rho_field)
-
-        #self.compute_mean_rho.project()
-        #x_in_mixed.subfunctions[self.mean_rho_idx].assign(self.rho0_field)
-
 
         # Update the mean mixing ratios:
         for i in range(self.mX_num):
@@ -684,42 +679,10 @@ class MeanMixingRatio(Augmentation):
             self.DG1_field.assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
             self.compute_mean_mX.project()
 
-            print(f'\n min of mX field is {np.min(self.DG1_field.dat.data)}')
-            print(f'\n min of mean field is {np.min(self.DG0_field.dat.data)}')
-
-            # Clip zero values if needed:
+            # Clip any minuscule negative values in the mean mixing ratio
             self.limiters._clip_means_kernel.apply(self.DG0_field, self.DG0_field)
 
-            print(f'\n min of mean field after clipping is {np.min(self.DG0_field.dat.data)}')
-
             x_in_mixed.subfunctions[self.mean_idxs[i]].assign(self.DG0_field)
-
-            # Debugging
-            DG1_sum = assemble(self.rho_field*self.DG1_field*dx)
-            #DG0_sum = assemble(x_in_mixed.subfunctions[3]*self.DG0_field*dx)
-            #DG0_sum = assemble(self.rho0_field*self.DG0_field*dx)
-            DG0_sum = assemble(self.rho_field*self.DG0_field*dx)
-            rel_proj_err = np.abs(DG1_sum - DG0_sum)/DG1_sum
-            print('rho*DG1*dx is', DG1_sum)
-            print('rho*DG0*dx is', DG0_sum)
-            print('What is the projection error? \n', rel_proj_err)
-            #if rel_proj_err > 1e-14:
-            #    import sys; sys.exit()
-
-        # Check total mass conservation:
-        X_sum = assemble(x_in_mixed.subfunctions[0]*x_in_mixed.subfunctions[1]*dx)
-        X2_sum = assemble(x_in_mixed.subfunctions[0]*x_in_mixed.subfunctions[2]*dx)
-        XT_sum = X_sum + 2*X2_sum
-
-        self.DG1_field.interpolate(Constant(4e-6))
-        XT_analyt = assemble(x_in_mixed.subfunctions[0]*self.DG1_field*dx)
-        XT_diff = abs(XT_sum - XT_analyt)/XT_analyt
-
-        print('\n Checking total conservation in augmnetation update')
-        print(XT_diff)
-
-        if XT_diff > 1e-10:
-            import sys; sys.exit()
 
     def limit(self, x_in_mixed):
         # Ensure non-negativity by applying the blended limiter
