@@ -39,7 +39,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
                  alpha=0.5, off_centred_u=False,
-                 num_outer=8, num_inner=1, accelerator=False,
+                 num_outer=8, num_inner=8, accelerator=True,
                  predictor=None, reference_update_freq=None,
                  spinup_steps=0):
         """
@@ -162,7 +162,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                      + f"physics scheme {parametrisation.label.label}")
 
         self.active_transport = []
-        self.transported_fields = []
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             if isinstance(scheme.field_name, list):
@@ -469,7 +468,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
                     if (inner > 0 and self.accelerator):
                         # Zero implicit forcing to accelerate solver convergence
-                        self.forcing.zero_forcing_terms(self.equation, xp, xrhs, self.transported_fields)
+                        self.forcing.zero_forcing_terms(self.equation, xnp1, xrhs, self.equation.field_names)
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
@@ -699,6 +698,7 @@ class Forcing(object):
             x_out (:class:`FieldCreator`): the output field to be updated.
             transported_field_names (str): list of fields names for transported fields
         """
+
         for field_name in transported_field_names:
             if field_name != 'u':
                 logger.info(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')

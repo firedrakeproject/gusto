@@ -16,15 +16,15 @@ from gusto import (
     Domain, IO, OutputParameters, TRBDF2QuasiNewton, SSPRK3, DGUpwind,
     RecoverySpaces, BoundaryMethod, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, CompressibleSolver,
-    compressible_hydrostatic_balance
+    compressible_hydrostatic_balance, RungeKuttaFormulation, SUPGOptions
 )
 
 dry_bryan_fritsch_defaults = {
-    'ncolumns': 100,
-    'nlayers': 100,
-    'dt': 2.5,
+    'ncolumns': 50,
+    'nlayers': 50,
+    'dt': 2.0,
     'tmax': 1000.,
-    'dumpfreq': 400,
+    'dumpfreq': 500,
     'dirname': 'dry_bryan_fritsch'
 }
 
@@ -53,7 +53,7 @@ def dry_bryan_fritsch(
     # Our settings for this set up
     # ------------------------------------------------------------------------ #
 
-    element_order = 0
+    element_order = 1
     u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
@@ -80,26 +80,24 @@ def dry_bryan_fritsch(
     diagnostic_fields = [Perturbation('theta')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    # Transport schemes -- set up options for using recovery wrapper
-    boundary_methods = {'DG': BoundaryMethod.taylor,
-                        'HDiv': BoundaryMethod.taylor}
-
-    recovery_spaces = RecoverySpaces(
-        domain, boundary_methods, use_vector_spaces=True
-    )
-
-    u_opts = recovery_spaces.HDiv_options
-    rho_opts = recovery_spaces.DG_options
-    theta_opts = recovery_spaces.theta_options
-
+    # Transport schemes
+    theta_opts = SUPGOptions()
+    subcycling_options = None
     transported_fields = [
-        SSPRK3(domain, "rho", options=rho_opts),
-        SSPRK3(domain, "theta", options=theta_opts),
-        SSPRK3(domain, "u", options=u_opts)
+        SSPRK3(domain, "u", subcycling_options=subcycling_options),
+        SSPRK3(
+            domain, "rho", subcycling_options=subcycling_options,
+            rk_formulation=RungeKuttaFormulation.linear
+        ),
+        SSPRK3(
+            domain, "theta", subcycling_options=subcycling_options,
+            options=theta_opts
+        )
     ]
-
     transport_methods = [
-        DGUpwind(eqns, field) for field in ["u", "rho", "theta"]
+        DGUpwind(eqns, "u"),
+        DGUpwind(eqns, "rho", advective_then_flux=True),
+        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
     ]
 
     # Linear solver
