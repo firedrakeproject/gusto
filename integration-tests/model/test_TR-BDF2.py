@@ -13,7 +13,7 @@ from firedrake import (
     PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate, conditional, cos, pi,
     sqrt, NonlinearVariationalProblem, NonlinearVariationalSolver, TestFunction,
     dx, TrialFunction, Function, as_vector, LinearVariationalProblem,
-    LinearVariationalSolver, Constant, BrokenElement, VertexBasedLimiter
+    LinearVariationalSolver, Constant
 )
 from gusto import *
 import pytest
@@ -60,32 +60,31 @@ def run_TR_BDF2(tmpdir, order):
     output_dirname = tmpdir+"/TR-BDF2_order"+str(order)
 
     output = OutputParameters(
-        dirname=output_dirname, dumpfreq=5, chkptfreq=5, checkpoint=True
+        dirname=output_dirname, dumpfreq=5, chkptfreq=5, checkpoint=True,
+        dumplist=["u", "rho", "theta", "water_vapour", "cloud_water"]
     )
     io = IO(domain, output)
 
     # Set up transport schemes
     if order == 0:
         boundary_methods = {'DG': BoundaryMethod.taylor,
-                        'HDiv': BoundaryMethod.taylor}
+                            'HDiv': BoundaryMethod.taylor}
         recovery_spaces = RecoverySpaces(domain, boundary_method=boundary_methods, use_vector_spaces=True)
         u_opts = recovery_spaces.HDiv_options
         rho_opts = recovery_spaces.DG_options
         theta_opts = recovery_spaces.theta_options
     else:
         theta_opts = EmbeddedDGOptions()
-        rho_opts=None
-        u_opts=None
-        
-    VDG1 = domain.spaces("DG1_equispaced")
-    limiter = VertexBasedLimiter(VDG1)
+        rho_opts = None
+        u_opts = None
+
     transported_fields = [
-            SSPRK3(domain, "u", options=u_opts),
-            SSPRK3(domain, "rho", options=rho_opts),
-            SSPRK3(domain, "theta", options=theta_opts),
-            SSPRK3(domain, "water_vapour", options=theta_opts, limiter=limiter),
-            SSPRK3(domain, "cloud_water", options=theta_opts, limiter=limiter)
-        ]
+        SSPRK3(domain, "u", options=u_opts),
+        SSPRK3(domain, "rho", options=rho_opts),
+        SSPRK3(domain, "theta", options=theta_opts),
+        SSPRK3(domain, "water_vapour", options=theta_opts),
+        SSPRK3(domain, "cloud_water", options=theta_opts)
+    ]
 
     transport_methods = [
         DGUpwind(eqns, field) for field in
