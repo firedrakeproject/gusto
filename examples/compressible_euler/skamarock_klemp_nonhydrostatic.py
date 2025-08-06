@@ -22,11 +22,11 @@ from firedrake import (
 )
 import numpy as np
 from gusto import (
-    Domain, IO, OutputParameters, TRBDF2QuasiNewton, SSPRK3, DGUpwind,
-    logger, SUPGOptions, Perturbation, CompressibleParameters,
+    Domain, IO, OutputParameters, TRBDF2QuasiNewton, SemiImplicitQuasiNewton, SSPRK3,
+    DGUpwind, logger, SUPGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
     compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
-    hydrostatic_parameters, SemiImplicitQuasiNewton, SubcyclingOptions
+    hydrostatic_parameters, SubcyclingOptions, 
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -99,7 +99,7 @@ def skamarock_klemp_nonhydrostatic(
     if COMM_WORLD.size == 1:
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=True, dump_nc=True,
+            dump_vtus=False, dump_nc=True,
             point_data=[('theta_perturbation', points)]
         )
     else:

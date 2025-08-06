@@ -538,12 +538,14 @@ class Forcing(object):
         Args:
             equation (:class:`PrognosticEquationSet`): the prognostic equations
                 containing the forcing terms.
+
            explicit_scaling (:class:`Expr`): Off-centering parameter for
                 explicit forcing evaluation. For Semi-Implicit Quasi-Newton,
                 this corresponds to 1 - alpha.
            implicit_scaling (:class:`Expr`): Off-centering parameter for
                 implicit forcing evaluation.For Semi-Implicit Quasi-Newton,
                 this corresponds to alpha.
+            
         """
 
         self.field_name = equation.field_name
