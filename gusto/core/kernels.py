@@ -113,72 +113,26 @@ class ClipZero():
                  {"field": (field, WRITE),
                   "field_in": (field_in, READ)})
 
-class MeanValue():
-    """
-    Computes the mean value in a DG1_equispaced cell
-    """
-
-    def __init__(self, V):
-        """
-        Args:
-            V (:class:`FunctionSpace`): The space of the field for which 
-            a mean is being computed.
-        """
-        # Loop over DG1-equispaced DoFs and determine the most negative value.
-        # Set lambda accordingly from this.
-        shapes = {'nDOFs': V.finat_element.space_dimension()}
-        domain = "{{[i]: 0 <= i < {nDOFs}}}".format(**shapes)
-
-        instrs = ("""
-                  <float64> rho_sum = 0.0
-                  <float64> rho_m_sum = 0.0
-
-                  for i
-                      rho_sum = rho_sum + rho_field[i]
-                      rho_m_sum = rho_m_sum + rho_field[i] * mX_field[i]
-                  end
-
-                  mean_field[0] = rho_m_sum/rho_sum
-
-                  """)
-
-        self._kernel = (domain, instrs)
-
-    def apply(self, mean_field, rho_field, mX_field):
-        """
-        Performs the par loop.
-
-        Args:
-            w (:class:`Function`): the field in which to store the weights. This
-                lives in the continuous target space.
-        """
-        par_loop(self._kernel, dx,
-                 {"mean_field": (mean_field, INC),
-                  "rho_field": (rho_field, READ),
-                  "mX_field": (mX_field, READ)})
-
 
 class MeanMixingRatioWeights():
     """
     Finds the lambda values for blending a mixing ratio and its
     mean DG0 field in the MeanLimiter.
 
-    Each cell is looped over and the minimum value is computed.
+    The minimum value in each cell is identified.
     If the value is negative, then a lamda weight is computed
     that will ensure non-negativity in the limiting step.
     """
 
-    def __init__(self, V_DG1, V_DG0):
+    def __init__(self, V_DG1):
         """
         Args:
             V (:class:`FunctionSpace`): The space of the field for the mean
             mixing ratio, which should be DG0.
         """
-        # Loop over DG1-equispaced DoFs and determine the most negative value.
-        # Set lambda accordingly from this.
-        shapes = {'nDOFs_DG1': V_DG1.finat_element.space_dimension(),
-                  'nDOFs_DG0': V_DG1.finat_element.space_dimension() / 4}
-        domain = "{{[i,j]: 0 <= i < {nDOFs_DG1}}} and  0 <= j < {nDOFs_DG0}".format(**shapes)
+
+        shapes = {'nDOFs_DG1': V_DG1.finat_element.space_dimension()}
+        domain = "{{[i]: 0 <= i < {nDOFs_DG1}}}".format(**shapes)
 
         instrs = ("""
                   <float64> min_value = 0.0

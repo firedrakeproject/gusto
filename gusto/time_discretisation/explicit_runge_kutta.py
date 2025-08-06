@@ -4,7 +4,7 @@ import numpy as np
 
 from enum import Enum
 from firedrake import (Function, Constant, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver, assemble, dx)
+                       NonlinearVariationalSolver)
 from firedrake.fml import replace_subject, drop, keep, Term
 from firedrake.utils import cached_property
 from firedrake.formmanipulation import split_form
@@ -446,39 +446,16 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         """
 
         if self.augmentation is not None:
-            print('Updating the augmentation before transport begins')
             self.augmentation.update(x_in)
 
         # TODO: is this limiter application necessary?
         if self.limiter is not None:
             self.limiter.apply(x_in)
-        elif self.augmentation is not None:
-            if self.augmentation.name == 'mean_mixing_ratio':
-                self.augmentation.limit(x_in)
 
         self.x1.assign(x_in)
 
         for i in range(self.nStages):
-
-            #if i > 0:
-            #    if self.augmentation is not None:
-            #        if self.augmentation.name == 'mean_mixing_ratio':
-            #            print('\n Updating the mean fields within transport subcycling')
-            #            self.augmentation.update(self.x1)
-
-            #for idx, field in enumerate(self.x1):
-                #print(field.name)
-            #    print(assemble(field*dx))
-
-
-            print('\n solving RK stage', i)
             self.solve_stage(x_in, i)
-
-            # Apply limiting if using the mean mixing
-            # ratio augmentation.
-            #if self.augmentation is not None:
-            #    if self.augmentation.name == 'mean_mixing_ratio':
-            #        self.augmentation.limit(self.x1)
         x_out.assign(self.x1)
 
 

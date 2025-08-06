@@ -267,8 +267,8 @@ class MixedFSLimiter(object):
 
 class MeanLimiter(object):
     """
-    A mass-preseving limiter for a mixing ratio that ensures non-negativity
-    by blending the mixing ratio field with that of a mean mixing ratio.
+    A mass-preserving limiter for a mixing ratio that ensures non-negativity
+    by blending the mixing ratio with its associated mean field.
     The blending factor is given by the DG0 function lamda.
     """
 
@@ -280,8 +280,7 @@ class MeanLimiter(object):
             ValueError: If the space is not appropriate for the limiter.
         """
 
-        # Check that space is DG1.
-        # Should I have this?
+        # The Mean Limiter is currently set up for mixing ratios in DG1.
         for space in spaces:
             degree = space.ufl_element().degree()
             if (space.ufl_element().sobolev_space.name != 'L2'
@@ -308,196 +307,47 @@ class MeanLimiter(object):
         DG1 = FunctionSpace(mesh, 'DG', 1)
 
         self.lamda = Function(DG0)
-        self.lamda_DG1 = Function(DG1_equispaced)
-        self.inv_lamda = Function(DG0)
         self.mX_field = Function(DG1_equispaced)
         self.mean_field = Function(DG0)
+        self.mX_new = Function(DG1_equispaced)
 
-        self._lamda_kernel = MeanMixingRatioWeights(DG1_equispaced, DG0)
+        self._lamda_kernel = MeanMixingRatioWeights(DG1_equispaced)
 
+        # Also define kernels to clip any very small negatives
+        # that arise from numerical error.
         self._clip_zero_kernel = ClipZero(DG1_equispaced)
         self._clip_DG1_field = ClipZero(DG1)
         self._clip_means_kernel = ClipZero(DG0)
 
-        self.rho = Function(DG1_equispaced)
-        self.rho0 = Function(DG0)
-        self.mX_new = Function(DG1_equispaced)
-        mX_trial = TrialFunction(DG1_equispaced)
-        test = TestFunction(DG1_equispaced)
-
-        # Make a solver for the updated mean field
-        a = self.rho*mX_trial*test*dx
-        L = (Constant(1.0) - self.lamda)*self.rho*self.mX_field*test*dx + self.lamda*self.rho0*self.mean_field*test*dx
-
-        #L = (Constant(1.0) - self.lamda)*self.rho*self.mX_field*test*dx + self.lamda*self.rho*self.mX_field*test*dx
-
-        problem = LinearVariationalProblem(a, L, self.mX_new)
-        self.solver = LinearVariationalSolver(problem)
-
-        # New, more complicated solver:
-        #X_test = TestFunction(DG1_equispaced)
-        #X2_test = TestFunction(DG1_equispaced)
-        #rho_test = TestFunction(DG1_equispaced)
-
-        #X_trial = TrialFunction(DG1_equispaced)
-        #X2_trial = TrialFunction(DG1_equispaced)
-        #rho_trial = TrialFunction(DG1_equispaced)
-
-        #self.X_DG1 = Function(DG1_equispaced)
-        #self.X2_DG1 = Function(DG1_equispaced)
-        #self.rho_DG1 = Function(DG1_equispaced)
-
-        #elf.X_DG0 = Function(DG0)
-        #self.X2_DG0 = Function(DG0)
-        #self.rho_DG0 = Function(DG0)
-
-        #mixed_fs = MixedFunctionSpace(DG1_equispaced,DG1_equispaced,DG1_equispaced)
-        #tests = TestFunctions(mixed_fs)
-        #trials = TrialFunctions(mixed_fs)
-        #elf.limited_sol = Function(mixed_fs)
-
-        #F = (trials[0]*tests[0] + trials[0]*trials[1]*tests[1] + trials[0]*trials[2]*tests[2])*dx
-        #    - ( (Constant(1.0) - self.lamda)*self.rho_DG1*self.X_DG1*X_test*dx + self.lamda*self.rho_DG0*self.X_DG0*X_test +
-        #      (Constant(1.0) - self.lamda)*self.rho_DG1*self.X2_DG1*X2_test*dx + self.lamda*self.rho_DG0*self.X2_DG0*X2_test +  
-        #      (Constant(1.0) - self.lamda)*self.rho_DG1*rho_test*dx + self.lamda*self.rho_DG0*rho_test           
-        #) * dx
-
-       # nonlin_prob = NonlinearVariationalProblem(F, self.limited_sol)
-       # self.nonlin_solver = NonlinearVariationalSolver(nonlin_prob)
-
-
-
-    #def apply(self, mX_fields, mean_fields, rho_field, rho0_field):
-    def apply(self, mX_fields, mean_fields, rho_field):
+    def apply(self, mX_fields, mean_fields):
         """
         The application of the limiter to the field.
 
         Args:
-            field (:class:`Function`): the field to apply the limiter to.
+            mX_fields (:class:`Function`): the mixing ratios to limit.
+            mean_fields (:class:`Function`): the DG0 mean field associated with 
+            each mX_field.
 
         Raises:
              AssertionError: If the field is not in the correct space.
          """
 
-        # Move the density to DG1 equispaced
-        self.rho.interpolate(rho_field)
-        #self.rho0.assign(rho0_field)
-
+        # Remove weights from previous applications
         self.lamda.interpolate(Constant(0.0))
 
-        # New implementation, using interpolate
         for i in range(len(mX_fields)):
+            # Interpolate fields from DG1 to DG1 equispaced
             self.mX_field.interpolate(mX_fields[i])
             self.mean_field.interpolate(mean_fields[i])
 
-            print(f'\n min of mX field:')
-            print(np.min(self.mX_field.dat.data))
-
-            print(f'\n min of mean field:')
-            print(np.min(self.mean_field.dat.data))
-
-            # Set the weights, lamda, to zero
-            #self.lamda.interpolate(Constant(0.0))
-
-            # Update the weights, lamda
+            # Update the weights based on any negative values
             self._lamda_kernel.apply(self.lamda, self.mX_field, self.mean_field)
-            total_dx = assemble(
-            1*dx(domain=ufl.domain.extract_unique_domain(self.lamda))
-        )
-            print('Average lambda is', assemble(self.lamda*dx)/total_dx)
-            print('max lambda is', max(self.lamda.dat.data))
 
-        #self.X_DG1.interpolate(mX_fields[0])
-        #self.X2_DG1.interpolate(mX_fields[1])
-        #self.rho_DG1.interpolate(rho_field)
-        #self.X_DG0.assign(mean_fields[0])
-        #self.X2_DG0.assign(mean_fields[1])
-        #self.rho_DG0.assign(rho0_field)
-
-        #self.nonlin_solver.solve()
-        #rho_field.interpolate(self.limited_sol.subfunctions[0])
-        #mX_fields[0].interpolate(self.limited_sol.subfunctions[1])
-        #mX_fields[1].interpolate(self.limited_sol.subfunctions[2])
-
+        # Perform blended limiting, with all mixing ratios using 
+        # the same lambda field to ensure conservation.
         for i in range(len(mX_fields)):
             self.mX_field.interpolate(mX_fields[i])
             self.mean_field.interpolate(mean_fields[i])
 
-            # Dumb test:
-            #self.lamda.interpolate(Constant(0.5))
-
-            # With two kernels
-            #self._limiter_kernel.apply(self.lamda, self.mX_new, self.mX_field, self.mean_field)
-            #mX_fields[i].interpolate(self.mX_new)
-
-            # Move straight back to original space
             self.mX_new.interpolate((Constant(1.0) - self.lamda)*self.mX_field + self.lamda*self.mean_field)
-
-            #self.lamda_DG1.interpolate(Constant(1.0) - self.lamda)
-            #print('Average 1- lambda is', assemble(self.lamda_DG1*dx)/total_dx)
-            #print('total lambda', assemble(self.lamda_DG1*dx)/total_dx + assemble(self.lamda*dx)/total_dx)
-            #self.mX_new.interpolate(self.lamda_DG1*self.mX_field + self.lamda*self.mean_field)
-
-            #self.mX_new.interpolate(self.lamda_DG1*self.mX_field + self.lamda*self.mX_field)
-
-            # Clip zero within the equispaced DG1 space
-            #print(assemble(self.mX_field*dx))
-            #self.mX_intermediate.interpolate((Constant(1.0) - self.lamda)*self.mX_field + self.lamda*self.mean_field)
-            #print(assemble(self.mX_intermediate*dx))
-            
-            # Clip zero within the equispaced DG1 space
-            #self._clip_zero_kernel.apply(self.mX_new, self.mX_new)
             mX_fields[i].interpolate(self.mX_new)
-            
-            
-            # New, using a linear variational solver:
-            #print(assemble(self.rho*self.mX_field*dx))
-            #self.solver.solve()
-            #print(assemble(self.rho*self.mX_new*dx))
-            
-           # mX_fields[i].interpolate(self.mX_new)
-        #    
-            #total_dx = assemble(
-            #1*dx(domain=ufl.domain.extract_unique_domain(self.lamda))
-        #)
-        #    print('Average lambda is', assemble(self.lamda*dx)/total_dx)
-        #    print('max lambda is', max(self.lamda.dat.data))
-
-            # Check lamda:
-            #if max(self.lamda.dat.data > 1.0):
-            #    print('Max lamda is too large: ', max(self.lamda.dat.data))
-            #    import sys; sys.exit()
-
-
-        #    # Clip small zeroes where necessary
-             # This does appear to affect conservation to a non-negligible degree ... 
-            #self._clip_zero_kernel.apply(mX_fields[i], mX_fields[i])
-
-        #Old versions:
-        # # Set the weights, lamda, to zero
-         #   self.lamda.interpolate(Constant(0.0))
-
-        # New, use a separate lambda for each field:
-        # The 'two lambda' approach for the Terminator Toy
-        #for i in range(len(mX_fields)):
-        #    # Update the weights, lamda
-        #    self._kernel.apply(self.lamda, mX_fields[i], mean_fields[i])
-        #    mX_fields[i].interpolate((Constant(1.0) - self.lamda)*mX_fields[i] + self.lamda*mean_fields[i])
-        #    
-        #    # Clip small zeroes where necessary:
-        #    self._clip_zero_kernel.apply(mX_fields[i], mX_fields[i])
-
-        # Previous implementation with a single lambda
-        #for i in range(len(mX_fields)):
-            # Update the weights, lamda
-        #    self._kernel.apply(self.lamda, mX_fields[i], mean_fields[i])
-
-        #for i in range(len(mX_fields)):
-            # Apply the lamda weights to force negative values
-            # to be non-negative.
-        #    mX_fields[i].interpolate((Constant(1.0) - self.lamda)*mX_fields[i] + self.lamda*mean_fields[i])
-
-            # As a hack for now, clip zero when required. This is
-            # because rouding can leave very small, yet still
-            # negative values.
-        #    self._clip_zero_kernel.apply(mX_fields[i], mX_fields[i])

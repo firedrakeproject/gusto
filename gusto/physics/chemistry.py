@@ -90,16 +90,16 @@ class TerminatorToy(PhysicsParametrisation):
             source_expr = -e1 * (species1 - d + r) * (species1 + d + r) / (1.0 + e + self.dt * e1 * (species1 + r))
 
             # Ensure the increments don't make a negative mixing ratio
-            #source_expr = conditional(source_expr < 0.0,
-            #                          max_value(source_expr, -species1/self.dt),
-            #                          min_value(source_expr, 2.0*species2/self.dt))
+            source_expr = conditional(source_expr < 0.0,
+                                      max_value(source_expr, -species1/self.dt),
+                                      min_value(source_expr, 2.0*species2/self.dt))
             
             # Ensure the increments don't make a negative mixing ratio
             # AND X doesn't get larger than 4e-6,
             # AND X2 doesn't get larger than 2e-6
-            source_expr = conditional(source_expr < 0.0,
-                                      max_value(max_value(source_expr, -species1/self.dt), 2.0*(species2 - 2.e-6)/self.dt),
-                                      min_value(min_value(source_expr, 2.0*species2/self.dt), (4.e-6 - species1)/self.dt))
+            #source_expr = conditional(source_expr < 0.0,
+            #                          max_value(max_value(source_expr, -species1/self.dt), 2.0*(species2 - 2.e-6)/self.dt),
+            #                          min_value(min_value(source_expr, 2.0*species2/self.dt), (4.e-6 - species1)/self.dt))
 
             source1_expr = source_expr
             source2_expr = -source_expr/2.0

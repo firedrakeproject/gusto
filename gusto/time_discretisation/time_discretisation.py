@@ -12,13 +12,13 @@ from firedrake import (Function, TestFunction, TestFunctions, DirichletBC,
                        Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import (replace_subject, replace_test_function, Term,
-                           all_terms, drop, subject)
+                           all_terms, drop)
 from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.core.labels import (time_derivative, prognostic, physics_label,
-                               mass_weighted, nonlinear_time_derivative, source_label)
+                               mass_weighted, nonlinear_time_derivative)
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
 from gusto.solvers import mass_parameters
@@ -265,8 +265,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                             self.residual = self.residual.label_map(
                                 lambda t: t.get(prognostic) == field and t.has_label(mass_weighted),
                                 map_if_true=lambda t: t.get(mass_weighted))
-                            print('mass-weighted stuff has been replaced')
-
 
         # -------------------------------------------------------------------- #
         # Set up Wrappers
@@ -368,16 +366,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         self.x_out = Function(self.fs)
         self.x1 = Function(self.fs)
-
-        for term in self.residual:
-            print('\n')
-            print(term.get(subject))
-            print(term.form)
-            print(term.labels)
-        print(len(self.residual))
-
-       # import sys; sys.exit()
-
 
     @property
     def nlevels(self):
