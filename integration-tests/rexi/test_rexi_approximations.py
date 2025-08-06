@@ -70,10 +70,13 @@ def approx_e_ix(x, params, approx_type):
         M = params.M
         # FIX ME !!!
         mu = -5.133333333333333 + 1j*0
-        alpha, c1, c2 = RexiiCoefficients(params)
+        alpha, C1, C2 = RexiiCoefficients(params)
         N = int((len(alpha) - 1)/2)
-        for n in range(-N, N):
-            numer = c1[n+N]*h*mu + c2[n+N]*(x + h*n)
+        for n in range(-N, N+1):
+            # Back out c1 and c2 from C1 and C2
+            c2 = -1j * C2[n+N]
+            c1 = C1[n+N] / (h*mu) - (c2 * n ) / mu
+            numer = c1*h*mu + c2*(x + h*n)
             denom = (alpha[-n+N] - 1j*x) * (alpha[n+N] + 1j*x)
             sum += numer / denom
     else:
@@ -157,4 +160,4 @@ def test_rexi_exponential_approx(algorithm):
     for x in range(-int(h*M)+1, int(h*M)):
         exact = exp(1j*x)
         approx = approx_e_ix(x, params, approx_type)
-        assert abs(exact - approx) < 8.e-11
+        assert abs(exact - approx) < 2.e-11
