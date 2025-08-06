@@ -103,11 +103,11 @@ class VerticalHybridizationPC(PCBase):
         V_d = FunctionSpace(mesh, broken_elements)
 
         # Set up relevant functions
-        self.broken_solution = Function(V_d.dual())
-        self.broken_residual = Function(V_d)
+        self.broken_solution = Function(V_d)
+        self.broken_residual = Cofunction(V_d.dual())
         self.trace_solution = Function(Vv_tr)
         self.unbroken_solution = Function(V)
-        self.unbroken_residual = Function(V)
+        self.unbroken_residual = Cofunction(V.dual())
 
         weight_kernel = AverageWeightings(Vv)
         self.weight = Function(Vv)

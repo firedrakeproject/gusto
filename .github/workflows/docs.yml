@@ -22,16 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     # The docker container to use.
     container:
-      image: firedrakeproject/firedrake-docdeps:latest
-      options: --user root
-    env:
-      # Since we are running as root we need to set PYTHONPATH to be able to find the installed
-      # packages
-      PYTHONPATH: /home/firedrake/firedrake:/home/firedrake/.local/lib/python3.12/site-packages
+      image: firedrakeproject/firedrake-vanilla-default:latest
+
     steps:
       - uses: actions/checkout@v4
       - name: Install Gusto
-        run: python3 -m pip install --break-system-packages -e '.[docs]'
+        run: python3 -m pip install -e '.[docs]'
       - name: Check documentation links
         run: make -C docs linkcheck
       - name: Build docs

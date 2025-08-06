@@ -285,9 +285,8 @@ class ThermodynamicDiagnostic(DiagnosticField):
         """
 
         self.Vtheta = domain.spaces('theta')
-        #h_deg = self.Vtheta.ufl_element().degree()[0]
         v_deg = self.Vtheta.ufl_element().degree()[1]-1
-        boundary_method = BoundaryMethod.extruded if (v_deg == 0) else None
+        boundary_method = BoundaryMethod.extruded if v_deg == 0 else None
 
         # Extract all fields
         self.rho = state_fields("rho")
