@@ -216,7 +216,7 @@ def run_TR_BDF2(tmpdir, order):
 
 
 @pytest.mark.parametrize("order", [0, 1])
-def test_simult_SIQN(tmpdir, order):
+def test_TR_BDF2(tmpdir, order):
 
     dirname = str(tmpdir)
     stepper, check_stepper = run_TR_BDF2(dirname, order)
