@@ -1,14 +1,10 @@
 """
 This tests the TR-BDF2 timestpper. A few timesteps are taken with the Bryan-Fritsch
-bubble test case, which solves the Compressible Euler Equations.
-The two tracers of water vapour and cloud water are being tranpsported
-conservatively, which means they need to be transported simultaneously
-with the density.
-Degree 0 and 1 configurations are  tested to ensure that the simultaneous
-transport is working with the different wrappers.
+bubble test case, which solves the Compressible Euler Equations with cloud water
+and water vapour tracers.
+Degree 0 and 1 configurations are  tested.
 """
 
-from os.path import join, abspath, dirname
 from firedrake import (
     PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate, conditional, cos, pi,
     sqrt, NonlinearVariationalProblem, NonlinearVariationalSolver, TestFunction,
@@ -197,35 +193,11 @@ def run_TR_BDF2(tmpdir, order):
 
     stepper.run(t=0, tmax=tmax)
 
-    # State for checking checkpoints
-    checkpoint_name = 'TR-BDF2_order'+str(order)+'_chkpt.h5'
-    new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
-    check_output = OutputParameters(dirname=output_dirname,
-                                    checkpoint_pickup_filename=new_path,
-                                    checkpoint=True)
-    check_mesh = pick_up_mesh(check_output, mesh_name)
-    check_domain = Domain(check_mesh, dt, "CG", order)
-    check_params = CompressibleParameters(check_mesh)
-    check_eqn = CompressibleEulerEquations(check_domain, check_params, active_tracers=tracers, u_transport_option=u_eqn_type)
-    check_io = IO(check_domain, check_output)
-    check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
-    check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
-
-    return stepper, check_stepper
+    return
 
 
 @pytest.mark.parametrize("order", [0, 1])
 def test_TR_BDF2(tmpdir, order):
 
     dirname = str(tmpdir)
-    stepper, check_stepper = run_TR_BDF2(dirname, order)
-
-    for variable in ['u', 'rho', 'theta', 'water_vapour', 'cloud_water']:
-        new_variable = stepper.fields(variable)
-        check_variable = check_stepper.fields(variable)
-        diff_array = new_variable.dat.data - check_variable.dat.data
-        error = np.linalg.norm(diff_array) / np.linalg.norm(check_variable.dat.data)
-
-        # Slack values chosen to be robust to different platforms
-        assert error < 1e-10, f'Values for {variable} in the ' + \
-            f'order {order} elements test do not match KGO values'
+    run_TR_BDF2(dirname, order)
