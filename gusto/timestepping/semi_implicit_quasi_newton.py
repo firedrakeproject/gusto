@@ -664,7 +664,7 @@ class Forcing(object):
 
         This takes x_in and x_out, where                                      \n
         x_out = x_in + scale*F(x_nl)                                          \n
-        for some field x_nl and sets x_out = x_in for all non-wind prognosticsc
+        for some field x_nl and sets x_out = x_in for all non-wind prognostics
 
         Args:
             equation (:class:`PrognosticEquationSet`): the prognostic
@@ -675,6 +675,6 @@ class Forcing(object):
         """
         for field_name in field_names:
             if field_name != 'u':
-                logger.info(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
+                logger.debug(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
                 field_index = equation.field_names.index(field_name)
                 x_out.subfunctions[field_index].assign(x_in(field_name))
