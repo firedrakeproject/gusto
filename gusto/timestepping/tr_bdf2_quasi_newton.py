@@ -365,7 +365,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                     self.tr_forcing.apply(xp, xm, xrhs, "implicit")
                     if inner > 0:
                         # Zero implicit forcing to accelerate solver convergence
-                        self.forcing.zero_forcing_terms(self.equation, xm, xrhs, self.equation.field_names)
+                        self.zero_forcing_terms(self.equation, xm, xrhs, self.equation.field_names)
 
                 xrhs -= xm(self.field_name)
                 xrhs += xrhs_phys
@@ -423,14 +423,13 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
             xrhs_phys.assign(x_after_fast(self.field_name) - xp(self.field_name))
             for inner in range(self.num_inner_bdf):
-
                 # Implicit forcing ---------------------------------------------
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'TR-BDF2 Quasi Newton: BDF Implicit forcing {(outer, inner)}')
                     self.bdf_forcing.apply(xp, xnp1, xrhs, "implicit")
                     if inner > 0:
                         # Zero implicit forcing to accelerate solver convergence
-                        self.forcing.zero_forcing_terms(self.equation, xnp1, xrhs, self.equation.field_names)
+                        self.zero_forcing_terms(self.equation, xnp1, xrhs, self.equation.field_names)
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
@@ -489,7 +488,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
         This takes x_in and x_out, where                                      \n
         x_out = x_in + scale*F(x_nl)                                          \n
-
         for some field x_nl and sets x_out = x_in for all non-wind prognostics
 
         Args:
@@ -497,13 +495,10 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 equation set to be solved
             x_in (:class:`FieldCreator`): the field to be incremented.
             x_out (:class:`FieldCreator`): the output field to be updated.
-            transported_field_names (str): list of fields names for transported fields
             field_names (str): list of fields names for prognostic fields
         """
-
         for field_name in field_names:
             if field_name != 'u':
-                logger.info(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
                 logger.debug(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
                 field_index = equation.field_names.index(field_name)
                 x_out.subfunctions[field_index].assign(x_in(field_name))
