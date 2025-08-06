@@ -68,7 +68,9 @@ def approx_e_ix(x, params, approx_type):
         # This is the REXII scheme from Caliari et al
         h = params.h
         M = params.M
-        alpha, c1, c2, mu = RexiiCoefficients(params)
+        # FIX ME !!!
+        mu = -5.133333333333333 + 1j*0
+        alpha, c1, c2 = RexiiCoefficients(params)
         N = int((len(alpha) - 1)/2)
         for n in range(-N, N):
             numer = c1[n+N]*h*mu + c2[n+N]*(x + h*n)

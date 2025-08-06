@@ -223,13 +223,18 @@ def RexiiCoefficients(rexi_parameters):
     alpha = numpy.zeros((2*N+1,), dtype=numpy.complex128)
     c1 = numpy.zeros((2*N+1,), dtype=numpy.complex128)
     c2 = numpy.zeros((2*N+1,), dtype=numpy.complex128)
-
+    C1 = numpy.zeros((2*N+1,), dtype=numpy.complex128)
+    C2 = numpy.zeros((2*N+1,), dtype=numpy.complex128)
+    
     for n in range(-N, N+1):
         L1 = max(-L, n-M)
         L2 = min(L, n+M)
         alpha[n+N] = h*(mu + 1j*n)
         for k in range(L1, L2+1):
-            c1[n+N] += b[n-k+M]*h*a.real[k+L]
-            c2[n+N] += b[n-k+M]*h*a.imag[k+L]
+            c1[n+N] += b[n-k+M]*h*a[k+L].real
+            c2[n+N] += b[n-k+M]*h*a[k+L].imag
 
-    return alpha, c1, c2, mu
+        C1[n+N] = ( c1[n+N] * h * mu + c2[n+N] * h * n)
+        C2[n+N] = 1j * c2[n+N]
+            
+    return alpha, C1, C2

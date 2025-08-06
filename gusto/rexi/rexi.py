@@ -64,7 +64,7 @@ class Rexi(object):
 
         # Get the Rexi Coefficients, given the values of h and M in
         # rexi_parameters
-        self.alpha, self.beta, self.beta2 = RexiCoefficients(rexi_parameters)
+        self.get_coefficients(rexi_parameters)
 
         self.manager = manager
 
@@ -188,6 +188,13 @@ class Rexi(object):
         self.solver = LinearVariationalSolver(
             rexi_prob, solver_parameters=solver_parameters)
 
+    def get_coefficients(self, rexi_parameters):
+
+        # Get the Rexi Coefficients, given the values of h and M in
+        # rexi_parameters
+        self.alpha, self.beta, self.beta2 = RexiCoefficients(rexi_parameters)
+
+
     def solve(self, x_out, x_in, dt):
         """
         Solve method for approximating the matrix exponential by a
@@ -224,6 +231,74 @@ class Rexi(object):
 
             cpx.get_imag(self.w, self.wrk)
             x_out -= self.bc.imag*self.wrk
+
+        # in parallel we have to accumulate the sum over all processes
+        if self.manager is not None:
+            self.wrk.assign(x_out)
+            self.manager.allreduce(self.wrk, x_out)
+
+class Rexii(Rexi):
+
+    def get_coefficients(self, rexi_parameters):
+
+        # Get the Rexi Coefficients, given the values of h and M in
+        # rexi_parameters
+        self.alpha, self.C1, self.C2 = RexiiCoefficients(rexi_parameters)
+
+
+    def solve(self, x_out, x_in, dt):
+        """
+        Solve method for approximating the matrix exponential by a
+        rational sum. Solves
+
+        (A_n + tau L)V_n = U
+
+        multiplies by the corresponding B_n and sums over n.
+
+        :arg x_in: the mixed function on the rhs.
+        :arg dt: the value of tau
+
+        """
+        cpx = self.cpx
+        # assign tau and U0 and initialise solution to 0.
+        self.tau.assign(dt)
+        self.U0.assign(x_in)
+        x_out.assign(0.)
+
+        # loop over solvers, assigning a_i, solving and accumulating the sum
+        for i in range(self.N):
+            j = self.idx + i
+            self.ac.real.assign(self.alpha[j].real)
+            self.ac.imag.assign(self.alpha[j].imag)
+
+            self.solver.solve()
+
+            # self.w is V_n, use this as RHS in second solve
+            self.U0.assign(self.w)
+            # Flip sign on tau and im part of alpha to turn phi into chi
+            self.tau.assign(-dt)
+            self.ac.imag.assign(-self.alpha[j].imag)
+
+            self.solver.solve()
+            
+            # Convert Q tilde to Q
+            self.w *= ( self.C1[j] / self.C2[j] - self.alpha[j])
+
+            # accumulate real part of Q_n
+            cpx.get_real(self.w, self.wrk)
+            x_out += self.C2[j].real*self.wrk
+
+            # accumulate real part of V_n
+            cpx.get_real(self.U0, self.wrk)
+            x_out += self.C2[j].real*self.wrk
+
+            # accumulate im part of Q_n
+            cpx.get_imag(self.w, self.wrk)
+            x_out += self.C2[j].imag*self.wrk
+
+            # accumulate im part of V_n
+            cpx.get_imag(self.U0, self.wrk)
+            x_out += self.C2[j].imag*self.wrk
 
         # in parallel we have to accumulate the sum over all processes
         if self.manager is not None:
