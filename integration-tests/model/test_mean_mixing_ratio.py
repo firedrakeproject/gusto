@@ -1,126 +1,133 @@
 """
-Tests the mean mixing ratio augmentation. Here a mixing ratio is transported
-conservatively along with the dry density. The mean mixing ratio augmentation
-should ensure that the mixing ratio remains non-negative. To test this,
-we start with a mixing ratio field that has some negative values, then
-see if the limiter ensures that these values become non-negative.
+Tests the mean mixing ratio augmentation, which is used for
+non-negativity limiting in a conservative transport scheme.
+A few timesteps are taken in the terminator toy test, with
+non-negativity and mass conservation checked.
+
 """
 
 from gusto import *
 from firedrake import (
-    PeriodicIntervalMesh, ExtrudedMesh, exp, cos, sin, SpatialCoordinate,
-    pi, min_value, as_vector
+    exp, cos, sin, SpatialCoordinate,
+    pi, max_value, assemble, dx
 )
 
 
 def setup_mean_mixing_ratio(dirname):
+    dt = 450.
+    tau = 12.*24.*60.*60.  # time period of reversible wind, in s
+    radius = 6371220.      # radius of the sphere, in m
+    theta_cr = pi/9.       # central latitude of first reaction rate, in rad
+    lamda_cr = -pi/3.      # central longitude of first reaction rate, in rad
+    theta_c1 = 0.          # central latitude of first chemical blob, in rad
+    theta_c2 = 0.          # central latitude of second chemical blob, in rad
+    lamda_c1 = -pi/4.      # central longitude of first chemical blob, in rad
+    lamda_c2 = pi/4.       # central longitude of second chemical blob, in rad
+    rho_b = 1              # Base dry density
+    g_max = 0.5            # Maximum amplitude of Gaussian density perturbations
+    b0 = 5                 # Controls the width of the chemical blobs
 
-    # Domain
-    Lx = 2000.
-    Hz = 2000.
+    mesh = GeneralCubedSphereMesh(radius, 12, degree=2)
+    xyz = SpatialCoordinate(mesh)
 
-    # Time parameters
-    dt = 2.
-    tmax = 2000.
+    # Only use order 1 elements
+    domain = Domain(mesh, dt, 'RTCF', 1)
 
-    nlayers = 10.  # horizontal layers
-    columns = 10.  # number of columns
+    # get lat lon coordinates
+    lamda, theta, _ = lonlatr_from_xyz(xyz[0], xyz[1], xyz[2])
 
-    # Define the spaces for the tracers
-    rho_d_space = 'DG'
-    m_X_space = 'DG'
-
-    period_mesh = PeriodicIntervalMesh(columns, Lx)
-    mesh = ExtrudedMesh(period_mesh, layers=nlayers, layer_height=Hz/nlayers)
-    domain = Domain(mesh, dt, "CG", 1)
-    x, z = SpatialCoordinate(mesh)
-
-    V_rho = domain.spaces(rho_d_space)
-    V_m_X = domain.spaces(m_X_space)
-
-    m_X = ActiveTracer(name='m_X', space=m_X_space,
-                       variable_type=TracerVariableType.mixing_ratio,
-                       transport_eqn=TransportEquationType.tracer_conservative,
-                       density_name='rho_d')
-
-    rho_d = ActiveTracer(name='rho_d', space=rho_d_space,
+    # Define co-located tracers of the dry density and the two species
+    rho_d = ActiveTracer(name='rho_d', space='DG',
                          variable_type=TracerVariableType.density,
                          transport_eqn=TransportEquationType.conservative)
+
+    X_tracer = ActiveTracer(name='X_tracer', space='DG',
+                            variable_type=TracerVariableType.mixing_ratio,
+                            transport_eqn=TransportEquationType.tracer_conservative,
+                            density_name='rho_d')
+
+    X2_tracer = ActiveTracer(name='X2_tracer', space='DG',
+                             variable_type=TracerVariableType.mixing_ratio,
+                             transport_eqn=TransportEquationType.tracer_conservative,
+                             density_name='rho_d')
 
     # Define m_X first to test that the tracers will be
     # automatically re-ordered such that the density field
     # is indexed before the mixing ratio.
-    tracers = [m_X, rho_d]
+    tracers = [X_tracer, X2_tracer, rho_d]
 
     # Equation
     V = domain.spaces("HDiv")
     eqn = CoupledTransportEquation(domain, active_tracers=tracers, Vu=V)
 
-    # IO
     output = OutputParameters(dirname=dirname)
     io = IO(domain, output)
 
-    augmentation = MeanMixingRatio(domain, eqn, ['m_X'])
-    transport_scheme = SSPRK3(
-        domain, augmentation=augmentation, rk_formulation=RungeKuttaFormulation.predictor
-    )
-    transport_methods = [DGUpwind(eqn, "m_X"), DGUpwind(eqn, "rho_d")]
+    k1 = max_value(0, sin(theta)*sin(theta_cr) + cos(theta)*cos(theta_cr)*cos(lamda-lamda_cr))
+    k2 = 1
 
-    # Timestepper
-    time_varying = True
-    stepper = PrescribedTransport(
-        eqn, transport_scheme, io, time_varying, transport_methods
+    mixed_phys_limiter = MixedFSLimiter(
+        eqn,
+        {'rho_d': ZeroLimiter(domain.spaces('DG')),
+         'X_tracer': ZeroLimiter(domain.spaces('DG')),
+         'X2_tracer': ZeroLimiter(domain.spaces('DG'))}
     )
 
-    # Initial Conditions
-    xc1 = 5.*Lx/8.
-    zc1 = Hz/2.
-    xc2 = 3.*Lx/8.
-    zc2 = Hz/2.
+    # Using the analytical forcing from Appendix D of Lauritzen et. al.
+    physics_schemes = [(TerminatorToy(eqn, k1=k1, k2=k2, species1_name='X_tracer',
+                        species2_name='X2_tracer', analytical_formulation=True),
+                        ForwardEuler(domain, limiter=mixed_phys_limiter))]
 
-    def l2_dist(xc, zc):
-        return min_value(abs(x-xc), Lx-abs(x-xc))**2 + (z-zc)**2
+    X, Y, Z = xyz
+    X1, Y1, Z1 = xyz_from_lonlatr(lamda_c1, theta_c1, radius)
+    X2, Y2, Z2 = xyz_from_lonlatr(lamda_c2, theta_c2, radius)
 
-    lc = 2.*Lx/25.
-    f0 = 0.5
-    rho_b = 0.5
+    g1 = g_max*exp(-(b0/(radius**2))*((X-X1)**2 + (Y-Y1)**2 + (Z-Z1)**2))
+    g2 = g_max*exp(-(b0/(radius**2))*((X-X2)**2 + (Y-Y2)**2 + (Z-Z2)**2))
 
-    g1 = f0*exp(-l2_dist(xc1, zc1)/(lc**2))
-    g2 = f0*exp(-l2_dist(xc2, zc2)/(lc**2))
+    rho_expr = rho_b + g1 + g2
 
-    rho_d_0 = rho_b + g1 + g2
+    X_T_0 = 4e-6
+    r = k1/(4*k2)
+    D_val = sqrt(r**2 + 2*X_T_0*r)
 
-    # Make the mixing ratio contain negative values to
-    # test that the limiter is working.
-    m0 = -0.05
-    m_X_0 = m0 + 0.5*z/Hz
-
-    # Set up the divergent, time-varying, velocity field
-    U = Lx/tmax
-    W = U/10.
+    # Initial condition for each species
+    X_0 = D_val - r
+    X2_0 = 0.5*(X_T_0 - D_val + r)
 
     def u_t(t):
-        xd = x - U*t
-        u = U - (W*pi*Lx/Hz)*cos(pi*t/tmax)*cos(2*pi*xd/Lx)*cos(pi*z/Hz)
-        w = 2*pi*W*cos(pi*t/tmax)*sin(2*pi*xd/Lx)*sin(pi*z/Hz)
+        k = 10*radius/tau
 
-        u_expr = as_vector((u, w))
+        u_zonal = (
+            k*(sin(lamda - 2*pi*t/tau)**2)*sin(2*theta)*cos(pi*t/tau)
+            + ((2*pi*radius)/tau)*cos(theta)
+        )
+        u_merid = k*sin(2*(lamda - 2*pi*t/tau))*cos(theta)*cos(pi*t/tau)
 
-        return u_expr
+        return xyz_vector_from_lonlatr(u_zonal, u_merid, Constant(0.0), xyz)
+
+    augmentation = MeanMixingRatio(domain, eqn, ['X_tracer', 'X2_tracer'])
+    transport_scheme = SSPRK3(domain, augmentation=augmentation, rk_formulation=RungeKuttaFormulation.predictor)
+    transport_method = [DGUpwind(eqn, 'rho_d'), DGUpwind(eqn, 'X_tracer'), DGUpwind(eqn, 'X2_tracer')]
+
+    time_varying_velocity = True
+    stepper = SplitPrescribedTransport(eqn, transport_scheme, io,
+                                       time_varying_velocity,
+                                       spatial_methods=transport_method,
+                                       physics_schemes=physics_schemes)
 
     stepper.setup_prescribed_expr(u_t)
 
-    stepper.fields("m_X").interpolate(m_X_0)
-    stepper.fields("rho_d").interpolate(rho_d_0)
-    stepper.fields("u").project(u_t(0))
+    # Initial conditions
+    stepper.fields("rho_d").interpolate(rho_expr)
+    stepper.fields("X_tracer").interpolate(X_0)
+    stepper.fields("X2_tracer").interpolate(X2_0)
 
-    m_X_init = Function(V_m_X)
-    rho_d_init = Function(V_rho)
+    X_sum = assemble(stepper.fields("rho_d")*stepper.fields("X_tracer")*dx)
+    X2_sum = assemble(stepper.fields("rho_d")*stepper.fields("X2_tracer")*dx)
+    XT_init = X_sum + 2*X2_sum
 
-    m_X_init.assign(stepper.fields("m_X"))
-    rho_d_init.assign(stepper.fields("rho_d"))
-
-    return stepper, m_X_init, rho_d_init
+    return stepper, XT_init
 
 
 def test_mean_mixing_ratio(tmpdir):
@@ -128,12 +135,22 @@ def test_mean_mixing_ratio(tmpdir):
     # Setup and run
     dirname = str(tmpdir)
 
-    stepper, m_X_0, rho_d_0 = \
-        setup_mean_mixing_ratio(dirname)
+    stepper, XT_init = setup_mean_mixing_ratio(dirname)
 
-    # Run for two timesteps
-    stepper.run(t=0, tmax=2)
-    m_X = stepper.fields("m_X")
+    # Run for four timesteps
+    stepper.run(t=0, tmax=1800.)
+    rho_d = stepper.fields("rho_d")
+    X_tracer = stepper.fields("X_tracer")
+    X2_tracer = stepper.fields("X2_tracer")
 
-    # Check that the mixing ratio has no negative values
-    assert all(m_X.dat.data >= 0.0), "mean mixing ratio field has not ensured non-negativity"
+    X_sum = assemble(rho_d*X_tracer*dx)
+    X2_sum = assemble(rho_d*X2_tracer*dx)
+    XT_sum = X_sum + 2*X2_sum
+    td_err = np.abs(XT_init - XT_sum)/XT_init
+
+    # Check that all the fields are non-negative
+    assert all(X_tracer.dat.data >= 0.0) and all(X2_tracer.dat.data >= 0.0), \
+        "mean mixing ratio field has not ensured non-negativity"
+
+    # Confirm mass conservation to a certain tolerance
+    assert td_err < 1e-20, "mean mixing ratio field has not ensured mass conservation"

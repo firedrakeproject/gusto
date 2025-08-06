@@ -14,7 +14,7 @@ class TerminatorToy(PhysicsParametrisation):
     """
     Setup the Terminator Toy chemistry interaction
     as specified in 'The terminator toy chemistry test ...'
-    Lauritzen et. al. (2014).
+    Lauritzen et. al. (2015).
 
     The coupled equations for the two species are given by:
 
@@ -75,11 +75,9 @@ class TerminatorToy(PhysicsParametrisation):
         self.dt = Constant(0.0)
 
         if analytical_formulation:
-            # Implement this such at the chemistry forcing can never
-            # make the mixing ratio fields become negative.
             # This uses the anaytical formulation given in
-            # the DCMIP 2016 test case document.
-            # This must be used with forwards Euler.
+            # Appendix D of Lauritzen et al. (2015)
+            # This must be used with forward Euler.
             X_T_0 = 4.e-6
             r = k1/(4.0*k2)
             d = sqrt(r**2 + 2.0*X_T_0*r)
@@ -89,17 +87,10 @@ class TerminatorToy(PhysicsParametrisation):
 
             source_expr = -e1 * (species1 - d + r) * (species1 + d + r) / (1.0 + e + self.dt * e1 * (species1 + r))
 
-            # Ensure the increments don't make a negative mixing ratio
+            # Ensure the increments don't create a negative mixing ratio
             source_expr = conditional(source_expr < 0.0,
                                       max_value(source_expr, -species1/self.dt),
                                       min_value(source_expr, 2.0*species2/self.dt))
-            
-            # Ensure the increments don't make a negative mixing ratio
-            # AND X doesn't get larger than 4e-6,
-            # AND X2 doesn't get larger than 2e-6
-            #source_expr = conditional(source_expr < 0.0,
-            #                          max_value(max_value(source_expr, -species1/self.dt), 2.0*(species2 - 2.e-6)/self.dt),
-            #                          min_value(min_value(source_expr, 2.0*species2/self.dt), (4.e-6 - species1)/self.dt))
 
             source1_expr = source_expr
             source2_expr = -source_expr/2.0

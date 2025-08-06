@@ -413,10 +413,13 @@ class MeanMixingRatio(Augmentation):
                 field = term.get(prognostic)
                 mass_term = term.get(mass_weighted)
 
-                # Transport terms are Terms not LabelledForms,
-                # so this change this to use the label_map
+                # Extract the previous labels for the 
+                # mass-weighted term
                 if term.has_label(transport):
                     old_mass_weighted_labels = mass_term.labels
+
+                    # Transport terms are Terms not LabelledForms,
+                    # so this change this to use the label_map
                     mass_term = LabelledForm(mass_term)
                 else:
                     old_mass_weighted_labels = mass_term.terms[0].labels
@@ -484,23 +487,25 @@ class MeanMixingRatio(Augmentation):
 
         self.residual = subject(self.residual, self.X)
 
-        print('Original residual')
-        print('\n')
-        for term in equation.residual:
+        print('rho idx is', self.rho_idxs)
+
+        #print('Original residual')
+        #print('\n')
+        #for term in equation.residual:
             #print(term.get(subject))
             #print(term.labels)
-            if term.has_label(mass_weighted):
-                print('advective form of a mass weighted term')
-                print(term.form)
-                print('the mass-weighted part')
-                print(term.get(mass_weighted).form)
-                print(term.get(mass_weighted))
-                #print(term.get(mass_weighted).labels)
-                print('\n')
-            else:
-                print('Not')
-                print(term.form)
-                print('\n')
+        #    if term.has_label(mass_weighted):
+        #        print('advective form of a mass weighted term')
+        #        print(term.form)
+        #        print('the mass-weighted part')
+        #        print(term.get(mass_weighted).form)
+        #        print(term.get(mass_weighted))
+        #        #print(term.get(mass_weighted).labels)
+        #        print('\n')
+        #    else:
+        #        print('Not')
+        #        print(term.form)
+        #        print('\n')
 
         # For debugging, check that all the replacements have worked:
         print('\n')
@@ -594,19 +599,4 @@ class MeanMixingRatio(Augmentation):
         for i in range(self.mX_num):
             self.limiters._clip_DG1_field.apply(mX_pre[i], mX_pre[i])
             x_in_mixed.subfunctions[self.mX_idxs[i]].assign(mX_pre[i])
-            
-        # Check total mass conservation:
-        X_sum = assemble(x_in_mixed.subfunctions[0]*x_in_mixed.subfunctions[1]*dx)
-        X2_sum = assemble(x_in_mixed.subfunctions[0]*x_in_mixed.subfunctions[2]*dx)
-        XT_sum = X_sum + 2*X2_sum
-
-        self.DG1_field.interpolate(Constant(4e-6))
-        XT_analyt = assemble(x_in_mixed.subfunctions[0]*self.DG1_field*dx)
-        XT_diff = abs(XT_sum - XT_analyt)/XT_analyt
-
-        print('\n Checking total conservation after limiting')
-        print(XT_diff)
-
-        if XT_diff > 1e-10:
-            import sys; sys.exit()
 
