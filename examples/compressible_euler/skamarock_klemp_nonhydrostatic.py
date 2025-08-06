@@ -26,7 +26,7 @@ from gusto import (
     DGUpwind, logger, SUPGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
     compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
-    hydrostatic_parameters, SubcyclingOptions, 
+    hydrostatic_parameters, SubcyclingOptions,
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
