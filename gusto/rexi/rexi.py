@@ -1,6 +1,7 @@
 from gusto.rexi.rexi_coefficients import *
 from firedrake import Function, DirichletBC, \
     LinearVariationalProblem, LinearVariationalSolver
+from gusto.core.configuration import Configuration
 from gusto.core.labels import time_derivative, prognostic, linearisation
 from firedrake.fml import (
     Term, all_terms, drop, subject,
@@ -9,6 +10,16 @@ from firedrake.fml import (
 from firedrake.formmanipulation import split_form
 
 NullTerm = Term(None)
+
+
+class RexiParameters(Configuration):
+    """
+    Parameters for the REXI coefficients
+    """
+    h = 0.2
+    M = 64
+    reduce_to_half = False
+    coefficients = "Haut"
 
 
 class Rexi(object):

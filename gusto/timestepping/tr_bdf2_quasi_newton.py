@@ -38,8 +38,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                  slow_physics_schemes=None,
                  fast_physics_schemes=None,
                  gamma=(1-sqrt(2)/2),
-                 num_outer_tr=4, num_inner_tr=1,
-                 num_outer_bdf=4, num_inner_bdf=1,
+                 num_outer_tr=2, num_inner_tr=2,
+                 num_outer_bdf=2, num_inner_bdf=2,
                  reference_update_freq=None,
                  ):
         """
@@ -149,7 +149,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                      + f"physics scheme {parametrisation.label.label}")
 
         self.active_transport = []
-        self.transported_fields = []
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             assert scheme.field_name in equation_set.field_names
@@ -364,6 +363,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'TR-BDF2 Quasi Newton: TR Implicit forcing {(outer, inner)}')
                     self.tr_forcing.apply(xp, xm, xrhs, "implicit")
+                    if inner > 0:
+                        # Zero implicit forcing to accelerate solver convergence
+                        self.zero_forcing_terms(self.equation, xm, xrhs, self.equation.field_names)
 
                 xrhs -= xm(self.field_name)
                 xrhs += xrhs_phys
@@ -421,11 +423,13 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
             xrhs_phys.assign(x_after_fast(self.field_name) - xp(self.field_name))
             for inner in range(self.num_inner_bdf):
-
                 # Implicit forcing ---------------------------------------------
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'TR-BDF2 Quasi Newton: BDF Implicit forcing {(outer, inner)}')
                     self.bdf_forcing.apply(xp, xnp1, xrhs, "implicit")
+                    if inner > 0:
+                        # Zero implicit forcing to accelerate solver convergence
+                        self.zero_forcing_terms(self.equation, xnp1, xrhs, self.equation.field_names)
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
@@ -477,3 +481,24 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             self.to_update_ref_profile = True
 
         super().run(t, tmax, pick_up=pick_up)
+
+    def zero_forcing_terms(self, equation, x_in, x_out, field_names):
+        """
+        Zero forcing term F(x) for non-wind prognostics.
+
+        This takes x_in and x_out, where                                      \n
+        x_out = x_in + scale*F(x_nl)                                          \n
+        for some field x_nl and sets x_out = x_in for all non-wind prognostics
+
+        Args:
+            equation (:class:`PrognosticEquationSet`): the prognostic
+                equation set to be solved
+            x_in (:class:`FieldCreator`): the field to be incremented.
+            x_out (:class:`FieldCreator`): the output field to be updated.
+            field_names (str): list of fields names for prognostic fields
+        """
+        for field_name in field_names:
+            if field_name != 'u':
+                logger.debug(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
+                field_index = equation.field_names.index(field_name)
+                x_out.subfunctions[field_index].assign(x_in(field_name))
