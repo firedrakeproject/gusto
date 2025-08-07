@@ -108,11 +108,8 @@ class TerminatorToy(PhysicsParametrisation):
         else:
             Kx = k1*species2 - k2*(species1**2)
 
-            source1_expr = 2*Kx
-            source2_expr = -Kx
-
-            source1_expr = test1 * source1_expr * dx
-            source2_expr = test2 * source2_expr * dx
+            source1_expr = test1 * 2*Kx * dx
+            source2_expr = test2 * -Kx * dx
 
             equation.residual -= self.label(subject(prognostic(source1_expr, species1_name), self.Xq), self.evaluate)
             equation.residual -= self.label(subject(prognostic(source2_expr, species2_name), self.Xq), self.evaluate)
