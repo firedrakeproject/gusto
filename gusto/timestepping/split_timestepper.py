@@ -395,14 +395,6 @@ class SplitPrescribedTransport(Timestepper):
 
         super().timestep()
 
-        print('Transport complete in split prescribed timestepper')
-
-        for idx, field in enumerate(self.x.np1):
-            print(field.name())
-            print(np.min(field.dat.data))
-
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
                 scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
-
-        print('Physics complete in split prescribed timestepper')

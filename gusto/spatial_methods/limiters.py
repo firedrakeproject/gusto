@@ -313,23 +313,22 @@ class MeanLimiter(object):
 
         self._lamda_kernel = MeanMixingRatioWeights(DG1_equispaced)
 
-        # Also define kernels to clip any very small negatives
-        # that arise from numerical error.
-        self._clip_zero_kernel = ClipZero(DG1_equispaced)
+        # Also construct kernels to clip any very small negatives
+        # that arise from numerical error. These are used in the 
+        # mean mixing ratio augmentation limit routine.
         self._clip_DG1_field = ClipZero(DG1)
         self._clip_means_kernel = ClipZero(DG0)
 
     def apply(self, mX_fields, mean_fields):
         """
-        The application of the limiter to the field.
+        Compute the limiter weights, lambda, and use these
+        to combine the DG1 mixing ratio and DG0 mean field
+        to ensure non-negativity.
 
         Args:
-            mX_fields (:class:`Function`): the mixing ratios to limit.
+            mX_fields (:class:`Function`): the DG1 mixing ratios to limit.
             mean_fields (:class:`Function`): the DG0 mean field associated with 
             each mX_field.
-
-        Raises:
-             AssertionError: If the field is not in the correct space.
          """
 
         # Remove weights from previous applications

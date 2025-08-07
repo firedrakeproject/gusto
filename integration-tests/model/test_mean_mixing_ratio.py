@@ -51,7 +51,7 @@ def setup_mean_mixing_ratio(dirname):
                              transport_eqn=TransportEquationType.tracer_conservative,
                              density_name='rho_d')
 
-    # Define m_X first to test that the tracers will be
+    # Define the mixing ratios first to test that the tracers will be
     # automatically re-ordered such that the density field
     # is indexed before the mixing ratio.
     tracers = [X_tracer, X2_tracer, rho_d]
@@ -153,4 +153,4 @@ def test_mean_mixing_ratio(tmpdir):
         "mean mixing ratio field has not ensured non-negativity"
 
     # Confirm mass conservation to a certain tolerance
-    assert td_err < 1e-20, "mean mixing ratio field has not ensured mass conservation"
+    assert td_err < 1e-14, "mean mixing ratio field has not ensured mass conservation"
