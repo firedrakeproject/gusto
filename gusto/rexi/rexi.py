@@ -1,5 +1,5 @@
 from gusto.rexi.rexi_coefficients import *
-from firedrake import Function, DirichletBC, \
+from firedrake import Function, DirichletBC, TestFunction, \
     LinearVariationalProblem, LinearVariationalSolver
 from gusto.core.configuration import Configuration
 from gusto.core.labels import time_derivative, prognostic, linearisation
@@ -147,9 +147,20 @@ class Rexi(object):
             f = f.label_map(lambda t: t is NullTerm, drop)
             return f
 
+        self.Q = Function(W_)
+        self.Q_ = Function(W)
+        self.U0_ = Function(W)
+        tests_ = TestFunction(W)
+        tests_r = cpx.split(tests_, cpx.Part.Real)
+        tests_i = cpx.split(tests_, cpx.Part.Imag)
+        ur = cpx.split(self.U0_, cpx.Part.Real)
+        ui = cpx.split(self.U0_, cpx.Part.Imag)
+            
+        self.b = form_mass(*ur, *tests_r) - form_mass(*ui, *tests_r) + form_mass(*ur, *tests_i) + form_mass(*ui, *tests_i)
+
         # generate ufl for right hand side over given trial/tests
-        def form_rhs(*tests):
-            return form_mass(*self.U0.subfunctions, *tests)
+        # def form_rhs(*tests):
+        #     return form_mass(*self.U0.subfunctions, *tests)
 
         # complex Constants for alpha and beta values
         self.ac = cpx.ComplexConstant(1)
@@ -161,7 +172,7 @@ class Rexi(object):
         a = aM - aL
 
         # right hand side is just U0
-        b = cpx.LinearForm(W, 1, form_rhs)
+        # b = cpx.LinearForm(W, 1, form_rhs)
 
         if hasattr(equation, "aP"):
             aP = equation.aP(trial, self.ai, self.tau)
@@ -178,7 +189,7 @@ class Rexi(object):
         # now we can transfer the velocity boundary conditions to the complex space
         bcs = tuple(cb for bc in ubcs for cb in cpx.DirichletBC(W, W_, bc))
 
-        rexi_prob = LinearVariationalProblem(a.form, b.form, self.w, aP=aP,
+        rexi_prob = LinearVariationalProblem(a.form, self.b.form, self.w, aP=aP,
                                              bcs=bcs,
                                              constant_jacobian=False)
 
@@ -211,7 +222,8 @@ class Rexi(object):
         cpx = self.cpx
         # assign tau and U0 and initialise solution to 0.
         self.tau.assign(dt)
-        self.U0.assign(x_in)
+        cpx.set_real(self.U0_, x_in)
+        #self.U0.assign(x_in)
         x_out.assign(0.)
 
         # loop over solvers, assigning a_i, solving and accumulating the sum
@@ -262,7 +274,8 @@ class Rexii(Rexi):
         cpx = self.cpx
         # assign tau and U0 and initialise solution to 0.
         self.tau.assign(dt)
-        self.U0.assign(x_in)
+        cpx.set_real(self.U0_, x_in)
+        # self.U0.assign(x_in)
         x_out.assign(0.)
 
         # loop over solvers, assigning a_i, solving and accumulating the sum
@@ -274,7 +287,7 @@ class Rexii(Rexi):
             self.solver.solve()
 
             # self.w is V_n, use this as RHS in second solve
-            self.U0.assign(self.w)
+            self.U0_.assign(self.w)
             # Flip sign on tau and im part of alpha to turn phi into chi
             self.tau.assign(-dt)
             self.ac.imag.assign(-self.alpha[j].imag)
@@ -282,23 +295,36 @@ class Rexii(Rexi):
             self.solver.solve()
             
             # Convert Q tilde to Q
-            self.w *= ( self.C1[j] / self.C2[j] - self.alpha[j])
+            self.Q.assign(0.)
+            coeff = self.C1[j] / self.C2[j] - self.alpha[j]
+            cpx.get_real(self.w, self.wrk)
+            self.Q += float(coeff.real) * self.wrk
+            cpx.get_imag(self.w, self.wrk)
+            self.Q -= float(coeff.imag) * self.wrk
+            cpx.set_real(self.Q_, self.Q)
+
+            self.Q.assign(0.)
+            cpx.get_real(self.w, self.wrk)
+            self.Q += float(coeff.imag) * self.wrk
+            cpx.get_imag(self.w, self.wrk)
+            self.Q += float(coeff.real) * self.wrk
+            cpx.set_imag(self.Q_, self.Q)
 
             # accumulate real part of Q_n
-            cpx.get_real(self.w, self.wrk)
-            x_out += self.C2[j].real*self.wrk
+            cpx.get_real(self.Q_, self.wrk)
+            x_out += float(self.C2[j].real)*self.wrk
 
             # accumulate real part of V_n
-            cpx.get_real(self.U0, self.wrk)
-            x_out += self.C2[j].real*self.wrk
+            cpx.get_real(self.U0_, self.wrk)
+            x_out += float(self.C2[j].real)*self.wrk
 
             # accumulate im part of Q_n
-            cpx.get_imag(self.w, self.wrk)
-            x_out += self.C2[j].imag*self.wrk
+            cpx.get_imag(self.Q_, self.wrk)
+            x_out += float(self.C2[j].imag)*self.wrk
 
             # accumulate im part of V_n
-            cpx.get_imag(self.U0, self.wrk)
-            x_out += self.C2[j].imag*self.wrk
+            cpx.get_imag(self.U0_, self.wrk)
+            x_out += float(self.C2[j].imag)*self.wrk
 
         # in parallel we have to accumulate the sum over all processes
         if self.manager is not None:

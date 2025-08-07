@@ -66,8 +66,13 @@ def run_rexi_sw(tmpdir, coefficients, ensemble=None):
         rexi_output.write(u, D)
 
     # Compute exponential solution and write it out
-    rexi = Rexii(eqns, RexiParameters(coefficients=coefficients),
-                manager=ensemble)
+    if coefficients == "Haut":
+        rexi = Rexi(eqns, RexiParameters(coefficients=coefficients),
+                     manager=ensemble)
+    elif coefficients == "Caliari":
+        rexi = Rexii(eqns, RexiParameters(coefficients=coefficients),
+                     manager=ensemble)
+
     rexi.solve(Uexpl, U_in, tmax)
 
     uexpl, Dexpl = Uexpl.subfunctions
