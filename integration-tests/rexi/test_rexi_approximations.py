@@ -134,7 +134,7 @@ def test_exponential_approx(coefficients):
         assert abs(exact - approx) < 2.e-11
 
 # ------------------------------------------------------------------------ #
-# Test 3: This test the full REXI appromimation, i.e. the combination of steps
+# Test 4: This test the full REXI appromimation, i.e. the combination of steps
 # 1 and 2 into a single sum.
 # ------------------------------------------------------------------------ #
 
@@ -158,21 +158,26 @@ def test_rexi_exponential_approx(algorithm):
     h = params.h
     M = params.M
 
-    # Set tolerance for REXI. Also used by REXII if x>xlimit
-    tolerance_rexi = 2.e-11
-    # Error bound from Caliari Appendix B
+    # Set tolerance used if x>xlimit
+    tolerance_big = 2.e-11
+    # Error bounds from the Haut Appendix and Caliari Appendix B
     m0 = 11
     xlimit = (M - m0) * h
-    delta1 = 0.       # Neglect this term if x<xlimit
-    delta2 = 8.e-15
-    tolerance_rexii = exp(h**2) * ( delta1 + (2*M + 1) * delta2 )
+    delta1 = 0.           # Neglect this term if x<xlimit
+    if approx_type == "REXI":
+        delta2 =  5.e-13  # From Haut Appendix
+    elif approx_type == "REXII":
+        delta2 = 8.e-15 # From Caliari Appendix B
+    else:
+        raise ValueError("approx_type must be REXI or REXII")
+    tolerance = exp(h**2) * ( delta1 + (2*M + 1) * delta2 )
     
-    for x in range(int(h*M)):
+    for x in range(-int(h*M)+1, int(h*M)):
         exact = exp(1j*x)
         approx = approx_e_ix(x, params, approx_type)
 
-        if x < xlimit and approx_type == "REXII":
-            tolerance = tolerance_rexii
+        if abs(x) < xlimit:
+            tolerance = tolerance
         else:
-            tolerance = tolerance_rexi
+            tolerance = tolerance_big
         assert abs(exact - approx) < tolerance
