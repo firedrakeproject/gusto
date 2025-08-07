@@ -156,7 +156,7 @@ class Rexi(object):
         ur = cpx.split(self.U0_, cpx.Part.Real)
         ui = cpx.split(self.U0_, cpx.Part.Imag)
             
-        self.b = form_mass(*ur, *tests_r) - form_mass(*ui, *tests_r) + form_mass(*ur, *tests_i) + form_mass(*ui, *tests_i)
+        self.b = form_mass(*ur, *tests_r) + form_mass(*ui, *tests_r) + form_mass(*ur, *tests_i) - form_mass(*ui, *tests_i)
 
         # generate ufl for right hand side over given trial/tests
         # def form_rhs(*tests):
