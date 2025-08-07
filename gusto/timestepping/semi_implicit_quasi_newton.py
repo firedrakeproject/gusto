@@ -20,7 +20,7 @@ from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisa
 from gusto.timestepping.timestepper import BaseTimestepper
 
 
-__all__ = ["SemiImplicitQuasiNewton"]
+__all__ = ["SemiImplicitQuasiNewton", "Forcing"]
 
 
 class SemiImplicitQuasiNewton(BaseTimestepper):
@@ -456,7 +456,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
             xrhs_phys.assign(x_after_fast(self.field_name) - xp(self.field_name))
-
             for inner in range(self.num_inner):
 
                 # Implicit forcing ---------------------------------------------
@@ -480,7 +479,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xnp1)
-
             self._apply_bcs()
 
         for name, scheme in self.auxiliary_schemes:
@@ -535,19 +533,25 @@ class Forcing(object):
     semi-implicit time discretisation.
     """
 
-    def __init__(self, equation, alpha):
+    def __init__(self, equation, alpha, dt=None):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the prognostic equations
                 containing the forcing terms.
+
             alpha (:class:`Function`): semi-implicit off-centering factor. An
                 alpha of 0 corresponds to fully explicit, while a factor of 1
                 corresponds to fully implicit.
+
+            dt (:float): timestep over which to apply forcing, defaults to None
+                in which case it is taken from the equation class.
         """
 
         self.field_name = equation.field_name
         implicit_terms = [incompressible, sponge]
-        dt = equation.domain.dt
+
+        if dt is None:
+            dt = equation.domain.dt
 
         W = equation.function_space
         self.x0 = Function(W)
@@ -568,16 +572,14 @@ class Forcing(object):
                                replace_subject(trials),
                                map_if_false=drop)
 
-        # the explicit forms are multiplied by (1-alpha) and moved to the rhs
-        one_minus_alpha = Function(alpha.function_space(), val=1-alpha)
-        L_explicit = -one_minus_alpha*dt*residual.label_map(
+        L_explicit = -(1 - alpha)*dt*residual.label_map(
             lambda t:
                 any(t.has_label(time_derivative, hydrostatic, *implicit_terms,
                                 return_tuple=True)),
             drop,
             replace_subject(self.x0))
 
-        # the implicit forms are multiplied by alpha and moved to the rhs
+        # the implicit forms are multiplied by implicit scaling and moved to the rhs
         L_implicit = -alpha*dt*residual.label_map(
             lambda t:
                 any(t.has_label(
@@ -605,10 +607,11 @@ class Forcing(object):
                 drop)
 
         # now we can set up the explicit and implicit problems
-        explicit_forcing_problem = LinearVariationalProblem(
-            a.form, L_explicit.form, self.xF, bcs=bcs,
-            constant_jacobian=True
-        )
+        if alpha != 1.0:
+            explicit_forcing_problem = LinearVariationalProblem(
+                a.form, L_explicit.form, self.xF, bcs=bcs,
+                constant_jacobian=True
+            )
 
         implicit_forcing_problem = LinearVariationalProblem(
             a.form, L_implicit.form, self.xF, bcs=bcs,
@@ -618,11 +621,12 @@ class Forcing(object):
         self.solver_parameters = mass_parameters(W, equation.domain.spaces)
 
         self.solvers = {}
-        self.solvers["explicit"] = LinearVariationalSolver(
-            explicit_forcing_problem,
-            solver_parameters=self.solver_parameters,
-            options_prefix="ExplicitForcingSolver"
-        )
+        if alpha != 1.0:
+            self.solvers["explicit"] = LinearVariationalSolver(
+                explicit_forcing_problem,
+                solver_parameters=self.solver_parameters,
+                options_prefix="ExplicitForcingSolver"
+            )
         self.solvers["implicit"] = LinearVariationalSolver(
             implicit_forcing_problem,
             solver_parameters=self.solver_parameters,
@@ -630,7 +634,8 @@ class Forcing(object):
         )
 
         if logger.isEnabledFor(DEBUG):
-            self.solvers["explicit"].snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
+            if alpha != 1.0:
+                self.solvers["explicit"].snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
             self.solvers["implicit"].snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
 
     def apply(self, x_in, x_nl, x_out, label):

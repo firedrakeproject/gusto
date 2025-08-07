@@ -83,6 +83,26 @@ def test_skamarock_klemp_nonhydrostatic_parallel():
     test_skamarock_klemp_nonhydrostatic()
 
 
+def test_skamarock_klemp_nonhydrostatic_TR_BDF2():
+    from skamarock_klemp_nonhydrostatic import skamarock_klemp_nonhydrostatic
+    test_name = 'skamarock_klemp_nonhydrostatic'
+    skamarock_klemp_nonhydrostatic(
+        ncolumns=30,
+        nlayers=5,
+        dt=6.0,
+        tmax=60.0,
+        dumpfreq=10,
+        dirname=make_dirname(test_name),
+        hydrostatic=False,
+        timestepper='TR-BDF2'
+    )
+
+
+@pytest.mark.parallel(nprocs=2)
+def test_skamarock_klemp_nonhydrostatic_TR_BDF2_parallel():
+    test_skamarock_klemp_nonhydrostatic_TR_BDF2()
+
+
 # Hydrostatic equations not currently working
 @pytest.mark.xfail
 def test_hyd_switch_skamarock_klemp_nonhydrostatic():
