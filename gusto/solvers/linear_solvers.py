@@ -658,6 +658,7 @@ class ThermalSWSolver(TimesteppingSolver):
             # compute q_v using q_sat to partition q_t into q_v and q_c
             self.q_sat_func = Function(VD)
             self.qvbar = Function(VD)
+            self.q_v = Function(VD)
             qtbar = split(equation.X_ref)[3]
 
             # set up interpolators that use the X_ref values for D and b_e
@@ -669,6 +670,9 @@ class ThermalSWSolver(TimesteppingSolver):
 
             # bbar was be_bar and here we correct to become bbar
             bbar += equation.parameters.beta2 * self.qvbar
+            # Should we also be doing the same for b?
+            # (ie: b was b_e and here we correct it to become b?)
+            b += equation.parameters.beta2 * self.q_v
 
         n = FacetNormal(equation.domain.mesh)
 
