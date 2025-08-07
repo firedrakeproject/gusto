@@ -7,9 +7,8 @@ from firedrake import (dot, dx, Function, sqrt, TestFunction,
                        ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, pi,
                        TensorFunctionSpace, SpatialCoordinate, as_vector,
                        Projector, assemble, FunctionSpace, FiniteElement,
-                       TensorProductElement, CellVolume, Cofunction)
+                       TensorProductElement, CellVolume, Cofunction, interpolate)
 from firedrake.assign import Assigner
-from firedrake.__future__ import interpolate
 from ufl.domain import extract_unique_domain
 
 from abc import ABCMeta, abstractmethod, abstractproperty
