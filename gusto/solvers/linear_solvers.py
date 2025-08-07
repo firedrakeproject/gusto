@@ -799,6 +799,14 @@ class MoistThermalSWSolver(TimesteppingSolver):
         "assembled_pc_star_sub_sub_pc_factor_fill": 1.2
     }
 
+    def __init__(self, equations, physics_beta, alpha=0.5, tau_values=None,
+                 solver_parameters=None, overwrite_solver_parameters=False):
+
+        self.physics_beta = physics_beta
+
+        super().__init__(equations, alpha, tau_values, solver_parameters,
+                         overwrite_solver_parameters)
+
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         equation = self.equations      # just cutting down line length a bit
@@ -830,7 +838,7 @@ class MoistThermalSWSolver(TimesteppingSolver):
         # Build the function spaces and functions for the linear problem
         M = MixedFunctionSpace((Vu, VD, Vb, Vv, Vc))
         w, phi, lamda, tau1, tau2 = TestFunctions(M)
-        u, D, b, qc, qv = TrialFunctions(M)
+        u, D, b, qv, qc = TrialFunctions(M)
 
         # Get parameters from equation
         q0 = equation.parameters.q0
@@ -838,24 +846,16 @@ class MoistThermalSWSolver(TimesteppingSolver):
         beta2 = equation.parameters.beta2
         g = equation.parameters.g
         H = equation.parameters.H
-        
+
         # Get reference fields
         Dbar, bbar, qvbar, qcbar = split(equation.X_ref)[1:5]
 
         b_ebar = bbar - beta2*qvbar
         sat_expr = q0*H/(Dbar) * exp(nu*(1 - b_ebar/g))
 
-        # Try including gamma_v in linearisation of P
-        denominator = 1 + 2*nu*beta2*sat_expr/g + (nu*beta2*sat_expr/g)**2
-
-        # P_expr = (1/denominator) * (qv * (1 - qvbar*sat_expr*(nu*beta2/g)**2)
-        #                             + b * (nu*sat_expr/g + qvbar*beta2*((nu/g)**2))
-        #                             + D * (sat_expr/Dbar + (qvbar*nu*beta2*sat_expr)/(g*Dbar)))
-
-        P_expr = (qv) + sat_expr*(1/Dbar*(D)
-                                         + nu/g*(b)
-                                         - nu*beta2/g*(qv))
-
+        P_expr = (
+            qv - sat_expr*(-D/Dbar - b*nu/g  + qv*nu*beta2/g)
+        )
 
         n = FacetNormal(equation.domain.mesh)
 
@@ -875,18 +875,22 @@ class MoistThermalSWSolver(TimesteppingSolver):
             + inner(lamda, (b - b_in)) * dx
             - beta_b * bbar * div(lamda*u) * dx
             + beta_b * jump(lamda*u, n) * avg(bbar) * dS
-            + beta_b * lamda * beta2 * P_expr * dx
             # qv equation
             + inner(tau1, (qv - qv_in)) * dx
             - beta_qv * qvbar * div(tau1*u) * dx
             + beta_qv * jump(tau1*u, n) * avg(qvbar) * dS
-            + beta_qv * tau1 * P_expr * dx
             # qc equation
             + inner(tau2, (qc - qc_in)) * dx
             - beta_qc * qcbar * div(tau2*u) * dx
             + beta_qc * jump(tau2*u, n) * avg(qcbar) * dS
-            - beta_qc * tau2 * P_expr * dx
         )
+
+        if abs(self.physics_beta) > 0.0:
+            eqn += (
+                self.physics_beta * lamda * beta2 * P_expr * dx
+                + self.physics_beta * tau1 * P_expr * dx
+                - self.physics_beta * tau2 * P_expr * dx
+            )
 
         if 'coriolis' in equation.prescribed_fields._field_names:
             f = equation.prescribed_fields('coriolis')

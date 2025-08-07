@@ -14,11 +14,13 @@ from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (transport, diffusion, time_derivative,
                                hydrostatic, physics_label, sponge,
                                incompressible)
-from gusto.solvers import LinearTimesteppingSolver, mass_parameters
+from gusto.solvers import LinearTimesteppingSolver, mass_parameters, MoistThermalSWSolver
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
 
+# TODO TB: to remove
+import numpy as np
 
 __all__ = ["SemiImplicitQuasiNewton"]
 
@@ -38,8 +40,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  diffusion_schemes=None, physics_schemes=None,
                  final_physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
-                 ultra_fast_physics_schemes=None,
-                 alpha=0.5, off_centred_u=False, physics_beta=0.5,
+                 alpha=0.5, off_centred_u=False, physics_beta=1.0,
                  num_outer=2, num_inner=2, accelerator=False,
                  predictor=None, reference_update_freq=None,
                  spinup_steps=0):
@@ -65,7 +66,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`),
                 pairing physics parametrisations and timestepping schemes to use
                 for each. Timestepping schemes for physics must be explicit.
-                These schemes are all evaluated with forcing, both explicitly and 
+                These schemes are all evaluated with forcing, both explicitly and
                 implicitly. Defaults to None.
             final_physics_schemes: (list, optional): a list of tuples of the form
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`),
@@ -81,10 +82,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`).
                 These schemes are evaluated within the outer loop. Defaults to
                 None.
-            ultra_fast_physics_schemes: (list, optional): a list of tuples of
-                the form (:class:`PhysicsParametrisation`, :class:
-                `TimeDiscretisation`). These schemes are evaluated within the
-                inner loop. Defaults to None.
             alpha (`float, optional): the semi-implicit off-centering
                 parameter. A value of 1 corresponds to fully implicit, while 0
                 corresponds to fully explicit. Defaults to 0.5.
@@ -156,6 +153,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         if physics_schemes is not None:
             self.physics_schemes = physics_schemes
+        else:
+            self.physics_schemes = []
         if final_physics_schemes is not None:
             self.final_physics_schemes = final_physics_schemes
         else:
@@ -168,13 +167,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.fast_physics_schemes = fast_physics_schemes
         else:
             self.fast_physics_schemes = []
-        if ultra_fast_physics_schemes is not None:
-            self.ultra_fast_physics_schemes = ultra_fast_physics_schemes
-        else:
-            self.ultra_fast_physics_schemes = []
         self.all_physics_schemes = (self.slow_physics_schemes
                                     + self.fast_physics_schemes
-                                    + self.ultra_fast_physics_schemes
                                     + self.final_physics_schemes
                                     + self.physics_schemes)
 
@@ -247,7 +241,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.setup_transporting_velocity(aux_scheme)
 
         self.tracers_to_copy = []
-        if equation_set.active_tracers is not None:
+        copy_active_tracers = (
+            equation_set.active_tracers is not None
+            and not isinstance(linear_solver, MoistThermalSWSolver)
+        )
+        if copy_active_tracers:
             for active_tracer in equation_set.active_tracers:
                 self.tracers_to_copy.append(active_tracer.name)
 
@@ -434,7 +432,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         x_after_fast = self.x.after_fast
         xrhs = self.xrhs
         xrhs_phys = self.xrhs_phys
-        xrhs_inner_phys = self.xrhs_inner_phys
         x_explicit_phys = self.x.explicit_phys
         x_implicit_phys = self.x.implicit_phys
         dy = self.dy
@@ -464,11 +461,17 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.forcing.apply(x_after_slow, xn, xstar(self.field_name), "explicit")
 
         # Explicit physics
-        for _, scheme in self.physics_schemes:
-            logger.info("Semi-implicit Quasi-Newton: Explicit physics")
-            # Add explicit physics to xstar
-            scheme.apply(x_explicit_phys(scheme.field_name), xn(scheme.field_name))
-            xstar(self.field_name).assign(xstar(self.field_name) + (1 - self.physics_beta)*(x_explicit_phys(self.field_name) - xn(self.field_name)))
+        if abs(self.physics_beta - 1.0) > 0.0:
+            for _, scheme in self.physics_schemes:
+                logger.info("Semi-implicit Quasi-Newton: Explicit physics")
+                # Evaluate explict physics on xn
+                scheme.apply(x_explicit_phys(scheme.field_name), xn(scheme.field_name))
+                # Compute increment from physics scheme
+                x_phys_inc = (x_explicit_phys(self.field_name) - xn(self.field_name))
+                # Add (1-beta)*dt*P[xn] to xstar
+                xstar(self.field_name).assign(
+                    xstar(self.field_name) + (1 - self.physics_beta)*x_phys_inc
+                )
 
         # set xp here so that variables that are not transported have
         # the correct values
@@ -496,10 +499,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
             for inner in range(self.num_inner):
 
-                # Set the first guess of xnp1 to be xp
-                # if outer == 0 and inner == 0:
-                #     xnp1(self.field_name).assign(xp(self.field_name))
-
                 # Implicit forcing ---------------------------------------------
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'Semi-implicit Quasi Newton: Implicit forcing {(outer, inner)}')
@@ -510,9 +509,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                 # Implicit physics
                 logger.info(f'Semi-implicit Quasi Newton: Implicit physics {(outer, inner)}')
-                for _, scheme in self.physics_schemes:
-                    scheme.apply(x_implicit_phys(self.field_name), xnp1(self.field_name))
-                    xrhs += self.physics_beta*(x_implicit_phys(self.field_name) - xnp1(self.field_name))
+                if abs(self.physics_beta) > 0.0:
+                    for _, scheme in self.physics_schemes:
+                        scheme.apply(x_implicit_phys(self.field_name), xnp1(self.field_name))
+                        xrhs += self.physics_beta*(x_implicit_phys(self.field_name) - xnp1(self.field_name))
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
@@ -526,7 +526,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 xnp1X += dy
 
             # Update xnp1 values for active tracers not included in the linear solve
-            # self.copy_active_tracers(x_after_fast, xnp1)
+            self.copy_active_tracers(x_after_fast, xnp1)
 
             self._apply_bcs()
 
