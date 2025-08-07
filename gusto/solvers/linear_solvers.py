@@ -13,10 +13,11 @@ from firedrake import (
     BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC, as_vector,
     assemble, conditional
 )
-from firedrake.fml import Term, drop
+from firedrake.fml import Term, drop, subject
 from firedrake.petsc import flatten_parameters
 from firedrake.__future__ import interpolate
 from pyop2.profiling import timed_function, timed_region
+from ufl import derivative as ufl_derivative
 
 from gusto.equations.active_tracers import TracerVariableType
 from gusto.core.logging import (
@@ -1017,20 +1018,15 @@ class MoistConvectiveSWSolverNew(TimesteppingSolver):
         # Set up Preconditioner aP
         beta_u = dt*self.tau_values.get("u", self.alpha)
         beta_d = dt*self.tau_values.get("D", self.alpha)
-        Vu = equation.domain.spaces("HDiv")
-        VD = equation.domain.spaces("DG")
 
-        # Split up the rhs vector
-        self.xrhs = Function(self.equations.function_space)
+        # Split up the rhs vectorx
+        M = self.equations.function_space
+        self.xrhs = Function(M)
         u_in = split(self.xrhs)[0]
         D_in = split(self.xrhs)[1]
-        p0_in = split(self.xrhs)[2]
-        p1_in = split(self.xrhs)[3]
-        p2_in = split(self.xrhs)[4]
 
 
         # Build the reduced function space for u, D
-        M = self.equations.function_space
         w, phi, q0, q1, q2 = TestFunctions(M)
         u, D, p0, p1, p2 = TrialFunctions(M)
 
@@ -1040,9 +1036,9 @@ class MoistConvectiveSWSolverNew(TimesteppingSolver):
         g = equation.parameters.g
 
         eqn = (
-            inner(w, (u - u_in)) * dx
+            inner(w, (u-u_in)) * dx
             - beta_u * (D - Dbar) * div(w*g) * dx
-            + inner(phi, (D - D_in)) * dx
+            + inner(phi, (D-D_in)) * dx
             + beta_d * phi * div(Dbar*u) * dx
             + inner(q0, (p0)) * dx
             + inner(q1, (p1)) * dx
@@ -1053,26 +1049,29 @@ class MoistConvectiveSWSolverNew(TimesteppingSolver):
             f = equation.prescribed_fields('coriolis')
             eqn += beta_u * f * inner(w, equation.domain.perp(u)) * dx
 
-        aeqn= lhs(eqn)
-        Leqn = rhs(eqn)
+        aP= lhs(eqn)
 
-        # # Calculated linearised problem
-        # residual = equation.residual.label_map(
-        #     lambda t: t.has_label(linearisation),
-        #     lambda t: Term(t.get(linearisation).form, t.labels),
-        #     drop)
+        # Calculated linearised problem
+        residual = equation.residual.label_map(
+            lambda t: t.has_label(linearisation),
+            lambda t: Term(t.get(linearisation).form, t.labels),
+            drop)
+        
+        other_res = equation.residual.label_map(
+            lambda t: t.has_label(linearisation),
+            map_if_true=drop)
+        other_res = other_res.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_true=lambda t: Term(ufl_derivative(t.form, t.get(subject)), t.labels),
+            map_if_false=drop)
+        beta = dt*self.alpha
 
-        # beta = dt*self.alpha
-
-        # # Split up the rhs vector (symbolically)
-        # #self.xrhs = Function(M)
-
-        # aeqn = residual.label_map(
-        #     lambda t: (t.has_label(time_derivative) and t.has_label(linearisation)),
-        #     map_if_false=lambda t: beta*t)
-        # Leqn = residual.label_map(
-        #     lambda t: (t.has_label(time_derivative) and t.has_label(linearisation)),
-        #     map_if_false=drop)
+        aeqn = residual.label_map(
+            lambda t: (t.has_label(time_derivative) and t.has_label(linearisation)),
+            map_if_false=lambda t: beta*t) + other_res
+        Leqn = residual.label_map(
+            lambda t: (t.has_label(time_derivative) and t.has_label(linearisation)),
+            map_if_false=drop)
 
         # Place to put results of (u,D) solver
         self.uD = Function(M)
@@ -1081,7 +1080,7 @@ class MoistConvectiveSWSolverNew(TimesteppingSolver):
         bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, D
-        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs,
+        uD_problem = LinearVariationalProblem(aeqn.form, action(Leqn.form, self.xrhs), self.uD, bcs=bcs,
                                               constant_jacobian=True)
 
         # Provide callback for the nullspace of the trace system
