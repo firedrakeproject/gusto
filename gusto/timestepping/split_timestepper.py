@@ -8,7 +8,6 @@ from gusto.core.labels import time_derivative, physics_label
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper, Timestepper
 from numpy import ones
-import numpy as np
 
 __all__ = ["SplitTimestepper", "SplitPhysicsTimestepper", "SplitPrescribedTransport"]
 
@@ -214,6 +213,17 @@ class SplitPhysicsTimestepper(Timestepper):
 
     def setup_scheme(self):
         self.setup_equation(self.equation)
+
+        if self.scheme.augmentation is not None:
+            if self.scheme.augmentation.name == 'mean_mixing_ratio':
+                # For the mean mixing ratio residual,
+                # go through and label all non-physics terms with a "dynamics" label
+                dynamics = Label('dynamics')
+                self.scheme.augmentation.residual = self.scheme.augmentation.residual.label_map(
+                    lambda t: not any(t.has_label(time_derivative, physics_label)),
+                    map_if_true=lambda t: dynamics(t)
+                )
+
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
         self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics_label)), dynamics)
@@ -226,11 +236,6 @@ class SplitPhysicsTimestepper(Timestepper):
     def timestep(self):
 
         super().timestep()
-
-        print('Transport complete in the split phyics timestepper')
-
-        for field in self.x.np1:
-            print(np.min(field.dat.data))
 
         with timed_stage("Physics"):
             for _, scheme in self.physics_schemes:
