@@ -13,14 +13,14 @@ This example uses the icosahedral sphere mesh and degree 1 spaces.
 """
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from firedrake import SpatialCoordinate, sin, cos, exp, Function
+from firedrake import SpatialCoordinate, sin, cos, exp, Function, errornorm, norm
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
     ZonalComponent, MeridionalComponent, SteadyStateError, lonlatr_from_xyz,
     DG1Limiter, InstantRain, MoistConvectiveSWSolver, ForwardEuler,
     RelativeVorticity, SWSaturationAdjustment, WaterVapour, CloudWater, Rain,
-    GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr
+    GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr, MoistConvectiveSWSolverNew
 )
 
 moist_convect_williamson_2_defaults = {
@@ -127,7 +127,7 @@ def moist_convect_williamson_2(
         SSPRK3(domain, "rain", limiter=limiter)
     ]
 
-    linear_solver = MoistConvectiveSWSolver(eqns)
+    linear_solver = MoistConvectiveSWSolverNew(eqns)
 
     # Physics schemes
     sat_adj = SWSaturationAdjustment(
@@ -158,6 +158,8 @@ def moist_convect_williamson_2(
     D0 = stepper.fields("D")
     v0 = stepper.fields("water_vapour")
 
+    D_init = Function(D0.function_space())
+
     uexpr = xyz_vector_from_lonlatr(u_max*cos(phi), 0, 0, (x, y, z))
     g = parameters.g
     w = Omega*radius*u_max + (u_max**2)/2
@@ -184,6 +186,8 @@ def moist_convect_williamson_2(
     D0.interpolate(Dexpr)
     v0.interpolate(vexpr)
 
+    D_init.interpolate(Dexpr)
+
     # Set reference profiles
     Dbar = Function(D0.function_space()).assign(mean_depth)
     stepper.set_reference_profiles([('D', Dbar)])
@@ -193,6 +197,10 @@ def moist_convect_williamson_2(
     # ------------------------------------------------------------------------ #
 
     stepper.run(t=0, tmax=tmax)
+
+    error_D = errornorm(D0, D_init, mesh=mesh)/norm(D_init, mesh=mesh)
+
+    print("Error D:", error_D)
 
 # ---------------------------------------------------------------------------- #
 # MAIN
