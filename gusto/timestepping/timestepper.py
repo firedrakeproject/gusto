@@ -243,7 +243,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
             self.timestep()
 
-            self.t.assign(self.t + self.dt)
+            self.t.assign(float(self.t) + float(self.dt))
             self.step += 1
 
             with timed_stage("Dump output"):
@@ -435,9 +435,12 @@ class PrescribedTransport(Timestepper):
         if self.is_velocity_setup:
             raise RuntimeError('Prescribed velocity already set up!')
 
+        project_params = {
+            'quadrature_degree': self.equation.domain.max_quad_degree
+        }
         self.velocity_projection = Projector(
             expr_func(self.t), self.fields('u'),
-            quadrature_degree=self.equation.domain.max_quad_degree
+            form_compiler_parameters=project_params
         )
 
         self.is_velocity_setup = True

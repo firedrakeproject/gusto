@@ -8,7 +8,8 @@ import time
 from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.core.meshes import get_flat_latlon_mesh
 from firedrake import (Function, functionspaceimpl, Constant, COMM_WORLD,
-                       DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile)
+                       DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile,
+                       MeshGeometry)
 from firedrake.output import VTKFile
 from pyop2.mpi import MPI
 import numpy as np
@@ -257,7 +258,7 @@ class IO(object):
         """
         if hasattr(equation, 'parameters') and equation.parameters is not None:
             logger.info("Physical parameters that take non-default values:")
-            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items()))
+            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items() if type(v) is not MeshGeometry))
 
     def setup_log_courant(self, state_fields, name='u', component="whole",
                           expression=None):

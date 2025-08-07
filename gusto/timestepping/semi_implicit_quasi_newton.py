@@ -5,7 +5,7 @@ and GungHo dynamical cores.
 
 from firedrake import (
     Function, Constant, TrialFunctions, DirichletBC, div, assemble,
-    LinearVariationalProblem, LinearVariationalSolver
+    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace
 )
 from firedrake.fml import drop, replace_subject
 from firedrake.__future__ import interpolate
@@ -37,8 +37,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  auxiliary_equations_and_schemes=None, linear_solver=None,
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
-                 alpha=Constant(0.5), off_centred_u=False,
-                 num_outer=2, num_inner=2, accelerator=False,
+                 alpha=0.5, off_centred_u=False,
+                 num_outer=2, num_inner=2, accelerator=True,
                  predictor=None, reference_update_freq=None,
                  spinup_steps=0):
         """
@@ -73,9 +73,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`).
                 These schemes are evaluated within the outer loop. Defaults to
                 None.
-            alpha (`ufl.Constant`, optional): the semi-implicit off-centering
+            alpha (`float, optional): the semi-implicit off-centering
                 parameter. A value of 1 corresponds to fully implicit, while 0
-                corresponds to fully explicit. Defaults to Constant(0.5).
+                corresponds to fully explicit. Defaults to 0.5.
             off_centred_u (bool, optional): option to offcentre the transporting
                 velocity. Defaults to False, in which case transporting velocity
                 is centred. If True offcentring uses value of alpha.
@@ -89,8 +89,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 linear solve. Defaults to 2. Note that default used by the Met
                 Office's ENDGame and GungHo models is 2.
             accelerator (bool, optional): Whether to zero non-wind implicit
-                forcings for transport terms in order to speed up solver
-                convergence. Defaults to False.
+                forcings for prognostic variables in order to speed up solver
+                convergence. Defaults to True.
             predictor (str, optional): a single string corresponding to the name
                 of a variable to transport using the divergence predictor. This
                 pre-multiplies that variable by (1 - beta*dt*div(u)) before the
@@ -114,12 +114,14 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         self.num_outer = num_outer
         self.num_inner = num_inner
-        self.alpha = Constant(alpha)
+        mesh = equation_set.domain.mesh
+        R = FunctionSpace(mesh, "R", 0)
+        self.alpha = Function(R, val=float(alpha))
         self.predictor = predictor
         self.accelerator = accelerator
 
         # Options relating to reference profiles and spin-up
-        self._alpha_original = Constant(alpha)
+        self._alpha_original = float(alpha)  # float so as to not upset adjoint
         self.reference_update_freq = reference_update_freq
         self.to_update_ref_profile = False
         self.spinup_steps = spinup_steps
@@ -131,7 +133,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         # default is to not offcentre transporting velocity but if it
         # is offcentred then use the same value as alpha
-        self.alpha_u = Constant(alpha) if off_centred_u else Constant(0.5)
+        self.alpha_u = Function(R, val=float(alpha)) if off_centred_u else Function(R, val=0.5)
 
         self.spatial_methods = spatial_methods
 
@@ -159,7 +161,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                      + f"physics scheme {parametrisation.label.label}")
 
         self.active_transport = []
-        self.transported_fields = []
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             if isinstance(scheme.field_name, list):
@@ -464,7 +465,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
                     if (inner > 0 and self.accelerator):
                         # Zero implicit forcing to accelerate solver convergence
-                        self.forcing.zero_forcing_terms(self.equation, xp, xrhs, self.transported_fields)
+                        self.forcing.zero_forcing_terms(self.equation, xnp1, xrhs, self.equation.field_names)
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
@@ -539,7 +540,7 @@ class Forcing(object):
         Args:
             equation (:class:`PrognosticEquationSet`): the prognostic equations
                 containing the forcing terms.
-            alpha (:class:`Constant`): semi-implicit off-centering factor. An
+            alpha (:class:`Function`): semi-implicit off-centering factor. An
                 alpha of 0 corresponds to fully explicit, while a factor of 1
                 corresponds to fully implicit.
         """
@@ -568,7 +569,8 @@ class Forcing(object):
                                map_if_false=drop)
 
         # the explicit forms are multiplied by (1-alpha) and moved to the rhs
-        L_explicit = -(Constant(1)-alpha)*dt*residual.label_map(
+        one_minus_alpha = Function(alpha.function_space(), val=1-alpha)
+        L_explicit = -one_minus_alpha*dt*residual.label_map(
             lambda t:
                 any(t.has_label(time_derivative, hydrostatic, *implicit_terms,
                                 return_tuple=True)),
@@ -656,23 +658,23 @@ class Forcing(object):
         x_out.assign(x_in(self.field_name))
         x_out += self.xF
 
-    def zero_forcing_terms(self, equation, x_in, x_out, transported_field_names):
+    def zero_forcing_terms(self, equation, x_in, x_out, field_names):
         """
-        Zero forcing term F(x) for non-wind transport.
+        Zero forcing term F(x) for non-wind prognostics.
 
         This takes x_in and x_out, where                                      \n
         x_out = x_in + scale*F(x_nl)                                          \n
-        for some field x_nl and sets x_out = x_in for all non-wind transport terms
+        for some field x_nl and sets x_out = x_in for all non-wind prognostics
 
         Args:
             equation (:class:`PrognosticEquationSet`): the prognostic
                 equation set to be solved
             x_in (:class:`FieldCreator`): the field to be incremented.
             x_out (:class:`FieldCreator`): the output field to be updated.
-            transported_field_names (str): list of fields names for transported fields
+            field_names (str): list of fields names for prognostic fields
         """
-        for field_name in transported_field_names:
+        for field_name in field_names:
             if field_name != 'u':
-                logger.info(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
+                logger.debug(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
                 field_index = equation.field_names.index(field_name)
                 x_out.subfunctions[field_index].assign(x_in(field_name))

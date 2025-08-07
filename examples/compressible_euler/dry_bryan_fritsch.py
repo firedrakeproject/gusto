@@ -66,7 +66,7 @@ def dry_bryan_fritsch(
     domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
-    params = CompressibleParameters()
+    params = CompressibleParameters(mesh)
     eqns = CompressibleEulerEquations(
         domain, params, u_transport_option=u_eqn_type,
         no_normal_flow_bc_ids=[1, 2]

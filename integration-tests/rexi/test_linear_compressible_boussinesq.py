@@ -9,9 +9,10 @@ from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        exp, SpatialCoordinate, Function)
 from firedrake.output import VTKFile
+import pytest
 
 
-def run_rexi_linear_boussinesq(tmpdir):
+def run_rexi_linear_boussinesq(tmpdir, coefficients):
 
     # ---------------------------------------------------------------------- #
     # Set up model objects
@@ -31,7 +32,7 @@ def run_rexi_linear_boussinesq(tmpdir):
     domain = Domain(mesh, tmax, 'CG', 1)
 
     # Equation
-    parameters = BoussinesqParameters(cs=300)
+    parameters = BoussinesqParameters(mesh, cs=300)
     eqns = LinearBoussinesqEquations(domain, parameters)
 
     # ---------------------------------------------------------------------- #
@@ -78,7 +79,7 @@ def run_rexi_linear_boussinesq(tmpdir):
     p1.assign(p)
     b1.assign(b)
     rexi_output.write(u1, p1, b1)
-    rexi = Rexi(eqns, RexiParameters())
+    rexi = Rexi(eqns, RexiParameters(coefficients=coefficients))
     rexi.solve(U_expl, U_in, tmax)
     u1, p1, b1 = U_expl.subfunctions
     rexi_output.write(u1, p1, b1)
@@ -102,10 +103,12 @@ def run_rexi_linear_boussinesq(tmpdir):
     return usoln, psoln, bsoln, u1, p1, b1
 
 
-def test_rexi_linear_boussinesq(tmpdir):
+@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+def test_rexi_linear_boussinesq(tmpdir, coefficients):
 
     dirname = str(tmpdir)
-    u, p, b, uexpl, pexpl, bexpl = run_rexi_linear_boussinesq(dirname)
+    u, p, b, uexpl, pexpl, bexpl = run_rexi_linear_boussinesq(dirname,
+                                                              coefficients)
 
     udiff_arr = uexpl.dat.data - u.dat.data
     pdiff_arr = pexpl.dat.data - p.dat.data

@@ -22,33 +22,16 @@ jobs:
     runs-on: ubuntu-latest
     # The docker container to use.
     container:
-      image: firedrakeproject/firedrake-docdeps:latest
-      options: --user root
-      volumes:
-        - ${{ github.workspace }}:/home/firedrake/output
-    # Steps represent a sequence of tasks that will be executed as
-    # part of the jobs
+      image: firedrakeproject/firedrake-vanilla-default:latest
+
     steps:
       - uses: actions/checkout@v4
-      - name: Install checkedout Gusto
-        run: |
-          . /home/firedrake/firedrake/bin/activate
-          python -m pip install -e .
-      - name: Install Read the Docs theme
-        run: |
-          . /home/firedrake/firedrake/bin/activate
-          python -m pip install sphinx_rtd_theme
+      - name: Install Gusto
+        run: python3 -m pip install -e '.[docs]'
       - name: Check documentation links
-        if: ${{ github.ref == 'refs/heads/master' }}
-        run: |
-          . /home/firedrake/firedrake/bin/activate
-          cd docs
-          make linkcheck
+        run: make -C docs linkcheck
       - name: Build docs
-        run: |
-          . /home/firedrake/firedrake/bin/activate
-          cd docs
-          make html
+        run: make -C docs html
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

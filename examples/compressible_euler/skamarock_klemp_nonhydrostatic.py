@@ -78,7 +78,7 @@ def skamarock_klemp_nonhydrostatic(
     domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
-    parameters = CompressibleParameters()
+    parameters = CompressibleParameters(mesh)
     if hydrostatic:
         eqns = HydrostaticCompressibleEulerEquations(domain, parameters)
     else:
