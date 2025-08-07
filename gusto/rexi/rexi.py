@@ -223,7 +223,6 @@ class Rexi(object):
         # assign tau and U0 and initialise solution to 0.
         self.tau.assign(dt)
         cpx.set_real(self.U0_, x_in)
-        #self.U0.assign(x_in)
         x_out.assign(0.)
 
         # loop over solvers, assigning a_i, solving and accumulating the sum
@@ -263,46 +262,83 @@ class Rexii(Rexi):
         Solve method for approximating the matrix exponential by a
         rational sum. Solves
 
-        (A_n + tau L)V_n = U
+        Wn = C_2n( ((C_1n/C_2n) - alpha_{-n}) \tilde{Qn} + Vn )
+           = C_2n( Qn + Vn )
 
-        multiplies by the corresponding B_n and sums over n.
+        where
 
+        Phi_n Vn = U0 and
+        Chi_n \tilde{Qn} = Vn
+        Qn = ((C_1n/C_2n) - alpha_{-n}) \tilde{Qn}
+
+        with
+
+        Phi_n = (alpha_n I + tau L) and
+        Chi_n = (alpha_{-n} I - tau L)
+
+        Note that we can obtain Chi_n from Phi_n by replacing tau with
+        -tau and Im(alpha_n) with -Im(alpha_n).
+
+        Re(U0) = x_in and Im(U0) = 0
+        x_out = \Sum_n Wn
+
+        :arg x_out: the mixed function solution.
         :arg x_in: the mixed function on the rhs.
         :arg dt: the value of tau
 
         """
+
+        # complex proxy: must be used to interact with mixed functions
+        # on the complex space because they could be ordered
+        # differently depending on whether we have used the mixed or
+        # the vector form.
         cpx = self.cpx
-        # assign tau and U0 and initialise solution to 0.
-        self.tau.assign(dt)
-        cpx.set_real(self.U0_, x_in)
-        # self.U0.assign(x_in)
+
+        # zero x_out because we add to it as we loop over n
         x_out.assign(0.)
 
-        # loop over solvers, assigning a_i, solving and accumulating the sum
+        # loop over solvers, assigning alpha_j, solving and
+        # accumulating the sum
         for i in range(self.N):
             j = self.idx + i
+
+            # assign tau and U0
+            self.tau.assign(dt)
+            self.U0_.assign(0.)
+            cpx.set_real(self.U0_, x_in)
+
+            # assign alpha[j]
             self.ac.real.assign(self.alpha[j].real)
             self.ac.imag.assign(self.alpha[j].imag)
 
+            # solve Phi_n Vn = U0
             self.solver.solve()
 
-            # self.w is V_n, use this as RHS in second solve
+            # self.w is Vn, use this as RHS in second solve
             self.U0_.assign(self.w)
-            # Flip sign on tau and im part of alpha to turn phi into chi
+
+            # flip sign on tau and Im(alpha) to turn Phi into Chi
             self.tau.assign(-dt)
             self.ac.imag.assign(-self.alpha[j].imag)
 
+            # solve Chi_n \tilde{Q}n = Vn
             self.solver.solve()
             
-            # Convert Q tilde to Q
+            # convert \tilde{Q} to Q:
+            # this alpha is alpha_{-n}
+            alpha = self.alpha[j].real - 1j * self.alpha[j].imag
+            # coeff is C_1n/C_2n - alpha_{-n}
+            coeff = self.C1[j] / self.C2[j] - alpha
+
+            # accumulate Re(Q); self.w is \tilde{Q} from above solve
             self.Q.assign(0.)
-            coeff = self.C1[j] / self.C2[j] - self.alpha[j]
             cpx.get_real(self.w, self.wrk)
             self.Q += float(coeff.real) * self.wrk
             cpx.get_imag(self.w, self.wrk)
             self.Q -= float(coeff.imag) * self.wrk
             cpx.set_real(self.Q_, self.Q)
 
+            # accumulate Im(Q); self.w is \tilde{Q} from above solve
             self.Q.assign(0.)
             cpx.get_real(self.w, self.wrk)
             self.Q += float(coeff.imag) * self.wrk
@@ -310,21 +346,31 @@ class Rexii(Rexi):
             self.Q += float(coeff.real) * self.wrk
             cpx.set_imag(self.Q_, self.Q)
 
-            # accumulate real part of Q_n
+            # accumulate real part of C_2n * Qn; self.Q_ is Qn
             cpx.get_real(self.Q_, self.wrk)
             x_out += float(self.C2[j].real)*self.wrk
+            cpx.get_imag(self.Q_, self.wrk)
+            x_out -= float(self.C2[j].imag)*self.wrk
 
-            # accumulate real part of V_n
+            # accumulate real part of C_2n * Vn; self.U0_ is Vn
             cpx.get_real(self.U0_, self.wrk)
             x_out += float(self.C2[j].real)*self.wrk
-
-            # accumulate im part of Q_n
-            cpx.get_imag(self.Q_, self.wrk)
-            x_out += float(self.C2[j].imag)*self.wrk
-
-            # accumulate im part of V_n
             cpx.get_imag(self.U0_, self.wrk)
-            x_out += float(self.C2[j].imag)*self.wrk
+            x_out -= float(self.C2[j].imag)*self.wrk
+
+            # accumulate im part of Q_n - I think we don't need this
+            # but code doesn't work so...
+            # cpx.get_imag(self.Q_, self.wrk)
+            # x_out += float(self.C2[j].real)*self.wrk
+            # cpx.get_real(self.Q_, self.wrk)
+            # x_out += float(self.C2[j].imag)*self.wrk
+
+            # accumulate im part of V_n - I think we don't need this
+            # but code doesn't work so...
+            # cpx.get_imag(self.U0_, self.wrk)
+            # x_out += float(self.C2[j].real)*self.wrk
+            # cpx.get_real(self.U0_, self.wrk)
+            # x_out += float(self.C2[j].imag)*self.wrk
 
         # in parallel we have to accumulate the sum over all processes
         if self.manager is not None:
