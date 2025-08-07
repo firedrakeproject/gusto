@@ -30,7 +30,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 
 
 __all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver",
-           "ThermalSWSolver", "MoistConvectiveSWSolver"]
+           "ThermalSWSolver", "MoistConvectiveSWSolver", "EquivBuoyancySWSolver"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -970,3 +970,202 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
         D = dy.subfunctions[1]
         u.assign(u1)
         D.assign(D1)
+
+class EquivBuoyancySWSolver(TimesteppingSolver):
+    """
+    Linear solver object for the moist shallow water equations, written with
+    all moisture in the dynamics.
+
+    This solves a linear problem for the moist shallow water equations with
+    prognostic variables u (velocity), D (depth) and b_e (equivalent buoyancy).
+    It follows the following strategy:
+
+    (1) Eliminate b_e
+    (2) Solve the resulting system for (u, D) using a hybrid-mixed method
+    (3) Reconstruct b_e
+     """
+
+    solver_parameters = {
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': {'ksp_type': 'cg',
+                          'pc_type': 'gamg',
+                          'ksp_rtol': 1e-8,
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'}}
+    }
+
+    @timed_function("Gusto:SolverSetup")
+    def _setup_solver(self):
+        equation = self.equations      # just cutting down line length a bit
+        dt = self.dt
+        beta_ = dt*self.alpha
+        Vu = equation.domain.spaces("HDiv")
+        VD = equation.domain.spaces("DG")
+        Vb = equation.domain.spaces("DG")
+
+        # Check that the third field is buoyancy
+        if not equation.field_names[2] == 'b_e':
+            raise NotImplementedError("Field 'b_e' must exist to use the moist dynamics linear solver in the SIQN scheme")
+        if not equation.field_names[3] == 'q_t':
+            raise NotImplementedError("Field 'q_t' must exist to use the moist dynamics linear solver in the SIQN scheme")
+
+        # Store time-stepping coefficients as UFL Constants
+        beta = Constant(beta_)
+
+        # Split up the rhs vector
+        self.xrhs = Function(self.equations.function_space)
+        u_in = split(self.xrhs)[0]
+        D_in = split(self.xrhs)[1]
+        b_e_in = split(self.xrhs)[2]
+
+        # Split up the xn vector
+        self.xn = Function(self.equations.function_space)
+        D_xn = split(self.xn)[1]
+        b_e_xn = split(self.xn)[2]
+        q_t_xn = split(self.xn)[3]
+
+        # Build the reduced function space for u, D
+        M = MixedFunctionSpace((Vu, VD))
+        w, phi = TestFunctions(M)
+        u, D = TrialFunctions(M)
+
+        # Get background buoyancy and depth
+        Dbar = split(equation.X_ref)[1]
+        b_ebar = split(equation.X_ref)[2]
+
+        # Approximate elimination of b_e
+        b_e = -dot(u, grad(b_ebar))*beta + b_e_in
+
+        n = FacetNormal(equation.domain.mesh)
+
+        # compute q_v using q_sat to partition q_t into q_v and q_c
+        g = equation.parameters.g
+        H = equation.parameters.H
+        # q0 = equation.q0
+        beta2 = equation.parameters.beta2
+        # nu = equation.nu
+
+        # check for topography
+        if hasattr(equation.prescribed_fields, "topography"):
+            B = equation.prescribed_fields("topography")
+        else:
+            B = None
+
+        self.q_sat_func = Function(VD)
+        self.q_v_bar = Function(VD)
+
+        # set up interpolators that use the xn values for D and b_e
+        self.q_sat_expr_interpolate = interpolate(equation.compute_saturation(equation.X_ref), VD)
+        self.q_v_interpolate = interpolate(conditional(q_t_xn < self.q_sat_func, q_t_xn, self.q_sat_func), VD)
+
+        q_v_bar = self.q_v_bar  # to make line length shorter
+        eqn = (
+            inner(w, (u - u_in)) * dx
+            - beta * (D-Dbar) * div(w * (b_ebar + beta2*q_v_bar)) * dx
+            + beta * jump(w*(b_ebar + beta2*q_v_bar), n) * avg((D-Dbar)) * dS
+            - beta * 0.5 * H * (b_ebar + b_e + beta2*q_v_bar) * div(w) * dx
+            - beta * 0.5 * (b_ebar + beta2*q_v_bar) * div(w*(D-Dbar)) * dx
+            + beta * 0.5 * jump((D-Dbar)*w, n) * avg(b_ebar + beta2*q_v_bar) * dS
+            + inner(phi, (D - D_in)) * dx
+            + beta * phi * H * div(u) * dx
+        )
+
+        if 'coriolis' in equation.prescribed_fields._field_names:
+            f = equation.prescribed_fields('coriolis')
+            eqn += beta * f * inner(w, equation.domain.perp(u)) * dx
+
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
+
+        # Place to put results of (u,D) solver
+        self.uD = Function(M)
+
+        # Boundary conditions
+        bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
+
+        # Solver for u, D
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs)
+
+        # Provide callback for the nullspace of the trace system
+        def trace_nullsp(T):
+            return VectorSpaceBasis(constant=True)
+
+        appctx = {"trace_nullspace": trace_nullsp}
+        self.uD_solver = LinearVariationalSolver(uD_problem,
+                                                 solver_parameters=self.solver_parameters,
+                                                 appctx=appctx)
+
+         # Reconstruction of b_e
+        b_e = TrialFunction(Vb)
+        gamma = TestFunction(Vb)
+
+        u, D = self.uD.subfunctions
+        self.b_e = Function(Vb)
+
+        b_e_eqn = gamma*(b_e - b_e_in + inner(u, grad(b_ebar))*beta) * dx
+
+        b_e_problem = LinearVariationalProblem(lhs(b_e_eqn),
+                                               rhs(b_e_eqn),
+                                               self.b_e)
+        self.b_e_solver = LinearVariationalSolver(b_e_problem)
+
+        # Log residuals on hybridized solver
+        self.log_ksp_residuals(self.uD_solver.snes.ksp)
+
+
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        if self.equations.equivalent_buoyancy:
+            self.q_sat_func.assign(assemble(self.q_sat_expr_interpolate))
+            self.q_v_bar.assign(assemble(self.q_v_interpolate))
+
+
+    @timed_function("Gusto:LinearSolve")
+    # We're no longer passing nx into the solve
+    def solve(self, xrhs, dy):
+        """
+        Solve the linear problem.
+
+        Args:
+            xrhs (:class:`Function`): the right-hand side field in the
+                appropriate :class:`MixedFunctionSpace`.
+            dy (:class:`Function`): the resulting field in the appropriate
+                :class:`MixedFunctionSpace`.
+        """
+        self.xrhs.assign(xrhs)
+        # self.xn.assign(xn)
+
+        # Check that the b reference profile has been set
+        b_ebar = split(self.equations.X_ref)[2]
+        b_e = dy.subfunctions[2]
+
+        b_ebar_func = Function(b_e.function_space()).interpolate(b_ebar)
+        if b_ebar_func.dat.data.max() == 0 and b_ebar_func.dat.data.min() == 0:
+            logger.warning("The reference profile for b_e in the linear solver is zero. To set a non-zero profile add b_e to the set_reference_profiles argument.")
+
+        with timed_region("Gusto:VelocityDepthSolve"):
+            logger.info('Moist dynamics linear solver: mixed solve')
+
+            # We've removed old interpolate behaviour
+            # self.q_sat_func.assign(self.q_sat_expr_interpolator.interpolate())
+            # self.q_v_bar.assign(self.q_v_interpolator.interpolate())
+
+            self.uD_solver.solve()
+
+        u1, D1 = self.uD.subfunctions
+        u = dy.subfunctions[0]
+        D = dy.subfunctions[1]
+        b_e = dy.subfunctions[2]
+        u.assign(u1)
+        D.assign(D1)
+
+        with timed_region("Gusto:BuoyancyRecon"):
+            logger.info('Moist dynamics linear solver: buoyancy reconstruction')
+            self.b_e_solver.solve()
+
+        b_e.assign(self.b_e)

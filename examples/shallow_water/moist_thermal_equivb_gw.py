@@ -11,7 +11,7 @@ from gusto import (
     Domain, IO, OutputParameters, DGUpwind, ShallowWaterParameters,
     ThermalShallowWaterEquations, lonlatr_from_xyz, MeridionalComponent,
     GeneralIcosahedralSphereMesh, SubcyclingOptions, ZonalComponent,
-    PartitionedCloud, RungeKuttaFormulation, SSPRK3, ThermalSWSolver,
+    PartitionedCloud, RungeKuttaFormulation, SSPRK3, ThermalSWSolver, EquivBuoyancySWSolver,
     SemiImplicitQuasiNewton, xyz_vector_from_lonlatr
 )
 
@@ -20,7 +20,7 @@ moist_thermal_gw_defaults = {
     'dt': 900.0,               # 15 minutes
     'tmax': 5.*24.*60.*60.,    # 5 days
     'dumpfreq': 48,            # dump twice per day
-    'dirname': 'moist_thermal_equivb_gw'
+    'dirname': 'moist_thermal_equivb_gw_dynamics_solver0708'
 }
 
 
@@ -72,7 +72,7 @@ def moist_thermal_gw(
 
     # IO
     output = OutputParameters(
-        dirname=dirname, dumpfreq=dumpfreq, dump_nc=True, dump_vtus=False,
+        dirname=dirname, dumpfreq=dumpfreq, dump_nc=True, dump_vtus=True,
         dumplist=['b_e', 'D']
     )
     diagnostic_fields = [
@@ -84,7 +84,8 @@ def moist_thermal_gw(
         DGUpwind(eqns, field_name) for field_name in eqns.field_names
     ]
 
-    linear_solver = ThermalSWSolver(eqns)
+    # linear_solver = ThermalSWSolver(eqns)
+    linear_solver = EquivBuoyancySWSolver(eqns)
 
     # ------------------------------------------------------------------------ #
     # Timestepper
