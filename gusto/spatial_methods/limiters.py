@@ -6,9 +6,7 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 """
 
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
-                       FiniteElement, TensorProductElement, Constant, assemble, dx, ufl,
-                       TestFunction, TrialFunction, LinearVariationalProblem, LinearVariationalSolver,
-                       NonlinearVariationalProblem, NonlinearVariationalSolver, MixedFunctionSpace)
+                       FiniteElement, TensorProductElement, Constant)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.core.kernels import LimitMidpoints, ClipZero, MeanMixingRatioWeights
 
@@ -267,17 +265,18 @@ class MixedFSLimiter(object):
 
 class MeanLimiter(object):
     """
-    A mass-preserving limiter for a mixing ratio that ensures non-negativity
+    A mass-preserving limiter for mixing ratios that ensures non-negativity
     by blending the mixing ratio with its associated mean field.
-    The blending factor is given by the DG0 function lamda.
+    The blending factor is given by the DG0 function lamda. The same lamda
+    is used when there are multiple fields, for mass conservation.
     """
 
     def __init__(self, spaces):
         """
         Args:
-            spaces: The mixed function space for the equation set
+            spaces: The function spaces for the DG1 mixing ratios
         Raises:
-            ValueError: If the space is not appropriate for the limiter.
+            ValueError: If the space is not appropriate for the limiter, i.e DG1
         """
 
         # The Mean Limiter is currently set up for mixing ratios in DG1.
@@ -314,7 +313,7 @@ class MeanLimiter(object):
         self._lamda_kernel = MeanMixingRatioWeights(DG1_equispaced)
 
         # Also construct kernels to clip any very small negatives
-        # that arise from numerical error. These are used in the 
+        # that arise from numerical error. These are used in the
         # mean mixing ratio augmentation limit routine.
         self._clip_DG1_field = ClipZero(DG1)
         self._clip_means_kernel = ClipZero(DG0)
@@ -327,7 +326,7 @@ class MeanLimiter(object):
 
         Args:
             mX_fields (:class:`Function`): the DG1 mixing ratios to limit.
-            mean_fields (:class:`Function`): the DG0 mean field associated with 
+            mean_fields (:class:`Function`): the DG0 mean field associated with
             each mX_field.
          """
 
@@ -342,7 +341,7 @@ class MeanLimiter(object):
             # Update the weights based on any negative values
             self._lamda_kernel.apply(self.lamda, self.mX_field, self.mean_field)
 
-        # Perform blended limiting, with all mixing ratios using 
+        # Perform blended limiting, with all mixing ratios using
         # the same lambda field to ensure conservation.
         for i in range(len(mX_fields)):
             self.mX_field.interpolate(mX_fields[i])
