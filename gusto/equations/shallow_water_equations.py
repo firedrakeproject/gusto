@@ -3,7 +3,7 @@
 from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg,
                        dS, split, conditional, exp)
 from firedrake.fml import subject, drop
-from gusto.core.labels import (time_derivative, transport, prognostic,
+from gusto.core.labels import (time_derivative, prognostic,
                                linearisation, pressure_gradient, coriolis)
 from gusto.equations.common_forms import (
     advection_form, advection_form_1d, continuity_form,
@@ -51,8 +51,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
                 then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes both time derivatives,
-                the 'D' transport term and the pressure gradient term.
+                in which case the linearisation drops terms for any active
+                tracers.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form', and
@@ -70,12 +70,11 @@ class ShallowWaterEquations(PrognosticEquationSet):
             active_tracers = []
 
         if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure gradient and
-            # transport term from depth equation. Don't include active tracers
-            linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'D'] \
-                and (any(t.has_label(time_derivative, coriolis, pressure_gradient))
-                     or (t.get(prognostic) in ['D'] and t.has_label(transport)))
+            # Default linearisation is to include all terms
+            # Don't include terms for active tracers
+            linearisation_map = lambda t: (
+                t.has_label(time_derivative) or t.get(prognostic) in field_names
+            )
 
         field_names = ['u', 'D']
         space_names = {'u': 'HDiv', 'D': 'L2'}
@@ -232,8 +231,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
                 then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes both time derivatives,
-                the 'D' transport term, pressure gradient and Coriolis terms.
+                in which case the linearisation drops terms for any active
+                tracers.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -303,8 +302,8 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
                 then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes both time derivatives,
-                the 'D' transport term and the pressure gradient term.
+                in which case the linearisation drops terms for any active
+                tracers.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form', and
@@ -337,19 +336,21 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         breakpoint()
 
         if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure
-            # gradient and transport terms from depth and buoyancy
-            # equations. Include q_t if equivalent buoyancy. Don't include
-            # active tracers.
-            linear_transported = ['D', self.b_name]
             if equivalent_buoyancy:
-                linear_transported.append('q_t')
-            linearisation_map = lambda t: \
-                t.get(prognostic) in field_names \
-                and (any(t.has_label(time_derivative, pressure_gradient,
-                                     coriolis))
-                     or (t.get(prognostic) in linear_transported
-                         and t.has_label(transport)))
+                # Default linearisation is to include all terms
+                # Don't include qt terms
+                linearisation_map = lambda t: (
+                    t.has_label(time_derivative)
+                    or t.get(prognostic) in ['u', 'D', 'b_e']
+                )
+
+            else:
+                # Default linearisation is to include all terms
+                # Don't include terms for active tracers
+                linearisation_map = lambda t: (
+                    t.has_label(time_derivative)
+                    or t.get(prognostic) in field_names
+                )
 
         # Bypass ShallowWaterEquations.__init__ to avoid having to
         # define the field_names separately
@@ -564,8 +565,8 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
                 then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes both time derivatives,
-                the 'D' transport term, pressure gradient and Coriolis terms.
+                in which case the linearisation drops terms for any active
+                tracers.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -616,8 +617,8 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
         linearisation_map (func, optional): a function specifying which
             terms in the equation set to linearise. If None is specified
             then no terms are linearised. Defaults to the string 'default',
-            in which case the linearisation includes both time derivatives,
-            the 'D' transport term, pressure gradient and Coriolis terms.
+            in which case the linearisation drops terms for any active
+            tracers.
         no_normal_flow_bc_ids (list, optional): a list of IDs of domain
             boundaries at which no normal flow will be enforced. Defaults to
             None.
@@ -639,11 +640,11 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
             raise NotImplementedError('Tracers not implemented for 1D shallow water equations')
 
         if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure gradient,
-            # Coriolis and transport term from depth equation
-            linearisation_map = lambda t: \
-                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
-                 or (t.get(prognostic) == 'D' and t.has_label(transport)))
+            # Default linearisation is to include all terms
+            # Don't include terms for active tracers
+            linearisation_map = lambda t: (
+                t.has_label(time_derivative) or t.get(prognostic) in field_names
+            )
 
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
@@ -745,8 +746,8 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
                 then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes both time derivatives,
-                the 'D' transport term, pressure gradient and Coriolis terms.
+                in which case the linearisation drops terms for any active
+                tracers.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
                 None.

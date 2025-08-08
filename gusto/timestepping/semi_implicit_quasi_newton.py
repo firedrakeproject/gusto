@@ -5,16 +5,18 @@ and GungHo dynamical cores.
 
 from firedrake import (
     Function, Constant, TrialFunctions, DirichletBC, div, assemble,
-    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace
+    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace, action
 )
-from firedrake.fml import drop, replace_subject
+from firedrake.fml import drop, replace_subject, Term
 from firedrake.__future__ import interpolate
-from pyop2.profiling import timed_stage
+from firedrake.petsc import flatten_parameters
+from pyop2.profiling import timed_stage, timed_function
 from gusto.core import TimeLevelFields, StateFields
-from gusto.core.labels import (transport, diffusion, time_derivative,
-                               hydrostatic, physics_label, sponge,
-                               incompressible)
-from gusto.solvers import LinearTimesteppingSolver, mass_parameters
+from gusto.core.labels import (
+    transport, diffusion, time_derivative, hydrostatic, physics_label, sponge,
+    incompressible, linearisation, prognostic
+)
+from gusto.solvers import mass_parameters
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
@@ -37,10 +39,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  auxiliary_equations_and_schemes=None, linear_solver=None,
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
-                 alpha=0.5, off_centred_u=False,
+                 alpha=0.5, tau_values=None, off_centred_u=False,
                  num_outer=2, num_inner=2, accelerator=True,
                  predictor=None, reference_update_freq=None,
-                 spinup_steps=0):
+                 spinup_steps=0, solver_prognostics=None,
+                 linear_solver_parameters=None,
+                 overwrite_linear_solver_parameters=False):
         """
         Args:
             equation_set (:class:`PrognosticEquationSet`): the prognostic
@@ -76,6 +80,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             alpha (`float, optional): the semi-implicit off-centering
                 parameter. A value of 1 corresponds to fully implicit, while 0
                 corresponds to fully explicit. Defaults to 0.5.
+            tau_values (dict, optional): contains the semi-implicit relaxation
+                parameters. Defaults to None, in which case the value of alpha is used.
             off_centred_u (bool, optional): option to offcentre the transporting
                 velocity. Defaults to False, in which case transporting velocity
                 is centred. If True offcentring uses value of alpha.
@@ -110,8 +116,18 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             spinup_steps (int, optional): the number of steps to run the model
                 in "spin-up" mode, where the alpha parameter is set to 1.0.
                 Defaults to 0, which corresponds to no spin-up.
+            solver_prognostics (list, optional): a list of the names of
+                prognostic variables to include in the solver.
+            linear_solver_parameters (dict, optional): contains the options to
+                be passed to the underlying :class:`LinearVariationalSolver`.
+                for the Defaults to None.
+            overwrite_solver_parameters (bool, optional): if True use only the
+                `solver_parameters` that have been passed in. If False then
+                update the default parameters with the `solver_parameters`
+                passed in. Defaults to False.
         """
 
+        # Basic parts of the SIQN structure ------------------------------------
         self.num_outer = num_outer
         self.num_inner = num_inner
         mesh = equation_set.domain.mesh
@@ -119,8 +135,58 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.alpha = Function(R, val=float(alpha))
         self.predictor = predictor
         self.accelerator = accelerator
+        self.implicit_terms = [incompressible, sponge]
 
-        # Options relating to reference profiles and spin-up
+        # default is to not offcentre transporting velocity but if it
+        # is offcentred then use the same value as alpha
+        if off_centred_u:
+            self.alpha_u = Function(R, val=float(alpha))
+        else:
+            self.alpha_u = Function(R, val=0.5)
+
+        # Set up some important fields -----------------------------------------
+        self.field_name = equation_set.field_name
+        W = equation_set.function_space
+        self.xrhs = Function(W)
+        self.xrhs_phys = Function(W)
+        self.dy = Function(W)
+
+        # Determine prognostics for solver -------------------------------------
+        self.non_solver_prognostics = []
+        if solver_prognostics is not None:
+            assert type(solver_prognostics) is list, (
+                "solver_prognostics should be a list of prognostic variable "
+                + f"names, and not {type(solver_prognostics)}"
+            )
+            for prognostic_name in solver_prognostics:
+                assert prognostic_name in equation_set.field_names, (
+                    f"Prognostic variable {prognostic_name} not found in "
+                    + "equation set field names"
+                )
+            for field_name in equation_set.field_names:
+                if field_name not in solver_prognostics:
+                    self.non_solver_prognostics.append(field_name)
+        else:
+            solver_prognostics = equation_set.field_names
+        logger.info(
+            'Semi-implicit Quasi-Newton: Using solver prognostics '
+            + f'{solver_prognostics}'
+        )
+
+        # BCs, Forcing and Linear Solver ---------------------------------------
+        self.bcs = equation_set.bcs
+        self.forcing = Forcing(equation_set, self.implicit_terms, self.alpha)
+        if linear_solver is None:
+            self.linear_solver = SIQNLinearSolver(
+                equation_set, solver_prognostics, self.implicit_terms,
+                self.alpha, tau_values=tau_values,
+                solver_parameters=linear_solver_parameters,
+                overwrite_solver_parameters=overwrite_linear_solver_parameters
+            )
+        else:
+            self.linear_solver = linear_solver
+
+        # Options relating to reference profiles and spin-up -------------------
         self._alpha_original = float(alpha)  # float so as to not upset adjoint
         self.reference_update_freq = reference_update_freq
         self.to_update_ref_profile = False
@@ -128,15 +194,44 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.spinup_begun = False
         self.spinup_done = False
 
-        # Flag for if we have simultaneous transport
-        self.simult = False
-
-        # default is to not offcentre transporting velocity but if it
-        # is offcentred then use the same value as alpha
-        self.alpha_u = Function(R, val=float(alpha)) if off_centred_u else Function(R, val=0.5)
-
+        # Transport ------------------------------------------------------------
         self.spatial_methods = spatial_methods
 
+        # Flag for if we have simultaneous transport of tracers
+        self.simult = False
+
+        self.active_transport = []
+        for scheme in transport_schemes:
+            assert scheme.nlevels == 1, \
+                "multilevel schemes not supported as part of this timestepping loop"
+            if isinstance(scheme.field_name, list):
+                # This means that multiple fields are transported simultaneously
+                self.simult = True
+                for subfield in scheme.field_name:
+                    assert subfield in equation_set.field_names
+
+                    # Check that there is a corresponding transport method for
+                    # each field in the list
+                    method_found = False
+                    for method in spatial_methods:
+                        if subfield == method.variable and method.term_label == transport:
+                            method_found = True
+                    assert method_found, \
+                        f'No transport method found for variable {scheme.field_name}'
+                self.active_transport.append((scheme.field_name, scheme))
+            else:
+                assert scheme.field_name in equation_set.field_names
+
+                # Check that there is a corresponding transport method
+                method_found = False
+                for method in spatial_methods:
+                    if scheme.field_name == method.variable and method.term_label == transport:
+                        method_found = True
+                        self.active_transport.append((scheme.field_name, scheme))
+                assert method_found, \
+                    f'No transport method found for variable {scheme.field_name}'
+
+        # Physics schemes ------------------------------------------------------
         if physics_schemes is not None:
             self.final_physics_schemes = physics_schemes
         else:
@@ -154,44 +249,19 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                                     + self.final_physics_schemes)
 
         for parametrisation, scheme in self.all_physics_schemes:
-            assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
+            assert scheme.nlevels == 1, \
+                "multilevel schemes not supported as part of this timestepping loop"
             if hasattr(parametrisation, "explicit_only") and parametrisation.explicit_only:
                 assert isinstance(scheme, ExplicitTimeDiscretisation), \
                     ("Only explicit time discretisations can be used with "
                      + f"physics scheme {parametrisation.label.label}")
 
-        self.active_transport = []
-        for scheme in transport_schemes:
-            assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
-            if isinstance(scheme.field_name, list):
-                # This means that multiple fields are being transported simultaneously
-                self.simult = True
-                for subfield in scheme.field_name:
-                    assert subfield in equation_set.field_names
-
-                    # Check that there is a corresponding transport method for
-                    # each field in the list
-                    method_found = False
-                    for method in spatial_methods:
-                        if subfield == method.variable and method.term_label == transport:
-                            method_found = True
-                    assert method_found, f'No transport method found for variable {scheme.field_name}'
-                self.active_transport.append((scheme.field_name, scheme))
-            else:
-                assert scheme.field_name in equation_set.field_names
-
-                # Check that there is a corresponding transport method
-                method_found = False
-                for method in spatial_methods:
-                    if scheme.field_name == method.variable and method.term_label == transport:
-                        method_found = True
-                        self.active_transport.append((scheme.field_name, scheme))
-                assert method_found, f'No transport method found for variable {scheme.field_name}'
-
+        # Diffusion and other terms --------------------------------------------
         self.diffusion_schemes = []
         if diffusion_schemes is not None:
             for scheme in diffusion_schemes:
-                assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
+                assert scheme.nlevels == 1, \
+                    "multilevel schemes not supported as part of this timestepping loop"
                 assert scheme.field_name in equation_set.field_names
                 self.diffusion_schemes.append((scheme.field_name, scheme))
                 # Check that there is a corresponding transport method
@@ -203,7 +273,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         if auxiliary_equations_and_schemes is not None:
             for eqn, scheme in auxiliary_equations_and_schemes:
-                assert not hasattr(eqn, "field_names"), 'Cannot use auxiliary schemes with multiple fields'
+                assert not hasattr(eqn, "field_names"), \
+                    'Cannot use auxiliary schemes with multiple fields'
             self.auxiliary_schemes = [
                 (eqn.field_name, scheme)
                 for eqn, scheme in auxiliary_equations_and_schemes]
@@ -213,30 +284,20 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.auxiliary_schemes = []
         self.auxiliary_equations_and_schemes = auxiliary_equations_and_schemes
 
+        # General set up -------------------------------------------------------
+        # This sets up all of the time discretisations for transport, diffusion,
+        # physics schemes, etc, so must happen after those have been worked out
         super().__init__(equation_set, io)
 
+        # Set up auxiliary equations separately, as these are not done as part
+        # of the super init
         for aux_eqn, aux_scheme in self.auxiliary_equations_and_schemes:
             self.setup_equation(aux_eqn)
             aux_scheme.setup(aux_eqn)
             self.setup_transporting_velocity(aux_scheme)
 
-        self.tracers_to_copy = []
-        if equation_set.active_tracers is not None:
-            for active_tracer in equation_set.active_tracers:
-                self.tracers_to_copy.append(active_tracer.name)
-
-        self.field_name = equation_set.field_name
-        W = equation_set.function_space
-        self.xrhs = Function(W)
-        self.xrhs_phys = Function(W)
-        self.dy = Function(W)
-        if linear_solver is None:
-            self.linear_solver = LinearTimesteppingSolver(equation_set, self.alpha)
-        else:
-            self.linear_solver = linear_solver
-        self.forcing = Forcing(equation_set, self.alpha)
-        self.bcs = equation_set.bcs
-
+        # Set up the predictor last, as it requires the state fields to already
+        # be created
         if self.predictor is not None:
             V_DG = equation_set.domain.spaces('DG')
             self.predictor_field_in = Function(V_DG)
@@ -307,7 +368,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
            x_out: The output set of fields
         """
 
-        for name in self.tracers_to_copy:
+        for name in self.non_solver_prognostics:
             x_out(name).assign(x_in(name))
 
     def transport_fields(self, outer, xstar, xp):
@@ -535,18 +596,19 @@ class Forcing(object):
     semi-implicit time discretisation.
     """
 
-    def __init__(self, equation, alpha):
+    def __init__(self, equation, implicit_terms, alpha):
         """
         Args:
             equation (:class:`PrognosticEquationSet`): the prognostic equations
                 containing the forcing terms.
+            implicit_terms (list): list of labels for terms that are always
+                fully-implicit.
             alpha (:class:`Function`): semi-implicit off-centering factor. An
                 alpha of 0 corresponds to fully explicit, while a factor of 1
                 corresponds to fully implicit.
         """
 
         self.field_name = equation.field_name
-        implicit_terms = [incompressible, sponge]
         dt = equation.domain.dt
 
         W = equation.function_space
@@ -678,3 +740,166 @@ class Forcing(object):
                 logger.debug(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
                 field_index = equation.field_names.index(field_name)
                 x_out.subfunctions[field_index].assign(x_in(field_name))
+
+
+class SIQNLinearSolver(object):
+    """
+    Sets up the linear solver for the Semi-Implicit Quasi-Newton timestepper.
+
+    This computes the approximate linearisation of the algorithm for computing
+    the (n+1)-th level state, and sets up matrix-vector problem for the
+    Quasi-Newton problem.
+    """
+
+    solver_parameters = {
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': {'ksp_type': 'cg',
+                          'pc_type': 'gamg',
+                          'ksp_rtol': 1e-8,
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'}}
+    }
+
+    solver_parameters = {
+        'ksp_error_if_not_converged': None,
+        'pc_factor_shift_type': 'nonzero',
+        'snes_type': 'ksponly',
+    }
+
+    def __init__(self, equation, solver_prognostics, implicit_terms,
+                 alpha, tau_values=None, solver_parameters=None,
+                 overwrite_solver_parameters=False, reference_dependent=True):
+        """
+        Args:
+            equations (:class:`PrognosticEquation`): the model's equation.
+            solver_prognostics (list): a list of prognostic variable names to
+                include in the linear solver.
+            implicit_terms (list): a list of labels for terms that are always
+                fully-implicit.
+            alpha (float, optional): the semi-implicit off-centring factor.
+                Defaults to 0.5. A value of 1 is fully-implicit.
+            tau_values (dict, optional): contains the semi-implicit relaxation
+                parameters. Defaults to None, in which case the value of alpha
+                is used.
+            solver_parameters (dict, optional): contains the options to be
+                passed to the underlying :class:`LinearVariationalSolver`.
+                Defaults to None.
+            overwrite_solver_parameters (bool, optional): if True use only the
+                `solver_parameters` that have been passed in. If False then
+                update the default parameters with the `solver_parameters`
+                passed in. Defaults to False.
+            reference_dependent: this indicates that the solver Jacobian should
+                be rebuilt if the reference profiles have been updated.
+        """
+
+        # Update or set solver parameters --------------------------------------
+        if solver_parameters is not None:
+            if not overwrite_solver_parameters:
+                p = flatten_parameters(self.solver_parameters)
+                p.update(flatten_parameters(solver_parameters))
+                solver_parameters = p
+            self.solver_parameters = solver_parameters
+
+        if logger.isEnabledFor(DEBUG):
+            self.solver_parameters["ksp_monitor_true_residual"] = None
+
+        dt = equation.domain.dt
+        self.reference_dependent = reference_dependent
+        self.alpha = Constant(alpha)
+        self.tau_values = tau_values if tau_values is not None else {}
+
+        for prognostic_name in solver_prognostics:
+            if prognostic_name not in self.tau_values.keys():
+                # If no tau value is specified for this prognostic, use alpha
+                self.tau_values[prognostic_name] = self.alpha
+
+        # Set up the linearisation of the equation -----------------------------
+        # Time derivative terms: all prognostic variables
+        residual = equation.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            lambda t: Term(t.get(linearisation).form, t.labels),
+            drop
+        )
+
+        # All other linear terms (only specified prognostics)
+        for prognostic_name in solver_prognostics:
+            # Add semi-implicit terms for this prognostic
+            tau = self.tau_values[prognostic_name]
+            residual += equation.residual.label_map(
+                lambda t: (
+                    t.has_label(linearisation)
+                    and not t.has_label(time_derivative)
+                    and t.get(prognostic) == prognostic_name
+                    and not any(t.has_label(*implicit_terms, return_tuple=True))
+                ),
+                lambda t: tau*dt*Term(t.get(linearisation).form, t.labels),
+                drop
+            )
+            # Add implicit terms for this prognostic
+            residual += equation.residual.label_map(
+                lambda t: (
+                    t.has_label(linearisation)
+                    and not t.has_label(time_derivative)
+                    and t.get(prognostic) == prognostic_name
+                    and any(t.has_label(*implicit_terms, return_tuple=True))
+                ),
+                lambda t: dt*Term(t.get(linearisation).form, t.labels),
+                drop
+            )
+
+        W = equation.function_space
+
+        # Split up the rhs vector (symbolically)
+        self.xrhs = Function(W)
+
+        aeqn = residual
+        Leqn = residual.label_map(
+            lambda t: t.has_label(time_derivative), map_if_false=drop
+        )
+
+        # Place to put result of solver
+        self.dy = Function(W)
+
+        # Set up the solver ----------------------------------------------------
+        bcs = [
+            DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain)
+            for bc in equation.bcs['u']
+        ]
+        problem = LinearVariationalProblem(
+            aeqn.form, action(Leqn.form, self.xrhs), self.dy, bcs=bcs,
+            constant_jacobian=True)
+
+        self.solver = LinearVariationalSolver(
+            problem, solver_parameters=self.solver_parameters,
+            options_prefix='linear_solver'
+        )
+
+    @staticmethod
+    def log_ksp_residuals(ksp):
+        if logger.isEnabledFor(DEBUG):
+            ksp.setMonitor(logging_ksp_monitor_true_residual)
+
+    @timed_function("Gusto:UpdateReferenceProfiles")
+    def update_reference_profiles(self):
+        if self.reference_dependent:
+            self.solver.invalidate_jacobian()
+
+    @timed_function("Gusto:LinearSolve")
+    def solve(self, xrhs, dy):
+        """
+        Solve the linear problem.
+
+        Args:
+            xrhs (:class:`Function`): the right-hand side residual field in the
+                appropriate :class:`MixedFunctionSpace`.
+            dy (:class:`Function`): the resulting increment field in the
+                appropriate :class:`MixedFunctionSpace`.
+        """
+        self.xrhs.assign(xrhs)
+        self.solver.solve()
+        dy.assign(self.dy)
