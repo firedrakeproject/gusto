@@ -81,7 +81,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 parameter. A value of 1 corresponds to fully implicit, while 0
                 corresponds to fully explicit. Defaults to 0.5.
             tau_values (dict, optional): contains the semi-implicit relaxation
-                parameters. Defaults to None, in which case the value of alpha is used.
+                parameters. Defaults to None, in which case the value of alpha
+                is used.
             off_centred_u (bool, optional): option to offcentre the transporting
                 velocity. Defaults to False, in which case transporting velocity
                 is centred. If True offcentring uses value of alpha.
@@ -117,7 +118,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 in "spin-up" mode, where the alpha parameter is set to 1.0.
                 Defaults to 0, which corresponds to no spin-up.
             solver_prognostics (list, optional): a list of the names of
-                prognostic variables to include in the solver.
+                prognostic variables to include in the solver. Defaults to None,
+                in which case all prognostics that aren't active tracers are
+                included in the solver.
             linear_solver_parameters (dict, optional): contains the options to
                 be passed to the underlying :class:`LinearVariationalSolver`.
                 for the Defaults to None.
@@ -167,7 +170,19 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 if field_name not in solver_prognostics:
                     self.non_solver_prognostics.append(field_name)
         else:
-            solver_prognostics = equation_set.field_names
+            # Remove any active tracers by default
+            solver_prognostics = []
+            if equation_set.active_tracers is not None:
+                self.non_solver_prognostics = [
+                    tracer.name for tracer in equation_set.active_tracers
+                ]
+                for field_name in equation_set.field_names:
+                    if field_name not in self.non_solver_prognostics:
+                        solver_prognostics.append(field_name)
+            else:
+                # No active tracers so prognostics are field names
+                solver_prognostics = equation_set.field_names.copy()
+
         logger.info(
             'Semi-implicit Quasi-Newton: Using solver prognostics '
             + f'{solver_prognostics}'
@@ -763,12 +778,6 @@ class SIQNLinearSolver(object):
                                         'ksp_max_it': 2,
                                         'pc_type': 'bjacobi',
                                         'sub_pc_type': 'ilu'}}
-    }
-
-    solver_parameters = {
-        'ksp_error_if_not_converged': None,
-        'pc_factor_shift_type': 'nonzero',
-        'snes_type': 'ksponly',
     }
 
     def __init__(self, equation, solver_prognostics, implicit_terms,
