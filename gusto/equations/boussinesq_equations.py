@@ -3,7 +3,7 @@
 from firedrake import inner, dx, div, cross, split, as_vector
 from firedrake.fml import subject
 from gusto.core.labels import (
-    time_derivative, transport, prognostic, linearisation,
+    time_derivative, prognostic, linearisation,
     pressure_gradient, coriolis, divergence, gravity, incompressible
 )
 from gusto.equations.common_forms import (
@@ -60,8 +60,8 @@ class BoussinesqEquations(PrognosticEquationSet):
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
                 then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes time derivatives and
-                scalar transport terms.
+                in which case the linearisation drops terms for any active
+                tracers.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -90,14 +90,11 @@ class BoussinesqEquations(PrognosticEquationSet):
             active_tracers = []
 
         if linearisation_map == 'default':
-            # Default linearisation is time derivatives, scalar transport,
-            # pressure gradient, gravity and divergence terms
-            # Don't include active tracers
-            linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'p', 'b'] \
-                and (any(t.has_label(time_derivative, pressure_gradient,
-                                     divergence, gravity))
-                     or (t.get(prognostic) not in ['u', 'p'] and t.has_label(transport)))
+            # Default linearisation is to include all terms
+            # Don't include terms for active tracers
+            linearisation_map = lambda t: (
+                t.has_label(time_derivative) or t.get(prognostic) in field_names
+            )
 
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
@@ -249,8 +246,8 @@ class LinearBoussinesqEquations(BoussinesqEquations):
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
                 then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes time derivatives and
-                scalar transport terms.
+                in which case the linearisation drops terms for any active
+                tracers.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -267,13 +264,6 @@ class LinearBoussinesqEquations(BoussinesqEquations):
             NotImplementedError: active tracers are not implemented.
         """
 
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure gradient,
-            # Coriolis and transport term from depth equation
-            linearisation_map = lambda t: \
-                (any(t.has_label(time_derivative, pressure_gradient, coriolis,
-                                 gravity, divergence, incompressible))
-                 or (t.get(prognostic) in ['p', 'b'] and t.has_label(transport)))
         super().__init__(domain=domain,
                          parameters=parameters,
                          compressible=compressible,
