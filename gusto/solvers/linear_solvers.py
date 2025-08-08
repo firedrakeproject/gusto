@@ -38,7 +38,8 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
     """Base class for timestepping linear solvers for Gusto."""
 
     def __init__(self, equations, alpha=0.5, tau_values=None,
-                 solver_parameters=None, overwrite_solver_parameters=False):
+                 solver_parameters=None, overwrite_solver_parameters=False,
+                 options_prefix=None):
         """
         Args:
             equations (:class:`PrognosticEquation`): the model's equation.
@@ -58,6 +59,7 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
         self.dt = equations.domain.dt
         self.alpha = Constant(alpha)
         self.tau_values = tau_values if tau_values is not None else {}
+        self.options_prefix = options_prefix
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -940,7 +942,7 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
         appctx = {"trace_nullspace": trace_nullsp}
         self.uD_solver = LinearVariationalSolver(uD_problem,
                                                  solver_parameters=self.solver_parameters,
-                                                 appctx=appctx)
+                                                 appctx=appctx, options_prefix=self.options_prefix)
 
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
@@ -972,6 +974,7 @@ class MoistConvectiveSWSolver(TimesteppingSolver):
         u.assign(u1)
         D.assign(D1)
 
+
 class MoistConvectiveSWSolverNew(TimesteppingSolver):
     """
     Linear solver for the moist convective shallow water equations.
@@ -982,13 +985,14 @@ class MoistConvectiveSWSolverNew(TimesteppingSolver):
     """
 
     solver_parameters = {
+        'mat_type': 'matfree',
         'ksp_type': 'preonly',
         "pc_type": "fieldsplit",
         "pc_fieldsplit_type": "additive",
         "pc_fieldsplit_0_fields": "0,1",
         "pc_fieldsplit_1_fields": "2,3,4",
-        'mat_type': 'matfree',
         "fieldsplit_0": {
+            'ksp_monitor_true_residual': None,
             'ksp_type': 'preonly',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.HybridizationPC',
@@ -1036,9 +1040,9 @@ class MoistConvectiveSWSolverNew(TimesteppingSolver):
         g = equation.parameters.g
 
         eqn = (
-            inner(w, (u-u_in)) * dx
+            inner(w, u) * dx
             - beta_u * (D - Dbar) * div(w*g) * dx
-            + inner(phi, (D-D_in)) * dx
+            + inner(phi, D) * dx
             + beta_d * phi * div(Dbar*u) * dx
             + inner(q0, (p0)) * dx
             + inner(q1, (p1)) * dx
@@ -1049,26 +1053,19 @@ class MoistConvectiveSWSolverNew(TimesteppingSolver):
             f = equation.prescribed_fields('coriolis')
             eqn += beta_u * f * inner(w, equation.domain.perp(u)) * dx
 
-        aP= lhs(eqn)
+        aP = lhs(eqn)
 
         # Calculated linearised problem
         residual = equation.residual.label_map(
             lambda t: t.has_label(linearisation),
             lambda t: Term(t.get(linearisation).form, t.labels),
             drop)
-        
-        other_res = equation.residual.label_map(
-            lambda t: t.has_label(linearisation),
-            map_if_true=drop)
-        other_res = other_res.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_true=lambda t: Term(ufl_derivative(t.form, t.get(subject)), t.labels),
-            map_if_false=drop)
+
         beta = dt*self.alpha
 
         aeqn = residual.label_map(
             lambda t: (t.has_label(time_derivative) and t.has_label(linearisation)),
-            map_if_false=lambda t: beta*t) + other_res
+            map_if_false=lambda t: beta*t)
         Leqn = residual.label_map(
             lambda t: (t.has_label(time_derivative) and t.has_label(linearisation)),
             map_if_false=drop)
@@ -1080,8 +1077,9 @@ class MoistConvectiveSWSolverNew(TimesteppingSolver):
         bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
         # Solver for u, D
-        uD_problem = LinearVariationalProblem(aeqn.form, action(Leqn.form, self.xrhs), self.uD, bcs=bcs,
-                                              constant_jacobian=True)
+        uD_problem = LinearVariationalProblem(
+            aeqn.form, action(Leqn.form, self.xrhs),
+            self.uD, bcs=bcs, constant_jacobian=True)
 
         # Provide callback for the nullspace of the trace system
         def trace_nullsp(T):
@@ -1090,7 +1088,7 @@ class MoistConvectiveSWSolverNew(TimesteppingSolver):
         appctx = {"trace_nullspace": trace_nullsp}
         self.uD_solver = LinearVariationalSolver(uD_problem,
                                                  solver_parameters=self.solver_parameters,
-                                                 appctx=appctx)
+                                                 appctx=appctx, options_prefix=self.options_prefix)
 
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.uD_solver.snes.ksp)
@@ -1111,6 +1109,10 @@ class MoistConvectiveSWSolverNew(TimesteppingSolver):
                 :class:`MixedFunctionSpace`.
         """
         self.xrhs.assign(xrhs)
+        for xsub in self.xrhs.subfunctions[2:]:
+            xsub.zero()
+        for ysub in self.uD.subfunctions[2:]:
+            ysub.zero()
 
         with timed_region("Gusto:VelocityDepthSolve"):
             logger.info('Moist convective linear solver: mixed solve')

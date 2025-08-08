@@ -20,8 +20,10 @@ from gusto import (
     ZonalComponent, MeridionalComponent, SteadyStateError, lonlatr_from_xyz,
     DG1Limiter, InstantRain, MoistConvectiveSWSolver, ForwardEuler,
     RelativeVorticity, SWSaturationAdjustment, WaterVapour, CloudWater, Rain,
-    GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr, MoistConvectiveSWSolverNew
+    GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr,
+    MoistConvectiveSWSolver, MoistConvectiveSWSolverNew
 )
+from gusto.core.labels import time_derivative, prognostic, coriolis, pressure_gradient, transport
 
 moist_convect_williamson_2_defaults = {
     'ncells_per_edge': 16,     # number of cells per icosahedron edge
@@ -84,9 +86,19 @@ def moist_convect_williamson_2(
         WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')
     ]
 
+    def linearisation_map(term):
+        if (term.get(prognostic) in ['u', 'D']
+            and (any(term.has_label(time_derivative, coriolis, pressure_gradient))
+            or (term.get(prognostic) in ['D'] and term.has_label(transport)))):
+            return True
+        elif term.has_label(time_derivative):
+            return True
+        else:
+            return False
+
     eqns = ShallowWaterEquations(
         domain, parameters, fexpr=fexpr, u_transport_option=u_eqn_type,
-        active_tracers=tracers
+        active_tracers=tracers, linearisation_map=linearisation_map
     )
 
     # IO
@@ -127,7 +139,32 @@ def moist_convect_williamson_2(
         SSPRK3(domain, "rain", limiter=limiter)
     ]
 
-    linear_solver = MoistConvectiveSWSolverNew(eqns)
+    import numpy as np
+    np.random.seed(6)
+
+    xold = Function(eqns.function_space)
+    yold = Function(eqns.function_space)
+
+    for xsub in xold.subfunctions[:2]:
+        with xsub.dat.vec_wo as v:
+            v.array[:] = np.random.random_sample(v.array.shape)
+
+    xnew = xold.copy(deepcopy=True)
+    ynew = yold.copy(deepcopy=True)
+
+    old_solver = MoistConvectiveSWSolver(eqns, options_prefix="swe_old")
+    new_solver = MoistConvectiveSWSolverNew(eqns, options_prefix="swe_new")
+
+    old_solver.solve(xold, yold)
+    new_solver.solve(xnew, ynew)
+
+    # for i, (xo, xn) in enumerate(zip(xold.subfunctions, xnew.subfunctions)):
+    #     print(f"{i = }: {errornorm(xo, xn)/norm(xo) = :4e}")
+    for i, (yo, yn) in enumerate(zip(yold.subfunctions, ynew.subfunctions)):
+        print(f"{i = }| {norm(yo) = :2e} | {norm(yn) = :2e} | {errornorm(yo, yn)/norm(yo) = :4e}")
+
+    from sys import exit; exit()
+    
 
     # Physics schemes
     sat_adj = SWSaturationAdjustment(
