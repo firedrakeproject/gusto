@@ -30,8 +30,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 
 
 __all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver",
-           "ThermalSWSolver", "ThermalSWSolverNew", "ThermalSWSolverMono",
-           "MoistConvectiveSWSolver", "MoistConvectiveSWSolverNew"]
+           "ThermalSWSolver", "ThermalSWSolverNew", "ThermalSWSolverMono"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -1004,7 +1003,7 @@ class ThermalSWSolverMono(TimesteppingSolver):
     """
 
     # solver_parameters = {
-    #     'ksp_type': 'preonly',
+    #C     'ksp_type': 'preonly',
     #     'mat_type': 'matfree',
     #     'pc_type': 'python',
     #     'pc_python_type': 'firedrake.HybridizationPC',
@@ -1020,6 +1019,8 @@ class ThermalSWSolverMono(TimesteppingSolver):
 
     solver_parameters = {
         'ksp_error_if_not_converged': None,
+        'ksp_rtol': 1e-11,
+        'ksp_atol': 1e-11,
         'pc_factor_shift_type': 'nonzero',
         'snes_type': 'ksponly',
     }
