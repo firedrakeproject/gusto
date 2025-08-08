@@ -2,11 +2,10 @@
 
 from firedrake import (dot, jump, dS_h, ds_b, ds_t, ds,
                        FacetNormal, Tensor, AssembledVector,
-                       AuxiliaryOperatorPC, AssembledPC, PETSc)
+                       AuxiliaryOperatorPC, PETSc)
 
 from firedrake.preconditioners import PCBase
 from firedrake.matrix_free.operators import ImplicitMatrixContext
-from firedrake.petsc import PETSc
 from gusto.recovery.recovery_kernels import AverageKernel, AverageWeightings
 from pyop2.profiling import timed_region, timed_function
 from functools import partial

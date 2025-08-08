@@ -13,15 +13,14 @@ This example uses the icosahedral sphere mesh and degree 1 spaces.
 """
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from firedrake import SpatialCoordinate, sin, cos, exp, Function, errornorm, norm
+from firedrake import SpatialCoordinate, sin, cos, exp, Function, errornorm, norm, VectorSpaceBasis
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
     ZonalComponent, MeridionalComponent, SteadyStateError, lonlatr_from_xyz,
-    DG1Limiter, InstantRain, MoistConvectiveSWSolver, ForwardEuler,
+    DG1Limiter, InstantRain, ForwardEuler, LinearTimesteppingSolver,
     RelativeVorticity, SWSaturationAdjustment, WaterVapour, CloudWater, Rain,
-    GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr,
-    MoistConvectiveSWSolver, MoistConvectiveSWSolverNew
+    GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr
 )
 from gusto.core.labels import time_derivative, prognostic, coriolis, pressure_gradient, transport
 
@@ -139,32 +138,45 @@ def moist_convect_williamson_2(
         SSPRK3(domain, "rain", limiter=limiter)
     ]
 
-    import numpy as np
-    np.random.seed(6)
+    solver_parameters = {
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        "pc_type": "fieldsplit",
+        "pc_fieldsplit_type": "additive",
+        "pc_fieldsplit_0_fields": "0,1",
+        "pc_fieldsplit_1_fields": "2,3,4",
+        "fieldsplit_0": {
+            'ksp_monitor_true_residual': None,
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.HybridizationPC',
+            'hybridization': {
+                'ksp_type': 'cg',
+                'pc_type': 'gamg',
+                'ksp_rtol': 1e-8,
+                'mg_levels': {
+                    'ksp_type': 'chebyshev',
+                    'ksp_max_it': 2,
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu'
+                }
+            }
+        },
+        "fieldsplit_1": {
+            "ksp_type": "preonly",
+            "pc_type": "none"
+        },
+    }
 
-    xold = Function(eqns.function_space)
-    yold = Function(eqns.function_space)
-
-    for xsub in xold.subfunctions[:2]:
-        with xsub.dat.vec_wo as v:
-            v.array[:] = np.random.random_sample(v.array.shape)
-
-    xnew = xold.copy(deepcopy=True)
-    ynew = yold.copy(deepcopy=True)
-
-    old_solver = MoistConvectiveSWSolver(eqns, options_prefix="swe_old")
-    new_solver = MoistConvectiveSWSolverNew(eqns, options_prefix="swe_new")
-
-    old_solver.solve(xold, yold)
-    new_solver.solve(xnew, ynew)
-
-    # for i, (xo, xn) in enumerate(zip(xold.subfunctions, xnew.subfunctions)):
-    #     print(f"{i = }: {errornorm(xo, xn)/norm(xo) = :4e}")
-    for i, (yo, yn) in enumerate(zip(yold.subfunctions, ynew.subfunctions)):
-        print(f"{i = }| {norm(yo) = :2e} | {norm(yn) = :2e} | {errornorm(yo, yn)/norm(yo) = :4e}")
-
-    from sys import exit; exit()
-    
+    # Provide callback for the nullspace of the trace system
+    def trace_nullsp(T):
+        return VectorSpaceBasis(constant=True)
+    appctx = {"trace_nullspace": trace_nullsp}
+    linear_solver = LinearTimesteppingSolver(
+        eqns, alpha=0.5,
+        reference_dependent=True,
+        solver_parameters=solver_parameters,
+        options_prefix="swe_gen", appctx=appctx)
 
     # Physics schemes
     sat_adj = SWSaturationAdjustment(
