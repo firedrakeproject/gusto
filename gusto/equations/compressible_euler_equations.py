@@ -6,7 +6,7 @@ from firedrake import (
 )
 from firedrake.fml import subject, replace_subject
 from gusto.core.labels import (
-    time_derivative, prognostic, hydrostatic, linearisation,
+    time_derivative, transport, prognostic, hydrostatic, linearisation,
     pressure_gradient, coriolis, gravity, sponge
 )
 from gusto.equations.thermodynamics import exner_pressure
@@ -58,8 +58,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
                 then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation drops terms for any active
-                tracers.
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -88,11 +88,12 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             active_tracers = []
 
         if linearisation_map == 'default':
-            # Default linearisation is to include all terms
-            # Don't include terms for active tracers
-            linearisation_map = lambda t: (
-                t.has_label(time_derivative) or t.get(prognostic) in field_names
-            )
+            # Default linearisation is time derivatives and scalar transport terms
+            # Don't include active tracers
+            linearisation_map = lambda t: \
+                t.get(prognostic) in ['u', 'rho', 'theta'] \
+                and (t.has_label(time_derivative)
+                     or (t.get(prognostic) != 'u' and t.has_label(transport)))
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -305,8 +306,8 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
                 then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation drops terms for any active
-                tracers.
+                in which case the linearisation includes time derivatives and
+                scalar transport terms.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
