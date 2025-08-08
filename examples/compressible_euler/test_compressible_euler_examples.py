@@ -46,6 +46,24 @@ def test_dry_bryan_fritsch_parallel():
     test_dry_bryan_fritsch()
 
 
+def test_schaer_mountain():
+    from schaer_mountain import schaer_mountain
+    test_name = 'schaer_mountain'
+    schaer_mountain(
+        ncolumns=10,
+        nlayers=10,
+        dt=8.0,
+        tmax=40.0,
+        dumpfreq=5,
+        dirname=make_dirname(test_name)
+    )
+
+
+@pytest.mark.parallel(nprocs=3)
+def test_schaer_mountain_parallel():
+    test_schaer_mountain()
+
+
 def test_skamarock_klemp_nonhydrostatic():
     from skamarock_klemp_nonhydrostatic import skamarock_klemp_nonhydrostatic
     test_name = 'skamarock_klemp_nonhydrostatic'

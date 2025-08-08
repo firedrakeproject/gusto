@@ -38,7 +38,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
                  alpha=0.5, off_centred_u=False,
-                 num_outer=2, num_inner=2, accelerator=False,
+                 num_outer=2, num_inner=2, accelerator=True,
                  predictor=None, reference_update_freq=None,
                  spinup_steps=0):
         """
@@ -89,8 +89,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 linear solve. Defaults to 2. Note that default used by the Met
                 Office's ENDGame and GungHo models is 2.
             accelerator (bool, optional): Whether to zero non-wind implicit
-                forcings for transport terms in order to speed up solver
-                convergence. Defaults to False.
+                forcings for prognostic variables in order to speed up solver
+                convergence. Defaults to True.
             predictor (str, optional): a single string corresponding to the name
                 of a variable to transport using the divergence predictor. This
                 pre-multiplies that variable by (1 - beta*dt*div(u)) before the
@@ -161,7 +161,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                      + f"physics scheme {parametrisation.label.label}")
 
         self.active_transport = []
-        self.transported_fields = []
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             if isinstance(scheme.field_name, list):
@@ -466,7 +465,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
                     if (inner > 0 and self.accelerator):
                         # Zero implicit forcing to accelerate solver convergence
-                        self.forcing.zero_forcing_terms(self.equation, xp, xrhs, self.transported_fields)
+                        self.forcing.zero_forcing_terms(self.equation, xnp1, xrhs, self.equation.field_names)
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
@@ -659,23 +658,23 @@ class Forcing(object):
         x_out.assign(x_in(self.field_name))
         x_out += self.xF
 
-    def zero_forcing_terms(self, equation, x_in, x_out, transported_field_names):
+    def zero_forcing_terms(self, equation, x_in, x_out, field_names):
         """
-        Zero forcing term F(x) for non-wind transport.
+        Zero forcing term F(x) for non-wind prognostics.
 
         This takes x_in and x_out, where                                      \n
         x_out = x_in + scale*F(x_nl)                                          \n
-        for some field x_nl and sets x_out = x_in for all non-wind transport terms
+        for some field x_nl and sets x_out = x_in for all non-wind prognostics
 
         Args:
             equation (:class:`PrognosticEquationSet`): the prognostic
                 equation set to be solved
             x_in (:class:`FieldCreator`): the field to be incremented.
             x_out (:class:`FieldCreator`): the output field to be updated.
-            transported_field_names (str): list of fields names for transported fields
+            field_names (str): list of fields names for prognostic fields
         """
-        for field_name in transported_field_names:
+        for field_name in field_names:
             if field_name != 'u':
-                logger.info(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
+                logger.debug(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
                 field_index = equation.field_names.index(field_name)
                 x_out.subfunctions[field_index].assign(x_in(field_name))

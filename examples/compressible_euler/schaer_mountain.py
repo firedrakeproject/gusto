@@ -96,9 +96,9 @@ def schaer_mountain(
     domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
-    parameters = CompressibleParameters(g=g, cp=cp)
+    parameters = CompressibleParameters(mesh, g=g, cp=cp)
     sponge = SpongeLayerParameters(
-        H=domain_height, z_level=domain_height-sponge_depth, mubar=mu_dt/dt
+        mesh, H=domain_height, z_level=domain_height-sponge_depth, mubar=mu_dt/dt
     )
     eqns = CompressibleEulerEquations(
         domain, parameters, sponge_options=sponge, u_transport_option=u_eqn_type
