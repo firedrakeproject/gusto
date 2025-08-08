@@ -13,15 +13,16 @@ This example uses the icosahedral sphere mesh and degree 1 spaces.
 """
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from firedrake import SpatialCoordinate, sin, cos, exp, Function
+from firedrake import SpatialCoordinate, sin, cos, exp, Function, errornorm, norm, VectorSpaceBasis
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
     ZonalComponent, MeridionalComponent, SteadyStateError, lonlatr_from_xyz,
-    DG1Limiter, InstantRain, MoistConvectiveSWSolver, ForwardEuler,
+    DG1Limiter, InstantRain, ForwardEuler, LinearTimesteppingSolver,
     RelativeVorticity, SWSaturationAdjustment, WaterVapour, CloudWater, Rain,
     GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr
 )
+from gusto.core.labels import time_derivative, prognostic, coriolis, pressure_gradient, transport
 
 moist_convect_williamson_2_defaults = {
     'ncells_per_edge': 16,     # number of cells per icosahedron edge
@@ -84,9 +85,19 @@ def moist_convect_williamson_2(
         WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')
     ]
 
+    def linearisation_map(term):
+        if (term.get(prognostic) in ['u', 'D']
+            and (any(term.has_label(time_derivative, coriolis, pressure_gradient))
+            or (term.get(prognostic) in ['D'] and term.has_label(transport)))):
+            return True
+        elif term.has_label(time_derivative):
+            return True
+        else:
+            return False
+
     eqns = ShallowWaterEquations(
         domain, parameters, fexpr=fexpr, u_transport_option=u_eqn_type,
-        active_tracers=tracers
+        active_tracers=tracers, linearisation_map=linearisation_map
     )
 
     # IO
@@ -127,7 +138,45 @@ def moist_convect_williamson_2(
         SSPRK3(domain, "rain", limiter=limiter)
     ]
 
-    linear_solver = MoistConvectiveSWSolver(eqns)
+    solver_parameters = {
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        "pc_type": "fieldsplit",
+        "pc_fieldsplit_type": "additive",
+        "pc_fieldsplit_0_fields": "0,1",
+        "pc_fieldsplit_1_fields": "2,3,4",
+        "fieldsplit_0": {
+            'ksp_monitor_true_residual': None,
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.HybridizationPC',
+            'hybridization': {
+                'ksp_type': 'cg',
+                'pc_type': 'gamg',
+                'ksp_rtol': 1e-8,
+                'mg_levels': {
+                    'ksp_type': 'chebyshev',
+                    'ksp_max_it': 2,
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu'
+                }
+            }
+        },
+        "fieldsplit_1": {
+            "ksp_type": "preonly",
+            "pc_type": "none"
+        },
+    }
+
+    # Provide callback for the nullspace of the trace system
+    def trace_nullsp(T):
+        return VectorSpaceBasis(constant=True)
+    appctx = {"trace_nullspace": trace_nullsp}
+    linear_solver = LinearTimesteppingSolver(
+        eqns, alpha=0.5,
+        reference_dependent=True,
+        solver_parameters=solver_parameters,
+        options_prefix="swe_gen", appctx=appctx)
 
     # Physics schemes
     sat_adj = SWSaturationAdjustment(
@@ -158,6 +207,8 @@ def moist_convect_williamson_2(
     D0 = stepper.fields("D")
     v0 = stepper.fields("water_vapour")
 
+    D_init = Function(D0.function_space())
+
     uexpr = xyz_vector_from_lonlatr(u_max*cos(phi), 0, 0, (x, y, z))
     g = parameters.g
     w = Omega*radius*u_max + (u_max**2)/2
@@ -184,6 +235,8 @@ def moist_convect_williamson_2(
     D0.interpolate(Dexpr)
     v0.interpolate(vexpr)
 
+    D_init.interpolate(Dexpr)
+
     # Set reference profiles
     Dbar = Function(D0.function_space()).assign(mean_depth)
     stepper.set_reference_profiles([('D', Dbar)])
@@ -193,6 +246,10 @@ def moist_convect_williamson_2(
     # ------------------------------------------------------------------------ #
 
     stepper.run(t=0, tmax=tmax)
+
+    error_D = errornorm(D0, D_init, mesh=mesh)/norm(D_init, mesh=mesh)
+
+    print("Error D:", error_D)
 
 # ---------------------------------------------------------------------------- #
 # MAIN
