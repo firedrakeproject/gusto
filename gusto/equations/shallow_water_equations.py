@@ -334,8 +334,6 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         if active_tracers is None:
             active_tracers = []
 
-        breakpoint()
-
         if linearisation_map == 'default':
             # Default linearisation is time derivatives, pressure
             # gradient and transport terms from depth and buoyancy

@@ -66,17 +66,10 @@ def moist_thermal_gw(
                                         nu=nu, beta2=beta2)
     Omega = parameters.Omega
     fexpr = 2*Omega*xyz[2]/radius
-    # def linearisation_map(term):
-    #     if term.has_label(time_derivative):
-    #         return True
-    #     else:
-    #         return False
-    linearisation_map = lambda t: t.has_label(time_derivative)
-
     # Equation
     eqns = ThermalShallowWaterEquations(
         domain, parameters, fexpr=fexpr,
-        equivalent_buoyancy=False, linearisation_map = linearisation_map
+        equivalent_buoyancy=False
     )
 
     # IO
@@ -111,12 +104,12 @@ def moist_thermal_gw(
     xmono = xold.copy(deepcopy=True)
     ymono = yold.copy(deepcopy=True)
 
-    # old_solver = ThermalSWSolver(eqns, options_prefix="swe_old")
-    # new_solver = ThermalSWSolverNew(eqns, options_prefix="swe_new")
+    old_solver = ThermalSWSolver(eqns, options_prefix="swe_old")
+    new_solver = ThermalSWSolverNew(eqns, options_prefix="swe_new")
     mono_solver = ThermalSWSolverMono(eqns, alpha=0.5)
 
-    # old_solver.solve(xold, yold)
-    # new_solver.solve(xnew, ynew)
+    old_solver.solve(xold, yold)
+    new_solver.solve(xnew, ynew)
     mono_solver.solve(xmono, ymono)
 
     # for i, (xo, xn) in enumerate(zip(xold.subfunctions, xnew.subfunctions)):
