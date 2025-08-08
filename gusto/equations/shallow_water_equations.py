@@ -1,10 +1,12 @@
 """Classes for defining variants of the shallow-water equations."""
 
-from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg,
-                       dS, split, conditional, exp)
+from firedrake import (inner, dx, div, Function, FunctionSpace, FacetNormal,
+                       jump, avg, dS, split, conditional, exp, sqrt,
+                       SpatialCoordinate, Constant)
 from firedrake.fml import subject, drop
 from gusto.core.labels import (time_derivative, transport, prognostic,
                                linearisation, pressure_gradient, coriolis)
+from gusto.core.equation_configuration import CoriolisOptions
 from gusto.equations.common_forms import (
     advection_form, advection_form_1d, continuity_form,
     continuity_form_1d, vector_invariant_form,
@@ -12,6 +14,7 @@ from gusto.equations.common_forms import (
     linear_continuity_form, linear_advection_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
+import numpy as np
 
 
 __all__ = ["ShallowWaterEquations", "LinearShallowWaterEquations",
@@ -29,7 +32,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
     for Coriolis parameter 'f' and bottom surface 'B'.
     """
 
-    def __init__(self, domain, parameters, fexpr=None, topog_expr=None,
+    def __init__(self, domain, parameters,
                  space_names=None, linearisation_map='default',
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None):
@@ -39,10 +42,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
-            fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
-                parameter. Defaults to None.
-            topog_expr (:class:`ufl.Expr`, optional): an expression for the
-                bottom surface of the fluid. Defaults to None.
             space_names (dict, optional): a dictionary of strings for names of
                 the function spaces to use for the spatial discretisation. The
                 keys are the names of the prognostic variables. Defaults to None
@@ -89,7 +88,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         self.domain = domain
         self.active_tracers = active_tracers
 
-        self._setup_residual(fexpr, topog_expr, u_transport_option)
+        self._setup_residual(u_transport_option)
 
         # -------------------------------------------------------------------- #
         # Linearise equations
@@ -98,7 +97,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         self.residual = self.generate_linear_terms(
             self.residual, self.linearisation_map)
 
-    def _setup_residual(self, fexpr, topog_expr, u_transport_option):
+    def _setup_residual(self, u_transport_option):
         """
         Sets up the residual for the shallow water equations. This
         is separate from the __init__ method because the thermal
@@ -108,10 +107,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
         residual must be setup after this has happened.
 
         Args:
-            fexpr (:class:`ufl.Expr`): an expression for the Coroilis
-                parameter.
-            topog_expr (:class:`ufl.Expr`): an expression for the
-                bottom surface of the fluid.
             u_transport_option (str): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form', and
@@ -176,9 +171,26 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # The current approach is that these are prescribed fields, stored in
         # the equation, and initialised when the equation is
 
-        if fexpr is not None:
-            V = FunctionSpace(self.domain.mesh, 'CG', 1)
-            f = self.prescribed_fields('coriolis', V).interpolate(fexpr)
+        rotation = self.parameters.rotation
+        if rotation is not None:
+            CG1 = FunctionSpace(self.domain.mesh, "CG", 1)
+            if rotation is CoriolisOptions.sphere:
+                assert self.domain.on_sphere
+                xyz = SpatialCoordinate(self.domain.mesh)
+                r = sqrt(inner(xyz, xyz))
+                radius_field = Function(CG1)
+                radius_field.interpolate(r)
+                # TODO: this should use global min kernel
+                radius = Constant(np.min(radius_field.dat.data_ro))
+                fexpr = 2*self.parameters.Omega*xyz[2]/radius
+            elif rotation is CoriolisOptions.fplane:
+                fexpr = self.parameters.f0
+            elif rotation is CoriolisOptions.betaplane:
+                xyz = SpatialCoordinate(self.domain.mesh)
+                fexpr = self.parameters.f0 + self.parameters.beta * xyz[1]
+            else:
+                raise NotImplementedError('Coriolis option is not implemented')
+            f = self.prescribed_fields('coriolis', CG1).interpolate(fexpr)
             coriolis_form = coriolis(subject(
                 prognostic(f*inner(self.domain.perp(u), w)*dx, "u"), self.X))
             # Add linearisation
@@ -188,6 +200,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 
+        topog_expr = self.parameters.topog_expr
         if topog_expr is not None:
             topography = self.prescribed_fields('topography', self.domain.spaces('DG')).interpolate(topog_expr)
             topography_form = subject(prognostic
@@ -210,7 +223,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     which is then linearised.
     """
 
-    def __init__(self, domain, parameters, fexpr=None, topog_expr=None,
+    def __init__(self, domain, parameters,
                  space_names=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
@@ -220,10 +233,6 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
-            fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
-                parameter. Defaults to None.
-            topog_expr (:class:`ufl.Expr`, optional): an expression for the
-                bottom surface of the fluid. Defaults to None.
             space_names (dict, optional): a dictionary of strings for names of
                 the function spaces to use for the spatial discretisation. The
                 keys are the names of the prognostic variables. Defaults to None
@@ -248,7 +257,6 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
         """
 
         super().__init__(domain, parameters,
-                         fexpr=fexpr, topog_expr=topog_expr,
                          space_names=space_names,
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
@@ -278,7 +286,6 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
     """
 
     def __init__(self, domain, parameters, equivalent_buoyancy=False,
-                 fexpr=None, topog_expr=None,
                  space_names=None, linearisation_map='default',
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None):
@@ -291,10 +298,6 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             equivalent_buoyancy (bool, optional): switch to specify formulation
                 (see comments above). Defaults to False to give standard
                 thermal shallow water.
-            fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
-                parameter. Defaults to None.
-            topog_expr (:class:`ufl.Expr`, optional): an expression for the
-                bottom surface of the fluid. Defaults to None.
             space_names (dict, optional): a dictionary of strings for names of
                 the function spaces to use for the spatial discretisation. The
                 keys are the names of the prognostic variables. Defaults to None
@@ -361,7 +364,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         self.domain = domain
         self.active_tracers = active_tracers
 
-        self._setup_residual(fexpr, topog_expr, u_transport_option)
+        self._setup_residual(u_transport_option)
 
         # -------------------------------------------------------------------- #
         # Linearise equations
@@ -370,17 +373,13 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         self.residual = self.generate_linear_terms(
             self.residual, self.linearisation_map)
 
-    def _setup_residual(self, fexpr, topog_expr, u_transport_option):
+    def _setup_residual(self, u_transport_option):
         """
         Sets up the residual for the thermal shallow water
         equations, first calling the shallow water equation
         _setup_residual method to get the standard shallow water forms.
 
         Args:
-            fexpr (:class:`ufl.Expr`): an expression for the Coroilis
-                parameter.
-            topog_expr (:class:`ufl.Expr`): an expression for the
-                bottom surface of the fluid.
             u_transport_option (str): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form', and
@@ -389,8 +388,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         """
         # don't pass topography to super class as we deal with those
         # terms here later
-        super()._setup_residual(fexpr=fexpr, topog_expr=None,
-                                u_transport_option=u_transport_option)
+        super()._setup_residual(u_transport_option=u_transport_option)
 
         w = self.tests[0]
         gamma = self.tests[2]
@@ -398,8 +396,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         Dbar, bbar = split(self.X_ref)[1:3]
         u_trial, D_trial, b_trial = split(self.trials)[0:3]
         n = FacetNormal(self.domain.mesh)
-        topog = self.prescribed_fields('topography', self.domain.spaces('DG')).interpolate(topog_expr) if topog_expr else None
-        self.topog = topog
+
         if self.equivalent_buoyancy:
             gamma_qt = self.tests[3]
             qt = split(self.X)[3]
@@ -487,7 +484,10 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         # -------------------------------------------------------------------- #
         # add topography terms:
         # -------------------------------------------------------------------- #
+        topog_expr = self.parameters.topog_expr
         if topog_expr is not None:
+            topog = self.prescribed_fields(
+                'topography', self.domain.spaces('DG')).interpolate(topog_expr)
             if self.equivalent_buoyancy:
                 topography_form = subject(prognostic(
                     - topog * div(b*w) * dx
@@ -514,10 +514,11 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         g = self.parameters.g
         H = self.parameters.H
         D, b = split(X)[1:3]
-        topog = self.topog
-        if topog is None:
+
+        if self.parameters.topog_expr is None:
             sat_expr = q0*H/(D) * exp(nu*(1-b/g))
         else:
+            topog = self.prescribed_fields('topography')
             sat_expr = q0*H/(D+topog) * exp(nu*(1-b/g))
         return sat_expr
 
@@ -537,7 +538,6 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
     """
 
     def __init__(self, domain, parameters, equivalent_buoyancy=False,
-                 fexpr=None, topog_expr=None,
                  space_names=None, linearisation_map='default',
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
@@ -550,10 +550,6 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
             equivalent_buoyancy (bool, optional): switch to specify formulation
                 (see comments above). Defaults to False to give standard
                 thermal shallow water.
-            fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
-                parameter. Defaults to None.
-            topog_expr (:class:`ufl.Expr`, optional): an expression for the
-                bottom surface of the fluid. Defaults to None.
             space_names (dict, optional): a dictionary of strings for names of
                 the function spaces to use for the spatial discretisation. The
                 keys are the names of the prognostic variables. Defaults to None
@@ -579,7 +575,6 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
 
         super().__init__(domain, parameters,
                          equivalent_buoyancy=equivalent_buoyancy,
-                         fexpr=fexpr, topog_expr=topog_expr,
                          space_names=space_names,
                          linearisation_map=linearisation_map,
                          u_transport_option=u_transport_option,
@@ -605,8 +600,6 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
             mesh and the compatible function spaces.
         parameters (:class:`Configuration`, optional): an object containing
             the model's physical parameters.
-        fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
-            parameter. Defaults to None.
         space_names (dict, optional): a dictionary of strings for names of
             the function spaces to use for the spatial discretisation. The
             keys are the names of the prognostic variables. Defaults to None
@@ -625,7 +618,6 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
     """
 
     def __init__(self, domain, parameters,
-                 fexpr=None,
                  space_names=None, linearisation_map='default',
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None, active_tracers=None):
@@ -685,8 +677,13 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
         self.residual = (mass_form + adv_form
                          + pressure_gradient_form)
 
-        if fexpr is not None:
+        rotation = self.parameters.rotation
+        if rotation is not None:
             V = FunctionSpace(domain.mesh, 'CG', 1)
+            if rotation is CoriolisOptions.fplane:
+                fexpr = self.parameters.f0
+            else:
+                raise NotImplementedError('Coriolis option is not implemented')
             f = self.prescribed_fields('coriolis', V).interpolate(fexpr)
             coriolis_form = coriolis(subject(
                 prognostic(-f * v * w1 * dx, "u")
@@ -724,7 +721,7 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
     which is then linearised.
     """
 
-    def __init__(self, domain, parameters, fexpr=None,
+    def __init__(self, domain, parameters,
                  space_names=None, linearisation_map='default',
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
@@ -733,8 +730,6 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
                 mesh and the compatible function spaces.
             parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
-            fexpr (:class:`ufl.Expr`, optional): an expression for the Coroilis
-                parameter. Defaults to None.
             space_names (dict, optional): a dictionary of strings for names of
                 the function spaces to use for the spatial discretisation. The
                 keys are the names of the prognostic variables. Defaults to None
@@ -754,7 +749,7 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
         """
 
         super().__init__(domain, parameters,
-                         fexpr=fexpr, space_names=space_names,
+                         space_names=space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)

@@ -1,13 +1,21 @@
 """Some simple tools for configuring the model."""
+from enum import Enum
 from firedrake import Function, FunctionSpace, Constant
 import inspect
 
 
 __all__ = [
     "BoussinesqParameters", "CompressibleParameters",
-    "ShallowWaterParameters",
-    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters",
+    "ShallowWaterParameters", "CoriolisOptions",
+    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
 ]
+
+
+class CoriolisOptions(Enum):
+
+    fplane = 23     # constant Coriolis term equal to f0
+    betaplane = 31  # Coriolis term equal to f0 + beta(y-y0)
+    sphere = 42     # Coriolis term equal to 2 Omega sin(lat)
 
 
 class EquationParameters(object):
@@ -96,7 +104,13 @@ class ShallowWaterParameters(EquationParameters):
     """Physical parameters for the shallow-water equations."""
 
     g = 9.80616
+    # Coriolis options: controlled by rotation parameter
+    rotation = CoriolisOptions.sphere  # type of Coriolis term
     Omega = 7.292e-5  # rotation rate
+    f0 = None    # f- and beta- plane Coriolis parameter
+    beta = None  # beta-plane y-variation parameter
+    y0 = None    # beta-plane y-centre
+    topog_expr = None  # topography expression
     H = None  # mean depth
     # Factor that multiplies the vapour in the equivalent buoyancy
     # formulation of the thermal shallow water equations
