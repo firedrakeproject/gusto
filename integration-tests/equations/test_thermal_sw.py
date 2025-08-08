@@ -38,9 +38,7 @@ def setup_sw(dirname, dt, u_transport_option):
 
     # Equation
     parameters = ShallowWaterParameters(mesh, H=H, g=g)
-    Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
-    eqns = ThermalShallowWaterEquations(domain, parameters, fexpr=fexpr,
+    eqns = ThermalShallowWaterEquations(domain, parameters,
                                         u_transport_option=u_transport_option)
 
     # I/O

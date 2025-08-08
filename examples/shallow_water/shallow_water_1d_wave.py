@@ -14,12 +14,12 @@ import numpy as np
 from pyop2.mpi import MPI
 from firedrake import (
     PeriodicIntervalMesh, Function, assemble, SpatialCoordinate, COMM_WORLD,
-    Constant, pi, sin, exp, dx
+    pi, sin, exp, dx
 )
 from gusto import (
     Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
     ShallowWaterParameters, ShallowWaterEquations_1d, CGDiffusion,
-    InteriorPenaltyDiffusion, DiffusionParameters
+    InteriorPenaltyDiffusion, DiffusionParameters, CoriolisOptions
 )
 
 shallow_water_1d_wave_defaults = {
@@ -72,10 +72,10 @@ def shallow_water_1d_wave(
     ]
 
     # Equation
-    parameters = ShallowWaterParameters(mesh, H=1/epsilon, g=1/epsilon)
+    parameters = ShallowWaterParameters(mesh, rotation=CoriolisOptions.fplane,
+                                        f0=1/epsilon, H=1/epsilon, g=1/epsilon)
     eqns = ShallowWaterEquations_1d(
-        domain, parameters, fexpr=Constant(1/epsilon),
-        diffusion_options=diffusion_options
+        domain, parameters, diffusion_options=diffusion_options
     )
 
     output = OutputParameters(dirname=dirname, dumpfreq=dumpfreq)
