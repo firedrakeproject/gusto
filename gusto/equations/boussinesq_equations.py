@@ -1,9 +1,9 @@
 """Defines the Boussinesq equations."""
 
 from firedrake import inner, dx, div, cross, split, as_vector
-from firedrake.fml import subject
+from firedrake.fml import subject, all_terms
 from gusto.core.labels import (
-    time_derivative, transport, prognostic, linearisation,
+    time_derivative, prognostic, linearisation,
     pressure_gradient, coriolis, divergence, gravity, incompressible
 )
 from gusto.equations.common_forms import (
@@ -41,7 +41,7 @@ class BoussinesqEquations(PrognosticEquationSet):
     def __init__(self, domain, parameters,
                  compressible=True,
                  space_names=None,
-                 linearisation_map='default',
+                 linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
@@ -59,9 +59,8 @@ class BoussinesqEquations(PrognosticEquationSet):
                 in which case the spaces are taken from the de Rham complex.
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
-                then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes time derivatives and
-                scalar transport terms.
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -88,16 +87,6 @@ class BoussinesqEquations(PrognosticEquationSet):
 
         if active_tracers is None:
             active_tracers = []
-
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives, scalar transport,
-            # pressure gradient, gravity and divergence terms
-            # Don't include active tracers
-            linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'p', 'b'] \
-                and (any(t.has_label(time_derivative, pressure_gradient,
-                                     divergence, gravity))
-                     or (t.get(prognostic) not in ['u', 'p'] and t.has_label(transport)))
 
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
@@ -230,7 +219,7 @@ class LinearBoussinesqEquations(BoussinesqEquations):
     def __init__(self, domain, parameters,
                  compressible=True,
                  space_names=None,
-                 linearisation_map='default',
+                 linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
@@ -249,8 +238,8 @@ class LinearBoussinesqEquations(BoussinesqEquations):
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
                 then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes time derivatives and
-                scalar transport terms.
+                in which case the linearisation drops terms for any active
+                tracers.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -267,13 +256,6 @@ class LinearBoussinesqEquations(BoussinesqEquations):
             NotImplementedError: active tracers are not implemented.
         """
 
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure gradient,
-            # Coriolis and transport term from depth equation
-            linearisation_map = lambda t: \
-                (any(t.has_label(time_derivative, pressure_gradient, coriolis,
-                                 gravity, divergence, incompressible))
-                 or (t.get(prognostic) in ['p', 'b'] and t.has_label(transport)))
         super().__init__(domain=domain,
                          parameters=parameters,
                          compressible=compressible,

@@ -211,8 +211,15 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         # Linearise a term, and add the linearisation as a label
         def linearise(term, X, X_ref, du):
-            linear_term = Term(action(ufl.derivative(term.form, X), du), term.labels)
-            return linearisation(term, replace_subject(X_ref)(linear_term))
+            try:
+                derivative = ufl.derivative(term.form, X)
+                linear_term = Term(action(derivative, du), term.labels)
+                return linearisation(term, replace_subject(X_ref)(linear_term))
+            except IndexError:
+                # If the derivative is zero (e.g. for the gravity term) then
+                # action(derivative, du) will raise an IndexError
+                # In that case, just return the term with no linearisation label
+                return term
 
         # Add linearisations to all terms that need linearising
         residual = residual.label_map(

@@ -4,9 +4,9 @@ from firedrake import (
     sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg, dS_v,
     conditional, SpatialCoordinate, split, Constant, as_vector
 )
-from firedrake.fml import subject, replace_subject
+from firedrake.fml import subject, replace_subject, all_terms
 from gusto.core.labels import (
-    time_derivative, transport, prognostic, hydrostatic, linearisation,
+    time_derivative, prognostic, hydrostatic, linearisation,
     pressure_gradient, coriolis, gravity, sponge
 )
 from gusto.equations.thermodynamics import exner_pressure
@@ -35,7 +35,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
     def __init__(self, domain, parameters, sponge_options=None,
                  extra_terms=None, space_names=None,
-                 linearisation_map='default',
+                 linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
@@ -57,9 +57,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 in which case the spaces are taken from the de Rham complex.
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
-                then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes time derivatives and
-                scalar transport terms.
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -87,13 +86,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         if active_tracers is None:
             active_tracers = []
 
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives and scalar transport terms
-            # Don't include active tracers
-            linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'rho', 'theta'] \
-                and (t.has_label(time_derivative)
-                     or (t.get(prognostic) != 'u' and t.has_label(transport)))
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -283,7 +275,8 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
     """
 
     def __init__(self, domain, parameters, sponge_options=None,
-                 extra_terms=None, space_names=None, linearisation_map='default',
+                 extra_terms=None, space_names=None,
+                 linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
@@ -305,9 +298,8 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
                 in which case the spaces are taken from the de Rham complex.
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
-                then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes time derivatives and
-                scalar transport terms.
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
