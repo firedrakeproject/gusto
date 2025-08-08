@@ -335,11 +335,14 @@ class CompressibleSolver(TimesteppingSolver):
         # Function for the hybridized solutions
         self.urhol0 = Function(M)
 
+        appctx = {'slateschur_form': aeqn}
+
         hybridized_prb = LinearVariationalProblem(aeqn, Leqn, self.urhol0,
                                                   constant_jacobian=True)
         hybridized_solver = LinearVariationalSolver(hybridized_prb,
                                                     solver_parameters=self.solver_parameters,
-                                                    options_prefix='ImplicitSolver')
+                                                    options_prefix='ImplicitSolver',
+                                                    appctx=appctx)
         self.hybridized_solver = hybridized_solver
 
         # Project broken u into the HDiv space using facet averaging.
@@ -375,8 +378,8 @@ class CompressibleSolver(TimesteppingSolver):
         # Log residuals on hybridized solver
         self.log_ksp_residuals(self.hybridized_solver.snes.ksp)
         # Log residuals on the trace system too
-        python_context = self.hybridized_solver.snes.ksp.pc.getPythonContext()
-        attach_custom_monitor(python_context, logging_ksp_monitor_true_residual)
+        # python_context = self.hybridized_solver.snes.ksp.pc.getPythonContext()
+        # attach_custom_monitor(python_context, logging_ksp_monitor_true_residual)
 
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
