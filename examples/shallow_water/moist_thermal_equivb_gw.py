@@ -5,14 +5,17 @@ equations. The initial conditions are saturated and cloudy everywhere.
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
-    SpatialCoordinate, pi, sqrt, min_value, cos, Constant, Function, exp, sin
+    SpatialCoordinate, pi, sqrt, min_value, cos, Constant, Function, exp, sin,
+    norm, errornorm
 )
 from gusto import (
     Domain, IO, OutputParameters, DGUpwind, ShallowWaterParameters,
     ThermalShallowWaterEquations, lonlatr_from_xyz, MeridionalComponent,
     GeneralIcosahedralSphereMesh, SubcyclingOptions, ZonalComponent,
     PartitionedCloud, RungeKuttaFormulation, SSPRK3, ThermalSWSolver,
-    SemiImplicitQuasiNewton, xyz_vector_from_lonlatr
+    SemiImplicitQuasiNewton, xyz_vector_from_lonlatr, ThermalSWSolverNew,
+    ThermalSWSolverMono, prognostic, time_derivative, coriolis,
+    pressure_gradient, transport, drop
 )
 
 moist_thermal_gw_defaults = {
@@ -63,11 +66,17 @@ def moist_thermal_gw(
                                         nu=nu, beta2=beta2)
     Omega = parameters.Omega
     fexpr = 2*Omega*xyz[2]/radius
+    # def linearisation_map(term):
+    #     if term.has_label(time_derivative):
+    #         return True
+    #     else:
+    #         return False
+    linearisation_map = lambda t: t.has_label(time_derivative)
 
     # Equation
     eqns = ThermalShallowWaterEquations(
         domain, parameters, fexpr=fexpr,
-        equivalent_buoyancy=True
+        equivalent_buoyancy=False, linearisation_map = linearisation_map
     )
 
     # IO
@@ -85,6 +94,39 @@ def moist_thermal_gw(
     ]
 
     linear_solver = ThermalSWSolver(eqns)
+
+    import numpy as np
+    np.random.seed(6)
+
+    xold = Function(eqns.function_space)
+    yold = Function(eqns.function_space)
+    
+
+    for xsub in xold.subfunctions[:3]:
+        with xsub.dat.vec_wo as v:
+            v.array[:] = np.random.random_sample(v.array.shape)
+
+    xnew = xold.copy(deepcopy=True)
+    ynew = yold.copy(deepcopy=True)
+    xmono = xold.copy(deepcopy=True)
+    ymono = yold.copy(deepcopy=True)
+
+    # old_solver = ThermalSWSolver(eqns, options_prefix="swe_old")
+    # new_solver = ThermalSWSolverNew(eqns, options_prefix="swe_new")
+    mono_solver = ThermalSWSolverMono(eqns, alpha=0.5)
+
+    # old_solver.solve(xold, yold)
+    # new_solver.solve(xnew, ynew)
+    mono_solver.solve(xmono, ymono)
+
+    # for i, (xo, xn) in enumerate(zip(xold.subfunctions, xnew.subfunctions)):
+    #     print(f"{i = }: {errornorm(xo, xn)/norm(xo) = :4e}")
+    for i, (yo, yn) in enumerate(zip(yold.subfunctions, ynew.subfunctions)):
+        print(f"Hybrid New {i = }| {norm(yo) = :2e} | {norm(yn) = :2e} | {errornorm(yo, yn)/norm(yo) = :4e}")
+    for i, (yo, ym) in enumerate(zip(yold.subfunctions, ymono.subfunctions)):
+        print(f"Monolithic {i = }| {norm(yo) = :2e} | {norm(ym) = :2e} | {errornorm(yo, ym)/norm(yo) = :4e}")
+
+    from sys import exit; exit()
 
     # ------------------------------------------------------------------------ #
     # Timestepper
