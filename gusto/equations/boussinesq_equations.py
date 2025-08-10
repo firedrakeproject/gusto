@@ -3,7 +3,7 @@
 from firedrake import inner, dx, div, cross, split, as_vector
 from firedrake.fml import subject, all_terms
 from gusto.core.labels import (
-    time_derivative, prognostic, linearisation,
+    prognostic, linearisation,
     pressure_gradient, coriolis, divergence, gravity, incompressible
 )
 from gusto.equations.common_forms import (
