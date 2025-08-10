@@ -9,7 +9,8 @@ from gusto.equations.common_forms import (
     advection_form, advection_form_1d, continuity_form,
     continuity_form_1d, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form, diffusion_form_1d,
-    linear_continuity_form, linear_advection_form
+    linear_continuity_form, linear_advection_form,
+    linear_vector_invariant_form, linear_circulation_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
 
@@ -114,7 +115,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         w, phi = self.tests[0:2]
         u, D = split(self.X)[0:2]
         u_trial = split(self.trials)[0]
-        Dbar = split(self.X_ref)[1]
+        ubar, Dbar = split(self.X_ref)[0:2]
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -127,11 +128,27 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(self.domain, w, u, u), 'u')
+            # Manually add linearisation, as linearisation cannot handle the
+            # perp function on the plane / vertical slice
+            if self.linearisation_map(u_adv.terms[0]):
+                linear_u_adv = linear_vector_invariant_form(self.domain, w, u_trial, ubar)
+                u_adv = linearisation(u_adv, linear_u_adv)
+
+        elif u_transport_option == "circulation_form":
+            # This is different to vector invariant form as the K.E. form
+            # doesn't have a variable marked as "transporting velocity"
+            ke_form = prognostic(kinetic_energy_form(w, u, u), 'u')
+            circ_form = prognostic(advection_equation_circulation_form(self.domain, w, u, u), 'u')
+            # Manually add linearisation, as linearisation cannot handle the
+            # perp function on the plane / vertical slice
+            if self.linearisation_map(circ_form.terms[0]):
+                linear_circ_form = linear_circulation_form(self.domain, w, u_trial, ubar)
+                circ_form = linearisation(circ_form, linear_circ_form)
+            u_adv = circ_form + ke_form
+
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), 'u')
-        elif u_transport_option == "circulation_form":
-            ke_form = prognostic(kinetic_energy_form(w, u, u), 'u')
-            u_adv = prognostic(advection_equation_circulation_form(self.domain, w, u, u), 'u') + ke_form
+
         else:
             raise ValueError("Invalid u_transport_option: %s" % self.u_transport_option)
 
@@ -172,6 +189,12 @@ class ShallowWaterEquations(PrognosticEquationSet):
             f = self.prescribed_fields('coriolis', V).interpolate(fexpr)
             coriolis_form = coriolis(subject(
                 prognostic(f*inner(self.domain.perp(u), w)*dx, "u"), self.X))
+            # Add linearisation manually, as linearisation cannot handle the
+            # perp function on the plane / vertical slice
+            if self.linearisation_map(coriolis_form.terms[0]):
+                linear_coriolis = coriolis(
+                    subject(prognostic(f*inner(self.domain.perp(u_trial), w)*dx, 'u'), self.X))
+                coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 
         if topog_expr is not None:

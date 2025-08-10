@@ -12,7 +12,9 @@ from gusto.core.labels import (transport, transporting_velocity, diffusion,
 
 __all__ = ["advection_form", "advection_form_1d", "continuity_form",
            "continuity_form_1d", "vector_invariant_form",
+           "linear_vector_invariant_form",
            "kinetic_energy_form", "advection_equation_circulation_form",
+           "linear_circulation_form",
            "diffusion_form", "diffusion_form_1d",
            "linear_advection_form", "linear_continuity_form",
            "split_continuity_form", "tracer_conservative_form", "split_hv_advective_form"]
@@ -172,6 +174,34 @@ def vector_invariant_form(domain, test, q, ubar):
     return transport(form, TransportEquationType.vector_invariant)
 
 
+def linear_vector_invariant_form(domain, test, q, ubar):
+    u"""
+    The linear form corresponding to the vector invariant transport operator.
+
+    The vector invariant transport operator is: (∇×q)×u + (1/2)∇(u.q)
+    and its linearised form is:
+    (∇×q')×u_bar + (∇×q_bar)×u' + (1/2)∇(u_bar.q') + (1/2)∇(u'.q_bar)
+
+    Args:
+        domain (:class:`Domain`): the model's domain object, containing the
+            mesh and the compatible function spaces.
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    L = linear_circulation_form(domain, test, q, ubar).form
+
+    # Add K.E. term
+    L -= div(test)*inner(q, ubar)*dx
+    form = transporting_velocity(L, ubar)
+
+    return transport(form, TransportEquationType.vector_invariant)
+
+
 def kinetic_energy_form(test, q, ubar):
     u"""
     The form corresponding to the kinetic energy term.
@@ -228,6 +258,22 @@ def advection_equation_circulation_form(domain, test, q, ubar):
     form = transporting_velocity(L, ubar)
 
     return transport(form, TransportEquationType.circulation)
+
+
+def linear_circulation_form(domain, test, q, ubar):
+    """
+    The linear circulation term in the transport of a vector-valued field.
+
+    Args:
+        test (:class:`TestFunction`): the test function.
+        q (:class:`ufl.Expr`): the variable to be transported.
+        ubar (:class:`ufl.Expr`): the transporting velocity.
+
+    Returns:
+        class:`LabelledForm`: a labelled transport form.
+    """
+
+    return 2.0*advection_equation_circulation_form(domain, test, q, ubar)
 
 
 def diffusion_form(test, q, kappa):

@@ -13,7 +13,8 @@ from gusto.equations.thermodynamics import exner_pressure
 from gusto.equations.common_forms import (
     advection_form, continuity_form, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form,
-    diffusion_form, linear_continuity_form, linear_advection_form
+    diffusion_form, linear_continuity_form, linear_advection_form,
+    linear_vector_invariant_form, linear_circulation_form
 )
 from gusto.equations.active_tracers import Phases, TracerVariableType
 from gusto.equations.prognostic_equations import PrognosticEquationSet
@@ -98,7 +99,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         w, phi, gamma = self.tests[0:3]
         u, rho, theta = split(self.X)[0:3]
         u_trial = split(self.trials)[0]
-        _, rho_bar, theta_bar = split(self.X_ref)[0:3]
+        u_bar, rho_bar, theta_bar = split(self.X_ref)[0:3]
         zero_expr = Constant(0.0)*theta
         exner = exner_pressure(parameters, rho, theta)
         n = FacetNormal(domain.mesh)
@@ -117,14 +118,30 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
-            u_adv = prognostic(vector_invariant_form(domain, w, u, u), 'u')
+            u_adv = prognostic(vector_invariant_form(self.domain, w, u, u), 'u')
+            # Manually add linearisation, as linearisation cannot handle the
+            # perp function on the plane / vertical slice
+            if self.linearisation_map(u_adv.terms[0]):
+                linear_u_adv = linear_vector_invariant_form(self.domain, w, u_trial, u_bar)
+                u_adv = linearisation(u_adv, linear_u_adv)
+
+        elif u_transport_option == "circulation_form":
+            # This is different to vector invariant form as the K.E. form
+            # doesn't have a variable marked as "transporting velocity"
+            ke_form = prognostic(kinetic_energy_form(w, u, u), 'u')
+            circ_form = prognostic(advection_equation_circulation_form(self.domain, w, u, u), 'u')
+            # Manually add linearisation, as linearisation cannot handle the
+            # perp function on the plane / vertical slice
+            if self.linearisation_map(circ_form.terms[0]):
+                linear_circ_form = linear_circulation_form(self.domain, w, u_trial, u_bar)
+                circ_form = linearisation(circ_form, linear_circ_form)
+            u_adv = circ_form + ke_form
+
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), 'u')
-        elif u_transport_option == "circulation_form":
-            ke_form = prognostic(kinetic_energy_form(w, u, u), 'u')
-            u_adv = prognostic(advection_equation_circulation_form(domain, w, u, u), 'u') + ke_form
+
         else:
-            raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
+            raise ValueError("Invalid u_transport_option: %s" % self.u_transport_option)
 
         # Density transport (conservative form)
         rho_adv = prognostic(continuity_form(phi, rho, u), 'rho')

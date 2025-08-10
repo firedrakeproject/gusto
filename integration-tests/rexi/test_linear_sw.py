@@ -5,6 +5,7 @@ answer to confirm that REXI is correct.
 """
 
 from os.path import join, abspath, dirname
+from gusto.core.labels import prognostic, transport
 from gusto import *
 from gusto.rexi import *
 from firedrake import (PeriodicUnitSquareMesh, SpatialCoordinate, Constant, sin,
