@@ -6,20 +6,12 @@ import os
 
 from_diag = True
 
-filepath = 'Bu2b4Rop2_l500dt250df30_n'
+filepath = 'Bu2b4Rop2_l0dt250df1_n'
 
 plot_dir = f'/data/home/sh1293/results/jupiter_sw/{filepath}/Plots'
 if not os.path.exists(plot_dir):
     os.makedirs(plot_dir)
 
-g = 24.79
-Bu = float(filepath.split('Bu')[1].split('b')[0])
-Omega = 1.74e-4
-R = 71.4e6
-f0 = 2 * Omega
-rm = 1e6
-phi0 = Bu * (f0*rm)**2
-H = phi0/g
 
 if from_diag:
     ke_density, times = fcs.make_structured(filepath, 'ShallowWaterKineticEnergy')
@@ -28,14 +20,33 @@ if from_diag:
     pe_density, _ = fcs.make_structured(filepath, 'ShallowWaterPotentialEnergy')
     PE_total = pe_density.integrate('x').integrate('y')
 
-    avlpe_density = 1/2*g*(np.sqrt(2*pe_density/g)-H)**2
-    avlPE_total = avlpe_density.integrate('x').integrate('y')
+    try:
+        avlpe_density, _ = fcs.make_structured(filepath, 
+                                            'ShallowWaterAvailablePotentialEnergy')
+        avlPE_total = avlpe_density.integrate('x').integrate('y')
+        print(f"Using 'Available PE' diagnostic")
+    except IndexError as e:
+        if "not found in" in str(e):
+            print(f"No 'Available PE' diagnostic")
+            g = 24.79
+            Bu = float(filepath.split('Bu')[1].split('b')[0])
+            Omega = 1.74e-4
+            R = 71.4e6
+            f0 = 2 * Omega
+            rm = 1e6
+            phi0 = Bu * (f0*rm)**2
+            H = phi0/g
+            avlpe_density = 1/2*g*(np.sqrt(2*pe_density/g)-H)**2
+            avlPE_total = avlpe_density.integrate('x').integrate('y')
+        else:
+            raise
 
     e_density = ke_density + pe_density
     E_total = e_density.integrate('x').integrate('y')
 
     avle_density = ke_density + avlpe_density
     avlE_total = avle_density.integrate('x').integrate('y')
+
 else:
     g = 24.79
     D = fcs.make_structured(filepath, 'D')

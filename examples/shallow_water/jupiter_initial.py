@@ -43,9 +43,9 @@ H = phi0/g
 t_day = 2*pi/Omega
 
 ### timing options
-dump_freq = 30    # dump frequency of output
+dump_freq = 1    # dump frequency of output
 dt = 250.          # timestep (in seconds)
-tmax = 500*t_day       # duration of the simulation (in seconds)
+tmax = 5*dt       # duration of the simulation (in seconds)
 
 restart = False
 restart_name = 'Bu2b1Rop2_l100dt250df30_n'
@@ -330,7 +330,8 @@ logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000
 diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                     ShallowWaterKineticEnergy(), 
                     ShallowWaterPotentialEnergy(parameters),
-                    ShallowWaterPotentialEnstrophy()]
+                    ShallowWaterPotentialEnstrophy(),
+                    ShallowWaterAvailablePotentialEnergy(parameters)]
 
 io = IO(domain, output=output, diagnostic_fields=diagnostic_fields)
 
