@@ -19,17 +19,17 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parallel(nprocs=[6])
+@pytest.mark.parallel(nprocs=[4])
 @pytest.mark.parametrize(
-    "scheme", ["IMEX_SDC(3,3)", "IMEX_RIDC(3)"])
+    "scheme", ["IMEX_SDC(4,4)", "IMEX_RIDC(2)"])
 def test_parallel_dc(tmpdir, scheme):
 
-    if scheme == "IMEX_SDC(3,3)":
-        M = 3
-        k = M
+    if scheme == "IMEX_SDC(4,4)":
+        M = 4
+        k = 4
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(M))
-    elif scheme == "IMEX_RIDC(3)":
-        k = 2
+    elif scheme == "IMEX_RIDC(2)":
+        k = 1
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(k+1))
 
     # Get the tracer setup
@@ -65,20 +65,23 @@ def test_parallel_dc(tmpdir, scheme):
     domain = domain
     V = domain.spaces("DG")
     eqn = ContinuityEquation(domain, V, "f")
-    eqn = split_continuity_form(eqn)
-    eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
-    eqn.label_terms(lambda t: t.has_label(transport), explicit)
 
-    if scheme == "IMEX_SDC(3,3)":
+    if scheme == "IMEX_SDC(4,4)":
+        eqn.label_terms(lambda t: not t.has_label(time_derivative), implicit)
+
         quad_type = "RADAU-RIGHT"
         node_type = "LEGENDRE"
         qdelta_imp = "MIN-SR-FLEX"
         qdelta_exp = "MIN-SR-NS"
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
-                                   qdelta_exp, final_update=True, initial_guess="copy", communicator=ensemble)
-    elif scheme == "IMEX_RIDC(3)":
-        M = k*(k+1)//2 + 4
+                                   qdelta_exp, final_update=True, initial_guess="base", communicator=ensemble)
+    elif scheme == "IMEX_RIDC(2)":
+        eqn = split_continuity_form(eqn)
+        eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
+        eqn.label_terms(lambda t: t.has_label(transport), explicit)
+
+        M = 5
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_RIDC(base_scheme, domain, M, k, communicator=ensemble)
 
