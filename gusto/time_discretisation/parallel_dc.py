@@ -298,7 +298,7 @@ class Parallel_SDC(SDC):
 
             if self.qdelta_imp_type == "MIN-SR-FLEX":
                 # Recompute Implicit Q_delta matrix for each iteration k
-                self.Qdelta_imp = genQDeltaCoeffs(
+                self.Qdelta_imp = float(self.dt_coarse)*genQDeltaCoeffs(
                     self.qdelta_imp_type,
                     form=self.formulation,
                     nodes=self.nodes,

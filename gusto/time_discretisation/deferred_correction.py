@@ -155,12 +155,6 @@ class SDC(object, metaclass=ABCMeta):
                                                       quadType=quad_type,
                                                       form=formulation)
 
-        # Rescale to be over [0,dt] rather than [0,1]
-        self.nodes = float(self.dt_coarse)*self.nodes
-
-        self.dtau = np.diff(np.append(0, self.nodes))
-        self.Q = float(self.dt_coarse)*self.Q
-        self.Qfin = float(self.dt_coarse)*self.weights
         self.qdelta_imp_type = qdelta_imp
         self.formulation = formulation
         self.node_type = node_type
@@ -168,9 +162,18 @@ class SDC(object, metaclass=ABCMeta):
 
         # Get Q_delta matrices
         self.Qdelta_imp = genQDeltaCoeffs(qdelta_imp, form=formulation,
-                                          nodes=self.nodes, Q=self.Q, nNodes=M, nodeType=node_type, quadType=quad_type)
+                                          nodes=self.nodes, Q=self.Q, nNodes=M, nodeType=node_type, quadType=quad_type, k=1)
         self.Qdelta_exp = genQDeltaCoeffs(qdelta_exp, form=formulation,
                                           nodes=self.nodes, Q=self.Q, nNodes=M, nodeType=node_type, quadType=quad_type)
+
+        # Rescale to be over [0,dt] rather than [0,1]
+        self.nodes = float(self.dt_coarse)*self.nodes
+        self.dtau = np.diff(np.append(0, self.nodes))
+        self.Q = float(self.dt_coarse)*self.Q
+        self.Qfin = float(self.dt_coarse)*self.weights
+        self.Qdelta_imp = float(self.dt_coarse)*self.Qdelta_imp
+        self.Qdelta_exp = float(self.dt_coarse)*self.Qdelta_exp
+
         # Set default linear and nonlinear solver options if none passed in
         if linear_solver_parameters is None:
             self.linear_solver_parameters = {'snes_type': 'ksponly',
@@ -459,7 +462,7 @@ class SDC(object, metaclass=ABCMeta):
 
             if self.qdelta_imp_type == "MIN-SR-FLEX":
                 # Recompute Implicit Q_delta matrix for each iteration k
-                self.Qdelta_imp = genQDeltaCoeffs(
+                self.Qdelta_imp = float(self.dt_coarse)*genQDeltaCoeffs(
                     self.qdelta_imp_type,
                     form=self.formulation,
                     nodes=self.nodes,
