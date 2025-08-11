@@ -1,5 +1,8 @@
 from gusto import *
-from firedrake import IcosahedralSphereMesh, SpatialCoordinate, as_vector, pi, interpolate, exp, cos, sin, sqrt, PeriodicRectangleMesh, atan2, conditional
+from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
+                        as_vector, pi, interpolate, exp, cos, sin,
+                        sqrt, PeriodicRectangleMesh, atan2,
+                        conditional, RandomGenerator, PCG64)
 import scipy
 import numpy as np
 import time
@@ -7,9 +10,9 @@ import os
 import shutil
 
 ### options changed in Cheng Li 2020
-Bu = 10
-Ro = 0.23
-b = 1.5
+Bu = 2
+b = 4
+Ro = 0.2
 
 ### setup grid parameters
 nx = 256
@@ -40,12 +43,12 @@ H = phi0/g
 t_day = 2*pi/Omega
 
 ### timing options
-dump_freq = 15    # dump frequency of output
+dump_freq = 30    # dump frequency of output
 dt = 250.          # timestep (in seconds)
 tmax = 500*t_day       # duration of the simulation (in seconds)
 
-restart = True
-restart_name = 'int_Bu10b1p5Rop23_l100dt250df15'
+restart = False
+restart_name = 'Bu2b1Rop2_l100dt250df30_n'
 t0 = 100*t_day
 
 ### vortex locations
@@ -53,11 +56,10 @@ south_lat_deg = [90., 83., 83., 83., 83., 83.]#, 70.]
 south_lon_deg = [0., 72., 144., 216., 288., 0.]#, 0.]
 
 ### name
-# folder_name = 'jupiter_initial_multi'
-setup = 'int'
+setup = ''
 
-
-
+### add noise to initial depth profile?
+noise = True
 
 ##########################################################################
 
@@ -81,7 +83,11 @@ Buint, Budec = split_number(Bu)
 
 if setup != '':
     setup = f'{setup}_'
-folder_name = f'{setup}Bu{Buint}{Budec}b{bint}{bdec}Ro{Roint}{Rodec}_l{round(tmax/t_day)}dt{int(dt)}df{dump_freq}'
+if noise:
+    noise_name = f'_n'
+else:
+    noise_name = ''
+folder_name = f'{setup}Bu{Buint}{Budec}b{bint}{bdec}Ro{Roint}{Rodec}_l{round(tmax/t_day)}dt{int(dt)}df{dump_freq}{noise_name}'
 
 dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}'
 dirnameold=f'/data/home/sh1293/results/jupiter_sw/{restart_name}'
@@ -314,8 +320,6 @@ ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)
 eqns = ShallowWaterEquations(domain, parameters, fexpr=ftrap)
 logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
-# output = OutputParameters(dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}', dumpfreq=dump_freq, dump_nc=True, checkpoint=True)
-
 # diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D'),
 #                      RelativeVorticity(), PotentialVorticity(),
 #                      ShallowWaterKineticEnergy(),
@@ -323,7 +327,10 @@ logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000
 #                      ShallowWaterPotentialEnstrophy(),
 #                      CourantNumber()]#, MeridionalComponent('u'), ZonalComponent('u')]
 
-diagnostic_fields = [RelativeVorticity(), PotentialVorticity()]
+diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
+                    ShallowWaterKineticEnergy(), 
+                    ShallowWaterPotentialEnergy(parameters),
+                    ShallowWaterPotentialEnstrophy()]
 
 io = IO(domain, output=output, diagnostic_fields=diagnostic_fields)
 
@@ -436,6 +443,12 @@ if not restart:
     u0.project(uexpr)
     D0.interpolate(Dfinal)
 
+    if noise:
+        pcg = PCG64()
+        rg = RandomGenerator(pcg)
+        f_normal = rg.normal(VD, 0.0, 1.5e-3*H)
+        D0 += f_normal
+
 Dbar = Function(D0.function_space()).assign(H)
 stepper.set_reference_profiles([('D', Dbar)])
 
@@ -449,5 +462,8 @@ elif restart:
 
 end_time = time.time()
 
-logger.info(f'Total time taken {(end_time-start_time):.2f} seconds')
+t_start = tmin if restart else 0
+
+logger.info((f'Start time {t_start}'))
+logger.info(f'Total time taken {(end_time-start_time):.2f} seconds, {((end_time-start_time)/60**2):.2f} hours')
 logger.info(f'File produced:\n{folder_name}')
