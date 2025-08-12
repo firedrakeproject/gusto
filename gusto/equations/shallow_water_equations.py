@@ -34,7 +34,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
     def __init__(self, domain, parameters,
                  space_names=None, linearisation_map='default',
-                 u_transport_option='vector_invariant_form',
+                 u_transport_option='vector_advection_form',
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
         Args:
@@ -172,7 +172,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # the equation, and initialised when the equation is
 
         rotation = self.parameters.rotation
-        if rotation is not None:
+        if rotation is not CoriolisOptions.nonrotating:
             CG1 = FunctionSpace(self.domain.mesh, "CG", 1)
             if rotation is CoriolisOptions.sphere:
                 assert self.domain.on_sphere
@@ -678,7 +678,7 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
                          + pressure_gradient_form)
 
         rotation = self.parameters.rotation
-        if rotation is not None:
+        if rotation is not CoriolisOptions.nonrotating:
             V = FunctionSpace(domain.mesh, 'CG', 1)
             if rotation is CoriolisOptions.fplane:
                 fexpr = self.parameters.f0
