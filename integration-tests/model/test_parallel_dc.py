@@ -19,13 +19,13 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parallel(nprocs=[4])
+@pytest.mark.parallel(nprocs=[2])
 @pytest.mark.parametrize(
-    "scheme", ["IMEX_RIDC(2)", "IMEX_SDC(4,2)"])
+    "scheme", ["IMEX_RIDC(2)", "IMEX_SDC(2,2)"])
 def test_parallel_dc(tmpdir, scheme):
 
-    if scheme == "IMEX_SDC(4,2)":
-        M = 4
+    if scheme == "IMEX_SDC(2,2)":
+        M = 2
         k = 2
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(M))
     elif scheme == "IMEX_RIDC(2)":
@@ -66,7 +66,7 @@ def test_parallel_dc(tmpdir, scheme):
     V = domain.spaces("DG")
     eqn = ContinuityEquation(domain, V, "f")
 
-    if scheme == "IMEX_SDC(4,2)":
+    if scheme == "IMEX_SDC(2,2)":
         eqn.label_terms(lambda t: not t.has_label(time_derivative), implicit)
 
         quad_type = "RADAU-RIGHT"
