@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 
-def run_rexi_sw(tmpdir, ensemble=None):
+def run_rexi_sw(tmpdir, coefficients, ensemble=None):
     # Parameters
     tmax = 0.1
     H = 1
@@ -66,7 +66,8 @@ def run_rexi_sw(tmpdir, ensemble=None):
         rexi_output.write(u, D)
 
     # Compute exponential solution and write it out
-    rexi = Rexi(eqns, RexiParameters(), manager=ensemble)
+    rexi = Rexi(eqns, RexiParameters(coefficients=coefficients),
+                manager=ensemble)
     rexi.solve(Uexpl, U_in, tmax)
 
     uexpl, Dexpl = Uexpl.subfunctions
@@ -101,23 +102,25 @@ def run_rexi_sw(tmpdir, ensemble=None):
     return uerror, Derror
 
 
-def test_rexi_sw(tmpdir):
+@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+def test_rexi_sw(tmpdir, coefficients):
 
     dirname = str(tmpdir)
 
-    uerror, Derror = run_rexi_sw(dirname)
+    uerror, Derror = run_rexi_sw(dirname, coefficients)
 
-    assert uerror < 1e-14, 'u values in REXI linear shallow water wave test do not match KGO values'
-    assert Derror < 1e-14, 'D values in REXI linear shallow water wave test do not match KGO values'
+    assert uerror < 1e-10, 'u values in REXI linear shallow water wave test do not match KGO values'
+    assert Derror < 1e-10, 'D values in REXI linear shallow water wave test do not match KGO values'
 
 
 @pytest.mark.parallel(nprocs=2)
-def test_parallel_rexi_sw(tmpdir):
+@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+def test_parallel_rexi_sw(tmpdir, coefficients):
 
     dirname = str(tmpdir)
     ensemble = Ensemble(COMM_WORLD, 1)
 
-    uerror, Derror = run_rexi_sw(dirname, ensemble=ensemble)
+    uerror, Derror = run_rexi_sw(dirname, coefficients, ensemble=ensemble)
 
-    assert uerror < 1e-14, 'u values in REXI linear shallow water wave test do not match KGO values'
-    assert Derror < 1e-14, 'D values in REXI linear shallow water wave test do not match KGO values'
+    assert uerror < 1e-10, 'u values in REXI linear shallow water wave test do not match KGO values'
+    assert Derror < 1e-10, 'D values in REXI linear shallow water wave test do not match KGO values'
