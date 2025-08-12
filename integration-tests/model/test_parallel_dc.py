@@ -21,7 +21,7 @@ def run(timestepper, tmax, f_end):
 
 @pytest.mark.parallel(nprocs=[4])
 @pytest.mark.parametrize(
-    "scheme", ["IMEX_SDC(4,2)", "IMEX_RIDC(2)"])
+    "scheme", ["IMEX_RIDC(2)", "IMEX_SDC(4,2)"])
 def test_parallel_dc(tmpdir, scheme):
 
     if scheme == "IMEX_SDC(4,2)":
