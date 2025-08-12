@@ -31,9 +31,7 @@ def setup_sw(dirname):
 
     # Equation
     parameters = ShallowWaterParameters(mesh, H=H)
-    Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
-    eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
+    eqns = LinearShallowWaterEquations(domain, parameters)
 
     # I/O
     diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D')]
@@ -56,6 +54,7 @@ def setup_sw(dirname):
     u_max = 2*pi*R/(12*day)  # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
     g = parameters.g
+    Omega = parameters.Omega
     Dexpr = H-((R * Omega * u_max)*(x[2]*x[2]/(R*R)))/g
     u0.project(uexpr)
     D0.interpolate(Dexpr)
