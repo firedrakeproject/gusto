@@ -1,8 +1,8 @@
 """
 This runs a simple transport test on the sphere using the parallel DC time discretisations to
 test whether the errors are within tolerance. The test is run for the following schemes:
-- IMEX_SDC(2,2)  - IMEX SDC with 2 qaudrature nodes of Radau type (3rd order scheme) using
-- IMEX_RIDC(3)   - IMEX RIDC with 4 quadrature nodes of equidistant type, reduced stencils (3rd order scheme).
+- IMEX_SDC(2,2)  - IMEX SDC with 2 qaudrature nodes of Radau type and 2 correction sweeps (2nd order scheme)
+- IMEX_RIDC(2)   - IMEX RIDC with 3 quadrature nodes of equidistant type, 1 correction sweep, reduced stencils (2nd order scheme).
 """
 
 from firedrake import (norm, Ensemble, COMM_WORLD, SpatialCoordinate,
@@ -19,14 +19,14 @@ def run(timestepper, tmax, f_end):
     return norm(timestepper.fields("f") - f_end) / norm(f_end)
 
 
-@pytest.mark.parallel(nprocs=[4])
+@pytest.mark.parallel(nprocs=[2, 4])
 @pytest.mark.parametrize(
-    "scheme", ["IMEX_SDC(4,4)", "IMEX_RIDC(2)"])
+    "scheme", ["IMEX_SDC(2,2)", "IMEX_RIDC(2)"])
 def test_parallel_dc(tmpdir, scheme):
 
-    if scheme == "IMEX_SDC(4,4)":
-        M = 4
-        k = 4
+    if scheme == "IMEX_SDC(2,2)":
+        M = 2
+        k = 2
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(M))
     elif scheme == "IMEX_RIDC(2)":
         k = 1
@@ -66,7 +66,7 @@ def test_parallel_dc(tmpdir, scheme):
     V = domain.spaces("DG")
     eqn = ContinuityEquation(domain, V, "f")
 
-    if scheme == "IMEX_SDC(4,4)":
+    if scheme == "IMEX_SDC(2,2)":
         eqn.label_terms(lambda t: not t.has_label(time_derivative), implicit)
 
         quad_type = "RADAU-RIGHT"
