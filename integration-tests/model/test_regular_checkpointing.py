@@ -1,8 +1,8 @@
 """
-Runs a shallow water test that uses checkpointing. The test runs for 10
-timesteps and outputs a checkpoint file every 5 timesteps. the checkpoint
-after 5 steps is picked up and run for 5 steps, to compare to the original
-run of 10 timesteps. 
+Runs a shallow water test that uses checkpointing. The test runs for 8
+timesteps and outputs a checkpoint file every 2 timesteps. The checkpoint
+after 4 steps is picked up and run for another 4 steps and the results are
+compared to the original run of 8 timesteps.
 """
 
 from os import path
@@ -15,20 +15,16 @@ from firedrake import (PeriodicSquareMesh, SpatialCoordinate,
 
 def run_sw_fplane(run_num, ndt, output, chkfile=None):
     # Domain
-    # mesh_name = 'sw_fplane_mesh'
     if run_num == 1:
         # Set up a mesh
         Nx = 32
         Ny = Nx
         Lx = 10
-        # mesh = PeriodicSquareMesh(Nx, Ny, Lx, quadrilateral=True, name=mesh_name)
         mesh = PeriodicSquareMesh(Nx, Ny, Lx, quadrilateral=True)
 
     else:
-        # recover the mesh from the checkpoint
-        print("we are initialising from a previous run")
-        print("this is the file we pick up from:", chkfile)
-        # TODO: chkfile must not be None
+        # On this run we are picing up a checkpoint from a previous run and
+        # we recover the mesh from the checkpoint
         mesh = CheckpointFile(chkfile, 'r').load_mesh()
 
     dt = 0.01
@@ -59,7 +55,7 @@ def run_sw_fplane(run_num, ndt, output, chkfile=None):
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       transport_methods,
                                       num_outer=4, num_inner=1)
-    
+
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
 
@@ -70,15 +66,11 @@ def run_sw_fplane(run_num, ndt, output, chkfile=None):
         D0.interpolate(D_expr)
 
     else:
-        # Pick up fields from previous run's checkpoint
-        print("we are initialising from a previous run")
-        print("this is the file we pick up from:", chkfile)
-        # TODO: chkfile must not be None
-        # Recover the fields from the checkpoint
+        # Initialise fields from previous run's checkpoint
         with CheckpointFile(chkfile, 'r') as chk:
             start_D = chk.load_function(mesh, 'D')
             start_u = chk.load_function(mesh, 'u')
-        
+
         u0.project(start_u)
         D0.interpolate(start_D)
 
@@ -93,14 +85,14 @@ def run_sw_fplane(run_num, ndt, output, chkfile=None):
 
     return stepper
 
-  
+
 def initialise(mesh, parameters, Lx, f0):
 
     x, y = SpatialCoordinate(mesh)
     N0 = 0.1
     g = parameters.g
     H = parameters.H
-    Lx=Lx
+    Lx = Lx
     gamma = sqrt(g*H)
     ###############################
     #  Fast wave:
@@ -137,93 +129,44 @@ def initialise(mesh, parameters, Lx, f0):
     u_expr = as_vector([u1+u2, v1+v2])
     D_expr = H + sqrt(H/g)*(phi1+phi2)
 
-    return u_expr, D_expr 
+    return u_expr, D_expr
 
 
-# def test_regular_checkpointing(tmpdir):
+def test_regular_checkpointing(tmpdir):
 
-tmpdir = "testing_regular_checkpointing_tmp"
+    output1 = OutputParameters(
+        dirname=str(tmpdir)+"/sw_fplane_run1",
+        dumpfreq=1,
+        chkptfreq=2,
+        checkpoint=True
+    )
+    stepper1 = run_sw_fplane(run_num=1, ndt=8, output=output1)
 
-output1 = OutputParameters(
-    dirname=str(tmpdir)+"/sw_fplane_run1",
-    dumpfreq=1,
-    chkptfreq=2,
-    checkpoint=True
-)
-stepper1 = run_sw_fplane(run_num=1, ndt=4, output=output1)
+    # Pick up the checkpoint after 4 timesteps and run with that as the IC
+    chkpt1_filename = 'chkpt0.04.h5'
+    chkpt1_path = path.join(stepper1.io.dumpdir, 'chkpts', chkpt1_filename)
+    # First check that the checkpoint was sucessfully created - the test will fail if
+    # this is not the case
+    assert path.isfile(chkpt1_path), "The checkpoint from the first run was not created"
 
-# pick up the checkpoint after 5 timesteps and run from there
-chkpt1_filename = 'chkpt0.02.h5'
-chkpt1_path = path.join(stepper1.io.dumpdir, 'chkpts', chkpt1_filename)
+    output2 = OutputParameters(
+        dirname=str(tmpdir)+"/sw_fplane_run2",
+        dumpfreq=1,
+        checkpoint=True,
+        checkpoint_pickup_filename=chkpt1_path
+    )
+    stepper2 = run_sw_fplane(run_num=2, ndt=4, output=output2, chkfile=chkpt1_path)
 
-output2 = OutputParameters(
-    dirname=str(tmpdir)+"/sw_fplane_run2",
-    dumpfreq=1,
-    checkpoint=True,
-    checkpoint_pickup_filename=chkpt1_path
-)
-print("this is the file that is picked up:", chkpt1_path)
-stepper2 = run_sw_fplane(run_num=2, ndt=2, output=output2, chkfile=chkpt1_path)
+    # ------------------------------------------------------------------------ #
+    # Check that checkpointed values agree
+    # ------------------------------------------------------------------------ #
 
-# ------------------------------------------------------------------------ #
-# Check that checkpointed values agree
-# ------------------------------------------------------------------------ #
+    for field_name in ['u', 'D']:
+        run1_variable = stepper1.fields(field_name)
+        run2_variable = stepper2.fields(field_name)
+        diff_array = run2_variable.dat.data - run1_variable.dat.data
+        error = np.linalg.norm(diff_array) / np.linalg.norm(run1_variable.dat.data)
 
-for field_name in ['u', 'D']:
-    run1_variable = stepper1.fields(field_name)
-    run2_variable = stepper2.fields(field_name)
-    diff_array = run2_variable.dat.data - run1_variable.dat.data
-    error = np.linalg.norm(diff_array) / np.linalg.norm(run1_variable.dat.data)
-
-    assert error < 1e-10, f'Values for {field_name} in ' + \
-        'shallow water fplane test do not match after ' + \
-        'picking up checkpoint halfway through'
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# def set_up_model_objects(mesh, dt, output):
-
-#     domain = Domain(mesh, dt, "CG", 1)
-
-#     parameters = ShallowWaterParameters(mesh)
-#     eqns = ShallowWaterEquations(domain, parameters)
-
-#     io = IO(domain, output)
-
-#     transport_methods = [DGUpwind(eqns, 'u'),
-#                          DGUpwind(eqns, 'D')]
-    
-#     transported_fields = [SSPRK3(domain, "u"),
-#                           SSPRK3(domain, "D")]
-    
-#     # build time stepper
-#     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-#                                       transport_methods)
-    
-#     return stepper, eqns
-
-
-# def initialise_fields(eqns, stepper):
-
-#     # Initial conditions
-#     u0 = stepper.fields("u")
-#     D0 = stepper.fields("D")
-    
-
-    
+        assert error < 1e-10, f'Values for {field_name} in ' + \
+            'shallow water fplane test do not match after ' + \
+            'picking up checkpoint halfway through'
