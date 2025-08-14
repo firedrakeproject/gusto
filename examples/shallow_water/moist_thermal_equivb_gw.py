@@ -13,7 +13,7 @@ from gusto import (
     ThermalShallowWaterEquations, lonlatr_from_xyz, MeridionalComponent,
     GeneralIcosahedralSphereMesh, SubcyclingOptions, ZonalComponent,
     PartitionedCloud, RungeKuttaFormulation, SSPRK3, ThermalSWSolver,
-    SemiImplicitQuasiNewton, xyz_vector_from_lonlatr, ThermalSWSolverNew,
+    SemiImplicitQuasiNewton, xyz_vector_from_lonlatr,
     ThermalSWSolverMono, prognostic, time_derivative, coriolis,
     pressure_gradient, transport, drop
 )
@@ -69,7 +69,7 @@ def moist_thermal_gw(
     # Equation
     eqns = ThermalShallowWaterEquations(
         domain, parameters, fexpr=fexpr,
-        equivalent_buoyancy=False
+        equivalent_buoyancy=True
     )
 
     # IO
@@ -86,40 +86,69 @@ def moist_thermal_gw(
         DGUpwind(eqns, field_name) for field_name in eqns.field_names
     ]
 
-    linear_solver = ThermalSWSolver(eqns)
+    params = {
+        'ksp_view': ':ksp_view.log',
+        'ksp_error_if_not_converged': None,
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'additive',
+        'pc_fieldsplit_0_fields': '0,1,2',
+        'pc_fieldsplit_1_fields': '3',  # do nothing for scalar field
+        'fieldsplit_0': {
+            'pc_type': 'fieldsplit',
+            'pc_fieldsplit_type': 'schur',
+            'pc_fieldsplit_schur_fact_type': 'full',
+            'pc_fieldsplit_1_fields': '0,1',
+            'pc_fieldsplit_0_fields': '2',  # eliminate temperature
+            'fieldsplit_L2': {
+                'ksp_monitor': None,
+                'ksp_type': 'preonly',
+                'pc_type': 'python',
+                'pc_python_type': 'firedrake.AssembledPC',
+                'assembled_pc_type': 'bjacobi',
+                'assembled_sub_pc_type': 'ilu',
+            },
+            'fieldsplit_1': {
+                'ksp_monitor': None,
+                'ksp_type': 'preonly',
+                'pc_type': 'python',
+                'pc_python_type': 'gusto.AuxiliaryPC',
+                'aux': {
+                    'mat_type': 'matfree',
+                    'pc_type': 'python',
+                    'pc_python_type': 'firedrake.HybridizationPC',
+                    'hybridization': {
+                        'ksp_type': 'cg',
+                        'pc_type': 'gamg',
+                        'ksp_rtol': 1e-8,
+                        'mg_levels': {
+                            'ksp_type': 'chebyshev',
+                            'ksp_max_it': 2,
+                            'pc_type': 'bjacobi',
+                            'sub_pc_type': 'ilu'
+                        },
+                        'mg_coarse': {
+                            'ksp_type': 'preonly',
+                            'pc_type': 'lu',
+                            'pc_factor_mat_solver_type': 'mumps',
+                        },
+                    },
+                },
+            },
+        },
+        'fieldsplit_L2': {
+            'ksp_type': 'preonly',
+            'pc_type': 'none',
+        },
+    }
 
-    import numpy as np
-    np.random.seed(6)
-
-    xold = Function(eqns.function_space)
-    yold = Function(eqns.function_space)
-    
-
-    for xsub in xold.subfunctions[:3]:
-        with xsub.dat.vec_wo as v:
-            v.array[:] = np.random.random_sample(v.array.shape)
-
-    xnew = xold.copy(deepcopy=True)
-    ynew = yold.copy(deepcopy=True)
-    xmono = xold.copy(deepcopy=True)
-    ymono = yold.copy(deepcopy=True)
-
-    old_solver = ThermalSWSolver(eqns, options_prefix="swe_old")
-    new_solver = ThermalSWSolverNew(eqns, options_prefix="swe_new")
-    mono_solver = ThermalSWSolverMono(eqns, alpha=0.5)
-
-    old_solver.solve(xold, yold)
-    new_solver.solve(xnew, ynew)
-    mono_solver.solve(xmono, ymono)
-
-    # for i, (xo, xn) in enumerate(zip(xold.subfunctions, xnew.subfunctions)):
-    #     print(f"{i = }: {errornorm(xo, xn)/norm(xo) = :4e}")
-    for i, (yo, yn) in enumerate(zip(yold.subfunctions, ynew.subfunctions)):
-        print(f"Hybrid New {i = }| {norm(yo) = :2e} | {norm(yn) = :2e} | {errornorm(yo, yn)/norm(yo) = :4e}")
-    for i, (yo, ym) in enumerate(zip(yold.subfunctions, ymono.subfunctions)):
-        print(f"Monolithic {i = }| {norm(yo) = :2e} | {norm(ym) = :2e} | {errornorm(yo, ym)/norm(yo) = :4e}")
-
-    from sys import exit; exit()
+    linear_solver = ThermalSWSolverMono(
+        eqns, alpha=0.5,
+        options_prefix="swe",
+        # solver_parameters=params,
+        # overwrite_solver_parameters=True
+    )
 
     # ------------------------------------------------------------------------ #
     # Timestepper

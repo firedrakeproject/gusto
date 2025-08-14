@@ -13,7 +13,10 @@ This example uses the icosahedral sphere mesh and degree 1 spaces.
 """
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from firedrake import SpatialCoordinate, sin, cos, exp, Function, errornorm, norm, VectorSpaceBasis
+from firedrake import (
+    SpatialCoordinate, sin, cos, exp, Function, errornorm, norm,
+    VectorSpaceBasis, COMM_WORLD
+)
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
@@ -145,7 +148,7 @@ def moist_convect_williamson_2(
         "pc_fieldsplit_type": "additive",
         "pc_fieldsplit_0_fields": "0,1",
         "pc_fieldsplit_1_fields": "2,3,4",
-        "fieldsplit_0": {
+        "fieldsplit_0": {  # hybridisation on the (u,D) system
             'ksp_monitor_true_residual': None,
             'ksp_type': 'preonly',
             'pc_type': 'python',
@@ -162,7 +165,7 @@ def moist_convect_williamson_2(
                 }
             }
         },
-        "fieldsplit_1": {
+        "fieldsplit_1": {  # Don't touch the transported fields
             "ksp_type": "preonly",
             "pc_type": "none"
         },
@@ -170,13 +173,14 @@ def moist_convect_williamson_2(
 
     # Provide callback for the nullspace of the trace system
     def trace_nullsp(T):
-        return VectorSpaceBasis(constant=True)
+        return VectorSpaceBasis(constant=True, comm=COMM_WORLD)
     appctx = {"trace_nullspace": trace_nullsp}
+
     linear_solver = LinearTimesteppingSolver(
         eqns, alpha=0.5,
         reference_dependent=True,
         solver_parameters=solver_parameters,
-        options_prefix="swe_gen", appctx=appctx)
+        options_prefix="swe", appctx=appctx)
 
     # Physics schemes
     sat_adj = SWSaturationAdjustment(

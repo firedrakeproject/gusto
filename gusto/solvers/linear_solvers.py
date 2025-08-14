@@ -29,8 +29,12 @@ from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["BoussinesqSolver", "LinearTimesteppingSolver", "CompressibleSolver",
-           "ThermalSWSolver", "ThermalSWSolverNew", "ThermalSWSolverMono"]
+__all__ = [
+    "LinearTimesteppingSolver",
+    "CompressibleSolver",
+    "BoussinesqSolver",
+    "ThermalSWSolver",
+    "ThermalSWSolverMono"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -59,6 +63,8 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
         self.alpha = Constant(alpha)
         self.tau_values = tau_values if tau_values is not None else {}
         self.options_prefix = options_prefix
+
+        self._specialise_parameters()
 
         if solver_parameters is not None:
             if not overwrite_solver_parameters:
@@ -100,6 +106,9 @@ class TimesteppingSolver(object, metaclass=ABCMeta):
 
     @abstractmethod
     def solve(self):
+        pass
+
+    def _specialise_parameters(self):
         pass
 
 
@@ -613,18 +622,31 @@ class ThermalSWSolver(TimesteppingSolver):
 
     """
 
+    # solver_parameters = {
+    #     'ksp_type': 'preonly',
+    #     'mat_type': 'matfree',
+    #     'pc_type': 'python',
+    #     'pc_python_type': 'firedrake.HybridizationPC',
+    #     'hybridization': {
+    #         'ksp_type': 'preonly',
+    #         'pc_type': 'lu',
+    #         'pc_factor_mat_solver_type': 'mumps'
+    #     }
+    #     # 'hybridization': {'ksp_type': 'cg',
+    #     #                   'pc_type': 'gamg',
+    #     #                   'ksp_rtol': 1e-8,
+    #     #                   'mg_levels': {'ksp_type': 'chebyshev',
+    #     #                                 'ksp_max_it': 2,
+    #     #                                 'pc_type': 'bjacobi',
+    #     #                                 'sub_pc_type': 'ilu'}}
+    # }
+
     solver_parameters = {
+        'ksp_error_if_not_converged': None,
         'ksp_type': 'preonly',
-        'mat_type': 'matfree',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.HybridizationPC',
-        'hybridization': {'ksp_type': 'cg',
-                          'pc_type': 'gamg',
-                          'ksp_rtol': 1e-8,
-                          'mg_levels': {'ksp_type': 'chebyshev',
-                                        'ksp_max_it': 2,
-                                        'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'}}
+        'pc_type': 'lu',
+        'pc_factor_mat_solver_type': 'mumps',
+        'pc_factor_shift_type': 'nonzero',
     }
 
     @timed_function("Gusto:SolverSetup")
@@ -775,218 +797,6 @@ class ThermalSWSolver(TimesteppingSolver):
 
         b.assign(self.b)
 
-class ThermalSWSolverNew(TimesteppingSolver):
-    """Linear solver object for the thermal shallow water equations.
-
-    This solves a linear problem for the thermal shallow water
-    equations with prognostic variables u (velocity), D (depth) and
-    either b (buoyancy) or b_e (equivalent buoyancy). It follows the
-    following strategy:
-
-    (1) Eliminate b
-    (2) Solve the resulting system for (u, D) using a hybrid-mixed method
-    (3) Reconstruct b
-
-    """
-
-    # solver_parameters = {
-    #     'ksp_type': 'preonly',
-    #     'mat_type': 'matfree',
-    #     'pc_type': 'python',
-    #     'pc_python_type': 'firedrake.HybridizationPC',
-    #     'hybridization': {'ksp_type': 'cg',
-    #                       'pc_type': 'gamg',
-    #                       'ksp_rtol': 1e-8,
-    #                       'mg_levels': {'ksp_type': 'chebyshev',
-    #                                     'ksp_max_it': 2,
-    #                                     'pc_type': 'bjacobi',
-    #                                     'sub_pc_type': 'ilu'}}
-    # }
-
-
-    solver_parameters = {
-        'mat_type': 'matfree',
-        'ksp_type': 'preonly',
-        "ksp_view":":ksp_view.log",
-        "pc_type": "fieldsplit",
-        "pc_fieldsplit_type": "multiplicative",
-        "pc_fieldsplit_0_fields": "0,1",
-        "pc_fieldsplit_1_fields": "2",
-        "fieldsplit_0": {
-            'ksp_monitor_true_residual': None,
-            'ksp_type': 'preonly',
-            'pc_type': 'python',
-            'pc_python_type': 'firedrake.HybridizationPC',
-            'hybridization': {
-                'ksp_type': 'cg',
-                'pc_type': 'gamg',
-                'ksp_rtol': 1e-8,
-                'mg_levels': {
-                    'ksp_type': 'chebyshev',
-                    'ksp_max_it': 2,
-                    'pc_type': 'bjacobi',
-                    'sub_pc_type': 'ilu'
-                }
-            }
-        },
-        "fieldsplit_L2":{
-            'ksp_monitor': None,
-            "ksp_type": "preonly",
-            "pc_type": "python",
-            'pc_python_type': 'firedrake.AssembledPC',
-            'assembled':{'pc_type':'lu'}
-        },
-    }
-
-    @timed_function("Gusto:SolverSetup")
-    def _setup_solver(self):
-        equation = self.equations      # just cutting down line length a bit
-        equivalent_buoyancy = equation.equivalent_buoyancy
-
-        dt = self.dt
-        beta_u = dt*self.tau_values.get("u", self.alpha)
-        beta_d = dt*self.tau_values.get("D", self.alpha)
-        beta_b = dt*self.tau_values.get("b", self.alpha)
-        Vu = equation.domain.spaces("HDiv")
-        VD = equation.domain.spaces("DG")
-        Vb = equation.domain.spaces("DG")
-
-        # Check that the third field is buoyancy
-        if not equation.field_names[2] == 'b' and not (equation.field_names[2] == 'b_e' and equivalent_buoyancy):
-            raise NotImplementedError("Field 'b' or 'b_e' must exist to use the thermal linear solver in the SIQN scheme")
-
-        # Split up the rhs vector
-        self.xrhs = Function(equation.function_space)
-        u_in, D_in, b_in = split(self.xrhs)[0:3]
-
-        # Build the reduced function space for u, D
-        M = equation.function_space
-        w, phi, gamma = TestFunctions(M)
-        u, D, b = TrialFunctions(M)
-
-        # Get background buoyancy and depth
-        Dbar, bbar = split(equation.X_ref)[1:3]
-
-        # Approximate elimination of b
-        bval = -dot(u, grad(bbar))*beta_b + b_in
-
-        if equivalent_buoyancy:
-            # compute q_v using q_sat to partition q_t into q_v and q_c
-            self.q_sat_func = Function(VD)
-            self.qvbar = Function(VD)
-            qtbar = split(equation.X_ref)[3]
-
-            # set up interpolators that use the X_ref values for D and b_e
-            self.q_sat_expr_interpolate = interpolate(
-                equation.compute_saturation(equation.X_ref), VD)
-            self.q_v_interpolate = interpolate(
-                conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
-                VD)
-
-            # bbar was be_bar and here we correct to become bbar
-            bbar += equation.parameters.beta2 * self.qvbar
-
-        n = FacetNormal(equation.domain.mesh)
-
-        eqn = (
-            inner(w, (u - u_in)) * dx
-            - beta_u * (D - Dbar) * div(w*bbar) * dx
-            + beta_u * jump(w*bbar, n) * avg(D-Dbar) * dS
-            - beta_u * 0.5 * Dbar * bbar * div(w) * dx
-            - beta_u * 0.5 * Dbar * bval * div(w) * dx
-            - beta_u * 0.5 * bbar * div(w*(D-Dbar)) * dx
-            + beta_u * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
-            + inner(phi, (D - D_in)) * dx
-            + beta_d * phi * div(Dbar*u) * dx
-            +  gamma*(b - b_in + inner(u, grad(bbar))*beta_b) * dx
-        )
-
-        if 'coriolis' in equation.prescribed_fields._field_names:
-            f = equation.prescribed_fields('coriolis')
-            eqn += beta_u * f * inner(w, equation.domain.perp(u)) * dx
-
-        aeqn = lhs(eqn)
-        Leqn = rhs(eqn)
-
-        # Place to put results of (u,D) solver
-        self.uD = Function(M)
-
-        # Boundary conditions
-        bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
-
-        # Solver for u, D
-        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs,
-                                              constant_jacobian=True)
-
-        # Provide callback for the nullspace of the trace system
-        def trace_nullsp(T):
-            return VectorSpaceBasis(constant=True)
-
-        appctx = {"trace_nullspace": trace_nullsp}
-        self.uD_solver = LinearVariationalSolver(uD_problem,
-                                                 solver_parameters=self.solver_parameters,
-                                                 appctx=appctx)
-        # # Reconstruction of b
-        # b = TrialFunction(Vb)
-        # gamma = TestFunction(Vb)
-
-        # u, D = self.uD.subfunctions
-        # self.b = Function(Vb)
-
-        # b_eqn = gamma*(b - b_in + inner(u, grad(bbar))*beta_b) * dx
-
-        # b_problem = LinearVariationalProblem(lhs(b_eqn),
-        #                                      rhs(b_eqn),
-        #                                      self.b,
-        #                                      constant_jacobian=True)
-        # self.b_solver = LinearVariationalSolver(b_problem)
-
-        # Log residuals on hybridized solver
-        self.log_ksp_residuals(self.uD_solver.snes.ksp)
-
-    @timed_function("Gusto:UpdateReferenceProfiles")
-    def update_reference_profiles(self):
-        if self.equations.equivalent_buoyancy:
-            self.q_sat_func.assign(assemble(self.q_sat_expr_interpolate))
-            self.qvbar.assign(assemble(self.q_v_interpolate))
-
-    @timed_function("Gusto:LinearSolve")
-    def solve(self, xrhs, dy):
-        """
-        Solve the linear problem.
-
-        Args:
-            xrhs (:class:`Function`): the right-hand side field in the
-                appropriate :class:`MixedFunctionSpace`.
-            dy (:class:`Function`): the resulting field in the appropriate
-                :class:`MixedFunctionSpace`.
-        """
-        self.xrhs.assign(xrhs)
-
-        # Check that the b reference profile has been set
-        bbar = split(self.equations.X_ref)[2]
-        b = dy.subfunctions[2]
-        bbar_func = Function(b.function_space()).interpolate(bbar)
-        if bbar_func.dat.data.max() == 0 and bbar_func.dat.data.min() == 0:
-            logger.warning("The reference profile for b in the linear solver is zero. To set a non-zero profile add b to the set_reference_profiles argument.")
-
-        with timed_region("Gusto:VelocityDepthSolve"):
-            logger.info('Thermal linear solver: mixed solve')
-            self.uD_solver.solve()
-
-        # u1, D1 = self.uD.subfunctions
-        # u = dy.subfunctions[0]
-        # D = dy.subfunctions[1]
-        # b = dy.subfunctions[2]
-        # u.assign(u1)
-        # D.assign(D1)
-        dy.assign(self.uD)
-
-        # with timed_region("Gusto:BuoyancyRecon"):
-        #     logger.info('Thermal linear solver: buoyancy reconstruction')
-        #     self.b_solver.solve()
-
-        # b.assign(self.b)
 
 class ThermalSWSolverMono(TimesteppingSolver):
     """Linear solver object for the thermal shallow water equations.
@@ -1002,41 +812,105 @@ class ThermalSWSolverMono(TimesteppingSolver):
 
     """
 
-    # solver_parameters = {
-    #C     'ksp_type': 'preonly',
-    #     'mat_type': 'matfree',
-    #     'pc_type': 'python',
-    #     'pc_python_type': 'firedrake.HybridizationPC',
-    #     'hybridization': {'ksp_type': 'cg',
-    #                       'pc_type': 'gamg',
-    #                       'ksp_rtol': 1e-8,
-    #                       'mg_levels': {'ksp_type': 'chebyshev',
-    #                                     'ksp_max_it': 2,
-    #                                     'pc_type': 'bjacobi',
-    #                                     'sub_pc_type': 'ilu'}}
-    # }
-
-
     solver_parameters = {
         'ksp_error_if_not_converged': None,
-        'ksp_rtol': 1e-11,
-        'ksp_atol': 1e-11,
-        'pc_factor_shift_type': 'nonzero',
-        'snes_type': 'ksponly',
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'pc_fieldsplit_schur_fact_type': 'full',
+        'pc_fieldsplit_1_fields': '0,1',
+        'pc_fieldsplit_0_fields': '2',
+        'fieldsplit_L2': {
+            'ksp_monitor': None,
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.AssembledPC',
+            'assembled_pc_type': 'bjacobi',
+            'assembled_sub_pc_type': 'ilu',
+        },
+        'fieldsplit_1': {
+            'ksp_monitor': None,
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'gusto.AuxiliaryPC',
+            'aux': {
+                'mat_type': 'matfree',
+                'pc_type': 'python',
+                'pc_python_type': 'firedrake.HybridizationPC',
+                'hybridization': {
+                    'ksp_type': 'cg',
+                    'pc_type': 'gamg',
+                    'ksp_rtol': 1e-8,
+                    'mg_levels': {
+                        'ksp_type': 'chebyshev',
+                        'ksp_max_it': 2,
+                        'pc_type': 'bjacobi',
+                        'sub_pc_type': 'ilu',
+                    },
+                    'mg_coarse': {
+                        'ksp_type': 'preonly',
+                        'pc_type': 'lu',
+                        'pc_factor_mat_solver_type': 'mumps',
+                    },
+                },
+            },
+        }
     }
+
+    def _specialise_parameters(self):
+        if self.equations.equivalent_buoyancy:
+            uDb_parameters = self.solver_parameters
+            uDb_parameters.pop("mat_type")
+            self.solver_parameters = {
+                'ksp_error_if_not_converged': None,
+                'mat_type': 'matfree',
+                'ksp_type': 'preonly',
+                'pc_type': 'fieldsplit',
+                'pc_fieldsplit_type': 'additive',
+                'pc_fieldsplit_0_fields': '0,1,2',  # split out (u, D, b) system
+                'pc_fieldsplit_1_fields': '3',  # do nothing for scalar field
+                'fieldsplit_0': uDb_parameters,
+                'fieldsplit_L2': {
+                    'ksp_type': 'preonly',
+                    'pc_type': 'none',
+                },
+            }
 
     @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
-        equation = self.equations      # just cutting down line length a bit
+
+        # Form for the full (u, D, b) space
+        eqn, bcs = self._build_monolithic_form()
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
+
+        # Form after analytically eliminating bouyancy
+        seqn, sbcs = self._build_schur_complement_form()
+        appctx = {"auxform": (seqn, sbcs)}
+
+        # Place to put results of (u,D) solver
+        self.uD = Function(self.equations.function_space)
+
+        # Solver for u, D
+        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs,
+                                              constant_jacobian=True)
+        self.uD_solver = LinearVariationalSolver(uD_problem, appctx=appctx,
+                                                 options_prefix=self.options_prefix,
+                                                 solver_parameters=self.solver_parameters)
+
+        # Log residuals on hybridized solver
+        self.log_ksp_residuals(self.uD_solver.snes.ksp)
+
+    def _build_monolithic_form(self):
+        equation = self.equations
         equivalent_buoyancy = equation.equivalent_buoyancy
 
         dt = self.dt
         beta_u = dt*self.tau_values.get("u", self.alpha)
         beta_d = dt*self.tau_values.get("D", self.alpha)
         beta_b = dt*self.tau_values.get("b", self.alpha)
-        Vu = equation.domain.spaces("HDiv")
         VD = equation.domain.spaces("DG")
-        Vb = equation.domain.spaces("DG")
 
         # Check that the third field is buoyancy
         if not equation.field_names[2] == 'b' and not (equation.field_names[2] == 'b_e' and equivalent_buoyancy):
@@ -1048,12 +922,21 @@ class ThermalSWSolverMono(TimesteppingSolver):
 
         # Build the reduced function space for u, D
         M = equation.function_space
-        w, phi, gamma = TestFunctions(M)
-        u, D, b = TrialFunctions(M)
+        tests = TestFunctions(M)
+        trials = TrialFunctions(M)
+
+        w, phi, gamma = tests[:3]
+        u, D, b = trials[:3]
+
+        if len(tests) > 3:
+            has_scalar_fields = True
+            q_tests = tests[3:]
+            q_trials = trials[3:]
+        else:
+            has_scalar_fields = False
 
         # Get background buoyancy and depth
         Dbar, bbar = split(equation.X_ref)[1:3]
-
 
         if equivalent_buoyancy:
             # compute q_v using q_sat to partition q_t into q_v and q_c
@@ -1086,27 +969,58 @@ class ThermalSWSolverMono(TimesteppingSolver):
             +  gamma*(b - b_in + inner(u, grad(bbar))*beta_b) * dx
         )
 
+        if has_scalar_fields:
+            for qu, qv in zip(q_trials, q_tests):
+                eqn += qu * qv * dx
+
         if 'coriolis' in equation.prescribed_fields._field_names:
             f = equation.prescribed_fields('coriolis')
             eqn += beta_u * f * inner(w, equation.domain.perp(u)) * dx
 
-        aeqn = lhs(eqn)
-        Leqn = rhs(eqn)
-
-        # Place to put results of (u,D) solver
-        self.uD = Function(M)
-
         # Boundary conditions
         bcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
 
-        # Solver for u, D
-        uD_problem = LinearVariationalProblem(aeqn, Leqn, self.uD, bcs=bcs,
-                                              constant_jacobian=True)
-        self.uD_solver = LinearVariationalSolver(uD_problem,
-                                                 solver_parameters=self.solver_parameters)
+        return eqn, bcs
 
-        # Log residuals on hybridized solver
-        self.log_ksp_residuals(self.uD_solver.snes.ksp)
+    def _build_schur_complement_form(self):
+        equation = self.equations
+
+        # Approximate elimination of b
+        dt = self.dt
+        beta_u = dt*self.tau_values.get("u", self.alpha)
+        beta_d = dt*self.tau_values.get("D", self.alpha)
+        beta_b = dt*self.tau_values.get("b", self.alpha)
+
+        n = FacetNormal(equation.domain.mesh)
+        Vu = equation.domain.spaces("HDiv")
+        VD = equation.domain.spaces("DG")
+        M_ = Vu*VD
+        u_, D_ = TrialFunctions(M_)
+        w_, phi_ = TestFunctions(M_)
+
+        Dref, bref = equation.X_ref.subfunctions[1:3]
+        b_ = -dot(u_, grad(bref))*beta_b
+
+        seqn = (
+            inner(w_, u_) * dx
+            - beta_u * D_ * div(w_*bref) * dx
+            + beta_u * jump(w_*bref, n) * avg(D_) * dS
+            # - beta_u * 0.5 * Dref * bref * div(w_) * dx
+            - beta_u * 0.5 * Dref * b_ * div(w_) * dx
+            - beta_u * 0.5 * bref * div(w_*D_) * dx
+            + beta_u * 0.5 * jump(D_*w_, n) * avg(bref) * dS
+            + inner(phi_, D_) * dx
+            + beta_d * phi_ * div(Dref*u_) * dx
+        )
+
+        if 'coriolis' in equation.prescribed_fields._field_names:
+            f = equation.prescribed_fields('coriolis')
+            seqn += beta_u * f * inner(w_, equation.domain.perp(u_)) * dx
+
+        # Boundary conditions
+        sbcs = [DirichletBC(M_.sub(0), bc.function_arg, bc.sub_domain) for bc in self.equations.bcs['u']]
+
+        return seqn, sbcs
 
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
@@ -1126,18 +1040,7 @@ class ThermalSWSolverMono(TimesteppingSolver):
                 :class:`MixedFunctionSpace`.
         """
         self.xrhs.assign(xrhs)
-
-        # Check that the b reference profile has been set
-        bbar = split(self.equations.X_ref)[2]
-        b = dy.subfunctions[2]
-        bbar_func = Function(b.function_space()).interpolate(bbar)
-        if bbar_func.dat.data.max() == 0 and bbar_func.dat.data.min() == 0:
-            logger.warning("The reference profile for b in the linear solver is zero. To set a non-zero profile add b to the set_reference_profiles argument.")
-
-        with timed_region("Gusto:VelocityDepthSolve"):
-            logger.info('Thermal linear solver: mixed solve')
-            self.uD_solver.solve()
-
+        self.uD_solver.solve()
         dy.assign(self.uD)
 
 
@@ -1221,7 +1124,6 @@ class ThermalSWSolverMonoNew(object):
         print(self.dy.__str__())
         self.solver.solve()
         dy.assign(self.dy)
-
 
 
 class LinearTimesteppingSolver(object):

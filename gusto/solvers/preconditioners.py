@@ -12,7 +12,13 @@ from functools import partial
 from numpy import arange
 
 
-__all__ = ["VerticalHybridizationPC", "SlateSchurPC"]
+__all__ = ["VerticalHybridizationPC", "SlateSchurPC", "AuxiliaryPC"]
+
+
+class AuxiliaryPC(AuxiliaryOperatorPC):
+    def form(self, pc, test, trial):
+        a, bcs = self.get_appctx(pc)['auxform']
+        return (a(test, trial), bcs)
 
 
 class SlateSchurPC(AuxiliaryOperatorPC):
