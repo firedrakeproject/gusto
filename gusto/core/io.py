@@ -525,9 +525,13 @@ class IO(object):
                 self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
                                             mode=FILE_CREATE)
             elif self.output.checkpoint_method == 'checkpointfile':
-                # create new directory for checkpoints
-                self.chkpt_path = path.join(self.dumpdir, "chkpts")
-                self.chkpt_dir = makedirs(self.chkpt_path)
+                if self.output.chkptfreq != 1:
+                    # create new directory for checkpoints
+                    self.chkpt_path = path.join(self.dumpdir, "chkpts")
+                    self.chkpt_dir = makedirs(self.chkpt_path)
+                else:
+                    # Create one checkpoint file
+                    self.chkpt_path = path.join(self.dumpdir, "chkpt.h5")
             else:
                 raise ValueError(f'checkpoint_method {self.output.checkpoint_method} not supported')
 
@@ -730,7 +734,10 @@ class IO(object):
 
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
-            chkpt_file = path.join(self.chkpt_path, "chkpt"+str(t)+".h5")
+            if output.chkptfreq != 1:
+                chkpt_file = path.join(self.chkpt_path, "chkpt"+str(t)+".h5")
+            else:
+                chkpt_file = self.chkpt_path
             if self.output.checkpoint_method == 'dumbcheckpoint':
                 for field_name in self.to_pick_up:
                     self.chkpt.store(state_fields(field_name), name=field_name)
