@@ -669,11 +669,11 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
 
         self.parameters = parameters
         g = parameters.g
-        H = parameters.H
 
         w1, w2, phi = self.tests
         u, v, D = split(self.X)
-        u_trial = split(self.trials)[0]
+        ubar, _, Dbar = split(self.X_ref)
+        u_trial, _, D_trial = split(self.trials)
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -693,7 +693,7 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
         # Transport term needs special linearisation
         # TODO #651: we should remove this hand-coded linearisation
         if self.linearisation_map(D_adv.terms[0]):
-            linear_D_adv = linear_continuity_form(phi, H, u_trial)
+            linear_D_adv = linear_continuity_form(phi, D_trial, u_trial, Dbar, ubar)
             # Add linearisation to D_adv
             D_adv = linearisation(D_adv, linear_D_adv)
 
