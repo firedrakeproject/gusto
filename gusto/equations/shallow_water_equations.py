@@ -114,7 +114,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         w, phi = self.tests[0:2]
         u, D = split(self.X)[0:2]
-        u_trial = split(self.trials)[0]
+        u_trial, D_trial = split(self.trials)[0:2]
         ubar, Dbar = split(self.X_ref)[0:2]
 
         # -------------------------------------------------------------------- #
@@ -156,8 +156,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
         D_adv = prognostic(continuity_form(phi, D, u), 'D')
 
         # Transport term needs special linearisation
+        # TODO #651: we should remove this hand-coded linearisation
+        # currently removing it breaks the REXI tests
         if self.linearisation_map(D_adv.terms[0]):
-            linear_D_adv = linear_continuity_form(phi, Dbar, u_trial)
+            linear_D_adv = linear_continuity_form(phi, D_trial, u_trial, Dbar, ubar)
             # Add linearisation to D_adv
             D_adv = linearisation(D_adv, linear_D_adv)
 
@@ -404,7 +406,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         w = self.tests[0]
         gamma = self.tests[2]
         u, D, b = split(self.X)[0:3]
-        Dbar, bbar = split(self.X_ref)[1:3]
+        ubar, Dbar, bbar = split(self.X_ref)[0:3]
         u_trial, D_trial, b_trial = split(self.trials)[0:3]
         n = FacetNormal(self.domain.mesh)
         topog = self.prescribed_fields('topography', self.domain.spaces('DG')).interpolate(topog_expr) if topog_expr else None
@@ -439,6 +441,11 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 + beta2 * jump(qv*w, n) * avg(D) * dS
                 + 0.5 * beta2 * jump(D*w, n) * avg(qv) * dS,
                 'u'), self.X))
+
+            # TODO #651: we should remove this hand-coded linearisation
+            # currently removing it throws errors when using the linear
+            # thermal shallow water equations
+            # Care will be needed with the handling of the qv terms
             linear_source_form = pressure_gradient(subject(prognostic(
                 -D_trial * div(bbar*w) * dx
                 - 0.5 * b_trial * div(Dbar*w) * dx
@@ -457,6 +464,8 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 - beta2 * 0.5 * qt_trial * div(Dbar*w) * dx
                 + beta2 * 0.5 * jump(Dbar*w, n) * avg(qt_trial) * dS,
                 'u'), self.X))
+            source_form = linearisation(source_form, linear_source_form)
+
         else:
             source_form = pressure_gradient(
                 subject(prognostic(-D * div(b*w) * dx
@@ -464,6 +473,9 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                                    - 0.5 * b * div(D*w) * dx
                                    + 0.5 * jump(D*w, n) * avg(b) * dS,
                                    'u'), self.X))
+            # TODO #651: we should remove this hand-coded linearisation
+            # currently removing it throws errors when using the linear
+            # thermal shallow water equations
             linear_source_form = pressure_gradient(
                 subject(prognostic(-D_trial * div(bbar*w) * dx
                                    + jump(bbar*w, n) * avg(D_trial) * dS
@@ -474,22 +486,29 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                                    - 0.5 * bbar * div(D_trial*w) * dx
                                    + 0.5 * jump(D_trial*w, n) * avg(bbar) * dS,
                                    'u'), self.X))
-        source_form = linearisation(source_form, linear_source_form)
+            source_form = linearisation(source_form, linear_source_form)
+
         residual += source_form
 
         # -------------------------------------------------------------------- #
         # add transport terms and their linearisations:
         # -------------------------------------------------------------------- #
         b_adv = prognostic(advection_form(gamma, b, u), self.b_name)
+
+        # TODO #651: we should remove this hand-coded linearisation
+        # currently REXI can't handle generated transport linearisations
         if self.linearisation_map(b_adv.terms[0]):
-            linear_b_adv = linear_advection_form(gamma, bbar, u_trial)
+            linear_b_adv = linear_advection_form(gamma, b_trial, u_trial, bbar, ubar)
             b_adv = linearisation(b_adv, linear_b_adv)
         residual += subject(b_adv, self.X)
 
         if self.equivalent_buoyancy:
             qt_adv = prognostic(advection_form(gamma_qt, qt, u), "q_t")
+
+            # TODO #651: we should remove this hand-coded linearisation
+            # currently REXI can't handle generated transport linearisations
             if self.linearisation_map(qt_adv.terms[0]):
-                linear_qt_adv = linear_advection_form(gamma_qt, qtbar, u_trial)
+                linear_qt_adv = linear_advection_form(gamma_qt, qt_trial, u_trial, qtbar, ubar)
                 qt_adv = linearisation(qt_adv, linear_qt_adv)
             residual += subject(qt_adv, self.X)
 
@@ -672,6 +691,7 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
         D_adv = prognostic(continuity_form_1d(phi, D, u), 'D')
 
         # Transport term needs special linearisation
+        # TODO #651: we should remove this hand-coded linearisation
         if self.linearisation_map(D_adv.terms[0]):
             linear_D_adv = linear_continuity_form(phi, H, u_trial)
             # Add linearisation to D_adv

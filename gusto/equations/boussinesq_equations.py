@@ -99,8 +99,8 @@ class BoussinesqEquations(PrognosticEquationSet):
 
         w, phi, gamma = self.tests[0:3]
         u, p, b = split(self.X)
-        u_trial, p_trial, _ = split(self.trials)
-        u_bar, p_bar, b_bar = split(self.X_ref)
+        u_trial, p_trial, b_trial = split(self.trials)[0:3]
+        u_bar, p_bar, b_bar = split(self.X_ref)[0:3]
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -139,17 +139,24 @@ class BoussinesqEquations(PrognosticEquationSet):
 
         # Buoyancy transport
         b_adv = prognostic(advection_form(gamma, b, u), 'b')
+
+        # TODO #651: we should remove this hand-coded linearisation
+        # currently REXI can't handle generated transport linearisations
         if self.linearisation_map(b_adv.terms[0]):
-            linear_b_adv = linear_advection_form(gamma, b_bar, u_trial)
+            linear_b_adv = linear_advection_form(gamma, b_trial, u_trial, b_bar, u_bar)
             b_adv = linearisation(b_adv, linear_b_adv)
 
         if compressible:
             # Pressure transport
             p_adv = prognostic(advection_form(phi, p, u), 'p')
+
+            # TODO #651: we should remove this hand-coded linearisation
+            # currently REXI can't handle generated transport linearisations
             if self.linearisation_map(p_adv.terms[0]):
-                linear_p_adv = linear_advection_form(phi, p_bar, u_trial)
+                linear_p_adv = linear_advection_form(phi, p_trial, u_trial, p_bar, u_bar)
                 p_adv = linearisation(p_adv, linear_p_adv)
             adv_form = subject(u_adv + p_adv + b_adv, self.X)
+
         else:
             adv_form = subject(u_adv + b_adv, self.X)
 
@@ -199,11 +206,11 @@ class BoussinesqEquations(PrognosticEquationSet):
         # Extra Terms (Coriolis)
         # -------------------------------------------------------------------- #
         if self.parameters.Omega is not None:
-            # TODO: add linearisation
             Omega = as_vector((0, 0, self.parameters.Omega))
             coriolis_form = coriolis(subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, 'u'), self.X))
             residual += coriolis_form
+
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #

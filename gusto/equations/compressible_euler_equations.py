@@ -98,7 +98,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
         w, phi, gamma = self.tests[0:3]
         u, rho, theta = split(self.X)[0:3]
-        u_trial = split(self.trials)[0]
+        u_trial, rho_trial, theta_trial = split(self.trials)[0:3]
         u_bar, rho_bar, theta_bar = split(self.X_ref)[0:3]
         zero_expr = Constant(0.0)*theta
         exner = exner_pressure(parameters, rho, theta)
@@ -145,16 +145,22 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
         # Density transport (conservative form)
         rho_adv = prognostic(continuity_form(phi, rho, u), 'rho')
+
         # Transport term needs special linearisation
+        # TODO #651: we should remove this hand-coded linearisation
+        # currently REXI can't handle generated transport linearisations
         if self.linearisation_map(rho_adv.terms[0]):
-            linear_rho_adv = linear_continuity_form(phi, rho_bar, u_trial)
+            linear_rho_adv = linear_continuity_form(phi, rho_trial, u_trial, rho_bar, u_bar)
             rho_adv = linearisation(rho_adv, linear_rho_adv)
 
         # Potential temperature transport (advective form)
         theta_adv = prognostic(advection_form(gamma, theta, u), 'theta')
+
         # Transport term needs special linearisation
+        # TODO #651: we should remove this hand-coded linearisation
+        # currently REXI can't handle generated transport linearisations
         if self.linearisation_map(theta_adv.terms[0]):
-            linear_theta_adv = linear_advection_form(gamma, theta_bar, u_trial)
+            linear_theta_adv = linear_advection_form(gamma, theta_trial, u_trial, theta_bar, u_bar)
             theta_adv = linearisation(theta_adv, linear_theta_adv)
 
         adv_form = subject(u_adv + rho_adv + theta_adv, self.X)
@@ -227,7 +233,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Extra Terms (Coriolis, Sponge, Diffusion and others)
         # -------------------------------------------------------------------- #
         if parameters.Omega is not None:
-            # TODO: add linearisation
             Omega = as_vector((0, 0, parameters.Omega))
             coriolis_form = coriolis(subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, 'u'), self.X))
