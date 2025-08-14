@@ -23,7 +23,7 @@ def run_sw_fplane(run_num, ndt, output, chkfile=None):
         mesh = PeriodicSquareMesh(Nx, Ny, Lx, quadrilateral=True)
 
     else:
-        # On this run we are picing up a checkpoint from a previous run and
+        # On this run we are picking up a checkpoint from a previous run and
         # we recover the mesh from the checkpoint
         mesh = CheckpointFile(chkfile, 'r').load_mesh()
 
