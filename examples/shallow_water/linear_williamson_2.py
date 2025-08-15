@@ -10,10 +10,9 @@ equations.
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import Function, SpatialCoordinate, as_vector, pi
 from gusto import (
-    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, DefaultTransport,
-    ForwardEuler, SteadyStateError, ShallowWaterParameters,
+    OutputParameters, SteadyStateError, ShallowWaterParameters,
     LinearShallowWaterEquations, GeneralIcosahedralSphereMesh,
-    ZonalComponent, MeridionalComponent, RelativeVorticity
+    ZonalComponent, MeridionalComponent, RelativeVorticity, LinearModel
 )
 
 linear_williamson_2_defaults = {
@@ -42,23 +41,15 @@ def linear_williamson_2(
     u_max = 2*pi*radius/(12*24*60*60)  # Max amplitude of the zonal wind (m/s)
 
     # ------------------------------------------------------------------------ #
-    # Our settings for this set up
-    # ------------------------------------------------------------------------ #
-
-    element_order = 1
-
-    # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain
     mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
-    x, y, z = SpatialCoordinate(mesh)
-    domain = Domain(mesh, dt, 'BDM', element_order)
 
     # Equation
     parameters = ShallowWaterParameters(mesh, H=mean_depth)
-    eqns = LinearShallowWaterEquations(domain, parameters)
+    eqns = LinearShallowWaterEquations
 
     # I/O
     output = OutputParameters(
@@ -67,26 +58,20 @@ def linear_williamson_2(
     diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D'),
                          ZonalComponent('u'), MeridionalComponent('u'),
                          RelativeVorticity()]
-    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    # Transport schemes
-    transport_schemes = [ForwardEuler(domain, "D")]
-    transport_methods = [DefaultTransport(eqns, "D")]
-
-    # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transport_schemes, transport_methods
-    )
+    model = LinearModel(mesh, dt, parameters, eqns, output,
+                        diagnostic_fields=diagnostic_fields)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    g = parameters.g
+    u0 = model.stepper.fields("u")
+    D0 = model.stepper.fields("D")
 
-    u0 = stepper.fields("u")
-    D0 = stepper.fields("D")
+    g = parameters.g
     Omega = parameters.Omega
+    x, y, z = SpatialCoordinate(mesh)
 
     uexpr = as_vector([-u_max*y/radius, u_max*x/radius, 0.0])
     Dexpr = - ((radius*Omega*u_max) * (z/radius)**2) / g
@@ -95,13 +80,13 @@ def linear_williamson_2(
     D0.interpolate(Dexpr)
 
     Dbar = Function(D0.function_space()).assign(mean_depth)
-    stepper.set_reference_profiles([('D', Dbar)])
+    model.stepper.set_reference_profiles([('D', Dbar)])
 
     # ------------------------------------------------------------------------ #
     # Run
     # ------------------------------------------------------------------------ #
 
-    stepper.run(t=0, tmax=tmax)
+    model.stepper.run(t=0, tmax=tmax)
 
 # ---------------------------------------------------------------------------- #
 # MAIN

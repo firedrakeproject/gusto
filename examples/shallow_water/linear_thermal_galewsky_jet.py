@@ -12,11 +12,10 @@ from firedrake import (
     cos
 )
 from gusto import (
-    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, DefaultTransport,
-    DGUpwind, ForwardEuler, ShallowWaterParameters, NumericalIntegral,
+    OutputParameters, ShallowWaterParameters, NumericalIntegral,
     LinearThermalShallowWaterEquations, GeneralIcosahedralSphereMesh,
     ZonalComponent, ThermalSWSolver, lonlatr_from_xyz, xyz_vector_from_lonlatr,
-    RelativeVorticity, MeridionalComponent
+    RelativeVorticity, MeridionalComponent, LinearModel
 )
 
 import numpy as np
@@ -48,12 +47,6 @@ def linear_thermal_galewsky_jet(
     phi1 = pi/2. - phi0  # latitude of the northern boundary of the jet (rad)
     db = 1.0             # diff in buoyancy between equator and poles (m/s^2)
 
-    # ------------------------------------------------------------------------ #
-    # Our settings for this set up
-    # ------------------------------------------------------------------------ #
-
-    element_order = 1
-
     # ----------------------------------------------------------------- #
     # Set up model objects
     # ----------------------------------------------------------------- #
@@ -61,11 +54,10 @@ def linear_thermal_galewsky_jet(
     # Domain
     mesh = GeneralIcosahedralSphereMesh(R, ncells_per_edge, degree=2)
     xyz = SpatialCoordinate(mesh)
-    domain = Domain(mesh, dt, 'BDM', element_order)
 
     # Equation
     parameters = ShallowWaterParameters(mesh, H=H)
-    eqns = LinearThermalShallowWaterEquations(domain, parameters)
+    eqns = LinearThermalShallowWaterEquations
 
     # I/O
     output = OutputParameters(
@@ -75,28 +67,18 @@ def linear_thermal_galewsky_jet(
     diagnostic_fields = [
         ZonalComponent('u'), MeridionalComponent('u'), RelativeVorticity()
     ]
-    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    # Transport schemes
-    transport_schemes = [ForwardEuler(domain, "D")]
-    transport_methods = [DefaultTransport(eqns, "D"), DGUpwind(eqns, "b")]
-
-    # Linear solver
-    linear_solver = ThermalSWSolver(eqns)
-
-    # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transport_schemes, transport_methods,
-        linear_solver=linear_solver
-    )
+    model = LinearModel(mesh, dt, parameters, eqns, output,
+                        linear_solver=ThermalSWSolver,
+                        diagnostic_fields=diagnostic_fields)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    u0_field = stepper.fields("u")
-    D0_field = stepper.fields("D")
-    b0_field = stepper.fields("b")
+    u0_field = model.stepper.fields("u")
+    D0_field = model.stepper.fields("D")
+    b0_field = model.stepper.fields("b")
 
     # Parameters
     g = parameters.g
@@ -164,13 +146,13 @@ def linear_thermal_galewsky_jet(
     # Set reference profiles
     Dbar = Function(D0_field.function_space()).assign(H)
     bbar = Function(b0_field.function_space()).interpolate(g)
-    stepper.set_reference_profiles([('D', Dbar), ('b', bbar)])
+    model.stepper.set_reference_profiles([('D', Dbar), ('b', bbar)])
 
     # ----------------------------------------------------------------- #
     # Run
     # ----------------------------------------------------------------- #
 
-    stepper.run(t=0, tmax=tmax)
+    model.stepper.run(t=0, tmax=tmax)
 
 # ---------------------------------------------------------------------------- #
 # MAIN

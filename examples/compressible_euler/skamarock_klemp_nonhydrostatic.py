@@ -15,18 +15,14 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from petsc4py import PETSc
 PETSc.Sys.popErrorHandler()
-import itertools
 from firedrake import (
     as_vector, SpatialCoordinate, PeriodicIntervalMesh, ExtrudedMesh, exp, sin,
-    Function, pi, COMM_WORLD
+    Function, pi
 )
-import numpy as np
 from gusto import (
-    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    logger, SUPGOptions, Perturbation, CompressibleParameters,
-    CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
-    compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
-    SubcyclingOptions, hydrostatic_parameters
+    OutputParameters, Perturbation, CompressibleParameters,
+    CompressibleEulerEquations, Model,
+    compressible_hydrostatic_balance, CompressibleSolver
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
@@ -63,102 +59,39 @@ def skamarock_klemp_nonhydrostatic(
     N = 0.01                  # Brunt-Vaisala frequency (1/s)
 
     # ------------------------------------------------------------------------ #
-    # Our settings for this set up
-    # ------------------------------------------------------------------------ #
-
-    element_order = 1
-
-    # ------------------------------------------------------------------------ #
-    # Set up model objects
+    # Set up model
     # ------------------------------------------------------------------------ #
 
     # Domain -- 3D volume mesh
     base_mesh = PeriodicIntervalMesh(ncolumns, domain_width)
     mesh = ExtrudedMesh(base_mesh, nlayers, layer_height=domain_height/nlayers)
-    domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
     parameters = CompressibleParameters(mesh)
-    if hydrostatic:
-        eqns = HydrostaticCompressibleEulerEquations(domain, parameters)
-    else:
-        eqns = CompressibleEulerEquations(domain, parameters)
+    eqns = CompressibleEulerEquations
 
-    # I/O
-    points_x = np.linspace(0., domain_width, 100)
-    points_z = [domain_height/2.]
-    points = np.array([p for p in itertools.product(points_x, points_z)])
-
-    # Adjust default directory name
-    if hydrostatic and dirname == skamarock_klemp_nonhydrostatic_defaults['dirname']:
-        dirname = f'hyd_switch_{dirname}'
-
-    # Dumping point data using legacy PointDataOutput is not supported in parallel
-    if COMM_WORLD.size == 1:
-        output = OutputParameters(
-            dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=False, dump_nc=True,
-            point_data=[('theta_perturbation', points)],
-        )
-    else:
-        logger.warning(
-            'Dumping point data using legacy PointDataOutput is not'
-            ' supported in parallel\nDisabling PointDataOutput'
-        )
-        output = OutputParameters(
-            dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=False, dump_nc=True,
-        )
+    output = OutputParameters(
+        dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
+        dump_vtus=False, dump_nc=True,
+    )
 
     diagnostic_fields = [Perturbation('theta')]
-    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    # Transport schemes
-    theta_opts = SUPGOptions()
-    subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
-    transported_fields = [
-        SSPRK3(domain, "u", subcycling_options=subcycling_options),
-        SSPRK3(
-            domain, "rho", subcycling_options=subcycling_options,
-            rk_formulation=RungeKuttaFormulation.linear
-        ),
-        SSPRK3(
-            domain, "theta", subcycling_options=subcycling_options,
-            options=theta_opts
-        )
-    ]
-    transport_methods = [
-        DGUpwind(eqns, "u"),
-        DGUpwind(eqns, "rho", advective_then_flux=True),
-        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
-    ]
-
-    # Linear solver
-    if hydrostatic:
-        linear_solver = CompressibleSolver(
-            eqns, solver_parameters=hydrostatic_parameters,
-            overwrite_solver_parameters=True
-        )
-    else:
-        linear_solver = CompressibleSolver(eqns)
-
-    # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
-    )
+    model = Model(mesh, dt, parameters, eqns, output,
+                  linear_solver=CompressibleSolver,
+                  diagnostic_fields=diagnostic_fields)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    u0 = stepper.fields("u")
-    rho0 = stepper.fields("rho")
-    theta0 = stepper.fields("theta")
+    u0 = model.stepper.fields("u")
+    rho0 = model.stepper.fields("rho")
+    theta0 = model.stepper.fields("theta")
 
     # spaces
-    Vt = domain.spaces("theta")
-    Vr = domain.spaces("DG")
+    Vt = model.domain.spaces("theta")
+    Vr = model.domain.spaces("DG")
 
     # Thermodynamic constants required for setting initial conditions
     # and reference profiles
@@ -173,7 +106,7 @@ def skamarock_klemp_nonhydrostatic(
     rho_b = Function(Vr)
 
     # Calculate hydrostatic exner
-    compressible_hydrostatic_balance(eqns, theta_b, rho_b)
+    compressible_hydrostatic_balance(model.eqns, theta_b, rho_b)
 
     theta_pert = (
         deltaTheta * sin(pi*z/domain_height)
@@ -183,13 +116,13 @@ def skamarock_klemp_nonhydrostatic(
     rho0.assign(rho_b)
     u0.project(as_vector([wind_initial, 0.0]))
 
-    stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
+    model.stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
     # ------------------------------------------------------------------------ #
     # Run
     # ------------------------------------------------------------------------ #
 
-    stepper.run(t=0, tmax=tmax)
+    model.run(t=0, tmax=tmax)
 
 # ---------------------------------------------------------------------------- #
 # MAIN

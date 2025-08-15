@@ -8,15 +8,14 @@ The example here uses the icosahedral sphere mesh and degree 1 spaces.
 """
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from firedrake import SpatialCoordinate, sin, cos, pi, Function
+from firedrake import SpatialCoordinate, pi, Function, as_vector
 from gusto import (
-    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
+    OutputParameters, ShallowWaterParameters, ShallowWaterEquations,
     RelativeVorticity, PotentialVorticity, SteadyStateError,
     ShallowWaterKineticEnergy, ShallowWaterPotentialEnergy,
-    ShallowWaterPotentialEnstrophy, rotated_lonlatr_coords,
-    ZonalComponent, MeridionalComponent, rotated_lonlatr_vectors,
-    GeneralIcosahedralSphereMesh, SubcyclingOptions
+    ShallowWaterPotentialEnstrophy,
+    ZonalComponent, MeridionalComponent,
+    GeneralIcosahedralSphereMesh, OldDefaultModel
 )
 
 williamson_2_defaults = {
@@ -42,15 +41,7 @@ def williamson_2(
 
     radius = 6371220.                  # planetary radius (m)
     mean_depth = 5960.                 # reference depth (m)
-    rotate_pole_to = (0.0, pi/3)       # location of North pole of mesh
     u_max = 2*pi*radius/(12*24*60*60)  # Max amplitude of the zonal wind (m/s)
-
-    # ------------------------------------------------------------------------ #
-    # Our settings for this set up
-    # ------------------------------------------------------------------------ #
-
-    element_order = 1
-    u_eqn_type = 'vector_invariant_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -58,16 +49,10 @@ def williamson_2(
 
     # Domain
     mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
-    domain = Domain(mesh, dt, 'BDM', element_order, rotated_pole=rotate_pole_to)
-    xyz = SpatialCoordinate(mesh)
 
     # Equation
     parameters = ShallowWaterParameters(mesh, H=mean_depth)
-    Omega = parameters.Omega
-    _, lat, _ = rotated_lonlatr_coords(xyz, rotate_pole_to)
-    e_lon, _, _ = rotated_lonlatr_vectors(xyz, rotate_pole_to)
-    eqns = ShallowWaterEquations(
-        domain, parameters, u_transport_option=u_eqn_type)
+    eqns = ShallowWaterEquations
 
     # I/O
     output = OutputParameters(
@@ -80,49 +65,42 @@ def williamson_2(
         ShallowWaterPotentialEnergy(parameters),
         ShallowWaterPotentialEnstrophy(),
         SteadyStateError('u'), SteadyStateError('D'),
-        MeridionalComponent('u', rotate_pole_to),
-        ZonalComponent('u', rotate_pole_to)
-    ]
-    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-
-    # Transport schemes
-    subcycling_options = SubcyclingOptions(fixed_subcycles=2)
-    transported_fields = [
-        TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "D", subcycling_options=subcycling_options)]
-    transport_methods = [
-        DGUpwind(eqns, "u"),
-        DGUpwind(eqns, "D")
+        MeridionalComponent('u'),
+        ZonalComponent('u')
     ]
 
-    # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods
-    )
+    # ------------------------------------------------------------------------ #
+    # Model
+    # ------------------------------------------------------------------------ #
+
+    model = OldDefaultModel(mesh, dt, parameters, eqns, output,
+                            diagnostic_fields=diagnostic_fields)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
+    x, y, z = SpatialCoordinate(mesh)
     g = parameters.g
+    Omega = parameters.Omega
 
-    u0 = stepper.fields("u")
-    D0 = stepper.fields("D")
+    u0 = model.stepper.fields("u")
+    D0 = model.stepper.fields("D")
 
-    uexpr = u_max*cos(lat)*e_lon
-    Dexpr = mean_depth - (radius * Omega * u_max + 0.5*u_max**2)*(sin(lat))**2/g
+    uexpr = as_vector([-u_max*y/radius, u_max*x/radius, 0.0])
+    Dexpr = mean_depth - (radius * Omega * u_max + 0.5*u_max**2)*(z/radius)**2/g
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
 
     Dbar = Function(D0.function_space()).assign(mean_depth)
-    stepper.set_reference_profiles([('D', Dbar)])
+    model.stepper.set_reference_profiles([('D', Dbar)])
 
     # ------------------------------------------------------------------------ #
     # Run
     # ------------------------------------------------------------------------ #
 
-    stepper.run(t=0, tmax=tmax)
+    model.run(t=0, tmax=tmax)
 
 # ---------------------------------------------------------------------------- #
 # MAIN
