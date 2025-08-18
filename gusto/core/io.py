@@ -520,20 +520,19 @@ class IO(object):
 
         # if we want to checkpoint, set up the checkpointing
         if self.output.checkpoint:
-            if self.output.checkpoint_method == 'dumbcheckpoint':
-                # should have already picked up, so can create a new file
-                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
-                                            mode=FILE_CREATE)
-            elif self.output.checkpoint_method == 'checkpointfile':
-                if self.output.chkptfreq != 1:
-                    # create new directory for checkpoints
-                    self.chkpt_path = path.join(self.dumpdir, "chkpts")
-                    self.chkpt_dir = makedirs(self.chkpt_path)
-                else:
-                    # Create one checkpoint file
-                    self.chkpt_path = path.join(self.dumpdir, "chkpt.h5")
+            if self.output.chkptfreq != 1:
+                # Create new directory for checkpoints
+                self.chkpt_path = path.join(self.dumpdir, "chkpts")
+                self.chkpt_dir = makedirs(self.chkpt_path)
             else:
-                raise ValueError(f'checkpoint_method {self.output.checkpoint_method} not supported')
+                # Create one checkpoint file
+                if self.output.checkpoint_method == 'dumbcheckpoint':
+                    self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
+                                                mode=FILE_CREATE)
+                elif self.output.checkpoint_method == 'checkpointfile':
+                    self.chkpt_path = path.join(self.dumpdir, "chkpt.h5")
+                else:
+                    raise ValueError(f'checkpoint_method {self.output.checkpoint_method} not supported')
 
             # make list of fields to pick_up (this doesn't include
             # diagnostic fields)
@@ -735,9 +734,16 @@ class IO(object):
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
             if output.chkptfreq != 1:
-                chkpt_file = path.join(self.chkpt_path, "chkpt"+str(t)+".h5")
+                # Saving more than one checkpoint file
+                if self.output.checkpoint_method == 'checkpointfile':
+                    chkpt_file = path.join(self.chkpt_path, "chkpt"+str(t)+".h5")
+                elif self.output.checkpoint_method == 'dumbcheckpoint':
+                    self.chkpt = DumbCheckpoint(path.join(self.chkpt_path, "chkpt"+str(t)),
+                                                mode=FILE_CREATE)
             else:
-                chkpt_file = self.chkpt_path
+                # Saving just one checkpoint file
+                if self.output.checkpoint_method == 'checkpointfile':
+                    chkpt_file = self.chkpt_path
             if self.output.checkpoint_method == 'dumbcheckpoint':
                 for field_name in self.to_pick_up:
                     self.chkpt.store(state_fields(field_name), name=field_name)
