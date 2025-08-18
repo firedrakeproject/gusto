@@ -15,14 +15,15 @@ from gusto import (
     ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, GeneralIcosahedralSphereMesh, ZonalComponent,
     MeridionalComponent, RelativeVorticity, RungeKuttaFormulation,
-    SubcyclingOptions
+    SubcyclingOptions, EmbeddedDGOptions, GeneralCubedSphereMesh,
+    TrapeziumRule
 )
 
 williamson_5_defaults = {
     'ncells_per_edge': 16,     # number of cells per icosahedron edge
     'dt': 900.0,               # 15 minutes
     'tmax': 50.*24.*60.*60.,   # 50 days
-    'dumpfreq': 960,           # once per 10 days with default options
+    'dumpfreq': 480,           # once per 10 days with default options
     'dirname': 'williamson_5'
 }
 
@@ -73,13 +74,14 @@ def williamson_5(
     rsq = min_value(R0**2, (lamda - lamda_c)**2 + (phi - phi_c)**2)
     r = sqrt(rsq)
     tpexpr = mountain_height * (1 - r/R0)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
-                                 topog_expr=tpexpr)
+    eqns = ShallowWaterEquations(
+        domain, parameters, fexpr=fexpr,topog_expr=tpexpr
+    )
 
     # I/O
     output = OutputParameters(
-        dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq,
-        dump_vtus=True, dump_nc=False, dumplist=['D', 'topography']
+        dirname=dirname, dumplist_latlon=[], dumpfreq=dumpfreq,
+        dump_vtus=True, dump_nc=True, dumplist=['D', 'topography']
     )
     diagnostic_fields = [Sum('D', 'topography'), RelativeVorticity(),
                          MeridionalComponent('u'), ZonalComponent('u')]
@@ -101,7 +103,7 @@ def williamson_5(
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods
+        eqns, io, transported_fields, transport_methods, tau_values={'D': 1.0}
     )
 
     # ------------------------------------------------------------------------ #
