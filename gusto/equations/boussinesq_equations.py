@@ -69,7 +69,8 @@ class BoussinesqEquations(PrognosticEquationSet):
                 Defaults to 'vector_invariant_form'.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
-                None.
+                None, but no normal flow boundary conditions will be enforced
+                at the top and bottom for extruded domains.
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations.. Defaults to None.
@@ -258,7 +259,8 @@ class LinearBoussinesqEquations(BoussinesqEquations):
                 Defaults to 'vector_invariant_form'.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
-                None.
+                None, but no normal flow boundary conditions will be enforced
+                at the top and bottom for extruded domains.
             active_tracers (list, optional): a list of `ActiveTracer` objects
                 that encode the metadata for any active tracers to be included
                 in the equations.. Defaults to None.
