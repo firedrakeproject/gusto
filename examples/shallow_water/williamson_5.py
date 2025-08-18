@@ -15,15 +15,14 @@ from gusto import (
     ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, GeneralIcosahedralSphereMesh, ZonalComponent,
     MeridionalComponent, RelativeVorticity, RungeKuttaFormulation,
-    SubcyclingOptions, EmbeddedDGOptions, GeneralCubedSphereMesh,
-    TrapeziumRule
+    SubcyclingOptions
 )
 
 williamson_5_defaults = {
     'ncells_per_edge': 16,     # number of cells per icosahedron edge
     'dt': 900.0,               # 15 minutes
     'tmax': 50.*24.*60.*60.,   # 50 days
-    'dumpfreq': 480,           # once per 10 days with default options
+    'dumpfreq': 960,           # once per 10 days with default options
     'dirname': 'williamson_5'
 }
 
@@ -75,7 +74,7 @@ def williamson_5(
     r = sqrt(rsq)
     tpexpr = mountain_height * (1 - r/R0)
     eqns = ShallowWaterEquations(
-        domain, parameters, fexpr=fexpr,topog_expr=tpexpr
+        domain, parameters, fexpr=fexpr, topog_expr=tpexpr
     )
 
     # I/O
