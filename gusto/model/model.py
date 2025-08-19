@@ -8,7 +8,7 @@ from gusto.time_discretisation import (SSPRK3, RungeKuttaFormulation,
                                        BackwardEuler, TrapeziumRule,
                                        ForwardEuler)
 from gusto.timestepping import SemiImplicitQuasiNewton, SplitPhysicsTimestepper
-
+from gusto.core.labels import diffusion
 
 class ModelBase(object, metaclass=ABCMeta):
     """Base model class."""
@@ -74,6 +74,7 @@ class ModelBase(object, metaclass=ABCMeta):
 
         # set up prognostic equations
         self.eqns = equations(self.domain, parameters,
+                              diffusion_options=diffused_fields,
                               no_normal_flow_bc_ids=no_normal_flow_bc_ids)
 
         # set up I/O
@@ -87,14 +88,6 @@ class ModelBase(object, metaclass=ABCMeta):
 
         # set up timestepper
         self.setup_timestepper()
-
-    def setup_diffused_fields(self):
-
-        raise NotImplementedError('Please implement diffused fields with model class!')
-
-    def setup_physics(self):
-
-        raise NotImplementedError('Please implement physics schemes with model class!')
 
     @abstractmethod
     def setup_timestepper(self):
@@ -112,11 +105,6 @@ class ModelBase(object, metaclass=ABCMeta):
         """
         self.stepper.run(t=t, tmax=tmax, pick_up=pick_up)
 
-
-class TimestepperModel(ModelBase):
-
-    def setup_timestepper(self):
-        pass
 
 class SIQNModel(ModelBase):
     """
@@ -138,6 +126,16 @@ class SIQNModel(ModelBase):
     @abstractproperty
     def diffusion_schemes(self):
         pass
+
+    @property
+    def physics_schemes(self):
+
+        physics_schemes = []
+        for physics in self.physics_parameterisations:
+            physics_schemes.append(physics(self.eqns),
+                                   ForwardEuler(self.domain))
+
+        return physics_schemes
 
     def setup_timestepper(self):
 
@@ -164,7 +162,7 @@ class Model(SIQNModel):
                  # next line args are just while reproducing
                  linear_solver=None, supg=False,
                  no_normal_flow_bc_ids=None,
-                 physics_schemes=None, diffused_fields=None,
+                 physics_parameterisations=None, diffused_fields=None,
                  diagnostic_fields=None):
 
         # JS: I don't like this hardcoded list - we could check the
@@ -182,13 +180,12 @@ class Model(SIQNModel):
         else:
             self.theta_opts = EmbeddedDGOptions()
 
-        self.diffused_fields = diffused_fields
-
         super().__init__(mesh=mesh, dt=dt, parameters=parameters,
                          equations=equations, output=output,
                          family=family, element_order=1,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
-                         physics_schemes=physics_schemes,
+                         diffused_fields=diffused_fields,
+                         physics_parameterisations=physics_parameterisations,
                          diagnostic_fields=diagnostic_fields)
 
     @property
@@ -420,3 +417,39 @@ class LinearModel(Model):
     @property
     def diffusion_schemes(self):
         return []
+
+
+class BasicTimestepperModel(ModelBase):
+
+    def __init__(self, mesh, dt, parameters, equations, output,
+                 scheme,
+                 family=None, element_order=None,
+                 no_normal_flow_bc_ids=None,
+                 diffused_fields=None,
+                 physics_parameterisations=None,
+                 diagnostic_fields=None):
+
+        self.scheme = scheme
+
+        super().__init__(mesh=mesh, dt=dt, parameters=parameters,
+                         equations=equations, output=output,
+                         family=family, element_order=element_order,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         diffused_fields=diffused_fields,
+                         diagnostic_fields=diagnostic_fields)
+
+        # This amends the equation residual by adding on the physics
+        # terms associated with each parameterisation. This is done
+        # via callbacks because the schemes may require other
+        # functions or input parameters.
+        for physics in physics_parameterisations:
+            physics(self.eqns)
+
+    def setup_timestepper(self):
+
+        self.stepper = Timestepper(self.eqns,
+                                   self.scheme(domain),
+                                   self.io,
+                                   spatial_methods=(self.transport_methods
+                                                    +self.diffusion_methods)
+                                   )

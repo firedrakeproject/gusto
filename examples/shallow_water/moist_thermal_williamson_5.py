@@ -69,23 +69,15 @@ def moist_thermal_williamson_5(
     phi_c = pi/6.               # latitudinal centre of mountain (rad)
 
     # ------------------------------------------------------------------------ #
-    # Our settings for this set up
-    # ------------------------------------------------------------------------ #
-
-    element_order = 1
-    u_eqn_type = 'vector_invariant_form'
-
-    # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain
     mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
-    domain = Domain(mesh, dt, "BDM", element_order)
-    x, y, z = SpatialCoordinate(mesh)
-    lamda, phi, _ = lonlatr_from_xyz(x, y, z)
 
     # Equation: topography
+    x, y, z = SpatialCoordinate(mesh)
+    lamda, phi, _ = lonlatr_from_xyz(x, y, z)
     rsq = min_value(R0**2, (lamda - lamda_c)**2 + (phi - phi_c)**2)
     r = sqrt(rsq)
     tpexpr = mountain_height * (1 - r/R0)
@@ -97,10 +89,7 @@ def moist_thermal_williamson_5(
     tracers = [
         WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')
     ]
-    eqns = ThermalShallowWaterEquations(
-        domain, parameters,
-        active_tracers=tracers, u_transport_option=u_eqn_type
-    )
+    eqns = ThermalShallowWaterEquations
 
     # I/O
     output = OutputParameters(
@@ -110,9 +99,8 @@ def moist_thermal_williamson_5(
     )
     diagnostic_fields = [Sum('D', 'topography'), RelativeVorticity(),
                          ZonalComponent('u'), MeridionalComponent('u')]
-    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    # Physics ------------------------------------------------------------------
+    # Physics --------------------------
     # Saturation function -- first define simple expression
     def q_sat(b, D):
         return (q0/(g*D + g*tpexpr)) * exp(nu*(1 - b/g))
@@ -129,36 +117,34 @@ def moist_thermal_williamson_5(
         b = x_in.subfunctions[2]
         return 1.0 / (1.0 + nu*beta2/g*q_sat(b, D))
 
-    SWSaturationAdjustment(
-        eqns, phys_sat_func, time_varying_saturation=True,
-        parameters=parameters, thermal_feedback=True,
-        beta2=beta2, gamma_v=gamma_v, time_varying_gamma_v=True
-    )
+    def sat_adj(eqns):
+        return SWSaturationAdjustment(
+            eqns, phys_sat_func, time_varying_saturation=True,
+            parameters=eqns.parameters, thermal_feedback=True,
+            beta2=beta2, gamma_v=gamma_v, time_varying_gamma_v=True
+        )
 
-    InstantRain(
-        eqns, qprecip, vapour_name="cloud_water", rain_name="rain",
-        gamma_r=gamma_r
-    )
+    def inst_rain(eqns):
+        return InstantRain(
+            eqns, qprecip, vapour_name="cloud_water", rain_name="rain",
+            gamma_r=gamma_r
+        )
 
-    transport_methods = [
-        DGUpwind(eqns, field_name) for field_name in eqns.field_names
-    ]
-
-    # Timestepper
-    stepper = Timestepper(
-        eqns, RK4(domain), io, spatial_methods=transport_methods
+    model = BasicTimestepperModel(
+        mesh, dt, parameters, eqns, output, scheme=RK4,
+        physics_parameterisations=[sat_adj, inst_rain]
     )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    u0 = stepper.fields("u")
-    D0 = stepper.fields("D")
-    b0 = stepper.fields("b")
-    v0 = stepper.fields("water_vapour")
-    c0 = stepper.fields("cloud_water")
-    r0 = stepper.fields("rain")
+    u0 = model.stepper.fields("u")
+    D0 = model.stepper.fields("D")
+    b0 = model.stepper.fields("b")
+    v0 = model.stepper.fields("water_vapour")
+    c0 = model.stepper.fields("cloud_water")
+    r0 = model.stepper.fields("rain")
     Omega = parameters.Omega
 
     uexpr = as_vector([-u_max*y/radius, u_max*x/radius, 0.0])
@@ -194,7 +180,7 @@ def moist_thermal_williamson_5(
     # Run
     # ----------------------------------------------------------------- #
 
-    stepper.run(t=0, tmax=tmax)
+    model.run(t=0, tmax=tmax)
 
 # ---------------------------------------------------------------------------- #
 # MAIN

@@ -13,11 +13,10 @@ from firedrake import (
     Function, sqrt, conditional, as_vector
 )
 from gusto import (
-    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    TrapeziumRule, SUPGOptions, CourantNumber, Perturbation,
-    DiffusionParameters, InteriorPenaltyDiffusion, BackwardEuler,
+    OutputParameters, CourantNumber, Perturbation,
+    DiffusionParameters,
     CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
-    compressible_hydrostatic_balance
+    compressible_hydrostatic_balance, Model
 )
 
 straka_bubble_defaults = {
@@ -57,8 +56,6 @@ def straka_bubble(
 
     delta = domain_height/nlayers
     ncolumns = 8 * nlayers
-    element_order = 1
-    u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -67,16 +64,12 @@ def straka_bubble(
     # Domain
     base_mesh = PeriodicIntervalMesh(ncolumns, domain_width)
     mesh = ExtrudedMesh(base_mesh, nlayers, layer_height=delta)
-    domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
     parameters = CompressibleParameters(mesh)
     diffusion_params = DiffusionParameters(mesh, kappa=kappa, mu=mu0/delta)
-    diffusion_options = [("u", diffusion_params), ("theta", diffusion_params)]
-    eqns = CompressibleEulerEquations(
-        domain, parameters, u_transport_option=u_eqn_type,
-        diffusion_options=diffusion_options
-    )
+    diffused_fields = [("u", diffusion_params), ("theta", diffusion_params)]
+    eqns = CompressibleEulerEquations
 
     # I/O
     output = OutputParameters(
@@ -86,52 +79,27 @@ def straka_bubble(
     diagnostic_fields = [
         CourantNumber(), Perturbation('theta'), Perturbation('rho')
     ]
-    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-
-    # Transport schemes
-    theta_opts = SUPGOptions()
-    transported_fields = [
-        TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "rho"),
-        SSPRK3(domain, "theta", options=theta_opts)
-    ]
-    transport_methods = [
-        DGUpwind(eqns, "u"),
-        DGUpwind(eqns, "rho"),
-        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
-    ]
 
     # Linear solver
-    linear_solver = CompressibleSolver(eqns)
+    linear_solver = CompressibleSolver
 
-    # Diffusion schemes
-    diffusion_schemes = [
-        BackwardEuler(domain, "u"),
-        BackwardEuler(domain, "theta")
-    ]
-    diffusion_methods = [
-        InteriorPenaltyDiffusion(eqns, "u", diffusion_params),
-        InteriorPenaltyDiffusion(eqns, "theta", diffusion_params)
-    ]
+    model = Model(mesh, dt, parameters, eqns, output,
+                  linear_solver=linear_solver, supg=True,
+                  diffused_fields=diffused_fields,
+                  diagnostic_fields=diagnostic_fields)
 
-    # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields,
-        spatial_methods=transport_methods+diffusion_methods,
-        linear_solver=linear_solver, diffusion_schemes=diffusion_schemes
-    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    u0 = stepper.fields("u")
-    rho0 = stepper.fields("rho")
-    theta0 = stepper.fields("theta")
+    u0 = model.stepper.fields("u")
+    rho0 = model.stepper.fields("rho")
+    theta0 = model.stepper.fields("theta")
 
     # spaces
-    Vt = domain.spaces("theta")
-    Vr = domain.spaces("DG")
+    Vt = model.domain.spaces("theta")
+    Vr = model.domain.spaces("DG")
 
     # Isentropic background state
     theta_b = Function(Vt).interpolate(Tsurf)
@@ -159,13 +127,13 @@ def straka_bubble(
     rho0.assign(rho_b)
 
     # Reference profiles
-    stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
+    model.stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
     # ------------------------------------------------------------------------ #
     # Run
     # ------------------------------------------------------------------------ #
 
-    stepper.run(t=0, tmax=tmax)
+    model.run(t=0, tmax=tmax)
 
 # ---------------------------------------------------------------------------- #
 # MAIN
