@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
+from firedrake import (SpatialCoordinate, VertexOnlyMesh,
                         as_vector, pi, interpolate, exp, cos, sin,
                         sqrt, PeriodicRectangleMesh, atan2,
                         conditional, RandomGenerator, PCG64)
@@ -11,8 +11,11 @@ import shutil
 
 ### options changed in Cheng Li 2020
 Bu = 2
-b = 4
+b = 1.5
 Ro = 0.2
+
+### overwrite H for Laura's setup
+# H = 46e3
 
 ### setup grid parameters
 nx = 256
@@ -44,22 +47,31 @@ t_day = 2*pi/Omega
 
 ### timing options
 dump_freq = 1    # dump frequency of output
-dt = 250.          # timestep (in seconds)
-tmax = 5*dt       # duration of the simulation (in seconds)
+dt = 250          # timestep (in seconds)
+tmax = 1*dt       # duration of the simulation (in seconds)
 
 restart = False
-restart_name = 'Bu2b1Rop2_l100dt250df30_n'
-t0 = 100*t_day
+restart_name = 'new_single_halfoffset_fplane_Bu2b1p5Rop2_l1dt250df1'
+t0 = 200*t_day
 
 ### vortex locations
-south_lat_deg = [90., 83., 83., 83., 83., 83.]#, 70.]
-south_lon_deg = [0., 72., 144., 216., 288., 0.]#, 0.]
+south_lat_deg = [90.]#, 83., 83., 83., 83., 83.]#, 70.]
+south_lon_deg = [0.]#, 72., 144., 216., 288., 0.]#, 0.]
 
 ### name
-setup = ''
+setup = 'new_single'
 
 ### add noise to initial depth profile?
-noise = True
+noise = False
+
+### include available potential energy diagnostic or no?
+avlpe_diag = True
+
+#### if true then the experiment is done on an f-plane, if not then it's the PV trap as usual
+fplane = True
+
+### extract points - if True it extracts transect of y=ypole, x=xpole±40 'grid points'
+extract_points = True
 
 ##########################################################################
 
@@ -83,6 +95,8 @@ Buint, Budec = split_number(Bu)
 
 if setup != '':
     setup = f'{setup}_'
+if fplane:
+    setup =f'{setup}fplane_'
 if noise:
     noise_name = f'_n'
 else:
@@ -317,6 +331,9 @@ if smooth_degree == 5:
 ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
 ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)
 
+if fplane:
+    ftrap = 2*Omega
+
 eqns = ShallowWaterEquations(domain, parameters, fexpr=ftrap)
 logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
@@ -330,8 +347,10 @@ logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000
 diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                     ShallowWaterKineticEnergy(), 
                     ShallowWaterPotentialEnergy(parameters),
-                    ShallowWaterPotentialEnstrophy(),
-                    ShallowWaterAvailablePotentialEnergy(parameters)]
+                    ShallowWaterPotentialEnstrophy()]#,
+if avlpe_diag:
+    diagnostic_fields.append(ShallowWaterAvailablePotentialEnergy(parameters))
+                    #ShallowWaterAvailablePotentialEnergy(parameters)]
 
 io = IO(domain, output=output, diagnostic_fields=diagnostic_fields)
 
@@ -381,7 +400,7 @@ def initialise_D(X, idx):
         # print('calc r')
         dr = sqrt((x-x_c)**2 + (y-y_c)**2)
         # print('calc phi')
-        phi_perturb = (Ro/Bu)*exp(1./b)*(b**(-1.+(2./b)))*scipy.special.gammaincc(2./b, (1./b)*(dr/rm)**b)
+        phi_perturb = (Ro/Bu)*exp(1./b)*(b**(-1.+(2./b)))*scipy.special.gammaincc(2./b, (1./b)*(dr/rm)**b)*scipy.special.gamma(2./b)
         # print('append')
         D_values.append(-1 * H * phi_perturb)
 
@@ -460,6 +479,13 @@ if not restart:
     stepper.run(t=0, tmax=tmax)
 elif restart:
     stepper.run(t=tmin, tmax=tmax, pick_up=True)
+
+if extract_points:
+    points = [(136.71875*i, 136.71875*256) for i in range(217, 296)]
+    vom = VertexOnlyMesh(mesh, points)
+    P0DG = FunctionSpace(vom.input_ordering, "DG", 0)
+    PV = stepper.fields('PotentialVorticity')
+    PV_at_points = assemble(interpolate(PV, P0DG))
 
 end_time = time.time()
 
