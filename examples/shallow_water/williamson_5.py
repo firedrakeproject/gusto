@@ -79,7 +79,7 @@ def williamson_5(
 
     # I/O
     output = OutputParameters(
-        dirname=dirname, dumplist_latlon=[], dumpfreq=dumpfreq,
+        dirname=dirname, dumpfreq=dumpfreq,
         dump_vtus=True, dump_nc=True, dumplist=['D', 'topography']
     )
     diagnostic_fields = [Sum('D', 'topography'), RelativeVorticity(),

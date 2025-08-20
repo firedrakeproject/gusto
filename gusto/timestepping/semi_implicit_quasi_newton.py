@@ -123,7 +123,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 included in the solver.
             linear_solver_parameters (dict, optional): contains the options to
                 be passed to the underlying :class:`LinearVariationalSolver`.
-                for the Defaults to None.
+                Defaults to None.
             overwrite_solver_parameters (bool, optional): if True use only the
                 `solver_parameters` that have been passed in. If False then
                 update the default parameters with the `solver_parameters`
@@ -862,8 +862,6 @@ class SIQNLinearSolver(object):
             )
 
         W = equation.function_space
-
-        # Split up the rhs vector (symbolically)
         self.xrhs = Function(W)
 
         aeqn = residual

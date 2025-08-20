@@ -343,23 +343,6 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         if active_tracers is None:
             active_tracers = []
 
-        if linearisation_map == 'default':
-            if equivalent_buoyancy:
-                # Default linearisation is to include all terms
-                # Don't include qt terms
-                linearisation_map = lambda t: (
-                    t.has_label(time_derivative)
-                    or t.get(prognostic) in ['u', 'D', 'b_e']
-                )
-
-            else:
-                # Default linearisation is to include all terms
-                # Don't include terms for active tracers
-                linearisation_map = lambda t: (
-                    t.has_label(time_derivative)
-                    or t.get(prognostic) in field_names
-                )
-
         # Bypass ShallowWaterEquations.__init__ to avoid having to
         # define the field_names separately
         PrognosticEquationSet.__init__(
@@ -762,9 +745,8 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
                 buoyancy variable is taken by default to lie in the L2 space.
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
-                then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation drops terms for any active
-                tracers.
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
                 None.

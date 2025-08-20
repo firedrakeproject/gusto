@@ -248,6 +248,7 @@ def advection_equation_circulation_form(domain, test, q, ubar):
     term.
 
     Args:
+        domain (:class:`Domain`): the model's domain object.
         test (:class:`TestFunction`): the test function.
         q (:class:`ufl.Expr`): the variable to be transported.
         ubar (:class:`ufl.Expr`): the transporting velocity.
