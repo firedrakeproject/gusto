@@ -3,8 +3,9 @@
 from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg,
                        dS, split, conditional, exp)
 from firedrake.fml import subject, drop, all_terms
-from gusto.core.labels import (time_derivative, prognostic,
-                               linearisation, pressure_gradient, coriolis)
+from gusto.core.labels import (
+    linearisation, pressure_gradient, coriolis, prognostic
+)
 from gusto.equations.common_forms import (
     advection_form, advection_form_1d, continuity_form,
     continuity_form_1d, vector_invariant_form,
