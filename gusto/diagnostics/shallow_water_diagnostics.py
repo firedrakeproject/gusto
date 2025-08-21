@@ -11,7 +11,7 @@ from gusto.diagnostics.diagnostics import DiagnosticField, Energy
 __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
            "ShallowWaterPotentialEnstrophy", "PotentialVorticity",
            "RelativeVorticity", "AbsoluteVorticity", "PartitionedVapour",
-           "PartitionedCloud"]
+           "PartitionedCloud", "ShallowWaterAvailablePotentialEnergy"]
 
 
 class ShallowWaterKineticEnergy(Energy):
@@ -382,3 +382,37 @@ class PartitionedCloud(DiagnosticField):
         """Performs the computation of the diagnostic field."""
         self.qsat_func.assign(assemble(self.qsat_interpolate))
         super().compute()
+
+
+class ShallowWaterAvailablePotentialEnergy(Energy):
+    """Diagnostic shallow-water available potential energy density."""
+    name = "ShallowWaterAvailablePotentialEnergy"
+
+    def __init__(self, parameters, space=None, method='interpolate'):
+        """
+        Args:
+            parameters (:class:`ShallowWaterParameters`): the configuration
+                object containing the physical parameters for this equation.
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        self.parameters = parameters
+        super().__init__(space=space, method=method, required_fields=("D"))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        g = self.parameters.g
+        H = self.parameters.H
+        D = state_fields("D")
+        self.expr = 0.5*g*(D-H)**2
+        super().setup(domain, state_fields)
