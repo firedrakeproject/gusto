@@ -6,7 +6,7 @@ import os
 
 from_diag = True
 
-filepath = 'Bu2b4Rop2_l0dt250df1_n'
+filepath = 'new_single_fplane_Bu2b1p5Rop2_l500dt250df30'
 
 plot_dir = f'/data/home/sh1293/results/jupiter_sw/{filepath}/Plots'
 if not os.path.exists(plot_dir):

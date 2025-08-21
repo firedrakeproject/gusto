@@ -8,21 +8,22 @@ from tqdm import tqdm
 # filepath = 'intruder_Bu10b1p5Rop23_l1dt250df1'
 # path = f'/data/home/sh1293/results/jupiter_sw/{filepath}/Plots/PV_square'
 
-if len(sys.argv) != 3 and len(sys.argv) != 4:
+if len(sys.argv) != 2 and len(sys.argv) != 3:
     print('Wrong number of arguments')
     print(len(sys.argv))
     sys.exit(1)
 
 path = sys.argv[1]
-delay = float(sys.argv[2])
-if len(sys.argv) == 4:
-    extra_name = sys.argv[3]
+if len(sys.argv) == 3:
+    extra_name = sys.argv[2]
 else:
     extra_name = ''
 
 print(f'making gif: animation{extra_name}.gif')
 
 # pdb.set_trace()
+
+delay = 1
 
 if os.path.isfile(f'{path}/animation{extra_name}.gif'):
     os.remove(f'{path}/animation{extra_name}.gif')

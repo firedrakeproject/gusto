@@ -10,17 +10,37 @@ import time
 import pdb
 from tqdm import tqdm
 
-filepath = 'Bu2b4Rop2_l500dt250df30_n'
-field_name = 'PotentialVorticity'
-folder = 'PV'
+filepath = 'Bu2b1Rop2_l700dt250df30_n'
+field_name = 'RelativeVorticity'
+folder = 'RV'
 
 plot_dir = f'/data/home/sh1293/results/jupiter_sw/{filepath}/Plots/{folder}'
 if not os.path.exists(plot_dir):
     os.makedirs(plot_dir)
 
 PV_structured, times = fcs.make_structured(filepath, field_name)
-vmin = np.min(PV_structured[:,:,0])
-vmax = np.max(PV_structured[:,:,0])
+
+if field_name in ['PotentialVorticity', 'RelativeVorticity']:
+    vmin = np.min(PV_structured[:,:,0])
+    vmax = np.max(PV_structured[:,:,0])
+elif field_name == 'D_error':
+    Bu = float(filepath.split('Bu')[1].split('b')[0])
+    g = 24.79
+    Omega = 1.74e-4
+    f0 = 2 * Omega        # Planetary vorticity
+    rm = 1e6              # Radius of vortex (m)
+    phi0 = Bu * (f0*rm)**2
+    H = phi0/g
+    PV_structured = PV_structured/H
+    vmin = np.min(PV_structured[:,:,-1])
+    vmax = np.max(PV_structured[:,:,-1])
+    if abs(vmax)<abs(vmin):
+        vmin=-vmax
+    else:
+        vmax=-vmin
+# elif field_name == 'PotentialVorticity_error':
+    # vmin = np.min(PV_structured[:,:,0])
+    # vmax = np.max(PV_structured[:,:,0])
 
 digits = len(str(len(times)))
 
@@ -36,12 +56,15 @@ for i in tqdm(range(len(times)), desc='Making plots'):
     # print(f'{i:0{digits}d}')
     fig, ax = plt.subplots(1,1, figsize=(8,8))
     ax.set_aspect('equal')
-    pcolor = PV_structured[:,:,i].plot.imshow(ax=ax, x='x', y='y', cmap='RdBu_r', extend='both', add_colorbar=False, vmin=vmin, vmax=vmax)
+    pcolor = PV_structured[:,:,i].plot.imshow(ax=ax, x='x', y='y', cmap='RdBu_r', extend='both', add_colorbar=True, vmin=vmin, vmax=vmax)
     ax.set_xlabel('')
     ax.set_ylabel('')
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_title(f'{(times[i]/(2*np.pi/1.74e-4)):.3f} days')
+    if field_name=='D_error':
+        ax.set_title(f'~{(vmax*100):.2f}% deviation from H\n{(times[i]/(2*np.pi/1.74e-4)):.3f} days')
+    else:
+        ax.set_title(f'{(times[i]/(2*np.pi/1.74e-4)):.3f} days')
     plot_name = f'{plot_dir}/pcolor_{i:0{digits}d}.pdf'
     # print(f'Saving figure to {plot_name}')
     plt.savefig(f'{plot_name}', bbox_inches='tight')
