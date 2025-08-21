@@ -1,21 +1,33 @@
-from gusto import *
-from firedrake import (SpatialCoordinate, VertexOnlyMesh,
-                        as_vector, pi, interpolate, exp, cos, sin,
-                        sqrt, PeriodicRectangleMesh, atan2,
-                        conditional, RandomGenerator, PCG64)
+from gusto import (
+    OutputParameters, pick_up_mesh, ShallowWaterParameters, Domain,
+    ShallowWaterEquations, logger, RelativeVorticity, PotentialVorticity,
+    ShallowWaterKineticEnergy, ShallowWaterPotentialEnergy,
+    ShallowWaterPotentialEnstrophy, ShallowWaterAvailablePotentialEnergy,
+    SteadyStateError, IO, SubcyclingOptions, TrapeziumRule, SSPRK3,
+    DGUpwind, SemiImplicitQuasiNewton, VectorFunctionSpace, assemble,
+    Function, FunctionSpace
+)
+from firedrake import (
+    SpatialCoordinate, VertexOnlyMesh, as_vector, pi, interpolate, exp, cos, sin,
+    sqrt, PeriodicRectangleMesh, atan2, conditional, RandomGenerator, PCG64,
+    MinCellEdgeLength, MaxCellEdgeLength
+)
 import scipy
 import numpy as np
 import time
 import os
 import shutil
+import pdb
+from decimal import Decimal, ROUND_HALF_UP
 
 ### options changed in Cheng Li 2020
 Bu = 2
 b = 1.5
 Ro = 0.2
 
-### overwrite H for Laura's setup
-# H = 46e3
+### specify Ld (Laura's setup)
+Laurasetup = True
+Ld = 3060e3
 
 ### setup grid parameters
 nx = 256
@@ -41,6 +53,11 @@ f0 = 2 * Omega        # Planetary vorticity
 rm = 1e6              # Radius of vortex (m)
 vm = Ro * f0 * rm     # Calculate speed with Ro
 
+if Laurasetup:
+    Bu = (Ld/rm)**2
+    Buf = Decimal(str(Bu))
+    Bu2dp = Buf.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    Bu = float(Bu2dp)
 phi0 = Bu * (f0*rm)**2
 H = phi0/g
 t_day = 2*pi/Omega
@@ -48,18 +65,18 @@ t_day = 2*pi/Omega
 ### timing options
 dump_freq = 1    # dump frequency of output
 dt = 250          # timestep (in seconds)
-tmax = 1*dt       # duration of the simulation (in seconds)
+tmax = 10*t_day       # duration of the simulation (in seconds)
 
 restart = False
 restart_name = 'new_single_halfoffset_fplane_Bu2b1p5Rop2_l1dt250df1'
 t0 = 200*t_day
 
 ### vortex locations
-south_lat_deg = [90.]#, 83., 83., 83., 83., 83.]#, 70.]
+south_lat_deg = [65.]#, 83., 83., 83., 83., 83.]#, 70.]
 south_lon_deg = [0.]#, 72., 144., 216., 288., 0.]#, 0.]
 
 ### name
-setup = 'new_single'
+setup = 'new_single_edge'
 
 ### add noise to initial depth profile?
 noise = False
@@ -67,11 +84,18 @@ noise = False
 ### include available potential energy diagnostic or no?
 avlpe_diag = True
 
+### include perturbation of D diagnostic
+D_perturb = True
+
 #### if true then the experiment is done on an f-plane, if not then it's the PV trap as usual
-fplane = True
+fplane = False
 
 ### extract points - if True it extracts transect of y=ypole, x=xpole±40 'grid points'
 extract_points = True
+res = 1
+
+### anticyclone?
+ac = True
 
 ##########################################################################
 
@@ -95,6 +119,8 @@ Buint, Budec = split_number(Bu)
 
 if setup != '':
     setup = f'{setup}_'
+if ac:
+    setup = f'{setup}ac_'
 if fplane:
     setup =f'{setup}fplane_'
 if noise:
@@ -124,6 +150,17 @@ elif restart:
     output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=dump_freq, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5')
     chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
     mesh = chkpt_mesh
+
+
+# V = FunctionSpace(mesh, "DG", 0)
+# f = Function(V)
+# print(f'Number of cells: {len(f.dat.data)}')
+
+# V = FunctionSpace(mesh, "DG", 0)
+# min = Function(V).interpolate(MinCellEdgeLength(mesh))
+# max = Function(V).interpolate(MaxCellEdgeLength(mesh))
+# print(f'Cell size min and max: {min.dat.data}, {max.dat.data}')
+# pdb.set_trace()
 
 
 x, y = SpatialCoordinate(mesh)
@@ -337,6 +374,9 @@ if fplane:
 eqns = ShallowWaterEquations(domain, parameters, fexpr=ftrap)
 logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
+Ld = sqrt(H*g)/f0
+logger.info(f'Ld={Ld/1e3:.2f} km')
+
 # diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D'),
 #                      RelativeVorticity(), PotentialVorticity(),
 #                      ShallowWaterKineticEnergy(),
@@ -347,10 +387,11 @@ logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000
 diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                     ShallowWaterKineticEnergy(), 
                     ShallowWaterPotentialEnergy(parameters),
-                    ShallowWaterPotentialEnstrophy()]#,
+                    ShallowWaterPotentialEnstrophy()]
 if avlpe_diag:
     diagnostic_fields.append(ShallowWaterAvailablePotentialEnergy(parameters))
-                    #ShallowWaterAvailablePotentialEnergy(parameters)]
+if D_perturb:
+    diagnostic_fields.append(SteadyStateError('D'))
 
 io = IO(domain, output=output, diagnostic_fields=diagnostic_fields)
 
@@ -402,7 +443,11 @@ def initialise_D(X, idx):
         # print('calc phi')
         phi_perturb = (Ro/Bu)*exp(1./b)*(b**(-1.+(2./b)))*scipy.special.gammaincc(2./b, (1./b)*(dr/rm)**b)*scipy.special.gamma(2./b)
         # print('append')
-        D_values.append(-1 * H * phi_perturb)
+        if not ac:
+            D_values.append(-1 * H * phi_perturb)
+        ### I think this would turn it into an anticyclone???
+        elif ac:
+            D_values.append(H * phi_perturb)
 
     # print('loop done')
     # return list of D values in correct order
@@ -448,8 +493,10 @@ if not restart:
         # Overide u,v components in velocity field
         # u_veloc += - vm * ( r / rm ) * exp( (1/b) * ( 1 - ( r / rm )**b ) ) * ( (y_grid-yy) / ( r + 1e-16 ) )
         # v_veloc += vm * ( r / rm ) * exp( (1/b) * ( 1 - ( r / rm )**b ) ) * ( (x_grid-xx) / ( r + 1e-16 ) )
-
-        mag_veloc = vm * ( dr / rm ) * exp( (1/b) * ( 1 - ( dr / rm )**b ) )
+        if not ac:
+            mag_veloc = vm * ( dr / rm ) * exp( (1/b) * ( 1 - ( dr / rm )**b ) )
+        elif ac:
+            mag_veloc = -1 * vm * ( dr / rm ) * exp( (1/b) * ( 1 - ( dr / rm )**b ) )
         # logger.info(f'mag_veloc is {mag_veloc}')
         dx = x - x_c
         dy = y - y_c
@@ -480,14 +527,23 @@ if not restart:
 elif restart:
     stepper.run(t=tmin, tmax=tmax, pick_up=True)
 
+end_time = time.time()
+
 if extract_points:
-    points = [(136.71875*i, 136.71875*256) for i in range(217, 296)]
+    # factor=2 gives the same scaled as field_output.nc
+    factor = res
+    xpoints = [Lx/(nx*factor)*i for i in range(int((nx/2-20)*factor), int((nx/2+20)*factor))]
+    ypoint = Ly/2
+    points = [(x, ypoint) for x in xpoints]
     vom = VertexOnlyMesh(mesh, points)
-    P0DG = FunctionSpace(vom.input_ordering, "DG", 0)
+    P0DG = FunctionSpace(vom, "DG", 0)
+    P0DG_io = FunctionSpace(vom.input_ordering, "DG", 0)
     PV = stepper.fields('PotentialVorticity')
     PV_at_points = assemble(interpolate(PV, P0DG))
-
-end_time = time.time()
+    PV_at_input_points = assemble(interpolate(PV_at_points, P0DG_io))
+    import xarray as xr
+    pvend = xr.DataArray(PV_at_input_points.dat.data_ro, dims=['x'], coords=dict(x=('x', xpoints)), attrs=dict(y=ypoint/1e3))
+    pvend.to_netcdf(f'{dirname}/end_pv.nc')
 
 t_start = tmin if restart else 0
 
