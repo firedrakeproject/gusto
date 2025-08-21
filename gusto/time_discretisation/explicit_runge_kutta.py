@@ -354,6 +354,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             self.field_i[stage+1].assign(self.field_i[stage])
             if self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
+            elif self.augmentation is not None:
+                if self.augmentation.name == 'mean_mixing_ratio':
+                    self.augmentation.limit(self.field_i[stage])
 
             for evaluate in self.evaluate_source:
                 evaluate(self.field_i[stage], self.dt, x_out=self.source_i[stage])
@@ -365,6 +368,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 self.x1.assign(self.field_i[stage+1])
                 if self.limiter is not None:
                     self.limiter.apply(self.x1)
+                elif self.augmentation is not None:
+                    if self.augmentation.name == 'mean_mixing_ratio':
+                        self.augmentation.limit(self.x1)
 
         elif self.rk_formulation == RungeKuttaFormulation.linear:
 
