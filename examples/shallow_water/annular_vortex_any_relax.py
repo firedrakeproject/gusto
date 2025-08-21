@@ -2,14 +2,26 @@
 Set up Martian annular vortex experiment!
 """
 
-from gusto import *
-from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
-                       pi, cos, interpolate, PCG64, RandomGenerator)
+from gusto import (
+    ShallowWaterParameters, lonlatr_from_xyz, ShallowWaterEquations,
+    ContinuityEquation, logger, TrapeziumRule, SSPRK3, DGUpwind,
+    PotentialVorticity, ZonalComponent, MeridionalComponent,
+    Heaviside_flag_less, Sum, SWCO2cond_flag, CumulativeSum,
+    Domain, OutputParameters, pick_up_mesh, Function, IO,
+    SWHeightRelax, SWCO2cond, ForwardEuler, SemiImplicitQuasiNewton,
+    FunctionSpace, VectorFunctionSpace, xyz_vector_from_lonlatr,
+    Constant
+)
+from firedrake import (
+    IcosahedralSphereMesh, SpatialCoordinate, pi, cos,
+    interpolate, PCG64, RandomGenerator
+)
 import numpy as np
 from netCDF4 import Dataset
 import os
 import shutil
 import subprocess
+import pdb
 
 # ---------------------------------------------------------------------------- #
 # Test case parameters
@@ -27,7 +39,7 @@ monopolar = False
 A0scal = 0
 
 # scaling factor for PV at pole in annular relaxation profile (defaults 1.6 and 1.0)
-pvmax = 2.4
+pvmax = 2.2
 pvpole = 1.05
 
 # tau_r is radiative relaxation time constant
@@ -43,11 +55,11 @@ rel_sch = 'rad'
 include_co2 = 'yes'
 
 # refinement level
-ref_lev = 4
+ref_lev = 5
 
 # do you want to run from a restart file (True) or not (False). If yes, input the name of the restart file e.g. Free_run/...
 restart = True
-restart_name = 'Relax_to_annulus/annular_vortex_mars_57-62_PVmax--2-4_PVpole--1-05_tau_r--2sol_A0-0-norel_len-100sols_tracer_tophat-80_ref-4'
+restart_name = 'Relax_to_annulus/annular_vortex_mars_57-62_PVmax--2-2_PVpole--1-05_tau_r--2sol_A0-0-norel_len-100sols_tracer_tophat-80_ref-5'
 
 # length of this run, time to start from (only relevant if doing a restart)
 rundays = 200
@@ -324,10 +336,6 @@ def transport_setup(restart, domain, eqns, tracer_eqn, rs_tracer_eqn):
 rlat_an, uini_an, hini_an = initial_profiles(Omega, R, phis, phin, annulus=True, pvpole=pvpole, pvmax=pvmax)
 rlat_mp, uini_mp, hini_mp = initial_profiles(Omega, R, phimp, phin, annulus=False, pvmax=pvmax)
 rlat, ust, hst = initial_profiles(Omega, R, phiss=60, phinn=70, annulus=True)
-if standard_start:
-    h_th = min(hst)*beta+H
-else:
-    h_th = min(hini)*beta+H
 
 if tracer and not restart:
     if hat and not strip:
@@ -343,13 +351,19 @@ elif not tracer:
     Tini = 0
     Tini_rs = 0
 
-if monopolar:
-    uini, hini = uini_mp, hini_mp
-    phin = 90
 if standard_start:
     uini, hini = ust, hst
 else:
-    uini, hini = uini_an, hini_an
+    if monopolar:
+        uini, hini = uini_mp, hini_mp
+        phin = 90
+    else:
+        uini, hini = uini_an, hini_an
+
+if standard_start:
+    h_th = min(hst)*beta+H
+else:
+    h_th = min(hini)*beta+H
 
 # if not restart:
 #     # Domain
@@ -370,6 +384,11 @@ dirname = f'{rel_sch_folder}/annular_vortex_mars_{phis}-{phin}_{rel_sch_name}_{t
 # print(f'directory name is {dirname}')
 dirpath = f'{homepath}/{dirname}'
 
+# if restart:
+#     if os.path.exists(f'{dirpath}/field_output.nc'):
+#         logger.info('File already exists, delete if necessary')
+#         exit()
+
 if not restart:
     mesh = IcosahedralSphereMesh(radius=R, refinement_level=ref_lev, degree=2)
     domain = Domain(mesh, dt, 'BDM', degree=1)
@@ -385,7 +404,12 @@ elif restart:
     if tracer:
         dumplist.append('tracer_rs')
         groups.append('tracer_rs')
-    create_restart_nc(dirpath=dirpath, dirnameold=dirnameold, groups=groups)
+    if os.path.exists(f'{dirpath}/field_output.nc'):
+        logger.info('not making output netcdf')
+    else:
+        logger.info('making output netcdf')
+        create_restart_nc(dirpath=dirpath, dirnameold=dirnameold, groups=groups)
+    logger.info('escaped that bit')
     output = OutputParameters(dirname=dirpath, dump_nc=True, dumpfreq=dump_freq, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5', dumplist=dumplist)
 
     chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
