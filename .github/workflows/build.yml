@@ -118,6 +118,19 @@ jobs:
           firedrake-run-split-tests 4 3 "$EXTRA_PYTEST_ARGS" "--log-file=gusto4_{#}.log"
         timeout-minutes: 10
 
+      - name: Gusto jupyter_notebooks
+        run: |
+          . venv-gusto/bin/activate
+          export GUSTO_PARALLEL_LOG=FILE
+          python -m pytest \
+            -n 4 --dist loadscope \
+            --timeout=1200 \
+            --timeout-method=thread \
+            -o faulthandler_timeout=1260 \
+            --nbval-lax \
+            --nbval-cell-timeout=3000 \
+            -v jupyter_notebooks
+
       - name: Upload pytest log files
         uses: actions/upload-artifact@v4
         if: success() || steps.install-two.conclusion == 'success'

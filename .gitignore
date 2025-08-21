@@ -57,3 +57,7 @@ docs/_build/
 target/
 /docs/source/teamgrid.rst
 /docs/source/gusto.rst
+
+# Gusto specific
+jupyter_notebooks/results
+jupyter_notebooks/.ipynb_checkpoints
