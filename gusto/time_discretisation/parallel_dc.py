@@ -1,4 +1,4 @@
-u"""
+"""
 Objects for discretising time derivatives using time-parallel Deferred Correction
 Methods.
 
