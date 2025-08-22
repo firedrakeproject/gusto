@@ -86,7 +86,7 @@ from gusto.time_discretisation.time_discretisation import wrapper_apply
 from gusto.core.labels import (time_derivative, implicit, explicit, source_label)
 from qmat import genQCoeffs, genQDeltaCoeffs
 
-__all__ = ["SDC", "RIDC"]
+__all__ = ["SDC", "RIDC", "RIDC_new"]
 
 
 class SDC(object, metaclass=ABCMeta):
@@ -915,3 +915,385 @@ class RIDC(object, metaclass=ABCMeta):
                 self.source_Uk[m].assign(self.source_Ukp1[m])
 
         x_out.assign(self.Unodes[-1])
+
+class RIDC_new(object, metaclass=ABCMeta):
+    """Class for Revisionist Integral Deferred Correction schemes."""
+
+    def __init__(self, base_scheme, domain, M, K, J, field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None,
+                 limiter=None, options=None, reduced=True):
+        """
+        Initialise RIDC object
+        Args:
+            base_scheme (:class:`TimeDiscretisation`): Base time stepping scheme to get first guess of solution on
+                quadrature nodes.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            M (int): Number of subintervals
+            K (int): Max number of correction interations
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            linear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying linear solver. Defaults to None.
+            nonlinear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying nonlinear solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+            reduced (bool, optional): whether to use reduced or full stencils for RIDC.
+        """
+        self.base = base_scheme
+        self.field_name = field_name
+        self.domain = domain
+        self.tmax = domain.dt
+        self.limiter = limiter
+        self.augmentation = self.base.augmentation
+        self.wrapper = self.base.wrapper
+        self.K = K
+        self.M = M
+        self.J = J
+        self.reduced = reduced
+        self.dt_coarse = float(self.tmax / self.J)
+
+        self.dt = Constant(float(self.dt_coarse)/(self.M))
+
+        print("RIDC_new: dt_coarse = ", self.dt_coarse, "dt = ", self.dt_coarse/ self.M)
+
+        if reduced:
+            self.Q = []
+            for l in range(1, self.K + 1):
+                _, _, Q = genQCoeffs(
+                    "Collocation",
+                    nNodes=l + 1,
+                    nodeType="EQUID",
+                    quadType="LOBATTO",
+                    form="N2N"
+                )
+                Q = l * float(self.dt) * Q
+                self.Q.append(Q)
+        else:
+            # Get integration weights
+            _, _, self.Q = genQCoeffs(
+                "Collocation",
+                nNodes=self.K + 1,
+                nodeType="EQUID",
+                quadType="LOBATTO",
+                form="N2N"
+            )
+            self.Q = self.K * float(self.dt) * self.Q
+
+        # Set default linear and nonlinear solver options if none passed in
+        if linear_solver_parameters is None:
+            self.linear_solver_parameters = {'snes_type': 'ksponly',
+                                             'ksp_type': 'cg',
+                                             'pc_type': 'bjacobi',
+                                             'sub_pc_type': 'ilu'}
+        else:
+            self.linear_solver_parameters = linear_solver_parameters
+
+        if nonlinear_solver_parameters is None:
+            self.nonlinear_solver_parameters = {'snes_type': 'newtonls',
+                                                'ksp_type': 'gmres',
+                                                'pc_type': 'bjacobi',
+                                                'sub_pc_type': 'ilu'}
+        else:
+            self.nonlinear_solver_parameters = nonlinear_solver_parameters
+
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        """
+        Set up the RIDC time discretisation based on the equation.
+
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            apply_bcs (bool, optional): whether to apply the equation's boundary
+                conditions. Defaults to True.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
+        # Inherit from base time discretisation
+        self.base.setup(equation, apply_bcs, *active_labels)
+        self.equation = self.base.equation
+        self.residual = self.base.residual
+        self.evaluate_source = self.base.evaluate_source
+
+        for t in self.residual:
+            # Check all terms are labeled implicit or explicit
+            if ((not t.has_label(implicit)) and (not t.has_label(explicit))
+               and (not t.has_label(time_derivative)) and (not t.has_label(source_label))):
+                raise NotImplementedError("Non time-derivative or source terms must be labeled as implicit or explicit")
+
+        # Set up bcs
+        self.bcs = self.base.bcs
+
+        # Set up RIDC variables
+        if self.field_name is not None and hasattr(equation, "field_names"):
+            self.idx = equation.field_names.index(self.field_name)
+            W = equation.spaces[self.idx]
+        else:
+            self.field_name = equation.field_name
+            W = equation.function_space
+            self.idx = None
+        self.W = W
+        self.Unodes = [Function(W) for _ in range(self.M+1)]
+        self.Unodes1 = [Function(W) for _ in range(self.M+1)]
+        self.fUnodes = [Function(W) for _ in range(self.M+1)]
+        self.quad = [Function(W) for _ in range(self.M+1)]
+        self.source_Uk = [Function(W) for _ in range(self.M+1)]
+        self.source_Ukp1 = [Function(W) for _ in range(self.M+1)]
+        self.U_DC = Function(W)
+        self.U_start = Function(W)
+        self.Un = Function(W)
+        self.Q_ = Function(W)
+        self.quad_final = Function(W)
+        self.U_fin = Function(W)
+        self.Urhs = Function(W)
+        self.Uin = Function(W)
+        self.source_in = Function(W)
+        self.source_Ukp1_m = Function(W)
+        self.source_Uk_m = Function(W)
+        self.Uk_mp1 = Function(W)
+        self.Uk_m = Function(W)
+        self.Ukp1_m = Function(W)
+
+    @property
+    def nlevels(self):
+        return 1
+
+    def compute_quad(self, Q, fUnodes, m):
+        """
+        Computes integration of F(y) on quadrature nodes
+        """
+        quad = Function(self.W)
+        quad.assign(0.)
+        for k in range(0, np.shape(Q)[1]):
+            quad += float(Q[m, k])*fUnodes[k]
+        return quad
+
+    def compute_quad_final(self, Q, fUnodes, m):
+        """
+        Computes final integration of F(y) on quadrature nodes
+        """
+        quad = Function(self.W)
+        quad.assign(0.)
+        if self.reduced:
+            l = np.shape(Q)[0] - 1
+        else:
+            l = self.K
+        for k in range(0, l+1):
+            quad += float(Q[-1, k])*fUnodes[m - l + k]
+        return quad
+
+    @property
+    def res_rhs(self):
+        """Set up the residual for the calculation of F(y)."""
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs, old_idx=self.idx),
+                                    drop)
+        # F(y)
+        L = self.residual.label_map(lambda t: any(t.has_label(time_derivative, source_label)),
+                                    drop,
+                                    replace_subject(self.Uin, old_idx=self.idx))
+        L_source = self.residual.label_map(lambda t: t.has_label(source_label),
+                                           replace_subject(self.source_in, old_idx=self.idx),
+                                           drop)
+        residual_rhs = a - (L + L_source)
+        return residual_rhs.form
+
+    @property
+    def res(self):
+        """Set up the discretisation's residual."""
+        # Add time derivative terms  y^(k+1)_m - y_n
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
+        residual -= mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.U_start, old_idx=self.idx))
+
+        # Calculate source terms
+        r_source_kp1 = self.residual.label_map(
+            lambda t: t.has_label(source_label),
+            map_if_true=replace_subject(self.source_Ukp1_m, old_idx=self.idx),
+            map_if_false=drop)
+        r_source_kp1 = r_source_kp1.label_map(
+            all_terms,
+            lambda t: Constant(self.dt)*t)
+        residual += r_source_kp1
+
+        r_source_k = self.residual.label_map(
+            lambda t: t.has_label(source_label),
+            map_if_true=replace_subject(self.source_Uk_m, old_idx=self.idx),
+            map_if_false=drop)
+        r_source_k = r_source_k.label_map(
+            all_terms,
+            map_if_true=lambda t: Constant(self.dt)*t)
+        residual -= r_source_k
+
+        # Add on final implicit terms
+        # dt*(F(y_(m)^(k+1)) - F(y_(m)^k))
+        r_imp_kp1 = self.residual.label_map(
+            lambda t: t.has_label(implicit),
+            map_if_true=replace_subject(self.U_DC, old_idx=self.idx),
+            map_if_false=drop)
+        r_imp_kp1 = r_imp_kp1.label_map(
+            all_terms,
+            lambda t: Constant(self.dt)*t)
+        residual += r_imp_kp1
+        r_imp_k = self.residual.label_map(
+            lambda t: t.has_label(implicit),
+            map_if_true=replace_subject(self.Uk_mp1, old_idx=self.idx),
+            map_if_false=drop)
+        r_imp_k = r_imp_k.label_map(
+            all_terms,
+            lambda t: Constant(self.dt)*t)
+        residual -= r_imp_k
+
+        r_exp_kp1 = self.residual.label_map(
+            lambda t: t.has_label(explicit),
+            map_if_true=replace_subject(self.Ukp1_m, old_idx=self.idx),
+            map_if_false=drop)
+        r_exp_kp1 = r_exp_kp1.label_map(
+            all_terms,
+            lambda t: Constant(self.dt)*t)
+        residual += r_exp_kp1
+        r_exp_k = self.residual.label_map(
+            lambda t: t.has_label(explicit),
+            map_if_true=replace_subject(self.Uk_m, old_idx=self.idx),
+            map_if_false=drop)
+        r_exp_k = r_exp_k.label_map(
+            all_terms,
+            lambda t: Constant(self.dt)*t)
+        residual -= r_exp_k
+
+        # Add on sum(j=1,M) s_mj*F(y_m^k), where s_mj = q_mj-q_m-1j
+        # and s1j = q1j.
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_, old_idx=self.idx),
+                                    drop)
+        residual += Q
+        return residual.form
+
+    @cached_property
+    def solver(self):
+        """Set up the problem and the solver for the nonlinear solve."""
+        # setup solver using residual defined in derived class
+        problem = NonlinearVariationalProblem(self.res, self.U_DC, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        solver = NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name)
+        return solver
+
+    @cached_property
+    def solver_rhs(self):
+        """Set up the problem and the solver for mass matrix inversion."""
+        # setup linear solver using rhs residual defined in derived class
+        prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_rhs"
+        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
+                                          options_prefix=solver_name)
+
+    @wrapper_apply
+    def apply(self, x_out, x_in):
+        self.Un.assign(x_in)
+
+        for j in range(1, self.J+1):
+            # Compute initial guess on quadrature nodes with low-order
+            # base timestepper
+            time = (j) * self.dt_coarse
+            print("RIDC_new: time = ", time, "n = ", j)
+            self.Unodes[0].assign(self.Un)
+            self.M1 = self.K
+
+            for m in range(self.M):
+                self.base.dt = float(self.dt)
+                self.base.apply(self.Unodes[m+1], self.Unodes[m])
+
+            for m in range(self.M+1):
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
+
+            # Iterate through correction sweeps
+            for k in range(1, self.K+1):
+                # Compute: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
+                for m in range(self.M+1):
+                    self.Uin.assign(self.Unodes[m])
+                    # Include source terms
+                    for evaluate in self.evaluate_source:
+                        evaluate(self.Uin, self.base.dt, x_out=self.source_in)
+                    self.solver_rhs.solve()
+                    self.fUnodes[m].assign(self.Urhs)
+
+                # Loop through quadrature nodes and solve
+                self.Unodes1[0].assign(self.Unodes[0])
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
+                if self.reduced:
+                    self.M1 = k
+                for m in range(0, self.M1):
+                    # Set integration matrix
+                    if self.reduced:
+                        self.Q_.assign(self.compute_quad(self.Q[k-1], self.fUnodes, m+1))
+                    else:
+                        self.Q_.assign(self.compute_quad(self.Q, self.fUnodes, m+1))
+
+                    # Set initial guess for solver, and pick correct solver
+                    self.U_start.assign(self.Unodes1[m])
+                    self.Ukp1_m.assign(self.Unodes1[m])
+                    self.Uk_mp1.assign(self.Unodes[m+1])
+                    self.Uk_m.assign(self.Unodes[m])
+                    self.source_Ukp1_m.assign(self.source_Ukp1[m])
+                    self.source_Uk_m.assign(self.source_Uk[m])
+                    self.U_DC.assign(self.Unodes[m+1])
+
+                    # Compute:
+                    # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
+                    #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+                    #             + sum(j=1,M) s_mj*(F+S)(y^k)
+                    self.solver.solve()
+                    self.Unodes1[m+1].assign(self.U_DC)
+
+                    # Evaluate source terms
+                    for evaluate in self.evaluate_source:
+                        evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+
+                    # Apply limiter if required
+                    if self.limiter is not None:
+                        self.limiter.apply(self.Unodes1[m+1])
+                for m in range(self.M1, self.M):
+                    # Set integration matrix
+                    if self.reduced:
+                        self.Q_.assign(self.compute_quad_final(self.Q[k-1], self.fUnodes, m+1))
+                    else:
+                        self.Q_.assign(self.compute_quad_final(self.Q, self.fUnodes, m+1))
+
+                    # Set initial guess for solver, and pick correct solver
+                    self.U_start.assign(self.Unodes1[m])
+                    self.Ukp1_m.assign(self.Unodes1[m])
+                    self.Uk_mp1.assign(self.Unodes[m+1])
+                    self.Uk_m.assign(self.Unodes[m])
+                    self.source_Ukp1_m.assign(self.source_Ukp1[m])
+                    self.source_Uk_m.assign(self.source_Uk[m])
+                    self.U_DC.assign(self.Unodes[m+1])
+
+                    # Compute:
+                    # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
+                    #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+                    #             + sum(j=1,M) s_mj*(F+S)(y^k)
+                    self.solver.solve()
+                    self.Unodes1[m+1].assign(self.U_DC)
+
+                    # Evaluate source terms
+                    for evaluate in self.evaluate_source:
+                        evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+
+                    # Apply limiter if required
+                    if self.limiter is not None:
+                        self.limiter.apply(self.Unodes1[m+1])
+
+                for m in range(self.M+1):
+                    self.Unodes[m].assign(self.Unodes1[m])
+                    self.source_Uk[m].assign(self.source_Ukp1[m])
+
+            self.Un.assign(self.Unodes[-1])
+        x_out.assign(self.Unodes[-1])
+

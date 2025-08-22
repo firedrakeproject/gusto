@@ -1,4 +1,4 @@
-"""
+u"""
 Objects for discretising time derivatives using time-parallel Deferred Correction
 Methods.
 
@@ -15,9 +15,9 @@ from firedrake import (
 )
 from gusto.time_discretisation.time_discretisation import wrapper_apply
 from qmat import genQDeltaCoeffs
-from gusto.time_discretisation.deferred_correction import SDC, RIDC
+from gusto.time_discretisation.deferred_correction import SDC, RIDC, RIDC_new
 
-__all__ = ["Parallel_RIDC", "Parallel_SDC"]
+__all__ = ["Parallel_RIDC", "Parallel_SDC", "Parallel_RIDC_new"]
 
 
 class Parallel_RIDC(RIDC):
@@ -381,3 +381,202 @@ class Parallel_SDC(SDC):
             if self.comm.ensemble_comm.rank == self.M-1:
                 x_out.assign(self.Unodes[-1])
             self.comm.bcast(x_out, self.M-1)
+
+class Parallel_RIDC_new(RIDC_new):
+    """Class for Parallel Revisionist Integral Deferred Correction schemes."""
+
+    def __init__(self, base_scheme, domain, M, K, J, flush_freq = None, field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None,
+                 limiter=None, options=None, communicator=None):
+        """
+        Initialise RIDC object
+        Args:
+            base_scheme (:class:`TimeDiscretisation`): Base time stepping scheme to get first guess of solution on
+                quadrature nodes.
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            M (int): Number of subintervals
+            K (int): Max number of correction interations
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            linear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying linear solver. Defaults to None.
+            nonlinear_solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying nonlinear solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+            communicator (MPI communicator, optional): communicator for parallel execution. Defaults to None.
+        """
+
+        super(Parallel_RIDC_new, self).__init__(base_scheme, domain, M, K, J, field_name,
+                                            linear_solver_parameters, nonlinear_solver_parameters,
+                                            limiter, options, reduced=True)
+        self.comm = communicator
+
+        self.TAG_EXCHANGE_FIELD = 10 # Tag for sending nodal fields (Firedrake Functions)
+        self.TAG_EXCHANGE_SOURCE = 11 # Tag for sending nodal source fields (Firedrake Functions)
+        self.TAG_FLUSH_PIPE = 12 # Tag for flushing pipe and restarting
+        self.TAG_FINAL_OUT = 13 # Tag for the final broadcast and output
+        self.TAG_END_INTERVAL = 14 # Tag for telling the rank above you that you have ended interval j
+        if flush_freq is None:
+            self.flush_freq = 1
+        else:
+            self.flush_freq = flush_freq
+        # Checks for parallel RIDC
+        if self.comm is None:
+            raise ValueError("No communicator provided. Please provide a valid MPI communicator.")
+        if self.comm.ensemble_comm.size != self.K + 1:
+            raise ValueError("Number of ranks must be equal to K+1 for Parallel RIDC.")
+        if self.M < self.K*(self.K+1)//2:
+            raise ValueError("Number of subintervals M must be greater than K*(K+1)/2 for Parallel RIDC.")
+
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        """
+        Set up the RIDC time discretisation based on the equation.
+
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            apply_bcs (bool, optional): whether to apply the equation's boundary
+                conditions. Defaults to True.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
+        super(Parallel_RIDC_new, self).setup(equation, apply_bcs, *active_labels)
+
+        self.Uk_mp1 = Function(self.W)
+        self.Uk_m = Function(self.W)
+        self.Ukp1_m = Function(self.W)
+
+    @wrapper_apply
+    def apply(self, x_out, x_in):
+        # Set up varibles on this rank
+        x_out.assign(x_in)
+        self.kval = self.comm.ensemble_comm.rank
+        self.Un.assign(x_in)
+
+        for j in range(1, self.J + 1):
+            self.Unodes[0].assign(self.Un)
+            # Loop through quadrature nodes and solve
+            self.Unodes1[0].assign(self.Unodes[0])
+            for evaluate in self.evaluate_source:
+                evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
+            self.Uin.assign(self.Unodes[0])
+            self.solver_rhs.solve()
+            self.fUnodes[0].assign(self.Urhs)
+
+            # On first communicator, we do the predictor step
+            if (self.comm.ensemble_comm.rank == 0):
+                # Base timestepper
+                for m in range(self.M):
+                    self.base.dt = float(self.dt)
+                    self.base.apply(self.Unodes[m+1], self.Unodes[m])
+                    for evaluate in self.evaluate_source:
+                        evaluate(self.Unodes[m+1], self.base.dt, x_out=self.source_Uk[m+1])
+
+                    # Send base guess to k+1 correction
+                    self.comm.send(self.Unodes[m+1], dest=self.kval+1, tag=j*self.TAG_EXCHANGE_FIELD)
+                    self.comm.send(self.source_Uk[m+1], dest=self.kval+1, tag=j*self.TAG_EXCHANGE_SOURCE)
+            else:
+                for m in range(1, self.kval + 1):
+                    # Recieve and evaluate the stencil of guesses we need to correct
+                    self.comm.recv(self.Unodes[m], source=self.kval-1, tag=j*self.TAG_EXCHANGE_FIELD)
+                    self.comm.recv(self.source_Uk[m], source=self.kval-1, tag=j*self.TAG_EXCHANGE_SOURCE)
+                    self.Uin.assign(self.Unodes[m])
+                    for evaluate in self.evaluate_source:
+                        evaluate(self.Uin, self.base.dt, x_out=self.source_in)
+                    self.solver_rhs.solve()
+                    self.fUnodes[m].assign(self.Urhs)
+                for m in range(0, self.kval):
+                    # Set S matrix
+                    self.Q_.assign(self.compute_quad(self.Q[self.kval-1], self.fUnodes, m+1))
+
+                    # Set initial guess for solver, and pick correct solver
+                    self.U_start.assign(self.Unodes1[m])
+                    self.Ukp1_m.assign(self.Unodes1[m])
+                    self.Uk_mp1.assign(self.Unodes[m+1])
+                    self.Uk_m.assign(self.Unodes[m])
+                    self.source_Ukp1_m.assign(self.source_Ukp1[m])
+                    self.source_Uk_m.assign(self.source_Uk[m])
+                    self.U_DC.assign(self.Unodes[m+1])
+
+                    # Compute
+                    # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
+                    #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+                    #             + sum(j=1,M) s_mj*(F+S)(y_j^k)
+                    self.solver.solve()
+                    self.Unodes1[m+1].assign(self.U_DC)
+
+                    # Evaluate source terms
+                    for evaluate in self.evaluate_source:
+                        evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+
+                    # Apply limiter if required
+                    if self.limiter is not None:
+                        self.limiter.apply(self.Unodes1[m+1])
+                    # Send our updated value to next communicator
+                    if self.kval < self.K:
+                        self.comm.send(self.Unodes1[m+1], dest=self.kval+1, tag=j*self.TAG_EXCHANGE_FIELD)
+                        self.comm.send(self.source_Ukp1[m+1], dest=self.kval+1, tag=j*self.TAG_EXCHANGE_SOURCE)
+
+                for m in range(self.kval, self.M):
+                    # Recieve the guess we need to correct and evaluate the rhs
+                    self.comm.recv(self.Unodes[m+1], source=self.kval-1, tag=j*self.TAG_EXCHANGE_FIELD)
+                    self.comm.recv(self.source_Uk[m+1], source=self.kval-1, tag=j*self.TAG_EXCHANGE_SOURCE)
+                    self.Uin.assign(self.Unodes[m+1])
+                    for evaluate in self.evaluate_source:
+                        evaluate(self.Uin, self.base.dt, x_out=self.source_in)
+                    self.solver_rhs.solve()
+                    self.fUnodes[m+1].assign(self.Urhs)
+
+                    # Set S matrix
+                    self.Q_.assign(self.compute_quad_final(self.Q[self.kval-1], self.fUnodes, m+1))
+
+                    # Set initial guess for solver, and pick correct solver
+                    self.U_start.assign(self.Unodes1[m])
+                    self.Ukp1_m.assign(self.Unodes1[m])
+                    self.Uk_mp1.assign(self.Unodes[m+1])
+                    self.Uk_m.assign(self.Unodes[m])
+                    self.source_Ukp1_m.assign(self.source_Ukp1[m])
+                    self.source_Uk_m.assign(self.source_Uk[m])
+                    self.U_DC.assign(self.Unodes[m+1])
+
+                    # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
+                    #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+                    #             + sum(j=1,M) s_mj*(F+S)(y^k)
+                    self.solver.solve()
+                    self.Unodes1[m+1].assign(self.U_DC)
+
+                    # Evaluate source terms
+                    for evaluate in self.evaluate_source:
+                        evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+
+                    # Apply limiter if required
+                    if self.limiter is not None:
+                        self.limiter.apply(self.Unodes1[m+1])
+
+                    # Send our updated value to next communicator
+                    if self.kval < self.K:
+                        self.comm.send(self.Unodes1[m+1], dest=self.kval+1, tag=j*self.TAG_EXCHANGE_FIELD)
+                        self.comm.send(self.source_Ukp1[m+1], dest=self.kval+1, tag=j*self.TAG_EXCHANGE_SOURCE)
+            if self.flush_freq > 0 and (j % self.flush_freq == 0 or j == self.J):
+                print(j, self.flush_freq)
+                # Flush the pipe to ensure all ranks have the same data
+                if (self.kval == self.K):
+                    self.Un.assign(self.Unodes1[-1])
+                    for i in range(self.K):
+                        self.comm.send(self.Un, dest=i, tag=self.TAG_FLUSH_PIPE)
+                else:
+                    self.comm.recv(self.Un, source=self.K, tag=self.TAG_FLUSH_PIPE)
+            else:
+                self.Un.assign(self.Unodes1[-1])
+        # if (self.kval == self.K):
+        #     # Broadcast the final result to all other ranks
+        #     x_out.assign(self.Unodes1[-1])
+        #     for i in range(self.K):
+        #         # Send the final result to all other ranks
+        #         self.comm.send(x_out, dest=i, tag=self.TAG_FINAL_OUT)
+        # else:
+        #     # Receive the final result from rank K
+        #     self.comm.recv(x_out, source=self.K, tag=self.TAG_FINAL_OUT)
+        x_out.assign(self.Un)
