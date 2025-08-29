@@ -264,6 +264,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         # Set up Wrappers
         # -------------------------------------------------------------------- #
 
+        print(self.field_name)
+
         if self.wrapper is not None:
 
             wrapper_bcs = bcs if apply_bcs else None

@@ -215,6 +215,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # Flag for if we have simultaneous transport of tracers
         self.simult = False
 
+
         self.active_transport = []
         for scheme in transport_schemes:
             assert scheme.nlevels == 1, \
@@ -245,6 +246,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                         self.active_transport.append((scheme.field_name, scheme))
                 assert method_found, \
                     f'No transport method found for variable {scheme.field_name}'
+                
 
         # Physics schemes ------------------------------------------------------
         if physics_schemes is not None:
@@ -303,6 +305,14 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # This sets up all of the time discretisations for transport, diffusion,
         # physics schemes, etc, so must happen after those have been worked out
         super().__init__(equation_set, io)
+
+        print('\n', len(equation_set.residual))
+
+
+        for term in equation_set.residual:
+            print(term.form)
+
+        import sys; sys.exit()
 
         # Set up auxiliary equations separately, as these are not done as part
         # of the super init

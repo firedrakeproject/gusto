@@ -7,6 +7,7 @@ __all__ = [
     "BoussinesqParameters", "CompressibleParameters",
     "ShallowWaterParameters",
     "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters",
+    "PMLParameters"
 ]
 
 
@@ -115,6 +116,14 @@ class SpongeLayerParameters(EquationParameters):
     H = None
     z_level = None
     mubar = None
+
+class PMLParameters(EquationParameters):
+    """Specifies parameters describing a PML damping layer."""
+
+    c_max = 350 # Fastest wave speed in the medium
+    delta_frac = 0.1 # Fraction of domain that is the PML
+    tol = 1e-3 # Tolerance for the PML error
+    gamma0 = 0.1 # Stretching parameter
 
 
 class DiffusionParameters(EquationParameters):
