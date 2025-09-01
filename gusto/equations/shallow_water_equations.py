@@ -182,6 +182,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # The current approach is that these are prescribed fields, stored in
         # the equation, and initialised when the equation is
 
+        quad = self.domain.max_quad_degree
         rotation = self.parameters.rotation
         if rotation is not CoriolisOptions.nonrotating:
             CG1 = FunctionSpace(self.domain.mesh, "CG", 1)
@@ -201,22 +202,22 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 fexpr = self.parameters.f0 + self.parameters.beta * xyz[1]
             else:
                 raise NotImplementedError('Coriolis option is not implemented')
-            f = self.prescribed_fields('coriolis', CG1).interpolate(fexpr)
-            coriolis_form = coriolis(subject(
-                prognostic(f*inner(self.domain.perp(u), w)*dx, "u"), self.X))
+            self.prescribed_fields('coriolis', CG1).interpolate(fexpr)
+            coriolis_form = coriolis(subject(prognostic(
+                fexpr*inner(self.domain.perp(u), w)*dx(degree=quad), "u"), self.X))
             # Add linearisation manually, as linearisation cannot handle the
             # perp function on the plane / vertical slice
             if self.linearisation_map(coriolis_form.terms[0]):
-                linear_coriolis = coriolis(
-                    subject(prognostic(f*inner(self.domain.perp(u_trial), w)*dx, 'u'), self.X))
+                linear_coriolis = coriolis(subject(prognostic(
+                    fexpr*inner(self.domain.perp(u_trial), w)*dx(degree=quad), 'u'), self.X))
                 coriolis_form = linearisation(coriolis_form, linear_coriolis)
             residual += coriolis_form
 
         topog_expr = self.parameters.topog_expr
         if topog_expr is not None:
-            topography = self.prescribed_fields('topography', self.domain.spaces('DG')).interpolate(topog_expr)
+            self.prescribed_fields('topography', self.domain.spaces('DG')).interpolate(topog_expr)
             topography_form = subject(prognostic
-                                      (-g*div(w)*topography*dx, 'u'),
+                                      (-g*div(w)*topog_expr*dx(quad), 'u'),
                                       self.X)
             residual += topography_form
 
@@ -683,15 +684,16 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
 
         rotation = self.parameters.rotation
         if rotation is not CoriolisOptions.nonrotating:
+            quad = domain.max_quad_degree
             V = FunctionSpace(domain.mesh, 'CG', 1)
             if rotation is CoriolisOptions.fplane:
                 fexpr = self.parameters.f0
             else:
                 raise NotImplementedError('Coriolis option is not implemented')
-            f = self.prescribed_fields('coriolis', V).interpolate(fexpr)
+            self.prescribed_fields('coriolis', V).interpolate(fexpr)
             coriolis_form = coriolis(subject(
-                prognostic(-f * v * w1 * dx, "u")
-                + prognostic(f * u * w2 * dx, "v"), self.X))
+                prognostic(-fexpr * v * w1 * dx(degree=quad), "u")
+                + prognostic(fexpr * u * w2 * dx(degree=quad), "v"), self.X))
             self.residual += coriolis_form
 
         if diffusion_options is not None:
