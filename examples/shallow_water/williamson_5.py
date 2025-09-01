@@ -73,13 +73,14 @@ def williamson_5(
     rsq = min_value(R0**2, (lamda - lamda_c)**2 + (phi - phi_c)**2)
     r = sqrt(rsq)
     tpexpr = mountain_height * (1 - r/R0)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
-                                 topog_expr=tpexpr)
+    eqns = ShallowWaterEquations(
+        domain, parameters, fexpr=fexpr, topog_expr=tpexpr
+    )
 
     # I/O
     output = OutputParameters(
-        dirname=dirname, dumplist_latlon=['D'], dumpfreq=dumpfreq,
-        dump_vtus=True, dump_nc=False, dumplist=['D', 'topography']
+        dirname=dirname, dumpfreq=dumpfreq,
+        dump_vtus=True, dump_nc=True, dumplist=['D', 'topography']
     )
     diagnostic_fields = [Sum('D', 'topography'), RelativeVorticity(),
                          MeridionalComponent('u'), ZonalComponent('u')]
@@ -101,7 +102,7 @@ def williamson_5(
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods
+        eqns, io, transported_fields, transport_methods, tau_values={'D': 1.0}
     )
 
     # ------------------------------------------------------------------------ #
