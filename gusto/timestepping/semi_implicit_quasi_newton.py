@@ -39,6 +39,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  auxiliary_equations_and_schemes=None, linear_solver=None,
                  diffusion_schemes=None, physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
+                 ultra_fast_physics_schemes=None,
                  alpha=0.5, tau_values=None, off_centred_u=False,
                  num_outer=2, num_inner=2, accelerator=True,
                  predictor=None, reference_update_freq=None,
@@ -76,6 +77,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             fast_physics_schemes: (list, optional): a list of tuples of the form
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`).
                 These schemes are evaluated within the outer loop. Defaults to
+                None.
+            ultra_fast_physics_schemes: (list, optional): a list of tuples of the
+                form (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`).
+                These schemes are evaluated within the inner loop. Defaults to
                 None.
             alpha (`float, optional): the semi-implicit off-centering
                 parameter. A value of 1 corresponds to fully implicit, while 0
@@ -152,6 +157,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         W = equation_set.function_space
         self.xrhs = Function(W)
         self.xrhs_phys = Function(W)
+        self.xrhs_inner_phys = Function(W)
         self.dy = Function(W)
 
         # Determine prognostics for solver -------------------------------------
@@ -259,8 +265,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.fast_physics_schemes = fast_physics_schemes
         else:
             self.fast_physics_schemes = []
+        if ultra_fast_physics_schemes is not None:
+            self.ultra_fast_physics_schemes = ultra_fast_physics_schemes
+        else:
+            self.ultra_fast_physics_schemes = []
         self.all_physics_schemes = (self.slow_physics_schemes
                                     + self.fast_physics_schemes
+                                    + self.ultra_fast_physics_schemes
                                     + self.final_physics_schemes)
 
         for parametrisation, scheme in self.all_physics_schemes:
@@ -342,9 +353,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.x = TimeLevelFields(self.equation, 1)
         if self.simult is True:
             # If there is any simultaneous transport, add an extra 'simult' field:
-            self.x.add_fields(self.equation, levels=("star", "p", "simult", "after_slow", "after_fast"))
+            self.x.add_fields(self.equation, levels=("star", "p", "simult", "after_slow", "after_fast",
+                                                     "before_ultra_fast", "after_ultra_fast"))
         else:
-            self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast"))
+            self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast",
+                                                     "before_ultra_fast", "after_ultra_fast"))
         for aux_eqn, _ in self.auxiliary_equations_and_schemes:
             self.x.add_fields(aux_eqn)
         # Prescribed fields for auxiliary eqns should come from prognostics of
@@ -481,8 +494,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xp = self.x.p
         x_after_slow = self.x.after_slow
         x_after_fast = self.x.after_fast
+        x_before_ultra_fast = self.x.before_ultra_fast
+        x_after_ultra_fast = self.x.after_ultra_fast
         xrhs = self.xrhs
         xrhs_phys = self.xrhs_phys
+        xrhs_inner_phys = self.xrhs_inner_phys
         dy = self.dy
 
         # Update reference profiles --------------------------------------------
@@ -535,6 +551,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
             for inner in range(self.num_inner):
 
+                # Set the first guess of xnp1 to be xp
+                if outer == 0 and inner == 0:
+                    xnp1(self.field_name).assign(xp(self.field_name))
+
                 # Implicit forcing ---------------------------------------------
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'Semi-implicit Quasi Newton: Implicit forcing {(outer, inner)}')
@@ -542,6 +562,23 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     if (inner > 0 and self.accelerator):
                         # Zero implicit forcing to accelerate solver convergence
                         self.forcing.zero_forcing_terms(self.equation, xnp1, xrhs, self.equation.field_names)
+
+                # Ultra-fast physics
+                xrhs_inner_phys.assign(0)
+                if outer == 0 and inner == 0:
+                    x_before_ultra_fast(self.field_name).assign(xp(self.field_name))
+                else:
+                    x_before_ultra_fast(self.field_name).assign(xnp1(self.field_name))
+                    self.copy_active_tracers(xp, x_before_ultra_fast)
+                if len(self.ultra_fast_physics_schemes) > 0:
+                    with timed_stage("Ultra-fast physics"):
+                        logger.info(f'SIQN: Ultra-fast physics {(outer, inner)}')
+                        for _, scheme in self.ultra_fast_physics_schemes:
+                            scheme.apply(x_after_ultra_fast(scheme.field_name), x_before_ultra_fast(scheme.field_name))
+
+                        xrhs_inner_phys.assign(x_after_ultra_fast(self.field_name) - x_before_ultra_fast(self.field_name))
+
+                xrhs += xrhs_inner_phys
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
