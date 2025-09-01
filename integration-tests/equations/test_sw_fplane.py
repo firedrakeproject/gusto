@@ -116,7 +116,7 @@ def run_sw_fplane(tmpdir):
     check_domain = Domain(check_mesh, dt, 'RTCF', 1)
     check_parameters = ShallowWaterParameters(check_mesh,
                                               rotation=CoriolisOptions.fplane,
-                                              f0=f0,H=H, g=g)
+                                              f0=f0, H=H, g=g)
     check_eqn = ShallowWaterEquations(check_domain, check_parameters)
     check_io = IO(check_domain, output=check_output)
     check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])

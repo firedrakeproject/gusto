@@ -7,7 +7,7 @@ answer to confirm that REXI is correct.
 from os.path import join, abspath, dirname
 from gusto import *
 from gusto.rexi import *
-from firedrake import (PeriodicUnitSquareMesh, SpatialCoordinate, Constant, sin,
+from firedrake import (PeriodicUnitSquareMesh, SpatialCoordinate, sin,
                        cos, pi, as_vector, Function, COMM_WORLD, Ensemble)
 from firedrake.output import VTKFile
 
