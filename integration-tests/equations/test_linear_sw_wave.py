@@ -77,7 +77,10 @@ def run_linear_sw_wave(tmpdir):
                                     checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
     check_domain = Domain(check_mesh, dt, 'BDM', 1)
-    check_eqn = ShallowWaterEquations(check_domain, parameters)
+    check_parameters = ShallowWaterParameters(check_mesh,
+                                              rotation=CoriolisOptions.fplane,
+                                              f0=1, H=H, g=g)
+    check_eqn = ShallowWaterEquations(check_domain, check_parameters)
     check_io = IO(check_domain, output=check_output)
     check_stepper = Timestepper(check_eqn, RK4(check_domain), check_io)
     check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)

@@ -86,7 +86,10 @@ def run_rexi_sw(tmpdir, coefficients, ensemble=None):
                                         checkpoint=True)
         check_mesh = pick_up_mesh(check_output, mesh_name, comm=comm)
         check_domain = Domain(check_mesh, tmax, 'BDM', 1)
-        check_eqn = ShallowWaterEquations(check_domain, parameters)
+        check_parameters = ShallowWaterParameters(check_mesh, H=H, g=g,
+                                                  rotation=CoriolisOptions.fplane,
+                                                  f0=f)
+        check_eqn = ShallowWaterEquations(check_domain, check_parameters)
         check_io = IO(check_domain, output=check_output)
         check_stepper = Timestepper(check_eqn, RK4(check_domain), check_io)
         check_stepper.io.pick_up_from_checkpoint(check_stepper.fields, comm=comm)
