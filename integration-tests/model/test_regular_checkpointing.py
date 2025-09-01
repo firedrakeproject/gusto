@@ -138,12 +138,15 @@ def test_regular_checkpointing(tmpdir):
         dirname=str(tmpdir)+"/sw_fplane_run1",
         dumpfreq=1,
         chkptfreq=2,
-        checkpoint=True
+        checkpoint=True,
+        multichkpt=True
     )
     stepper1 = run_sw_fplane(run_num=1, ndt=8, output=output1)
 
     # Pick up the checkpoint after 4 timesteps and run with that as the IC
-    chkpt1_filename = 'chkpt0.04.h5'
+    # (The first checkpoint is saved at time 0 so we pick up chkpt5 to get
+    # the checkpoint after 4 timesteps)
+    chkpt1_filename = 'chkpt5.h5'
     chkpt1_path = path.join(stepper1.io.dumpdir, 'chkpts', chkpt1_filename)
     # First check that the checkpoint was sucessfully created - the test will fail if
     # this is not the case

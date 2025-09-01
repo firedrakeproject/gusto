@@ -153,7 +153,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method, ref_update_freq)
     # Pick up from checkpoint and run *new* timestepper for 2 time steps
     # ------------------------------------------------------------------------ #
 
-    chkpt_filename = 'chkpts/chkpt0.4' if checkpoint_method == 'dumbcheckpoint' else 'chkpts/chkpt0.4.h5'
+    chkpt_filename = 'chkpts/chkpt5' if checkpoint_method == 'dumbcheckpoint' else 'chkpts/chkpt5.h5'
     chkpt_2_path = path.join(stepper_2.io.dumpdir, chkpt_filename)
     output_3 = OutputParameters(
         dirname=dirname_3,
@@ -209,7 +209,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method, ref_update_freq)
         orig_chkpts_dir = path.join(stepper_2.io.dumpdir, "chkpts")
         pickup_chkpts_dir = path.join(stepper_2.io.dumpdir, "pickup_chkpts")
         new_output2_pickup_path = shutil.move(orig_chkpts_dir, pickup_chkpts_dir)
-        output_2.checkpoint_pickup_filename = path.join(new_output2_pickup_path, "chkpt0.4")
+        output_2.checkpoint_pickup_filename = path.join(new_output2_pickup_path, "chkpt5")
         initialise_fields(eqns_2, stepper_2)
         stepper_2.run(t=2*dt, tmax=4*dt, pick_up=True)
 

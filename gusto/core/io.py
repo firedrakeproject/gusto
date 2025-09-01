@@ -520,7 +520,7 @@ class IO(object):
 
         # if we want to checkpoint, set up the checkpointing
         if self.output.checkpoint:
-            if self.output.chkptfreq != 1:
+            if self.output.multichkpt:
                 # Create new directory for checkpoints
                 self.chkpt_path = path.join(self.dumpdir, "chkpts")
                 self.chkpt_dir = makedirs(self.chkpt_path)
@@ -733,10 +733,10 @@ class IO(object):
 
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
-            if output.chkptfreq != 1:
+            if output.multichkpt:
                 # Saving more than one checkpoint file
                 if self.output.checkpoint_method == 'checkpointfile':
-                    chkpt_file = path.join(self.chkpt_path, "chkpt"+str(t)+".h5")
+                    chkpt_file = path.join(self.chkpt_path, "chkpt"+str(step)+".h5")
                 elif self.output.checkpoint_method == 'dumbcheckpoint':
                     self.chkpt = DumbCheckpoint(path.join(self.chkpt_path, "chkpt"+str(t)),
                                                 mode=FILE_CREATE)
