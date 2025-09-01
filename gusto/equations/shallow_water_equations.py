@@ -183,7 +183,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # the equation, and initialised when the equation is
 
         rotation = self.parameters.rotation
-        if rotation is not None:
+        if rotation is not CoriolisOptions.nonrotating:
             CG1 = FunctionSpace(self.domain.mesh, "CG", 1)
             if rotation is CoriolisOptions.sphere:
                 assert self.domain.on_sphere
@@ -682,7 +682,7 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
                          + pressure_gradient_form)
 
         rotation = self.parameters.rotation
-        if rotation is not None:
+        if rotation is not CoriolisOptions.nonrotating:
             V = FunctionSpace(domain.mesh, 'CG', 1)
             if rotation is CoriolisOptions.fplane:
                 fexpr = self.parameters.f0

@@ -13,9 +13,10 @@ __all__ = [
 
 class CoriolisOptions(Enum):
 
-    fplane = 23     # constant Coriolis term equal to f0
-    betaplane = 31  # Coriolis term equal to f0 + beta(y-y0)
-    sphere = 42     # Coriolis term equal to 2 Omega sin(lat)
+    nonrotating = 11  # no Coriolis term
+    fplane = 23       # constant Coriolis term equal to f0
+    betaplane = 31    # Coriolis term equal to f0 + beta(y-y0)
+    sphere = 42       # Coriolis term equal to 2 Omega sin(lat)
 
 
 class EquationParameters(object):
