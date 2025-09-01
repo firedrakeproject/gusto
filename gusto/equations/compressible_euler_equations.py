@@ -2,7 +2,7 @@
 
 from firedrake import (
     sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg, dS_v,
-    conditional, SpatialCoordinate, split, Constant, as_vector
+    conditional, SpatialCoordinate, split, Constant, as_vector, ln
 )
 from firedrake.fml import subject, replace_subject, all_terms
 from gusto.core.labels import (
@@ -35,6 +35,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
     """
 
     def __init__(self, domain, parameters, sponge_options=None,
+                 PML_options=None,
                  extra_terms=None, space_names=None,
                  linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
@@ -49,6 +50,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 the model's physical parameters.
             sponge_options (:class:`SpongeLayerParameters`, optional): any
                 parameters for applying a sponge layer to the upper boundary.
+                Defaults to None.
+            PML_options (:class:`PMLParameters`, optional): any
+                parameters for applying a PML layer to the upper boundary.
+                This is an alternative to a sponge layer.
                 Defaults to None.
             extra_terms (:class:`ufl.Expr`, optional): any extra terms to be
                 included in the equation set. Defaults to None.
@@ -87,19 +92,32 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         if active_tracers is None:
             active_tracers = []
 
+        if PML_options is not None:
+            field_names.extend(['q_u', 'q_rho', 'q_theta'])
+            space_names.update({'q_u': 'HDiv', 'q_rho': 'L2', 'q_theta': 'theta'})
+
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
+        print(len(self.X))
+
         self.parameters = parameters
         g = parameters.g
         cp = parameters.cp
 
-        w, phi, gamma = self.tests[0:3]
-        u, rho, theta = split(self.X)[0:3]
-        u_trial, rho_trial, theta_trial = split(self.trials)[0:3]
-        u_bar, rho_bar, theta_bar = split(self.X_ref)[0:3]
+        if PML_options is not None:
+            w, phi, gamma, q_u_test, q_rho_test, q_theta_test = self.tests[0:6]
+            u, rho, theta, q_u, q_rho, q_theta = split(self.X)[0:6]
+            u_trial, rho_trial, theta_trial, q_u_trial, q_rho_trial, q_theta_trial = split(self.trials)[0:6]
+            u_bar, rho_bar, theta_bar, _, _, _ = split(self.X_ref)[0:6]
+        else:
+            w, phi, gamma = self.tests[0:3]
+            u, rho, theta = split(self.X)[0:3]
+            u_trial, rho_trial, theta_trial = split(self.trials)[0:3]
+            u_bar, rho_bar, theta_bar = split(self.X_ref)[0:3]
+
         zero_expr = Constant(0.0)*theta
         exner = exner_pressure(parameters, rho, theta)
         n = FacetNormal(domain.mesh)
@@ -270,6 +288,42 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 test = self.tests[idx]
                 residual += subject(prognostic(
                     inner(test, term)*dx, field), self.X)
+                
+        # -------------------------------------------------------------------- #
+        # PML: Add extra variables and terms
+        # -------------------------------------------------------------------- #
+        if PML_options is not None:
+            # Extract the key PML parameters
+            c_max = PML_options.c_max
+            delta_frac = PML_options.delta_frac
+            tol = PML_options.tol
+            gamma0 = PML_options.gamma0
+            H = PML_options.H
+
+            delta = delta_frac*H
+            Lz = H - delta
+            sigma0 = (4*c_max/(2*delta))*ln(1/tol)
+            alpha = 0.05*sigma0
+
+            x = SpatialCoordinate(domain.mesh)
+            z = x[len(x)-1]
+
+            sigma_expr = conditional(z <= Lz,
+                                     0.0,
+                                     sigma0*((z-Lz)/delta)**3)
+
+            W_DG = FunctionSpace(domain.mesh, "DG", 2)
+            self.sigma = self.prescribed_fields("PML", W_DG).interpolate(sigma_expr)
+            
+            # Add six sigma PML terms, one for each equation:
+            residual += subject(prognostic(self.sigma*inner(self.tests[0], q_u), 'u'), self.X)
+            residual += subject(prognostic(self.tests[1]*self.sigma*q_rho, 'rho'), self.X)
+            residual += subject(prognostic(self.tests[2]*self.sigma*q_theta, 'theta'), self.X) 
+            residual += subject(prognostic((self.sigma+alpha)*inner(self.tests[3], q_u), 'q_u'), self.X) 
+            residual += self.tests[4]*(self.sigma+alpha)*q_rho
+            residual += self.tests[5]*(self.sigma+alpha)*q_theta
+
+
 
         # -------------------------------------------------------------------- #
         # Linearise equations

@@ -124,6 +124,7 @@ class PMLParameters(EquationParameters):
     delta_frac = 0.1 # Fraction of domain that is the PML
     tol = 1e-3 # Tolerance for the PML error
     gamma0 = 0.1 # Stretching parameter
+    H = None # Height of the domain
 
 
 class DiffusionParameters(EquationParameters):
