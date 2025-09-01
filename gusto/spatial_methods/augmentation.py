@@ -9,8 +9,7 @@ from firedrake import (
     LinearVariationalProblem, LinearVariationalSolver, lhs, rhs, dot,
     ds_b, ds_v, ds_t, ds, FacetNormal, TestFunction, TrialFunction,
     transpose, nabla_grad, outer, dS, dS_h, dS_v, sign, jump, div,
-    Constant, sqrt, cross, curl, FunctionSpace, assemble, DirichletBC,
-    ln, SpatialCoordinate, conditional
+    Constant, sqrt, cross, curl, FunctionSpace, assemble, DirichletBC
 )
 from firedrake.fml import subject
 from gusto import (
@@ -239,105 +238,3 @@ class VorticityTransport(Augmentation):
         logger.debug('Vorticity solve')
         self.solver.solve()
         self.x_in.subfunctions[1].assign(self.Z_in)
-
-
-class PML(Augmentation):
-    """
-    Add a PML as an alternative to a sponge layer.
-    Args:
-        domain (:class:`Domain`): The domain object.
-        eqns (:class:`PrognosticEquationSet`): The overarching equation set.
-        PML_parameters (:class: list): A list of mixing ratios that
-        require augmented mean mixing ratios.
-    """
-
-    def __init__(
-            self, domain, eqns, Hz, PML_parameters
-    ):
-
-        self.name = 'PML'
-
-        self.eqn_orig = eqns
-        self.domain = domain
-        self.exist_spaces = eqns.spaces
-        self.orig_fs = eqns.function_space
-        print(len(self.orig_fs))
-        self.idx_orig = len(self.exist_spaces)
-
-        # Define the PML parameters
-
-        self.c_max = PML_parameters.c_max
-        self.delta_frac = PML_parameters.delta_frac
-        self.tol = PML_parameters.tol
-        self.gamma0 = PML_parameters.gamma0
-
-        self.delta = self.delta_frac*Hz
-
-        self.sigma0 = (4*self.c_max/(2*self.delta))*ln(1/self.tol)
-
-        V = FunctionSpace(self.domain.mesh, 'DG', 2)
-
-        x, z = SpatialCoordinate(self.domain.mesh)
-
-        self.sigma = Function(V).interpolate(conditional((z > self.delta), self.sigma0*((z-Hz)/self.delta)**3, 0))
-
-        print(len(eqns.residual))
-        for term in eqns.residual:
-            print(term.form)
-
-
-
-            # Create the auxillary variables
-            # These are for q_u, q_rho, q_theta
-            #orig_fs = 
-
-        self.fs = self.orig_fs
-        self.residual = eqns.residual
-        self.bcs = None
-
-
-
-    def setup_residual(self, equation):
-        """
-        Create a new residual for the augmented equation set,
-        using the larger mixed function space that includes the mean
-        mixing ratios, and new residual terms for the mean mixing ratio
-        equations
-        Args:
-            equation (:class:`PrognosticEquationSet`): The overarching equation set.
-            Note, this does not include the mean mixing ratios.
-        """
-
-        pass
-
-    def pre_apply(self, x_in):
-        """
-        Sets the original fields, i.e. not the mean fields
-        Args:
-            x_in (:class:`Function`): The input fields
-        """
-
-        for idx in range(self.idx_orig):
-            self.x_in.subfunctions[idx].assign(x_in.subfunctions[idx])
-
-    def post_apply(self, x_out):
-        """
-        Sets the output fields, i.e. not the mean fields
-        Args:
-            x_out (:class:`Function`): The output fields
-        """
-
-        for idx in range(self.idx_orig):
-            x_out.subfunctions[idx].assign(self.x_out.subfunctions[idx])
-
-    def update(self, x_in_mixed):
-        """
-        Compute the mean mixing ratio field by conservative projection,
-        where both the target and source density are in the higher-order
-        space.
-        Args:
-            x_in_mixed (:class:`Function`): The mixed function, containing
-            mean fields to update.
-        """
-
-        pass
