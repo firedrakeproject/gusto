@@ -108,17 +108,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         g = parameters.g
         cp = parameters.cp
 
-        print(len(self.X))
-        print(len(self.tests))
-        print(len(self.trials))
-        print(len(split(self.X)))
-        print(split(self.X)[0])
-        print(split(self.X)[1])
-        print(self.X[2])
-        print(self.X[3])
-        print(self.X[4])
-        print(self.X[5])
-
         if PML_options is not None:
             w, phi, gamma, q_u_test, q_rho_test, q_theta_test = self.tests[0:6]
             u, rho, theta, q_u, q_rho, q_theta = split(self.X)[0:6]
@@ -218,12 +207,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
         # Density transport (conservative form)
         if PML_options is not None:
-            #rho_adv_x = continuity_form(phi, rho, u[0])
-            #rho_adv_z = continuity_form(phi/self.gamma_z, rho, u[1])
-            #rho_adv = prognostic(rho_adv_x + rho_adv_z, 'rho')
-            #rho_adv = prognostic(continuity_form(as_vector([phi, phi/gamma])), 'rho')
-
-            # This needs work!
+            # Directly construct the form, for now.
             form = inner(gamma, (u[0]*rho).dx(0) + (1/self.gamma_z)*(u[1]*rho).dx(1))*dx
             rho_adv = prognostic(transport(form, TransportEquationType.conservative), 'rho')
         else:
@@ -272,7 +256,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                     + jump(theta_v*w, n)*avg(exner)*dS_v_qp), 'u'), self.X))
             # Add a pressure gradient for the PML variable
             pressure_gradient_form += pressure_gradient(subject(prognostic(
-                cp*(- ((theta_v*q_u_test[0]).dx(0) + (1/self.gamma_z)*(theta_v*q_u_test[1]).dx(1))*exner*dx_qp
+                cp*(- (1/self.gamma_z)*(theta_v*q_u_test[1]).dx(1)*exner*dx_qp
                     + jump(theta_v*q_u_test, n)*avg(exner)*dS_v_qp), 'q_u'), self.X))
 
         else:
@@ -371,15 +355,22 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         if PML_options is not None:
 
             # Add vertical advection PML terms for the PML variables
-            # These are all 1d transport in the vertical
-            residual += subject(prognostic(advection_form(w, q_u, u_w), 'q_u'), self.X)
-            residual += subject(prognostic(advection_form(phi, q_rho, u_w), 'q_rho'), self.X)
-            residual += subject(prognostic(advection_form(gamma, q_theta, u_w), 'q_theta'), self.X)
+            # These are all 1d transport in the vertical, and 
+            # have a minus sign in front of them.
+
+            # Advective forms for q_u, q_rho
+            residual -= subject(prognostic(advection_form(w, q_u, u_w), 'q_u'), self.X)
+            residual -= subject(prognostic(advection_form(gamma, q_theta, u_w), 'q_theta'), self.X)
+
+            # Conservative form for q_rho
+            form = inner(gamma, (1/self.gamma_z)*(u[1]*q_rho).dx(1))*dx
+            residual -= subject(prognostic(transport(form, TransportEquationType.conservative), 'q_rho'), self.X)
             
-            # Add six sigma PML terms, one for each equation:
-            residual += subject(prognostic(self.sigma*inner(w, q_u)*dx, 'u'), self.X)
-            residual += subject(prognostic(phi*self.sigma*q_rho*dx, 'rho'), self.X)
-            residual += subject(prognostic(gamma*self.sigma*q_theta*dx, 'theta'), self.X) 
+            # Six sigma PML terms, one for each equation
+            # Negative sign for standard variables, positive for PML
+            residual -= subject(prognostic(self.sigma*inner(w, q_u)*dx, 'u'), self.X)
+            residual -= subject(prognostic(phi*self.sigma*q_rho*dx, 'rho'), self.X)
+            residual -= subject(prognostic(gamma*self.sigma*q_theta*dx, 'theta'), self.X) 
             residual += subject(prognostic((self.sigma+alpha)*inner(q_u_test, q_u)*dx, 'q_u'), self.X) 
             residual += subject(prognostic(q_rho_test*(self.sigma+alpha)*q_rho*dx, 'q_rho'), self.X)
             residual += subject(prognostic(q_theta_test*(self.sigma+alpha)*q_theta*dx, 'q_theta'), self.X)
