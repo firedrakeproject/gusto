@@ -592,7 +592,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 xnp1X += dy
 
             # Update xnp1 values for active tracers not included in the linear solve
-            self.copy_active_tracers(x_after_fast, xnp1)
+            self.copy_active_tracers(x_after_ultra_fast, xnp1)
 
             self._apply_bcs()
 
