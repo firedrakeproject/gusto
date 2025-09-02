@@ -4,7 +4,6 @@ timesteps, checkpoints and then starts a new run from the checkpoint file.
 """
 
 from os import path
-import shutil
 import numpy as np
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, pi,
@@ -153,7 +152,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method, ref_update_freq)
     # Pick up from checkpoint and run *new* timestepper for 2 time steps
     # ------------------------------------------------------------------------ #
 
-    chkpt_filename = 'chkpts/chkpt5' if checkpoint_method == 'dumbcheckpoint' else 'chkpts/chkpt5.h5'
+    chkpt_filename = 'chkpt' if checkpoint_method == 'dumbcheckpoint' else 'chkpt.h5'
     chkpt_2_path = path.join(stepper_2.io.dumpdir, chkpt_filename)
     output_3 = OutputParameters(
         dirname=dirname_3,
@@ -205,11 +204,6 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method, ref_update_freq)
     # Wipe fields from second time stepper
     if checkpoint_method == 'dumbcheckpoint':
         # Get an error when picking up fields with the same stepper with new method
-        # Move the checkpoints from stepper 2 to somewhere else so that we can write to there again
-        orig_chkpts_dir = path.join(stepper_2.io.dumpdir, "chkpts")
-        pickup_chkpts_dir = path.join(stepper_2.io.dumpdir, "pickup_chkpts")
-        new_output2_pickup_path = shutil.move(orig_chkpts_dir, pickup_chkpts_dir)
-        output_2.checkpoint_pickup_filename = path.join(new_output2_pickup_path, "chkpt5")
         initialise_fields(eqns_2, stepper_2)
         stepper_2.run(t=2*dt, tmax=4*dt, pick_up=True)
 
