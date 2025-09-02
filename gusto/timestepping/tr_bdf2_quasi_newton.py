@@ -9,7 +9,7 @@ from firedrake import (
 
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
-from gusto.core.labels import (transport, diffusion)
+from gusto.core.labels import (transport, diffusion, sponge, incompressible)
 from gusto.solvers import LinearTimesteppingSolver
 from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
@@ -116,7 +116,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
         # Set transporting velocity to be average
         self.alpha_u = Function(R, val=0.5)
-
+        self.implicit_terms = [incompressible, sponge]
         self.spatial_methods = spatial_methods
 
         if physics_schemes is not None:
@@ -197,8 +197,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             self.bdf_solver = bdf_solver
 
         dt = self.equation.domain.dt
-        self.tr_forcing = Forcing(equation_set, alpha=0.5, dt=2.0*self.gamma*dt)
-        self.bdf_forcing = Forcing(equation_set, alpha=1.0, dt=self.gamma2*dt)
+        self.tr_forcing = Forcing(equation_set, self.implicit_terms, alpha=0.5, dt=2.0*self.gamma*dt)
+        self.bdf_forcing = Forcing(equation_set, self.implicit_terms, alpha=1.0, dt=self.gamma2*dt)
         self.bcs = equation_set.bcs
 
     def _apply_bcs(self, X):
@@ -456,7 +456,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 for _, scheme in self.final_physics_schemes:
                     scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
 
-        logger.debug("Leaving TR-BDF2 Quasi-Newton timestep method")
+        logger.debug("Leaving TR-BDFG Quasi-Newton timestep method")
 
     def run(self, t, tmax, pick_up=False):
         """
