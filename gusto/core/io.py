@@ -473,10 +473,38 @@ class IO(object):
             self.to_dump_latlon = []
             for name in self.output.dumplist_latlon:
                 f = state_fields(name)
-                field = Function(
-                    functionspaceimpl.WithGeometry.create(
-                        f.function_space(), mesh_ll),
-                    val=f.topological, name=name+'_ll')
+                V = f.function_space()
+                try:  # firedrake main
+                    from firedrake import MeshSequenceGeometry
+
+                    if V.parent and isinstance(V.parent.topological, functionspaceimpl.MixedFunctionSpace):
+                        if not isinstance(V.parent.mesh(), MeshSequenceGeometry):
+                            raise ValueError("Expecting a MeshSequenceGeometry")
+                        if len(set(V.parent.mesh().meshes)) > 1:
+                            raise ValueError("Expecting a single mesh")
+                        parent = functionspaceimpl.WithGeometry.create(
+                            V.parent.topological,
+                            MeshSequenceGeometry(
+                                tuple(mesh_ll for _ in V.parent.mesh().meshes),
+                            ),
+                        )
+                    else:
+                        parent = None
+                    field = Function(
+                        functionspaceimpl.WithGeometry.create(
+                            V.topological, mesh_ll, parent=parent,
+                        ),
+                        val=f.topological,
+                        name=name+'_ll',
+                    )
+                except ImportError:  # firedrake release
+                    field = Function(
+                        functionspaceimpl.WithGeometry.create(
+                            V.topological, mesh_ll,
+                        ),
+                        val=f.topological,
+                        name=name+'_ll',
+                    )
                 self.to_dump_latlon.append(field)
 
         # we create new netcdf files to write to, unless pick_up=True and they
