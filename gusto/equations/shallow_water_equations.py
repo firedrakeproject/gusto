@@ -2,14 +2,16 @@
 
 from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg,
                        dS, split, conditional, exp)
-from firedrake.fml import subject, drop
-from gusto.core.labels import (time_derivative, transport, prognostic,
-                               linearisation, pressure_gradient, coriolis)
+from firedrake.fml import subject, drop, all_terms
+from gusto.core.labels import (
+    linearisation, pressure_gradient, coriolis, prognostic
+)
 from gusto.equations.common_forms import (
     advection_form, advection_form_1d, continuity_form,
     continuity_form_1d, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form, diffusion_form_1d,
-    linear_continuity_form, linear_advection_form
+    linear_continuity_form, linear_advection_form,
+    linear_vector_invariant_form, linear_circulation_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
 
@@ -30,7 +32,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
     """
 
     def __init__(self, domain, parameters, fexpr=None, topog_expr=None,
-                 space_names=None, linearisation_map='default',
+                 space_names=None, linearisation_map=all_terms,
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
@@ -50,9 +52,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 buoyancy variable is taken by default to lie in the L2 space.
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
-                then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes both time derivatives,
-                the 'D' transport term and the pressure gradient term.
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form', and
@@ -68,14 +69,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         if active_tracers is None:
             active_tracers = []
-
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure gradient and
-            # transport term from depth equation. Don't include active tracers
-            linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'D'] \
-                and (any(t.has_label(time_derivative, coriolis, pressure_gradient))
-                     or (t.get(prognostic) in ['D'] and t.has_label(transport)))
 
         field_names = ['u', 'D']
         space_names = {'u': 'HDiv', 'D': 'L2'}
@@ -122,8 +115,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         w, phi = self.tests[0:2]
         u, D = split(self.X)[0:2]
-        u_trial = split(self.trials)[0]
-        Dbar = split(self.X_ref)[1]
+        u_trial, D_trial = split(self.trials)[0:2]
+        ubar, Dbar = split(self.X_ref)[0:2]
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -136,11 +129,27 @@ class ShallowWaterEquations(PrognosticEquationSet):
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
             u_adv = prognostic(vector_invariant_form(self.domain, w, u, u), 'u')
+            # Manually add linearisation, as linearisation cannot handle the
+            # perp function on the plane / vertical slice
+            if self.linearisation_map(u_adv.terms[0]):
+                linear_u_adv = linear_vector_invariant_form(self.domain, w, u_trial, ubar)
+                u_adv = linearisation(u_adv, linear_u_adv)
+
+        elif u_transport_option == "circulation_form":
+            # This is different to vector invariant form as the K.E. form
+            # doesn't have a variable marked as "transporting velocity"
+            ke_form = prognostic(kinetic_energy_form(w, u, u), 'u')
+            circ_form = prognostic(advection_equation_circulation_form(self.domain, w, u, u), 'u')
+            # Manually add linearisation, as linearisation cannot handle the
+            # perp function on the plane / vertical slice
+            if self.linearisation_map(circ_form.terms[0]):
+                linear_circ_form = linear_circulation_form(self.domain, w, u_trial, ubar)
+                circ_form = linearisation(circ_form, linear_circ_form)
+            u_adv = circ_form + ke_form
+
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), 'u')
-        elif u_transport_option == "circulation_form":
-            ke_form = prognostic(kinetic_energy_form(w, u, u), 'u')
-            u_adv = prognostic(advection_equation_circulation_form(self.domain, w, u, u), 'u') + ke_form
+
         else:
             raise ValueError("Invalid u_transport_option: %s" % self.u_transport_option)
 
@@ -148,8 +157,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
         D_adv = prognostic(continuity_form(phi, D, u), 'D')
 
         # Transport term needs special linearisation
+        # TODO #651: we should remove this hand-coded linearisation
+        # currently removing it breaks the REXI tests
         if self.linearisation_map(D_adv.terms[0]):
-            linear_D_adv = linear_continuity_form(phi, Dbar, u_trial)
+            linear_D_adv = linear_continuity_form(phi, D_trial, u_trial, Dbar, ubar)
             # Add linearisation to D_adv
             D_adv = linearisation(D_adv, linear_D_adv)
 
@@ -181,7 +192,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
             f = self.prescribed_fields('coriolis', V).interpolate(fexpr)
             coriolis_form = coriolis(subject(
                 prognostic(f*inner(self.domain.perp(u), w)*dx, "u"), self.X))
-            # Add linearisation
+            # Add linearisation manually, as linearisation cannot handle the
+            # perp function on the plane / vertical slice
             if self.linearisation_map(coriolis_form.terms[0]):
                 linear_coriolis = coriolis(
                     subject(prognostic(f*inner(self.domain.perp(u_trial), w)*dx, 'u'), self.X))
@@ -211,7 +223,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     """
 
     def __init__(self, domain, parameters, fexpr=None, topog_expr=None,
-                 space_names=None, linearisation_map='default',
+                 space_names=None, linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
@@ -231,9 +243,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                 buoyancy variable is taken by default to lie in the L2 space.
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
-                then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes both time derivatives,
-                the 'D' transport term, pressure gradient and Coriolis terms.
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -279,7 +290,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
 
     def __init__(self, domain, parameters, equivalent_buoyancy=False,
                  fexpr=None, topog_expr=None,
-                 space_names=None, linearisation_map='default',
+                 space_names=None, linearisation_map=all_terms,
                  u_transport_option='vector_invariant_form',
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
@@ -302,9 +313,8 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 buoyancy variable is taken by default to lie in the L2 space.
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
-                then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes both time derivatives,
-                the 'D' transport term and the pressure gradient term.
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form', and
@@ -333,21 +343,6 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
 
         if active_tracers is None:
             active_tracers = []
-
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure
-            # gradient and transport terms from depth and buoyancy
-            # equations. Include q_t if equivalent buoyancy. Don't include
-            # active tracers.
-            linear_transported = ['D', self.b_name]
-            if equivalent_buoyancy:
-                linear_transported.append('q_t')
-            linearisation_map = lambda t: \
-                t.get(prognostic) in field_names \
-                and (any(t.has_label(time_derivative, pressure_gradient,
-                                     coriolis))
-                     or (t.get(prognostic) in linear_transported
-                         and t.has_label(transport)))
 
         # Bypass ShallowWaterEquations.__init__ to avoid having to
         # define the field_names separately
@@ -395,7 +390,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         w = self.tests[0]
         gamma = self.tests[2]
         u, D, b = split(self.X)[0:3]
-        Dbar, bbar = split(self.X_ref)[1:3]
+        ubar, Dbar, bbar = split(self.X_ref)[0:3]
         u_trial, D_trial, b_trial = split(self.trials)[0:3]
         n = FacetNormal(self.domain.mesh)
         topog = self.prescribed_fields('topography', self.domain.spaces('DG')).interpolate(topog_expr) if topog_expr else None
@@ -430,6 +425,11 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 + beta2 * jump(qv*w, n) * avg(D) * dS
                 + 0.5 * beta2 * jump(D*w, n) * avg(qv) * dS,
                 'u'), self.X))
+
+            # TODO #651: we should remove this hand-coded linearisation
+            # currently removing it throws errors when using the linear
+            # thermal shallow water equations
+            # Care will be needed with the handling of the qv terms
             linear_source_form = pressure_gradient(subject(prognostic(
                 -D_trial * div(bbar*w) * dx
                 - 0.5 * b_trial * div(Dbar*w) * dx
@@ -448,6 +448,8 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 - beta2 * 0.5 * qt_trial * div(Dbar*w) * dx
                 + beta2 * 0.5 * jump(Dbar*w, n) * avg(qt_trial) * dS,
                 'u'), self.X))
+            source_form = linearisation(source_form, linear_source_form)
+
         else:
             source_form = pressure_gradient(
                 subject(prognostic(-D * div(b*w) * dx
@@ -455,6 +457,9 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                                    - 0.5 * b * div(D*w) * dx
                                    + 0.5 * jump(D*w, n) * avg(b) * dS,
                                    'u'), self.X))
+            # TODO #651: we should remove this hand-coded linearisation
+            # currently removing it throws errors when using the linear
+            # thermal shallow water equations
             linear_source_form = pressure_gradient(
                 subject(prognostic(-D_trial * div(bbar*w) * dx
                                    + jump(bbar*w, n) * avg(D_trial) * dS
@@ -465,22 +470,29 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                                    - 0.5 * bbar * div(D_trial*w) * dx
                                    + 0.5 * jump(D_trial*w, n) * avg(bbar) * dS,
                                    'u'), self.X))
-        source_form = linearisation(source_form, linear_source_form)
+            source_form = linearisation(source_form, linear_source_form)
+
         residual += source_form
 
         # -------------------------------------------------------------------- #
         # add transport terms and their linearisations:
         # -------------------------------------------------------------------- #
         b_adv = prognostic(advection_form(gamma, b, u), self.b_name)
+
+        # TODO #651: we should remove this hand-coded linearisation
+        # currently REXI can't handle generated transport linearisations
         if self.linearisation_map(b_adv.terms[0]):
-            linear_b_adv = linear_advection_form(gamma, bbar, u_trial)
+            linear_b_adv = linear_advection_form(gamma, b_trial, u_trial, bbar, ubar)
             b_adv = linearisation(b_adv, linear_b_adv)
         residual += subject(b_adv, self.X)
 
         if self.equivalent_buoyancy:
             qt_adv = prognostic(advection_form(gamma_qt, qt, u), "q_t")
+
+            # TODO #651: we should remove this hand-coded linearisation
+            # currently REXI can't handle generated transport linearisations
             if self.linearisation_map(qt_adv.terms[0]):
-                linear_qt_adv = linear_advection_form(gamma_qt, qtbar, u_trial)
+                linear_qt_adv = linear_advection_form(gamma_qt, qt_trial, u_trial, qtbar, ubar)
                 qt_adv = linearisation(qt_adv, linear_qt_adv)
             residual += subject(qt_adv, self.X)
 
@@ -538,7 +550,7 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
 
     def __init__(self, domain, parameters, equivalent_buoyancy=False,
                  fexpr=None, topog_expr=None,
-                 space_names=None, linearisation_map='default',
+                 space_names=None, linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
@@ -561,9 +573,8 @@ class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
                 buoyancy variable is taken by default to lie in the L2 space.
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
-                then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes both time derivatives,
-                the 'D' transport term, pressure gradient and Coriolis terms.
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -611,11 +622,10 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
             the function spaces to use for the spatial discretisation. The
             keys are the names of the prognostic variables. Defaults to None
             in which case the spaces are taken from the de Rham complex.
-        linearisation_map (func, optional): a function specifying which
-            terms in the equation set to linearise. If None is specified
-            then no terms are linearised. Defaults to the string 'default',
-            in which case the linearisation includes both time derivatives,
-            the 'D' transport term, pressure gradient and Coriolis terms.
+            linearisation_map (func, optional): a function specifying which
+                terms in the equation set to linearise. If None is specified
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
         no_normal_flow_bc_ids (list, optional): a list of IDs of domain
             boundaries at which no normal flow will be enforced. Defaults to
             None.
@@ -626,7 +636,7 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
 
     def __init__(self, domain, parameters,
                  fexpr=None,
-                 space_names=None, linearisation_map='default',
+                 space_names=None, linearisation_map=all_terms,
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None, active_tracers=None):
 
@@ -636,13 +646,6 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
         if active_tracers is not None:
             raise NotImplementedError('Tracers not implemented for 1D shallow water equations')
 
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure gradient,
-            # Coriolis and transport term from depth equation
-            linearisation_map = lambda t: \
-                (any(t.has_label(time_derivative, pressure_gradient, coriolis))
-                 or (t.get(prognostic) == 'D' and t.has_label(transport)))
-
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -650,11 +653,11 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
 
         self.parameters = parameters
         g = parameters.g
-        H = parameters.H
 
         w1, w2, phi = self.tests
         u, v, D = split(self.X)
-        u_trial = split(self.trials)[0]
+        ubar, _, Dbar = split(self.X_ref)
+        u_trial, _, D_trial = split(self.trials)
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -672,8 +675,9 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
         D_adv = prognostic(continuity_form_1d(phi, D, u), 'D')
 
         # Transport term needs special linearisation
+        # TODO #651: we should remove this hand-coded linearisation
         if self.linearisation_map(D_adv.terms[0]):
-            linear_D_adv = linear_continuity_form(phi, H, u_trial)
+            linear_D_adv = linear_continuity_form(phi, D_trial, u_trial, Dbar, ubar)
             # Add linearisation to D_adv
             D_adv = linearisation(D_adv, linear_D_adv)
 
@@ -725,7 +729,7 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
     """
 
     def __init__(self, domain, parameters, fexpr=None,
-                 space_names=None, linearisation_map='default',
+                 space_names=None, linearisation_map=all_terms,
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
         Args:
@@ -742,9 +746,8 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
                 buoyancy variable is taken by default to lie in the L2 space.
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
-                then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes both time derivatives,
-                the 'D' transport term, pressure gradient and Coriolis terms.
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
                 None.
