@@ -619,7 +619,6 @@ class Forcing(object):
             alpha (:class:`Function`): semi-implicit off-centering factor. An
                 alpha of 0 corresponds to fully explicit, while a factor of 1
                 corresponds to fully implicit.
-
             dt (:float): timestep over which to apply forcing, defaults to None
                 in which case it is taken from the equation class.
         """
