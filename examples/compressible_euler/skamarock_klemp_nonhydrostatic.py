@@ -109,7 +109,7 @@ def skamarock_klemp_nonhydrostatic(
         )
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=True, dump_nc=True,
+            dump_vtus=False, dump_nc=True,
         )
 
     diagnostic_fields = [Perturbation('theta')]
