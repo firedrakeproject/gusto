@@ -72,7 +72,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             fast_physics_schemes: (list, optional): a list of tuples of the form
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`).
                 These schemes are evaluated within the outer loop. Defaults to
-                None.
+                None. -- Not yet implemented--
             gamma (`float, optional): the off-centering parameter for the
                 timestep between 0 and 0.5. A value of 0.5 corresponds to a SIQN
                 scheme with alpha = 0.5. Defaults to 1 - sqrt(2)/2, which makes
