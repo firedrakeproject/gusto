@@ -52,8 +52,10 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 :class:`TimeDiscretisation` to use
             spatial_methods (iter): a list of objects describing the spatial
                 discretisations of transport or diffusion terms to be used.
-            linear_solver (:class:`TimesteppingSolver`, optional): the object
-                to use for the linear solve. Defaults to None.
+            tr_solver (:class:`TimesteppingSolver`, optional): the object
+                to use for the linear solve in the TR step. Defaults to None.
+            bdf_solver (:class:`TimesteppingSolver`, optional): the object
+                to use for the linear solve in the BDF step. Defaults to None.
             diffusion_schemes (iter, optional): iterable of pairs of the form
                 ``(field_name, scheme)`` indicating the fields to diffuse, and
                 the :class:`~.TimeDiscretisation` to use. Defaults to None.
@@ -66,11 +68,11 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             slow_physics_schemes: (list, optional): a list of tuples of the form
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`).
                 These schemes are all evaluated at the start of the time step.
-                Defaults to None.
+                Defaults to None. -- Not Implemented Yet--
             fast_physics_schemes: (list, optional): a list of tuples of the form
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`).
                 These schemes are evaluated within the outer loop. Defaults to
-                None.
+                None. -- Not Implemented Yet--
             gamma (`float, optional): the off-centering parameter for the
                 timestep between 0 and 0.5. A value of 0.5 corresponds to a SIQN
                 scheme with alpha = 0.5. Defaults to 1 - sqrt(2)/2, which makes
@@ -261,8 +263,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
     def transport_fields(self, outer, x_in, x_out):
         """
-        Transports all fields in xstar with a transport scheme
-        and places the result in xp.
+        Transports all fields in x_in with a transport scheme
+        and places the result in x_out.
 
         Args:
             outer (int): the outer loop iteration number
@@ -365,7 +367,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                     self.tr_forcing.apply(xp, xm, xrhs, "implicit")
                     if inner > 0:
                         # Zero implicit forcing to accelerate solver convergence
-                        self.zero_forcing_terms(self.equation, xm, xrhs, self.equation.field_names)
+                        self.tr_forcing.zero_forcing_terms(self.equation, xm, xrhs, self.equation.field_names)
 
                 xrhs -= xm(self.field_name)
                 xrhs += xrhs_phys
@@ -429,7 +431,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                     self.bdf_forcing.apply(xp, xnp1, xrhs, "implicit")
                     if inner > 0:
                         # Zero implicit forcing to accelerate solver convergence
-                        self.zero_forcing_terms(self.equation, xnp1, xrhs, self.equation.field_names)
+                        self.bdf_forcing.zero_forcing_terms(self.equation, xnp1, xrhs, self.equation.field_names)
 
                 xrhs -= xnp1(self.field_name)
                 xrhs += xrhs_phys
@@ -456,7 +458,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 for _, scheme in self.final_physics_schemes:
                     scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
 
-        logger.debug("Leaving TR-BDFG Quasi-Newton timestep method")
+        logger.debug("Leaving TR-BDF2 Quasi-Newton timestep method")
 
     def run(self, t, tmax, pick_up=False):
         """
@@ -481,24 +483,3 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             self.to_update_ref_profile = True
 
         super().run(t, tmax, pick_up=pick_up)
-
-    def zero_forcing_terms(self, equation, x_in, x_out, field_names):
-        """
-        Zero forcing term F(x) for non-wind prognostics.
-
-        This takes x_in and x_out, where                                      \n
-        x_out = x_in + scale*F(x_nl)                                          \n
-        for some field x_nl and sets x_out = x_in for all non-wind prognostics
-
-        Args:
-            equation (:class:`PrognosticEquationSet`): the prognostic
-                equation set to be solved
-            x_in (:class:`FieldCreator`): the field to be incremented.
-            x_out (:class:`FieldCreator`): the output field to be updated.
-            field_names (str): list of fields names for prognostic fields
-        """
-        for field_name in field_names:
-            if field_name != 'u':
-                logger.debug(f'Semi-Implicit Quasi Newton: Zeroing implicit forcing for {field_name}')
-                field_index = equation.field_names.index(field_name)
-                x_out.subfunctions[field_index].assign(x_in(field_name))
