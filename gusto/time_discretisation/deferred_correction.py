@@ -945,7 +945,7 @@ class RIDC_new(object, metaclass=ABCMeta):
         self.base = base_scheme
         self.field_name = field_name
         self.domain = domain
-        self.tmax = domain.dt
+        # self.tmax = domain.dt
         self.limiter = limiter
         self.augmentation = self.base.augmentation
         self.wrapper = self.base.wrapper
@@ -953,9 +953,9 @@ class RIDC_new(object, metaclass=ABCMeta):
         self.M = M
         self.J = J
         self.reduced = reduced
-        self.dt_coarse = float(self.tmax / self.J)
+        self.dt_coarse  = domain.dt
 
-        self.dt = Constant(float(self.dt_coarse)/(self.M))
+        self.dt = Constant(float(self.dt_coarse)/float(self.M))
 
         print("RIDC_new: dt_coarse = ", self.dt_coarse, "dt = ", self.dt_coarse/ self.M)
 
@@ -1193,107 +1193,215 @@ class RIDC_new(object, metaclass=ABCMeta):
                                           options_prefix=solver_name)
 
     @wrapper_apply
-    def apply(self, x_out, x_in):
+    def apply_step(self, x_out, x_in):
         self.Un.assign(x_in)
 
-        for j in range(1, self.J+1):
-            # Compute initial guess on quadrature nodes with low-order
-            # base timestepper
-            time = (j) * self.dt_coarse
-            print("RIDC_new: time = ", time, "n = ", j)
-            self.Unodes[0].assign(self.Un)
-            self.M1 = self.K
+        # Compute initial guess on quadrature nodes with low-order
+        # base timestepper
+        self.Unodes[0].assign(self.Un)
+        self.M1 = self.K
 
-            for m in range(self.M):
-                self.base.dt = float(self.dt)
-                self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        for m in range(self.M):
+            self.base.dt = float(self.dt)
+            self.base.apply(self.Unodes[m+1], self.Unodes[m])
+
+        for m in range(self.M+1):
+            for evaluate in self.evaluate_source:
+                evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
+
+        # Iterate through correction sweeps
+        for k in range(1, self.K+1):
+            # Compute: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
+            for m in range(self.M+1):
+                self.Uin.assign(self.Unodes[m])
+                # Include source terms
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Uin, self.base.dt, x_out=self.source_in)
+                self.solver_rhs.solve()
+                self.fUnodes[m].assign(self.Urhs)
+
+            # Loop through quadrature nodes and solve
+            self.Unodes1[0].assign(self.Unodes[0])
+            for evaluate in self.evaluate_source:
+                evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
+            if self.reduced:
+                self.M1 = k
+            for m in range(0, self.M1):
+                # Set integration matrix
+                if self.reduced:
+                    self.Q_.assign(self.compute_quad(self.Q[k-1], self.fUnodes, m+1))
+                else:
+                    self.Q_.assign(self.compute_quad(self.Q, self.fUnodes, m+1))
+
+                # Set initial guess for solver, and pick correct solver
+                self.U_start.assign(self.Unodes1[m])
+                self.Ukp1_m.assign(self.Unodes1[m])
+                self.Uk_mp1.assign(self.Unodes[m+1])
+                self.Uk_m.assign(self.Unodes[m])
+                self.source_Ukp1_m.assign(self.source_Ukp1[m])
+                self.source_Uk_m.assign(self.source_Uk[m])
+                self.U_DC.assign(self.Unodes[m+1])
+
+                # Compute:
+                # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
+                #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+                #             + sum(j=1,M) s_mj*(F+S)(y^k)
+                self.solver.solve()
+                self.Unodes1[m+1].assign(self.U_DC)
+
+                # Evaluate source terms
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+
+                # Apply limiter if required
+                if self.limiter is not None:
+                    self.limiter.apply(self.Unodes1[m+1])
+            for m in range(self.M1, self.M):
+                # Set integration matrix
+                if self.reduced:
+                    self.Q_.assign(self.compute_quad_final(self.Q[k-1], self.fUnodes, m+1))
+                else:
+                    self.Q_.assign(self.compute_quad_final(self.Q, self.fUnodes, m+1))
+
+                # Set initial guess for solver, and pick correct solver
+                self.U_start.assign(self.Unodes1[m])
+                self.Ukp1_m.assign(self.Unodes1[m])
+                self.Uk_mp1.assign(self.Unodes[m+1])
+                self.Uk_m.assign(self.Unodes[m])
+                self.source_Ukp1_m.assign(self.source_Ukp1[m])
+                self.source_Uk_m.assign(self.source_Uk[m])
+                self.U_DC.assign(self.Unodes[m+1])
+
+                # Compute:
+                # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
+                #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+                #             + sum(j=1,M) s_mj*(F+S)(y^k)
+                self.solver.solve()
+                self.Unodes1[m+1].assign(self.U_DC)
+
+                # Evaluate source terms
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+
+                # Apply limiter if required
+                if self.limiter is not None:
+                    self.limiter.apply(self.Unodes1[m+1])
 
             for m in range(self.M+1):
-                for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
+                self.Unodes[m].assign(self.Unodes1[m])
+                self.source_Uk[m].assign(self.source_Ukp1[m])
 
-            # Iterate through correction sweeps
-            for k in range(1, self.K+1):
-                # Compute: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
-                for m in range(self.M+1):
-                    self.Uin.assign(self.Unodes[m])
-                    # Include source terms
-                    for evaluate in self.evaluate_source:
-                        evaluate(self.Uin, self.base.dt, x_out=self.source_in)
-                    self.solver_rhs.solve()
-                    self.fUnodes[m].assign(self.Urhs)
-
-                # Loop through quadrature nodes and solve
-                self.Unodes1[0].assign(self.Unodes[0])
-                for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
-                if self.reduced:
-                    self.M1 = k
-                for m in range(0, self.M1):
-                    # Set integration matrix
-                    if self.reduced:
-                        self.Q_.assign(self.compute_quad(self.Q[k-1], self.fUnodes, m+1))
-                    else:
-                        self.Q_.assign(self.compute_quad(self.Q, self.fUnodes, m+1))
-
-                    # Set initial guess for solver, and pick correct solver
-                    self.U_start.assign(self.Unodes1[m])
-                    self.Ukp1_m.assign(self.Unodes1[m])
-                    self.Uk_mp1.assign(self.Unodes[m+1])
-                    self.Uk_m.assign(self.Unodes[m])
-                    self.source_Ukp1_m.assign(self.source_Ukp1[m])
-                    self.source_Uk_m.assign(self.source_Uk[m])
-                    self.U_DC.assign(self.Unodes[m+1])
-
-                    # Compute:
-                    # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
-                    #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-                    #             + sum(j=1,M) s_mj*(F+S)(y^k)
-                    self.solver.solve()
-                    self.Unodes1[m+1].assign(self.U_DC)
-
-                    # Evaluate source terms
-                    for evaluate in self.evaluate_source:
-                        evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
-
-                    # Apply limiter if required
-                    if self.limiter is not None:
-                        self.limiter.apply(self.Unodes1[m+1])
-                for m in range(self.M1, self.M):
-                    # Set integration matrix
-                    if self.reduced:
-                        self.Q_.assign(self.compute_quad_final(self.Q[k-1], self.fUnodes, m+1))
-                    else:
-                        self.Q_.assign(self.compute_quad_final(self.Q, self.fUnodes, m+1))
-
-                    # Set initial guess for solver, and pick correct solver
-                    self.U_start.assign(self.Unodes1[m])
-                    self.Ukp1_m.assign(self.Unodes1[m])
-                    self.Uk_mp1.assign(self.Unodes[m+1])
-                    self.Uk_m.assign(self.Unodes[m])
-                    self.source_Ukp1_m.assign(self.source_Ukp1[m])
-                    self.source_Uk_m.assign(self.source_Uk[m])
-                    self.U_DC.assign(self.Unodes[m+1])
-
-                    # Compute:
-                    # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
-                    #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-                    #             + sum(j=1,M) s_mj*(F+S)(y^k)
-                    self.solver.solve()
-                    self.Unodes1[m+1].assign(self.U_DC)
-
-                    # Evaluate source terms
-                    for evaluate in self.evaluate_source:
-                        evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
-
-                    # Apply limiter if required
-                    if self.limiter is not None:
-                        self.limiter.apply(self.Unodes1[m+1])
-
-                for m in range(self.M+1):
-                    self.Unodes[m].assign(self.Unodes1[m])
-                    self.source_Uk[m].assign(self.source_Ukp1[m])
-
-            self.Un.assign(self.Unodes[-1])
         x_out.assign(self.Unodes[-1])
+
+    @wrapper_apply
+    def apply(self, x_out, x_in):
+        for j in range(1, self.J+1):
+            self.apply_step(x_out, x_in)
+            x_in.assign(x_out)
+    # @wrapper_apply
+    # def apply(self, x_out, x_in):
+    #     x_out.assign(x_in)
+
+    #     for j in range(1, self.J+1):
+    #         self.Un.assign(x_out)
+    #         # Compute initial guess on quadrature nodes with low-order
+    #         # base timestepper
+    #         time = (j) * self.dt_coarse
+    #         print("RIDC_new: time = ", time, "n = ", j)
+    #         self.Unodes[0].assign(self.Un)
+    #         self.M1 = self.K
+
+    #         for m in range(self.M):
+    #             self.base.dt = float(self.dt)
+    #             self.base.apply(self.Unodes[m+1], self.Unodes[m])
+
+    #         for m in range(self.M+1):
+    #             for evaluate in self.evaluate_source:
+    #                 evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
+
+    #         # Iterate through correction sweeps
+    #         for k in range(1, self.K+1):
+    #             # Compute: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
+    #             for m in range(self.M+1):
+    #                 self.Uin.assign(self.Unodes[m])
+    #                 # Include source terms
+    #                 for evaluate in self.evaluate_source:
+    #                     evaluate(self.Uin, self.base.dt, x_out=self.source_in)
+    #                 self.solver_rhs.solve()
+    #                 self.fUnodes[m].assign(self.Urhs)
+
+    #             # Loop through quadrature nodes and solve
+    #             self.Unodes1[0].assign(self.Unodes[0])
+    #             for evaluate in self.evaluate_source:
+    #                 evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
+    #             if self.reduced:
+    #                 self.M1 = k
+    #             for m in range(0, self.M1):
+    #                 # Set integration matrix
+    #                 if self.reduced:
+    #                     self.Q_.assign(self.compute_quad(self.Q[k-1], self.fUnodes, m+1))
+    #                 else:
+    #                     self.Q_.assign(self.compute_quad(self.Q, self.fUnodes, m+1))
+
+    #                 # Set initial guess for solver, and pick correct solver
+    #                 self.U_start.assign(self.Unodes1[m])
+    #                 self.Ukp1_m.assign(self.Unodes1[m])
+    #                 self.Uk_mp1.assign(self.Unodes[m+1])
+    #                 self.Uk_m.assign(self.Unodes[m])
+    #                 self.source_Ukp1_m.assign(self.source_Ukp1[m])
+    #                 self.source_Uk_m.assign(self.source_Uk[m])
+    #                 self.U_DC.assign(self.Unodes[m+1])
+
+    #                 # Compute:
+    #                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
+    #                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+    #                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
+    #                 self.solver.solve()
+    #                 self.Unodes1[m+1].assign(self.U_DC)
+
+    #                 # Evaluate source terms
+    #                 for evaluate in self.evaluate_source:
+    #                     evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+
+    #                 # Apply limiter if required
+    #                 if self.limiter is not None:
+    #                     self.limiter.apply(self.Unodes1[m+1])
+    #             for m in range(self.M1, self.M):
+    #                 # Set integration matrix
+    #                 if self.reduced:
+    #                     self.Q_.assign(self.compute_quad_final(self.Q[k-1], self.fUnodes, m+1))
+    #                 else:
+    #                     self.Q_.assign(self.compute_quad_final(self.Q, self.fUnodes, m+1))
+
+    #                 # Set initial guess for solver, and pick correct solver
+    #                 self.U_start.assign(self.Unodes1[m])
+    #                 self.Ukp1_m.assign(self.Unodes1[m])
+    #                 self.Uk_mp1.assign(self.Unodes[m+1])
+    #                 self.Uk_m.assign(self.Unodes[m])
+    #                 self.source_Ukp1_m.assign(self.source_Ukp1[m])
+    #                 self.source_Uk_m.assign(self.source_Uk[m])
+    #                 self.U_DC.assign(self.Unodes[m+1])
+
+    #                 # Compute:
+    #                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
+    #                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+    #                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
+    #                 self.solver.solve()
+    #                 self.Unodes1[m+1].assign(self.U_DC)
+
+    #                 # Evaluate source terms
+    #                 for evaluate in self.evaluate_source:
+    #                     evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+
+    #                 # Apply limiter if required
+    #                 if self.limiter is not None:
+    #                     self.limiter.apply(self.Unodes1[m+1])
+
+    #             for m in range(self.M+1):
+    #                 self.Unodes[m].assign(self.Unodes1[m])
+    #                 self.source_Uk[m].assign(self.source_Ukp1[m])
+
+    #         x_out.assign(self.Unodes1[-1])
+
+    #     x_out.assign(self.Unodes1[-1])
 

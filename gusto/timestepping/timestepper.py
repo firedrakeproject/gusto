@@ -14,7 +14,7 @@ from gusto.spatial_methods.transport_methods import TransportMethod
 import ufl
 import numpy as np
 
-__all__ = ["BaseTimestepper", "Timestepper", "PrescribedTransport"]
+__all__ = ["BaseTimestepper", "Timestepper","RIDC_Timestepper", "PrescribedTransport"]
 
 
 class BaseTimestepper(object, metaclass=ABCMeta):
@@ -355,6 +355,277 @@ class Timestepper(BaseTimestepper):
             self.setup_transporting_velocity(self.scheme.base)
         if self.io.output.log_courant:
             self.scheme.courant_max = self.io.courant_max
+
+    def timestep(self):
+        """
+        Implement the timestep
+        """
+        xnp1 = self.x.np1
+        name = self.equation.field_name
+        x_in = [x(name) for x in self.x.previous[-self.scheme.nlevels:]]
+
+        self.scheme.apply(xnp1(name), *x_in)
+
+
+class PrescribedTransport(Timestepper):
+    """
+    Implements a timeloop with a prescibed transporting velocity.
+    """
+    def __init__(self, equation, scheme, io, prescribed_transporting_velocity,
+                 transport_method, physics_parametrisations=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the prognostic equation
+            scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
+                the prognostic equation.
+            io (:class:`IO`): the model's object for controlling input/output.
+            prescribed_transporting_velocity: (bool): Whether a time-varying
+                transporting velocity will be defined. If True, this will
+                require the transporting velocity to be setup by calling either
+                the `setup_prescribed_expr` or `setup_prescribed_apply` methods.
+            transport_method (:class:`TransportMethod`): describes the method
+                used for discretising the transport term.
+            physics_parametrisations: (iter, optional): an iterable of
+                :class:`PhysicsParametrisation` objects that describe physical
+                parametrisations to be included to add to the equation. They can
+                only be used when the time discretisation `scheme` is explicit.
+                Defaults to None.
+        """
+
+        if isinstance(transport_method, TransportMethod):
+            transport_methods = [transport_method]
+        else:
+            # Assume an iterable has been provided
+            transport_methods = transport_method
+
+        super().__init__(equation, scheme, io, spatial_methods=transport_methods,
+                         physics_parametrisations=physics_parametrisations)
+
+        self.prescribed_transport_velocity = prescribed_transporting_velocity
+        self.is_velocity_setup = not self.prescribed_transport_velocity
+        self.velocity_projection = None
+        self.velocity_apply = None
+
+    @property
+    def transporting_velocity(self):
+        return self.fields('u')
+
+    def setup_fields(self):
+        self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+        self.fields = StateFields(self.x, self.equation.prescribed_fields,
+                                  *self.io.output.dumplist)
+
+    def setup_prescribed_expr(self, expr_func):
+        """
+        Sets up the prescribed transporting velocity, through a python function
+        which has time as an argument, and returns a `ufl.Expr`. This allows the
+        velocity to be updated with time.
+
+        Args:
+            expr_func (func): a python function with a single argument that
+                represents the model time, and returns a `ufl.Expr`.
+        """
+
+        if self.is_velocity_setup:
+            raise RuntimeError('Prescribed velocity already set up!')
+
+        project_params = {
+            'quadrature_degree': self.equation.domain.max_quad_degree
+        }
+        self.velocity_projection = Projector(
+            expr_func(self.t), self.fields('u'),
+            form_compiler_parameters=project_params
+        )
+
+        self.is_velocity_setup = True
+
+    def setup_prescribed_apply(self, apply_method):
+        """
+        Sets up the prescribed transporting velocity, through a python function
+        which has time as an argument. This function will perform the evaluation
+        of the transporting velocity.
+
+        Args:
+            expr_func (func): a python function with a single argument that
+                represents the model time, and performs the evaluation of the
+                transporting velocity.
+        """
+
+        if self.is_velocity_setup:
+            raise RuntimeError('Prescribed velocity already set up!')
+        self.velocity_apply = apply_method
+        self.is_velocity_setup = True
+
+    def run(self, t, tmax, pick_up=False):
+        """
+        Runs the model for the specified time, from t to tmax
+        Args:
+            t (float): the start time of the run
+            tmax (float): the end time of the run
+            pick_up: (bool): specify whether to pick_up from a previous run
+        """
+
+        # Throw an error if no transporting velocity has been set up
+        if self.prescribed_transport_velocity and not self.is_velocity_setup:
+            raise RuntimeError(
+                'A time-varying prescribed velocity is required. This must be '
+                + 'set up through calling either the setup_prescribed_expr or '
+                + 'setup_prescribed_apply routines.')
+
+        # It's best to have evaluated the velocity before we start
+        if self.velocity_projection is not None:
+            self.velocity_projection.project()
+        if self.velocity_apply is not None:
+            self.velocity_apply(self.t)
+
+        super().run(t, tmax, pick_up=pick_up)
+
+    def timestep(self):
+        """
+        Implements the time step, which possibly involves evaluation of the
+        prescribed transporting velocity.
+        """
+
+        if self.velocity_projection is not None:
+            self.velocity_projection.project()
+        if self.velocity_apply is not None:
+            self.velocity_apply(self.t)
+
+        super().timestep()
+
+
+class RIDC_Timestepper(BaseTimestepper):
+    """
+    Implements a timeloop by applying a scheme to a prognostic equation.
+    """
+
+    def __init__(self, equation, scheme, io, spatial_methods=None,
+                 physics_parametrisations=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the prognostic equation
+            scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
+                the prognostic equation
+            io (:class:`IO`): the model's object for controlling input/output.
+            spatial_methods (iter, optional): a list of objects describing the
+                methods to use for discretising transport or diffusion terms
+                for each transported/diffused variable. Defaults to None,
+                in which case the terms follow the original discretisation in
+                the equation.
+            physics_parametrisations: (iter, optional): an iterable of
+                :class:`PhysicsParametrisation` objects that describe physical
+                parametrisations to be included to add to the equation. They can
+                only be used when the time discretisation `scheme` is explicit.
+                Defaults to None.
+        """
+        self.scheme = scheme
+        if spatial_methods is not None:
+            self.spatial_methods = spatial_methods
+        else:
+            self.spatial_methods = []
+
+        if physics_parametrisations is not None:
+            self.physics_parametrisations = physics_parametrisations
+            if len(self.physics_parametrisations) > 1:
+                assert isinstance(scheme, ExplicitTimeDiscretisation), \
+                    ('Physics parametrisations can only be used with the '
+                     + 'basic TimeStepper when the time discretisation is '
+                     + 'explicit. If you want to use an implicit scheme, the '
+                     + 'SplitPhysicsTimestepper is more appropriate.')
+        else:
+            self.physics_parametrisations = []
+
+        super().__init__(equation=equation, io=io)
+
+    @property
+    def transporting_velocity(self):
+        return "prognostic"
+
+    def setup_fields(self):
+        self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+        self.fields = StateFields(self.x, self.equation.prescribed_fields,
+                                  *self.io.output.dumplist)
+
+    def setup_scheme(self):
+        self.setup_equation(self.equation)
+        self.scheme.setup(self.equation)
+        self.setup_transporting_velocity(self.scheme)
+        if hasattr(self.scheme, 'base'):
+            self.setup_transporting_velocity(self.scheme.base)
+        if self.io.output.log_courant:
+            self.scheme.courant_max = self.io.courant_max
+
+    def run(self, t, tmax, pick_up=False):
+        """
+        Runs the model for the specified time, from t to tmax
+
+        Args:
+            t (float): the start time of the run
+            tmax (float): the end time of the run
+            pick_up: (bool): specify whether to pick_up from a previous run
+        """
+
+        # Set up diagnostics, which may set up some fields necessary to pick up
+        self.io.setup_diagnostics(self.fields)
+        self.io.setup_log_courant(self.fields)
+        if self.equation.domain.mesh.extruded:
+            self.io.setup_log_courant(self.fields, component='horizontal')
+            self.io.setup_log_courant(self.fields, component='vertical')
+        if self.transporting_velocity != "prognostic":
+            self.io.setup_log_courant(self.fields, name='transporting_velocity',
+                                      expression=self.transporting_velocity)
+
+        if pick_up:
+            # Pick up fields, and return other info to be picked up
+            time_data, reference_profiles = self.io.pick_up_from_checkpoint(self.fields)
+            t = time_data.t
+            self.step = time_data.step
+            initial_timesteps = time_data.initial_steps
+            last_ref_update_time = time_data.last_ref_update_time
+            self.set_reference_profiles(reference_profiles, last_ref_update_time)
+            self.set_initial_timesteps(initial_timesteps)
+
+        else:
+            self.step = 1
+
+        # Set up dump, which may also include an initial dump
+        with timed_stage("Dump output"):
+            logger.debug('Dumping output to disk')
+            self.io.setup_dump(self.fields, t, pick_up)
+
+        self.log_field_stats()
+
+        self.t.assign(t)
+
+        # Time loop
+        self.log_timestep()
+
+        self.x.update()
+
+        self.io.log_courant(self.fields)
+        if self.equation.domain.mesh.extruded:
+            self.io.log_courant(self.fields, component='horizontal', message='horizontal')
+            self.io.log_courant(self.fields, component='vertical', message='vertical')
+
+        self.timestep()
+
+        self.t.assign(float(self.t) + float(self.dt))
+        self.step += 1
+
+        with timed_stage("Dump output"):
+            time_data = TimeData(
+                t=float(self.t), step=self.step,
+                initial_steps=self.get_initial_timesteps(),
+                last_ref_update_time=self.last_ref_update_time
+            )
+            self.io.dump(self.fields, time_data)
+
+        self.log_field_stats()
+
+        if self.io.output.checkpoint and self.io.output.checkpoint_method == 'dumbcheckpoint':
+            self.io.chkpt.close()
+
+        logger.info(f'TIMELOOP complete. t={float(self.t):.5f}, {tmax=:.5f}')
 
     def timestep(self):
         """
