@@ -208,6 +208,7 @@ def RexiiCoefficients(rexi_parameters):
 
     h = float(rexi_parameters.h)
     M = int(float(rexi_parameters.M))
+    reduce_to_half = rexi_parameters.reduce_to_half
 
     # get L, mu and the a coefficients
     constants = RexiConstants(rexi_parameters.coefficients)
@@ -218,23 +219,42 @@ def RexiiCoefficients(rexi_parameters):
     # calculate the b coefficients
     b = b_coefficients(h, M)
 
-    # allocate arrays for alpha, beta_re and beta_im
     N = M + L
-    alpha = numpy.zeros((2*N+1,), dtype=numpy.complex128)
+
+    # Set the number of terms in REXI summation and the starting index for n according
+    # to whether the reduce_to_half option is being used
+    if reduce_to_half:
+        num_terms = N+1
+        start_n = 0
+    else:
+        num_terms = 2*N+1
+        start_n = -N
+
+    # allocate arrays for alpha, beta_re and beta_im
+    alpha = numpy.zeros((num_terms,), dtype=numpy.complex128)
     c1 = numpy.zeros((2*N+1,), dtype=numpy.complex128)
     c2 = numpy.zeros((2*N+1,), dtype=numpy.complex128)
-    C1 = numpy.zeros((2*N+1,), dtype=numpy.complex128)
-    C2 = numpy.zeros((2*N+1,), dtype=numpy.complex128)
-    
+    C1 = numpy.zeros((num_terms,), dtype=numpy.complex128)
+    C2 = numpy.zeros((num_terms,), dtype=numpy.complex128)
+
     for n in range(-N, N+1):
         L1 = max(-L, n-M)
         L2 = min(L, n+M)
-        alpha[n+N] = h*(mu + 1j*n)
         for k in range(L1, L2+1):
             c1[n+N] += b[n-k+M]*h*a[k+L].real
             c2[n+N] += b[n-k+M]*h*a[k+L].imag
 
-        C1[n+N] = ( c1[n+N] * h * mu + c2[n+N] * h * n)
-        C2[n+N] = 1j * c2[n+N]
-            
+    for n in range(start_n, N+1):
+
+        if reduce_to_half and n != 0:
+            Gamma = 2.
+        else:
+            Gamma = 1.
+
+        alpha[n-start_n] = h*(mu + 1j*n)
+
+        # Include Gamma in both C1 and C2 terms. It will cancel out in C1/C2 but be present in the leading C2 term.
+        C1[n-start_n] = Gamma * ( c1[n+N] * h * mu + c2[n+N] * h * n)
+        C2[n-start_n] = Gamma * 1j * c2[n+N]
+
     return alpha, C1, C2
