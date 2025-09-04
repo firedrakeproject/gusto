@@ -102,6 +102,7 @@ class OutputParameters(Configuration):
     checkpoint_method = 'checkpointfile'
     checkpoint_pickup_filename = None
     chkptfreq = 1
+    multichkpt = False
     dirname = None
     log_courant = True
     #: TODO: Should the output fields be interpolated or projected to
