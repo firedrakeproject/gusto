@@ -156,7 +156,10 @@ class Rexi(object):
         ur = cpx.split(self.U0_, cpx.Part.Real)
         ui = cpx.split(self.U0_, cpx.Part.Imag)
             
-        self.b = form_mass(*ur, *tests_r) + form_mass(*ui, *tests_r) + form_mass(*ur, *tests_i) + form_mass(*ui, *tests_i)
+        b = (
+            form_mass(*ur, *tests_r) - form_mass(*ui, *tests_r)
+            - form_mass(*ur, *tests_i) + form_mass(*ui, *tests_i)
+        )
 
         # generate ufl for right hand side over given trial/tests
         # def form_rhs(*tests):
@@ -171,7 +174,8 @@ class Rexi(object):
         aL, self.tau, _ = cpx.BilinearForm(W, 1, form_function, return_z=True)
         a = aM - aL
 
-        # right hand side is just U0
+        # right hand side is just U0 - commented out because this is
+        # no longer true for the Caliari REXII method
         # b = cpx.LinearForm(W, 1, form_rhs)
 
         if hasattr(equation, "aP"):
@@ -189,7 +193,7 @@ class Rexi(object):
         # now we can transfer the velocity boundary conditions to the complex space
         bcs = tuple(cb for bc in ubcs for cb in cpx.DirichletBC(W, W_, bc))
 
-        rexi_prob = LinearVariationalProblem(a.form, self.b.form, self.w, aP=aP,
+        rexi_prob = LinearVariationalProblem(a.form, b.form, self.w, aP=aP,
                                              bcs=bcs,
                                              constant_jacobian=False)
 
