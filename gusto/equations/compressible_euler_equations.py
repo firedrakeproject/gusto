@@ -8,7 +8,8 @@ from firedrake import (
 from firedrake.fml import subject, replace_subject, all_terms
 from gusto.core.labels import (
     time_derivative, prognostic, hydrostatic, linearisation,
-    pressure_gradient, coriolis, gravity, sponge, transport
+    pressure_gradient, coriolis, gravity, sponge, transport,
+    transporting_velocity
 )
 from gusto.equations.thermodynamics import exner_pressure
 from gusto.equations.common_forms import (
@@ -112,7 +113,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             w, phi, gamma, q_u_test, q_rho_test, q_theta_test = self.tests[0:6]
             u, rho, theta, q_u, q_rho, q_theta = split(self.X)[0:6]
             u_trial, rho_trial, theta_trial, q_u_trial, q_rho_trial, q_theta_trial = split(self.trials)[0:6]
-            u_bar, rho_bar, theta_bar, _, _, _ = split(self.X_ref)[0:6]
+            u_bar, rho_bar, theta_bar, q_u_bar, q_rho_bar, q_theta_bar = split(self.X_ref)[0:6]
         else:
             w, phi, gamma = self.tests[0:3]
             u, rho, theta = split(self.X)[0:3]
@@ -155,7 +156,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
             self.sigma = self.prescribed_fields("PML", W_DG).interpolate(sigma_expr)
 
-            self.gamma_z = Constant(1.0) + gamma0*self.sigma
+            self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0) + gamma0*self.sigma)
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -208,7 +209,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Density transport (conservative form)
         if PML_options is not None:
             # Directly construct the form, for now.
-            form = inner(gamma, (u[0]*rho).dx(0) + (1/self.gamma_z)*(u[1]*rho).dx(1))*dx
+            L = inner(phi, (u[0]*rho).dx(0) + (1/self.gamma_z)*(u[1]*rho).dx(1))*dx
+            form = transporting_velocity(L, u)
             rho_adv = prognostic(transport(form, TransportEquationType.conservative), 'rho')
         else:
             rho_adv = prognostic(continuity_form(phi, rho, u), 'rho')
@@ -217,6 +219,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # TODO #651: we should remove this hand-coded linearisation
         # currently REXI can't handle generated transport linearisations
         if self.linearisation_map(rho_adv.terms[0]):
+            print('linearising ...')
+            # Hmmmm, this won't be right with the PML vertical scaling.
             linear_rho_adv = linear_continuity_form(phi, rho_trial, u_trial, rho_bar, u_bar)
             rho_adv = linearisation(rho_adv, linear_rho_adv)
 
@@ -227,6 +231,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # TODO #651: we should remove this hand-coded linearisation
         # currently REXI can't handle generated transport linearisations
         if self.linearisation_map(theta_adv.terms[0]):
+            print('linearising ...')
             linear_theta_adv = linear_advection_form(gamma, theta_trial, u_trial, theta_bar, u_bar)
             theta_adv = linearisation(theta_adv, linear_theta_adv)
 
@@ -358,16 +363,23 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             # These are all 1d transport in the vertical, and 
             # have a minus sign in front of them.
 
-            # Advective forms for q_u, q_rho
-            residual -= subject(prognostic(advection_form(w, q_u, u_w), 'q_u'), self.X)
-            residual -= subject(prognostic(advection_form(gamma, q_theta, u_w), 'q_theta'), self.X)
+            # Advective forms for q_u, q_theta
+            q_u_adv = subject(prognostic(advection_form(q_u_test, q_u, u_w), 'q_u'), self.X)
+            q_theta_adv = subject(prognostic(advection_form(q_theta_test, q_theta, u_w), 'q_theta'), self.X)
 
             # Conservative form for q_rho
-            form = inner(gamma, (1/self.gamma_z)*(u[1]*q_rho).dx(1))*dx
-            residual -= subject(prognostic(transport(form, TransportEquationType.conservative), 'q_rho'), self.X)
+            L = inner(q_rho_test, (1/self.gamma_z)*((u[1]*q_rho).dx(1)))*dx
+            form = transporting_velocity(L, u_w)
+            q_rho_adv = subject(prognostic(transport(form, TransportEquationType.conservative), 'q_rho'), self.X)
+
+            # Make these terms negative in the residual
+            residual -= subject(q_u_adv + q_theta_adv + q_rho_adv, self.X)
+
+            # Probably should add linearisations, but see if we can get away without for now.
             
             # Six sigma PML terms, one for each equation
             # Negative sign for standard variables, positive for PML
+            # These terms won't need linearisations.
             residual -= subject(prognostic(self.sigma*inner(w, q_u)*dx, 'u'), self.X)
             residual -= subject(prognostic(phi*self.sigma*q_rho*dx, 'rho'), self.X)
             residual -= subject(prognostic(gamma*self.sigma*q_theta*dx, 'theta'), self.X) 
