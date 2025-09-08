@@ -736,7 +736,7 @@ class IO(object):
             if output.multichkpt:
                 # Saving more than one checkpoint file
                 if self.output.checkpoint_method == 'checkpointfile':
-                    chkpt_file = path.join(self.chkpt_path, "chkpt"+str(step)+".h5")
+                    chkpt_file = path.join(self.chkpt_path, "chkpt"+str(step-1)+".h5")
                 elif self.output.checkpoint_method == 'dumbcheckpoint':
                     self.chkpt = DumbCheckpoint(path.join(self.chkpt_path, "chkpt"+str(t)),
                                                 mode=FILE_CREATE)
