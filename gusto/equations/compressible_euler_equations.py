@@ -4,16 +4,17 @@ from firedrake import (
     sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg, dS_v,
     conditional, SpatialCoordinate, split, Constant, as_vector
 )
-from firedrake.fml import subject, replace_subject
+from firedrake.fml import subject, replace_subject, all_terms
 from gusto.core.labels import (
-    time_derivative, transport, prognostic, hydrostatic, linearisation,
+    time_derivative, prognostic, hydrostatic, linearisation,
     pressure_gradient, coriolis, gravity, sponge
 )
 from gusto.equations.thermodynamics import exner_pressure
 from gusto.equations.common_forms import (
     advection_form, continuity_form, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form,
-    diffusion_form, linear_continuity_form, linear_advection_form
+    diffusion_form, linear_continuity_form, linear_advection_form,
+    linear_vector_invariant_form, linear_circulation_form
 )
 from gusto.equations.active_tracers import Phases, TracerVariableType
 from gusto.equations.prognostic_equations import PrognosticEquationSet
@@ -35,7 +36,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
     def __init__(self, domain, parameters, sponge_options=None,
                  extra_terms=None, space_names=None,
-                 linearisation_map='default',
+                 linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
@@ -57,9 +58,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 in which case the spaces are taken from the de Rham complex.
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
-                then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes time derivatives and
-                scalar transport terms.
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -87,13 +87,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         if active_tracers is None:
             active_tracers = []
 
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives and scalar transport terms
-            # Don't include active tracers
-            linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'rho', 'theta'] \
-                and (t.has_label(time_derivative)
-                     or (t.get(prognostic) != 'u' and t.has_label(transport)))
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -105,8 +98,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
         w, phi, gamma = self.tests[0:3]
         u, rho, theta = split(self.X)[0:3]
-        u_trial = split(self.trials)[0]
-        _, rho_bar, theta_bar = split(self.X_ref)[0:3]
+        u_trial, rho_trial, theta_trial = split(self.trials)[0:3]
+        u_bar, rho_bar, theta_bar = split(self.X_ref)[0:3]
         zero_expr = Constant(0.0)*theta
         exner = exner_pressure(parameters, rho, theta)
         n = FacetNormal(domain.mesh)
@@ -125,27 +118,49 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
-            u_adv = prognostic(vector_invariant_form(domain, w, u, u), 'u')
+            u_adv = prognostic(vector_invariant_form(self.domain, w, u, u), 'u')
+            # Manually add linearisation, as linearisation cannot handle the
+            # perp function on the plane / vertical slice
+            if self.linearisation_map(u_adv.terms[0]):
+                linear_u_adv = linear_vector_invariant_form(self.domain, w, u_trial, u_bar)
+                u_adv = linearisation(u_adv, linear_u_adv)
+
+        elif u_transport_option == "circulation_form":
+            # This is different to vector invariant form as the K.E. form
+            # doesn't have a variable marked as "transporting velocity"
+            ke_form = prognostic(kinetic_energy_form(w, u, u), 'u')
+            circ_form = prognostic(advection_equation_circulation_form(self.domain, w, u, u), 'u')
+            # Manually add linearisation, as linearisation cannot handle the
+            # perp function on the plane / vertical slice
+            if self.linearisation_map(circ_form.terms[0]):
+                linear_circ_form = linear_circulation_form(self.domain, w, u_trial, u_bar)
+                circ_form = linearisation(circ_form, linear_circ_form)
+            u_adv = circ_form + ke_form
+
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), 'u')
-        elif u_transport_option == "circulation_form":
-            ke_form = prognostic(kinetic_energy_form(w, u, u), 'u')
-            u_adv = prognostic(advection_equation_circulation_form(domain, w, u, u), 'u') + ke_form
+
         else:
-            raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
+            raise ValueError("Invalid u_transport_option: %s" % self.u_transport_option)
 
         # Density transport (conservative form)
         rho_adv = prognostic(continuity_form(phi, rho, u), 'rho')
+
         # Transport term needs special linearisation
+        # TODO #651: we should remove this hand-coded linearisation
+        # currently REXI can't handle generated transport linearisations
         if self.linearisation_map(rho_adv.terms[0]):
-            linear_rho_adv = linear_continuity_form(phi, rho_bar, u_trial)
+            linear_rho_adv = linear_continuity_form(phi, rho_trial, u_trial, rho_bar, u_bar)
             rho_adv = linearisation(rho_adv, linear_rho_adv)
 
         # Potential temperature transport (advective form)
         theta_adv = prognostic(advection_form(gamma, theta, u), 'theta')
+
         # Transport term needs special linearisation
+        # TODO #651: we should remove this hand-coded linearisation
+        # currently REXI can't handle generated transport linearisations
         if self.linearisation_map(theta_adv.terms[0]):
-            linear_theta_adv = linear_advection_form(gamma, theta_bar, u_trial)
+            linear_theta_adv = linear_advection_form(gamma, theta_trial, u_trial, theta_bar, u_bar)
             theta_adv = linearisation(theta_adv, linear_theta_adv)
 
         adv_form = subject(u_adv + rho_adv + theta_adv, self.X)
@@ -218,7 +233,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Extra Terms (Coriolis, Sponge, Diffusion and others)
         # -------------------------------------------------------------------- #
         if parameters.Omega is not None:
-            # TODO: add linearisation
             Omega = as_vector((0, 0, parameters.Omega))
             coriolis_form = coriolis(subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, 'u'), self.X))
@@ -283,7 +297,8 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
     """
 
     def __init__(self, domain, parameters, sponge_options=None,
-                 extra_terms=None, space_names=None, linearisation_map='default',
+                 extra_terms=None, space_names=None,
+                 linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
                  diffusion_options=None,
                  no_normal_flow_bc_ids=None,
@@ -305,9 +320,8 @@ class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):
                 in which case the spaces are taken from the de Rham complex.
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
-                then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes time derivatives and
-                scalar transport terms.
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
