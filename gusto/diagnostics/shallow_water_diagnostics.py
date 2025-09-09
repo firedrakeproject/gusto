@@ -416,4 +416,3 @@ class ShallowWaterAvailablePotentialEnergy(Energy):
         D = state_fields("D")
         self.expr = 0.5*g*(D-H)**2
         super().setup(domain, state_fields)
-
