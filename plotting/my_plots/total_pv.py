@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import xarray as xr
 import os
 
-filepath = 'new_single_fplane_Bu2b1p5Rop2_l500dt250df30'
+filepath = 'new_single_flattrap_Bu2b1p5Rop2_l1000dt250df30'
 
 plot_dir = f'/data/home/sh1293/results/jupiter_sw/{filepath}/Plots'
 if not os.path.exists(plot_dir):
@@ -14,7 +14,8 @@ But = filepath.split('Bu')[1].split('b')[0]
 try:
     Bui = float(But.split('p')[0])
     Bud = float(But.split('p')[1])*10**-len(But.split('p')[1])
-except ValueError:
+    Bu = Bui+Bud
+except IndexError:
     Bu = float(But)
 try:
     bi = float(filepath.split('b')[1].split('p')[0])

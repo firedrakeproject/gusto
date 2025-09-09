@@ -26,7 +26,7 @@ b = 1.5
 Ro = 0.2
 
 ### specify Ld (Laura's setup)
-Laurasetup = True
+Laurasetup = False
 Ld = 3060e3
 
 ### setup grid parameters
@@ -65,18 +65,18 @@ t_day = 2*pi/Omega
 ### timing options
 dump_freq = 1    # dump frequency of output
 dt = 250          # timestep (in seconds)
-tmax = 10*t_day       # duration of the simulation (in seconds)
+tmax = 500*t_day       # duration of the simulation (in seconds)
 
 restart = False
 restart_name = 'new_single_halfoffset_fplane_Bu2b1p5Rop2_l1dt250df1'
 t0 = 200*t_day
 
 ### vortex locations
-south_lat_deg = [65.]#, 83., 83., 83., 83., 83.]#, 70.]
+south_lat_deg = [90.]#, 84., 84., 84., 84., 84.]#, 70.]
 south_lon_deg = [0.]#, 72., 144., 216., 288., 0.]#, 0.]
 
 ### name
-setup = 'new_single_edge'
+setup = 'new_single'
 
 ### add noise to initial depth profile?
 noise = False
@@ -87,17 +87,29 @@ avlpe_diag = True
 ### include perturbation of D diagnostic
 D_perturb = True
 
-#### if true then the experiment is done on an f-plane, if not then it's the PV trap as usual
-fplane = False
+### coriolis form (fplane, flattrap, fulltrap)
+coriolisform = 'flattrap'
 
 ### extract points - if True it extracts transect of y=ypole, x=xpole±40 'grid points'
 extract_points = True
 res = 1
 
 ### anticyclone?
-ac = True
+ac = False
 
 ##########################################################################
+
+if coriolisform == 'fplane':
+    fplane = True
+    flattrap = False
+elif coriolisform == 'flattrap':
+    fplane = False
+    flattrap = True
+elif coriolisform == 'fulltrap':
+    fplane = False
+    flattrap = False
+else:
+    logger.info('Incorrect coriolisform option')
 
 tmin = np.ceil(t0/dump_freq)*dump_freq
 tmax = np.ceil(tmax/dump_freq)*dump_freq
@@ -122,7 +134,9 @@ if setup != '':
 if ac:
     setup = f'{setup}ac_'
 if fplane:
-    setup =f'{setup}fplane_'
+    setup = f'{setup}fplane_'
+elif flattrap:
+    setup = f'{setup}flattrap_'
 if noise:
     noise_name = f'_n'
 else:
@@ -307,16 +321,22 @@ def xy_from_rtheta(r, theta, angle_units='rad'):
 
     return x_shift, y_shift
 
-def smooth_f_profile(degree, delta, rstar=rstar, Omega=parameters.Omega, R=R, Lx=Lx, nx=nx):
+def smooth_f_profile(degree, delta, style, rstar=rstar, Omega=parameters.Omega, R=R, Lx=Lx, nx=nx):
     import sympy as sp
 
     delta *= Lx/nx
     r = sp.symbols('r')
-    fexpr = 2*Omega*(1-0.5*r**2/R**2)
-    left_val = fexpr.subs(r, rstar-delta)
-    right_val = 2*Omega
-    left_diff_val = sp.diff(fexpr, r).subs(r, rstar-delta)
-    left_diff2_val = sp.diff(fexpr, r, 2).subs(r, rstar-delta)
+    if style == 'polar':
+        fexpr = 2*Omega*(1-0.5*r**2/R**2)
+        left_val = fexpr.subs(r, rstar-delta)
+        right_val = 2*Omega
+        left_diff_val = sp.diff(fexpr, r).subs(r, rstar-delta)
+        left_diff2_val = sp.diff(fexpr, r, 2).subs(r, rstar-delta)
+    elif style == 'flat':
+        left_val = 2*Omega*(1-0.5*(rstar-delta)**2/R**2)
+        right_val = 2*Omega
+        left_diff_val = 0
+        left_diff2_val = 0
 
     a = sp.symbols(f'a_0:{degree+1}')
     P = a[0]
@@ -359,8 +379,10 @@ r, theta = rtheta_from_xy(x, y)
 # Create a spatially varying function for the Coriolis force:
 Omega = parameters.Omega
 fexpr = 2*Omega*(1-0.5*r**2/R**2)
+if flattrap:
+    fexpr = 2*Omega*(1-0.5*(rstar-smooth_delta*Lx/nx)**2/R**2)
 # ftrap = conditional(r < rstar, fexpr, 2*Omega)
-coeffs = smooth_f_profile(degree=smooth_degree, delta=smooth_delta)
+coeffs = smooth_f_profile(degree=smooth_degree, delta=smooth_delta, style='flat' if flattrap else 'polar')
 fsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
 if smooth_degree == 5:
     fsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5

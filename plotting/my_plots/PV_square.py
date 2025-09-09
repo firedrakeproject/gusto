@@ -9,10 +9,21 @@ import os
 import time
 import pdb
 from tqdm import tqdm
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-filepath = 'Bu2b1Rop2_l700dt250df30_n'
-field_name = 'RelativeVorticity'
-folder = 'RV'
+def colourbar(mappable, extend):
+    ax = mappable.axes
+    fig = ax.figure
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    cb = fig.colorbar(mappable, cax=cax, extend=extend)
+    ax.set_aspect('equal', adjustable='box')
+    return cb
+
+
+filepath = 'new_single_flattrap_Bu2b1p5Rop2_l1000dt250df30'
+field_name = 'D_error'
+folder = 'D_error_changecb'
 
 plot_dir = f'/data/home/sh1293/results/jupiter_sw/{filepath}/Plots/{folder}'
 if not os.path.exists(plot_dir):
@@ -24,7 +35,13 @@ if field_name in ['PotentialVorticity', 'RelativeVorticity']:
     vmin = np.min(PV_structured[:,:,0])
     vmax = np.max(PV_structured[:,:,0])
 elif field_name == 'D_error':
-    Bu = float(filepath.split('Bu')[1].split('b')[0])
+    But = filepath.split('Bu')[1].split('b')[0]
+    try:
+        Bui = float(But.split('p')[0])
+        Bud = float(But.split('p')[1])*10**-len(But.split('p')[1])
+        Bu = Bui+Bud
+    except IndexError:
+        Bu = float(But)
     g = 24.79
     Omega = 1.74e-4
     f0 = 2 * Omega        # Planetary vorticity
@@ -56,7 +73,8 @@ for i in tqdm(range(len(times)), desc='Making plots'):
     # print(f'{i:0{digits}d}')
     fig, ax = plt.subplots(1,1, figsize=(8,8))
     ax.set_aspect('equal')
-    pcolor = PV_structured[:,:,i].plot.imshow(ax=ax, x='x', y='y', cmap='RdBu_r', extend='both', add_colorbar=True, vmin=vmin, vmax=vmax)
+    pcolor = PV_structured[:,:,i].plot.imshow(ax=ax, x='x', y='y', cmap='RdBu_r', extend='both', add_colorbar=False)#, vmin=vmin, vmax=vmax)
+    cb = colourbar(pcolor, extend='both')
     ax.set_xlabel('')
     ax.set_ylabel('')
     ax.set_xticks([])

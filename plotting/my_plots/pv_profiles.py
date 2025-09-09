@@ -6,14 +6,15 @@ import os
 import pdb
 import scipy.special as scpspc
 
-filepath = 'new_single_fplane_Bu2b1p5Rop2_l500dt250df30'
+filepath = 'new_single_flattrap_Bu2b1p5Rop2_l1000dt250df30'
 
-accurate = False
+accurate = True
 
 But = filepath.split('Bu')[1].split('b')[0]
 try:
     Bui = float(But.split('p')[0])
     Bud = float(But.split('p')[1])*10**-len(But.split('p')[1])
+    Bu = Bui+Bud
 except IndexError:
     Bu = float(But)
 try:
@@ -72,7 +73,7 @@ initial_plot = (initialgrid-f0/H).plot(ax=ax, label='Initial', linestyle='--', m
 final_plot = (finalgrid-f0/H).plot(ax=ax, label=f'Final, {(times[-1]/t_day):.2f} days', linestyle=':', marker='.')
 analytic_plot = (analyticgrid-f0/H).plot(ax=ax, label='Analytic', linestyle='-')
 if accurate:
-    accurate_final_plot = accurate_end_pv.plot(ax=ax, label=f'Accurate final, {(times[-1]/t_day):.2f} days', color='fuchsia', marker='.', linestyle='-')
+    accurate_final_plot = (accurate_end_pv-f0/H).plot(ax=ax, label=f'Accurate final, {(times[-1]/t_day):.2f} days', color='fuchsia', marker='.', linestyle='-')
 plt.legend()
 plt.title(f'{filepath}')
 

@@ -6,7 +6,7 @@ import os
 import pdb
 import scipy.special as scpspc
 
-filepath = 'new_single_fplane_Bu2b1p5Rop2_l500dt250df30'
+filepath = 'new_single_flattrap_Bu2b1p5Rop2_l1000dt250df30'
 
 But = filepath.split('Bu')[1].split('b')[0]
 try:
