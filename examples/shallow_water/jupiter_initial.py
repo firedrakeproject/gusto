@@ -34,7 +34,8 @@ nx = 256
 ny = nx
 Lx = 7e7
 Ly = Lx
-rstar = Lx/2-3*Lx/nx
+# rstar = Lx/2-3*Lx/nx
+rstar = 3*Lx/7
 
 ### setup smoothing parameters
 smooth_degree = 5
@@ -65,7 +66,7 @@ t_day = 2*pi/Omega
 ### timing options
 dump_freq = 1    # dump frequency of output
 dt = 250          # timestep (in seconds)
-tmax = 500*t_day       # duration of the simulation (in seconds)
+tmax = 10*t_day       # duration of the simulation (in seconds)
 
 restart = False
 restart_name = 'new_single_halfoffset_fplane_Bu2b1p5Rop2_l1dt250df1'
@@ -76,7 +77,7 @@ south_lat_deg = [90.]#, 84., 84., 84., 84., 84.]#, 70.]
 south_lon_deg = [0.]#, 72., 144., 216., 288., 0.]#, 0.]
 
 ### name
-setup = 'new_single'
+setup = 'smallrstar_new_single'
 
 ### add noise to initial depth profile?
 noise = False

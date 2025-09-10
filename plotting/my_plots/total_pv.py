@@ -36,10 +36,10 @@ H = phi0/g
 t_day = 2*np.pi/Omega
 
 pv, times = fcs.make_structured(filepath, 'PotentialVorticity')
-total_pv = (pv-f0/H).integrate('x').integrate('y')
+total_pv = (pv).integrate('x').integrate('y')
 
 fig, ax = plt.subplots(1,1, figsize=(10,10/1.666))
-total_plot = total_pv.plot(ax=ax, label='Total domain PV - planetary PV')
+total_plot = ((total_pv-total_pv[0])/total_pv[0]*100).plot(ax=ax, label='Percentage deviation from initial total PV')
 plt.legend()
 
 plt.savefig(f'{plot_dir}/totalpv_evolution.pdf')
