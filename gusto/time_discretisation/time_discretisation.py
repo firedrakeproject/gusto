@@ -59,6 +59,36 @@ def wrapper_apply(original_apply):
     return get_apply
 
 
+def wrapper_apply2(original_apply):
+    """Decorator to add steps for using a wrapper around the apply method."""
+    def get_apply(self, x_out, x_in, j):
+
+        if self.augmentation is not None:
+
+            def new_apply(self, x_out, x_in, j):
+
+                self.augmentation.pre_apply(x_in)
+                original_apply(self, self.augmentation.x_out, self.augmentation.x_in, j)
+                self.augmentation.post_apply(x_out)
+
+            return new_apply(self, x_out, x_in, j)
+
+        elif self.wrapper is not None:
+
+            def new_apply(self, x_out, x_in, j):
+
+                self.wrapper.pre_apply(x_in)
+                original_apply(self, self.wrapper.x_out, self.wrapper.x_in, j)
+                self.wrapper.post_apply(x_out)
+
+            return new_apply(self, x_out, x_in, j)
+
+        else:
+
+            return original_apply(self, x_out, x_in, j)
+
+    return get_apply
+
 class TimeDiscretisation(object, metaclass=ABCMeta):
     """Base class for time discretisation schemes."""
 

@@ -14,7 +14,7 @@ from gusto.spatial_methods.transport_methods import TransportMethod
 import ufl
 import numpy as np
 
-__all__ = ["BaseTimestepper", "Timestepper","RIDC_Timestepper", "PrescribedTransport"]
+__all__ = ["BaseTimestepper", "Timestepper","RIDC_Timestepper", "PrescribedTransport", "Flush_Timestepper"]
 
 
 class BaseTimestepper(object, metaclass=ABCMeta):
@@ -763,3 +763,74 @@ class PrescribedTransport(Timestepper):
             self.velocity_apply(self.t)
 
         super().timestep()
+
+class Flush_Timestepper(BaseTimestepper):
+    """
+    Implements a timeloop by applying a scheme to a prognostic equation.
+    """
+
+    def __init__(self, equation, scheme, io, spatial_methods=None,
+                 physics_parametrisations=None):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the prognostic equation
+            scheme (:class:`TimeDiscretisation`): the scheme to use to timestep
+                the prognostic equation
+            io (:class:`IO`): the model's object for controlling input/output.
+            spatial_methods (iter, optional): a list of objects describing the
+                methods to use for discretising transport or diffusion terms
+                for each transported/diffused variable. Defaults to None,
+                in which case the terms follow the original discretisation in
+                the equation.
+            physics_parametrisations: (iter, optional): an iterable of
+                :class:`PhysicsParametrisation` objects that describe physical
+                parametrisations to be included to add to the equation. They can
+                only be used when the time discretisation `scheme` is explicit.
+                Defaults to None.
+        """
+        self.scheme = scheme
+        if spatial_methods is not None:
+            self.spatial_methods = spatial_methods
+        else:
+            self.spatial_methods = []
+
+        if physics_parametrisations is not None:
+            self.physics_parametrisations = physics_parametrisations
+            if len(self.physics_parametrisations) > 1:
+                assert isinstance(scheme, ExplicitTimeDiscretisation), \
+                    ('Physics parametrisations can only be used with the '
+                     + 'basic TimeStepper when the time discretisation is '
+                     + 'explicit. If you want to use an implicit scheme, the '
+                     + 'SplitPhysicsTimestepper is more appropriate.')
+        else:
+            self.physics_parametrisations = []
+
+        super().__init__(equation=equation, io=io)
+
+    @property
+    def transporting_velocity(self):
+        return "prognostic"
+
+    def setup_fields(self):
+        self.x = TimeLevelFields(self.equation, self.scheme.nlevels)
+        self.fields = StateFields(self.x, self.equation.prescribed_fields,
+                                  *self.io.output.dumplist)
+
+    def setup_scheme(self):
+        self.setup_equation(self.equation)
+        self.scheme.setup(self.equation)
+        self.setup_transporting_velocity(self.scheme)
+        if hasattr(self.scheme, 'base'):
+            self.setup_transporting_velocity(self.scheme.base)
+        if self.io.output.log_courant:
+            self.scheme.courant_max = self.io.courant_max
+
+    def timestep(self):
+        """
+        Implement the timestep
+        """
+        xnp1 = self.x.np1
+        name = self.equation.field_name
+        x_in = [x(name) for x in self.x.previous[-self.scheme.nlevels:]]
+
+        self.scheme.apply(xnp1(name), *x_in, self.step)
