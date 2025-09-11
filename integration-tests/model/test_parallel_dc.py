@@ -48,8 +48,8 @@ def test_parallel_dc(tmpdir, scheme):
     # to demonstrate that transport is working correctly
 
     dt = pi/3. * 0.02
-
-    output = OutputParameters(dirname=dirname, dump_vtus=False, dump_nc=True, dumpfreq=15)
+    dumpfreq = 15
+    output = OutputParameters(dirname=dirname, dump_vtus=False, dump_nc=True, dumpfreq=dumpfreq)
     domain = Domain(mesh, dt, family="BDM", degree=1)
     io = IO(domain, output)
 
@@ -82,8 +82,9 @@ def test_parallel_dc(tmpdir, scheme):
         eqn.label_terms(lambda t: t.has_label(transport), explicit)
 
         M = 5
+        J = int(tmax/dt)
         base_scheme = IMEX_Euler(domain)
-        time_scheme = Parallel_RIDC(base_scheme, domain, M, k, communicator=ensemble)
+        time_scheme = Parallel_RIDC(base_scheme, domain, M, k, J, output_freq=dumpfreq, communicator=ensemble)
 
     transport_method = DGUpwind(eqn, 'f')
 
