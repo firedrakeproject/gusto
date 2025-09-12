@@ -6,16 +6,13 @@ equations. The initial conditions are saturated and cloudy everywhere.
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
     SpatialCoordinate, pi, sqrt, min_value, cos, Constant, Function, exp, sin,
-    norm, errornorm
 )
 from gusto import (
     Domain, IO, OutputParameters, DGUpwind, ShallowWaterParameters,
     ThermalShallowWaterEquations, lonlatr_from_xyz, MeridionalComponent,
     GeneralIcosahedralSphereMesh, SubcyclingOptions, ZonalComponent,
-    PartitionedCloud, RungeKuttaFormulation, SSPRK3, ThermalSWSolver,
+    PartitionedCloud, RungeKuttaFormulation, SSPRK3, LinearTimesteppingSolver,
     SemiImplicitQuasiNewton, xyz_vector_from_lonlatr,
-    ThermalSWSolverMono, prognostic, time_derivative, coriolis,
-    pressure_gradient, transport, drop
 )
 
 moist_thermal_gw_defaults = {
@@ -87,6 +84,7 @@ def moist_thermal_gw(
     ]
 
     params = {
+        'ksp_monitor_true_residual': None,
         'ksp_view': ':ksp_view.log',
         'ksp_error_if_not_converged': None,
         'mat_type': 'matfree',
@@ -143,11 +141,11 @@ def moist_thermal_gw(
         },
     }
 
-    linear_solver = ThermalSWSolverMono(
-        eqns, alpha=0.5,
-        options_prefix="swe",
-        # solver_parameters=params,
-        # overwrite_solver_parameters=True
+    appctx = {'auxform': eqns.schur_complement_form(alpha=0.5)}
+
+    linear_solver = LinearTimesteppingSolver(
+        eqns, alpha=0.5, options_prefix="swe",
+        solver_parameters=params, appctx=appctx
     )
 
     # ------------------------------------------------------------------------ #

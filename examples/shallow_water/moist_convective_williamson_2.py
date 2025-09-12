@@ -25,7 +25,6 @@ from gusto import (
     RelativeVorticity, SWSaturationAdjustment, WaterVapour, CloudWater, Rain,
     GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr
 )
-from gusto.core.labels import time_derivative, prognostic, coriolis, pressure_gradient, transport
 
 moist_convect_williamson_2_defaults = {
     'ncells_per_edge': 16,     # number of cells per icosahedron edge
@@ -88,19 +87,9 @@ def moist_convect_williamson_2(
         WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')
     ]
 
-    def linearisation_map(term):
-        if (term.get(prognostic) in ['u', 'D']
-            and (any(term.has_label(time_derivative, coriolis, pressure_gradient))
-            or (term.get(prognostic) in ['D'] and term.has_label(transport)))):
-            return True
-        elif term.has_label(time_derivative):
-            return True
-        else:
-            return False
-
     eqns = ShallowWaterEquations(
         domain, parameters, fexpr=fexpr, u_transport_option=u_eqn_type,
-        active_tracers=tracers, linearisation_map=linearisation_map
+        active_tracers=tracers
     )
 
     # IO
@@ -146,8 +135,8 @@ def moist_convect_williamson_2(
         'ksp_type': 'preonly',
         "pc_type": "fieldsplit",
         "pc_fieldsplit_type": "additive",
-        "pc_fieldsplit_0_fields": "0,1",
-        "pc_fieldsplit_1_fields": "2,3,4",
+        "pc_fieldsplit_0_fields": "0,1",    # (u, D)
+        "pc_fieldsplit_1_fields": "2,3,4",  # (scalars,)
         "fieldsplit_0": {  # hybridisation on the (u,D) system
             'ksp_monitor_true_residual': None,
             'ksp_type': 'preonly',
