@@ -16,6 +16,7 @@ from firedrake import (
 from gusto.time_discretisation.time_discretisation import wrapper_apply
 from qmat import genQDeltaCoeffs
 from gusto.time_discretisation.deferred_correction import SDC, RIDC
+from gusto.core.logging import logger
 
 __all__ = ["Parallel_RIDC", "Parallel_SDC"]
 
@@ -69,8 +70,8 @@ class Parallel_RIDC(RIDC):
         self.step = 1
         self.output_freq = output_freq
 
-        if self.output_freq % self.flush_freq != 0:
-            raise Warning("Output on all parallel in time ranks will not be the same!")
+        if self.flush_freq == 0 or (self.flush_freq != 0 and self.output_freq % self.flush_freq != 0):
+            logger.warn("Output on all parallel in time ranks will not be the same until end of run!")
 
         # Checks for parallel RIDC
         if self.comm is None:
