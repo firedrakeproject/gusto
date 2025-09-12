@@ -367,7 +367,7 @@ def split_continuity_form(equation):
                 u_trial = TrialFunctions(W)[u_idx]
                 qbar = split(equation.X_ref)[idx]
                 # Add linearisation to adv_term
-                linear_adv_term = linear_advection_form(test, qbar, u_trial)
+                linear_adv_term = linear_advection_form(test, qbar, u_trial, qbar, uadv)
                 adv_term = linearisation(adv_term, linear_adv_term)
                 # Add linearisation to div_term
                 linear_div_term = transporting_velocity(qbar*test*div(u_trial)*dx, u_trial)
