@@ -23,7 +23,7 @@ __all__ = ["Parallel_RIDC", "Parallel_SDC"]
 class Parallel_RIDC(RIDC):
     """Class for Parallel Revisionist Integral Deferred Correction schemes."""
 
-    def __init__(self, base_scheme, domain, M, K, J, output_freq, flush_freq = None, field_name=None,
+    def __init__(self, base_scheme, domain, M, K, J, output_freq, flush_freq=None, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
                  limiter=None, options=None, communicator=None):
         """
@@ -37,7 +37,7 @@ class Parallel_RIDC(RIDC):
             K (int): Max number of correction interations
             J (int): Number of intervals
             output_freq (int): Frequency at which output is done
-            flush_freq (int): Frequency at which to flush the pipeline 
+            flush_freq (int): Frequency at which to flush the pipeline
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             linear_solver_parameters (dict, optional): dictionary of parameters to
@@ -54,12 +54,11 @@ class Parallel_RIDC(RIDC):
                                             linear_solver_parameters, nonlinear_solver_parameters,
                                             limiter, options, reduced=True)
         self.comm = communicator
-        self.TAG_EXCHANGE_FIELD = 11 # Tag for sending nodal fields (Firedrake Functions)
-        self.TAG_EXCHANGE_SOURCE = self.TAG_EXCHANGE_FIELD + J # Tag for sending nodal source fields (Firedrake Functions)
-        self.TAG_FLUSH_PIPE = self.TAG_EXCHANGE_SOURCE + J # Tag for flushing pipe and restarting
-        self.TAG_FINAL_OUT = self.TAG_FLUSH_PIPE + J # Tag for the final broadcast and output
-        self.TAG_END_INTERVAL = self.TAG_FINAL_OUT + J # Tag for telling the rank above you that you have ended interval j
-        
+        self.TAG_EXCHANGE_FIELD = 11  # Tag for sending nodal fields (Firedrake Functions)
+        self.TAG_EXCHANGE_SOURCE = self.TAG_EXCHANGE_FIELD + J  # Tag for sending nodal source fields (Firedrake Functions)
+        self.TAG_FLUSH_PIPE = self.TAG_EXCHANGE_SOURCE + J  # Tag for flushing pipe and restarting
+        self.TAG_FINAL_OUT = self.TAG_FLUSH_PIPE + J  # Tag for the final broadcast and output
+        self.TAG_END_INTERVAL = self.TAG_FINAL_OUT + J  # Tag for telling the rank above you that you have ended interval j
 
         if flush_freq is None:
             self.flush_freq = 1
@@ -70,7 +69,7 @@ class Parallel_RIDC(RIDC):
         self.step = 1
         self.output_freq = output_freq
 
-        if self.output_freq%self.flush_freq != 0:
+        if self.output_freq % self.flush_freq != 0:
             raise Warning("Output on all parallel in time ranks will not be the same!")
 
         # Checks for parallel RIDC
@@ -207,7 +206,7 @@ class Parallel_RIDC(RIDC):
                 if self.kval < self.K:
                     self.comm.send(self.Unodes1[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step)
                     self.comm.send(self.source_Ukp1[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
-                
+
             for m in range(self.M+1):
                 self.Unodes[m].assign(self.Unodes1[m])
                 self.source_Uk[m].assign(self.source_Ukp1[m])
