@@ -15,7 +15,7 @@ from firedrake import (
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, SUPGOptions, Divergence, Perturbation, CourantNumber,
-    BoussinesqParameters, BoussinesqEquations, BoussinesqSolver,
+    BoussinesqParameters, BoussinesqEquations, BoussinesqSolver, LinearTimesteppingSolver,
     boussinesq_hydrostatic_balance
 )
 
@@ -91,7 +91,66 @@ def skamarock_klemp_compressible_bouss(
     ]
 
     # Linear solver
-    linear_solver = BoussinesqSolver(eqns)
+    solver_parameters = {
+        'ksp_monitor_true_residual': None,
+        'ksp_view': ':ksp_view.log',
+        'ksp_error_if_not_converged': None,
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'pc_fieldsplit_schur_fact_type': 'full',
+        'pc_fieldsplit_1_fields': '0,1',
+        'pc_fieldsplit_0_fields': '2',  # eliminate temperature
+        'fieldsplit_theta': {
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.AssembledPC',
+            'assembled_pc_type': 'bjacobi',
+            'assembled_sub_pc_type': 'ilu',
+        },
+        'fieldsplit_1': {
+            'ksp_monitor': None,
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'gusto.AuxiliaryPC',
+            'aux': {
+                'mat_type': 'matfree',
+                'pc_type': 'python',
+                'pc_python_type': 'firedrake.HybridizationPC',
+                'hybridization': {
+                    'ksp_type': 'cg',
+                    'pc_type': 'gamg',
+                    'ksp_rtol': 1e-8,
+                    'mg_levels': {
+                        'ksp_type': 'chebyshev',
+                        'ksp_max_it': 2,
+                        'pc_type': 'bjacobi',
+                        'sub_pc_type': 'ilu'
+                    },
+                    'mg_coarse': {
+                        'ksp_type': 'preonly',
+                        'pc_type': 'lu',
+                        'pc_factor_mat_solver_type': 'mumps',
+                    },
+                },
+            },
+        },
+    }
+
+    def trace_nullsp(T):
+        return VectorSpaceBasis(constant=True)
+
+    appctx = {
+        'auxform': eqns.schur_complement_form(alpha=0.5),
+        "trace_nullspace": trace_nullsp,
+    }
+
+    linear_solver = LinearTimesteppingSolver(
+        eqns, alpha=0.5, options_prefix="boussinesq",
+        solver_parameters=solver_parameters,
+        appctx=appctx
+    )
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(

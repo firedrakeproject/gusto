@@ -1,6 +1,7 @@
 """Defines the Boussinesq equations."""
 
-from firedrake import inner, dx, div, cross, split, as_vector
+from firedrake import (
+    inner, dx, div, cross, split, as_vector, TestFunctions, TrialFunctions, dot, grad, DirichletBC)
 from firedrake.fml import subject, all_terms
 from gusto.core.labels import (
     prognostic, linearisation,
@@ -216,6 +217,61 @@ class BoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
+
+    def schur_complement_form(self, alpha=0.5, tau_values=None):
+        domain = self.domain
+        dt = domain.dt
+        tau_values = tau_values or {}
+        # Set relaxation parameters. If an alternative has not been given, set
+        # to semi-implicit off-centering factor
+        beta_u = dt*tau_values.get("u", alpha)
+        beta_p = dt*tau_values.get("p", alpha)
+        beta_b = dt*tau_values.get("b", alpha)
+        Vu = domain.spaces("HDiv")
+        Vb = domain.spaces("theta")
+        Vp = domain.spaces("DG")
+
+        # Build the reduced function space for u,p
+        M = Vu*Vp
+        w, phi = TestFunctions(M)
+        u, p = TrialFunctions(M)
+
+        # Get background fields
+        bbar = split(self.X_ref)[2]
+
+        # Analytical (approximate) elimination of theta
+        k = self.domain.k             # Upward pointing unit vector
+        b = -dot(k, u)*dot(k, grad(bbar))*beta_b
+
+        # vertical projection
+        def V(u):
+            return k*inner(u, k)
+
+        seqn = (
+            inner(w, u)*dx
+            - beta_u*div(w)*p*dx
+            - beta_u*inner(w, k)*b*dx
+        )
+
+        if self.compressible:
+            cs = self.parameters.cs
+            seqn += phi * p * dx + beta_p * phi * cs**2 * div(u) * dx
+        else:
+            seqn += phi * div(u) * dx
+
+        if hasattr(self, "mu"):
+            seqn += dt*self.mu*inner(w, k)*inner(u, k)*dx
+
+        if self.parameters.Omega is not None:
+            Omega = as_vector((0, 0, self.parameter.Omega))
+            seqn += inner(w, cross(2*Omega, u))*dx
+
+        # Boundary conditions (assumes extruded mesh)
+        # BCs are declared for the plain velocity space. As we need them in
+        # a mixed problem, we replicate the BCs but for subspace of M
+        sbcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.bcs['u']]
+
+        return seqn, sbcs
 
 
 class LinearBoussinesqEquations(BoussinesqEquations):
