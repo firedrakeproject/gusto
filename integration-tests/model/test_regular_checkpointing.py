@@ -1,6 +1,6 @@
 """
 Runs a shallow water test that uses checkpointing. The test runs for 8
-timesteps and outputs a checkpoint file every 2 timesteps. The checkpoint
+timesteps and outputs a checkpoint every 2 timesteps. The checkpoint
 after 4 steps is picked up and run for another 4 steps and the results are
 compared to the original run of 8 timesteps.
 """
@@ -67,13 +67,19 @@ def run_sw_fplane(run_num, ndt, output, chkfile=None):
 
     else:
         # Initialise fields from previous run's checkpoint
+        print("we are initialising from a previous run")
         with CheckpointFile(chkfile, 'r') as chk:
-            start_D = chk.load_function(mesh, 'D')
-            start_u = chk.load_function(mesh, 'u')
+            start_D = chk.load_function(mesh, 'D', idx=4)
+            start_u = chk.load_function(mesh, 'u', idx=4)
+            history = chk.get_timestepping_history(mesh, 'D')
+            print("this is the timestepping_history:", history)
 
         u0.project(start_u)
         D0.interpolate(start_D)
 
+    print("these are the starting functions:")
+    print("u min, max:", u0.dat.data.min(), u0.dat.data.max())
+    print("D min, max:", D0.dat.data.min(), D0.dat.data.max())
     Dbar = Function(D0.function_space()).assign(H)
     stepper.set_reference_profiles([('D', Dbar)])
 
@@ -144,8 +150,8 @@ def test_regular_checkpointing(tmpdir):
     stepper1 = run_sw_fplane(run_num=1, ndt=8, output=output1)
 
     # Pick up the checkpoint after 4 timesteps and run with that as the IC
-    chkpt1_filename = 'chkpt4.h5'
-    chkpt1_path = path.join(stepper1.io.dumpdir, 'chkpts', chkpt1_filename)
+    chkpt1_filename = 'chkpt.h5'
+    chkpt1_path = path.join(stepper1.io.dumpdir, chkpt1_filename)
     # First check that the checkpoint was sucessfully created - the test will fail if
     # this is not the case
     assert path.isfile(chkpt1_path), "The checkpoint from the first run was not created"

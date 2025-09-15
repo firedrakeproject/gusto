@@ -520,19 +520,15 @@ class IO(object):
 
         # if we want to checkpoint, set up the checkpointing
         if self.output.checkpoint:
-            if self.output.multichkpt:
-                # Create new directory for checkpoints
-                self.chkpt_path = path.join(self.dumpdir, "chkpts")
-                self.chkpt_dir = makedirs(self.chkpt_path)
+            if self.output.checkpoint_method == 'dumbcheckpoint':
+                # should have already picked up, so can create a new file
+                self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
+                                            mode=FILE_CREATE)
+            elif self.output.checkpoint_method == 'checkpointfile':
+                # should have already picked up, so can create a new file
+                self.chkpt_path = path.join(self.dumpdir, "chkpt.h5")
             else:
-                # Create one checkpoint file
-                if self.output.checkpoint_method == 'dumbcheckpoint':
-                    self.chkpt = DumbCheckpoint(path.join(self.dumpdir, "chkpt"),
-                                                mode=FILE_CREATE)
-                elif self.output.checkpoint_method == 'checkpointfile':
-                    self.chkpt_path = path.join(self.dumpdir, "chkpt.h5")
-                else:
-                    raise ValueError(f'checkpoint_method {self.output.checkpoint_method} not supported')
+                raise ValueError(f'checkpoint_method {self.output.checkpoint_method} not supported')
 
             # make list of fields to pick_up (this doesn't include
             # diagnostic fields)
@@ -733,17 +729,6 @@ class IO(object):
 
         # Dump all the fields to the checkpointing file (backup version)
         if output.checkpoint and (next(self.chkptcount) % output.chkptfreq) == 0:
-            if output.multichkpt:
-                # Saving more than one checkpoint file
-                if self.output.checkpoint_method == 'checkpointfile':
-                    chkpt_file = path.join(self.chkpt_path, "chkpt"+str(step-1)+".h5")
-                elif self.output.checkpoint_method == 'dumbcheckpoint':
-                    self.chkpt = DumbCheckpoint(path.join(self.chkpt_path, "chkpt"+str(t)),
-                                                mode=FILE_CREATE)
-            else:
-                # Saving just one checkpoint file
-                if self.output.checkpoint_method == 'checkpointfile':
-                    chkpt_file = self.chkpt_path
             if self.output.checkpoint_method == 'dumbcheckpoint':
                 for field_name in self.to_pick_up:
                     self.chkpt.store(state_fields(field_name), name=field_name)
@@ -754,10 +739,15 @@ class IO(object):
                 if last_ref_update_time is not None:
                     self.chkpt.write_attribute("/", "last_ref_update_time", last_ref_update_time)
             else:
-                with CheckpointFile(chkpt_file, 'w') as chk:
+                with CheckpointFile(self.chkpt_path, 'w') as chk:
                     chk.save_mesh(self.domain.mesh)
                     for field_name in self.to_pick_up:
-                        chk.save_function(state_fields(field_name), name=field_name)
+                        if output.multichkpt:
+                            print("saving a checkpoint with this index:", step-1, "at this time:", t)
+                            chk.save_function(state_fields(field_name), idx=step-1, name=field_name,
+                                              timestepping_info=({'time': float(t)}))
+                        else:
+                            chk.save_function(state_fields(field_name), name=field_name)
                     chk.set_attr("/", "time", t)
                     chk.set_attr("/", "step", step)
                     if initial_steps is not None:
