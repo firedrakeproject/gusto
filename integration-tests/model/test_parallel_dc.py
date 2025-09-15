@@ -2,7 +2,10 @@
 This runs a simple transport test on the sphere using the parallel DC time discretisations to
 test whether the errors are within tolerance. The test is run for the following schemes:
 - IMEX_SDC(2,2)  - IMEX SDC with 2 qaudrature nodes of Radau type and 2 correction sweeps (2nd order scheme)
-- IMEX_RIDC(2)   - IMEX RIDC with 3 quadrature nodes of equidistant type, 1 correction sweep, reduced stencils (2nd order scheme).
+- IMEX_RIDC(2,1)   - IMEX RIDC with 3 quadrature nodes of equidistant type, 1 correction sweep, reduced stencils (2nd order scheme).
+                     Has a pipeline flush frequency of 1 (every timestep).
+- IMEX_RIDC(2,5)   - IMEX RIDC with 3 quadrature nodes of equidistant type, 1 correction sweep, reduced stencils (2nd order scheme).
+                     Has a pipeline flush frequency of 5 (every 5 timesteps).
 """
 
 from firedrake import (norm, Ensemble, COMM_WORLD, SpatialCoordinate,
@@ -21,14 +24,14 @@ def run(timestepper, tmax, f_end):
 
 @pytest.mark.parallel(nprocs=[2])
 @pytest.mark.parametrize(
-    "scheme", ["IMEX_RIDC(2)", "IMEX_SDC(2,2)"])
+    "scheme", ["IMEX_RIDC(2,1)", "IMEX_RIDC(2,5)", "IMEX_SDC(2,2)"])
 def test_parallel_dc(tmpdir, scheme):
 
     if scheme == "IMEX_SDC(2,2)":
         M = 2
         k = 2
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(M))
-    elif scheme == "IMEX_RIDC(2)":
+    elif scheme == "IMEX_RIDC(2,1)" or scheme == "IMEX_RIDC(2,5)":
         k = 1
         ensemble = Ensemble(COMM_WORLD, COMM_WORLD.size//(k+1))
 
@@ -76,7 +79,7 @@ def test_parallel_dc(tmpdir, scheme):
         base_scheme = IMEX_Euler(domain)
         time_scheme = Parallel_SDC(base_scheme, domain, M, k, quad_type, node_type, qdelta_imp,
                                    qdelta_exp, final_update=True, initial_guess="base", communicator=ensemble)
-    elif scheme == "IMEX_RIDC(2)":
+    elif scheme == "IMEX_RIDC(2,1)":
         eqn = split_continuity_form(eqn)
         eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
         eqn.label_terms(lambda t: t.has_label(transport), explicit)
@@ -84,7 +87,16 @@ def test_parallel_dc(tmpdir, scheme):
         M = 5
         J = int(tmax/dt)
         base_scheme = IMEX_Euler(domain)
-        time_scheme = Parallel_RIDC(base_scheme, domain, M, k, J, output_freq=dumpfreq, communicator=ensemble)
+        time_scheme = Parallel_RIDC(base_scheme, domain, M, k, J, output_freq=dumpfreq, flush_freq=1, communicator=ensemble)
+    elif scheme == "IMEX_RIDC(2,5)":
+        eqn = split_continuity_form(eqn)
+        eqn.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
+        eqn.label_terms(lambda t: t.has_label(transport), explicit)
+
+        M = 5
+        J = int(tmax/dt)
+        base_scheme = IMEX_Euler(domain)
+        time_scheme = Parallel_RIDC(base_scheme, domain, M, k, J, output_freq=dumpfreq, flush_freq=5, communicator=ensemble)
 
     transport_method = DGUpwind(eqn, 'f')
 
