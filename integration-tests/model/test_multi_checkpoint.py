@@ -44,17 +44,15 @@ def run_sw_fplane(run_num, ndt, output, chkfile=None):
     io = IO(domain, output, diagnostic_fields=[CourantNumber()])
 
     # Transport schemes
-    vorticity_transport = VorticityTransport(domain, eqns, supg=True)
     transported_fields = [
-        TrapeziumRule(domain, "u", augmentation=vorticity_transport),
+        TrapeziumRule(domain, "u"),
         SSPRK3(domain, "D")
     ]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                      transport_methods,
-                                      num_outer=4, num_inner=1)
+                                      transport_methods)
 
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
@@ -74,9 +72,6 @@ def run_sw_fplane(run_num, ndt, output, chkfile=None):
         u0.project(start_u)
         D0.interpolate(start_D)
 
-    print("these are the starting functions:")
-    print("u min, max:", u0.dat.data.min(), u0.dat.data.max())
-    print("D min, max:", D0.dat.data.min(), D0.dat.data.max())
     Dbar = Function(D0.function_space()).assign(H)
     stepper.set_reference_profiles([('D', Dbar)])
 
@@ -135,7 +130,7 @@ def initialise(mesh, parameters, Lx, f0):
     return u_expr, D_expr
 
 
-def test_regular_checkpointing(tmpdir):
+def test_multi_checkpointing(tmpdir):
 
     output1 = OutputParameters(
         dirname=str(tmpdir)+"/sw_fplane_run1",
