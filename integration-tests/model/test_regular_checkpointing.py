@@ -67,12 +67,9 @@ def run_sw_fplane(run_num, ndt, output, chkfile=None):
 
     else:
         # Initialise fields from previous run's checkpoint
-        print("we are initialising from a previous run")
         with CheckpointFile(chkfile, 'r') as chk:
             start_D = chk.load_function(mesh, 'D', idx=4)
             start_u = chk.load_function(mesh, 'u', idx=4)
-            history = chk.get_timestepping_history(mesh, 'D')
-            print("this is the timestepping_history:", history)
 
         u0.project(start_u)
         D0.interpolate(start_D)

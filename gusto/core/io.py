@@ -739,21 +739,29 @@ class IO(object):
                 if last_ref_update_time is not None:
                     self.chkpt.write_attribute("/", "last_ref_update_time", last_ref_update_time)
             else:
-                with CheckpointFile(self.chkpt_path, 'w') as chk:
-                    chk.save_mesh(self.domain.mesh)
-                    for field_name in self.to_pick_up:
-                        if output.multichkpt:
-                            print("saving a checkpoint with this index:", step-1, "at this time:", t)
+                if output.multichkpt:
+                    with CheckpointFile(self.chkpt_path, 'a') as chk:
+                        chk.save_mesh(self.domain.mesh)
+                        for field_name in self.to_pick_up:
                             chk.save_function(state_fields(field_name), idx=step-1, name=field_name,
                                               timestepping_info=({'time': float(t)}))
-                        else:
+                        chk.set_attr("/", "time", t)
+                        chk.set_attr("/", "step", step)
+                        if initial_steps is not None:
+                            chk.set_attr("/", "initial_steps", initial_steps)
+                        if last_ref_update_time is not None:
+                            chk.set_attr("/", "last_ref_update_time", last_ref_update_time)
+                else:
+                    with CheckpointFile(self.chkpt_path, 'w') as chk:
+                        chk.save_mesh(self.domain.mesh)
+                        for field_name in self.to_pick_up:
                             chk.save_function(state_fields(field_name), name=field_name)
-                    chk.set_attr("/", "time", t)
-                    chk.set_attr("/", "step", step)
-                    if initial_steps is not None:
-                        chk.set_attr("/", "initial_steps", initial_steps)
-                    if last_ref_update_time is not None:
-                        chk.set_attr("/", "last_ref_update_time", last_ref_update_time)
+                        chk.set_attr("/", "time", t)
+                        chk.set_attr("/", "step", step)
+                        if initial_steps is not None:
+                            chk.set_attr("/", "initial_steps", initial_steps)
+                        if last_ref_update_time is not None:
+                            chk.set_attr("/", "last_ref_update_time", last_ref_update_time)
 
         if (next(self.dumpcount) % output.dumpfreq) == 0:
             if output.dump_nc:
