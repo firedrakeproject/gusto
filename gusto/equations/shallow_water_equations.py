@@ -1,7 +1,7 @@
 """Classes for defining variants of the shallow-water equations."""
 
-from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg,
-                       dS, split, conditional, exp)
+from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg, DirichletBC,
+                       dS, split, conditional, exp, TrialFunctions, TestFunctions, dot, grad)
 from firedrake.fml import subject, drop, all_terms
 from gusto.core.labels import (
     linearisation, pressure_gradient, coriolis, prognostic
@@ -532,6 +532,46 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         else:
             sat_expr = q0*H/(D+topog) * exp(nu*(1-b/g))
         return sat_expr
+
+    def schur_complement_form(self, alpha=0.5, tau_values=None):
+        # Approximate elimination of b
+        domain = self.domain
+        dt = domain.dt
+        tau_values = tau_values or {}
+        beta_u = dt*tau_values.get("u", alpha)
+        beta_d = dt*tau_values.get("D", alpha)
+        beta_b = dt*tau_values.get("b", alpha)
+
+        n = FacetNormal(domain.mesh)
+        Vu = domain.spaces("HDiv")
+        VD = domain.spaces("DG")
+        M_ = Vu*VD
+        u_, D_ = TrialFunctions(M_)
+        w_, phi_ = TestFunctions(M_)
+
+        Dref, bref = self.X_ref.subfunctions[1:3]
+        b_ = -dot(u_, grad(bref))*beta_b
+
+        seqn = (
+            inner(w_, u_) * dx
+            - beta_u * D_ * div(w_*bref) * dx
+            + beta_u * jump(w_*bref, n) * avg(D_) * dS
+            # - beta_u * 0.5 * Dref * bref * div(w_) * dx
+            - beta_u * 0.5 * Dref * b_ * div(w_) * dx
+            - beta_u * 0.5 * bref * div(w_*D_) * dx
+            + beta_u * 0.5 * jump(D_*w_, n) * avg(bref) * dS
+            + inner(phi_, D_) * dx
+            + beta_d * phi_ * div(Dref*u_) * dx
+        )
+
+        if 'coriolis' in self.prescribed_fields._field_names:
+            f = self.prescribed_fields('coriolis')
+            seqn += beta_u * f * inner(w_, domain.perp(u_)) * dx
+
+        # Boundary conditions
+        sbcs = [DirichletBC(M_.sub(0), bc.function_arg, bc.sub_domain) for bc in self.bcs['u']]
+
+        return seqn, sbcs
 
 
 class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
