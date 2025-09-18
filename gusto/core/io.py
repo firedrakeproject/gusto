@@ -767,10 +767,18 @@ class IO(object):
                 if last_ref_update_time is not None:
                     self.chkpt.write_attribute("/", "last_ref_update_time", last_ref_update_time)
             else:
-                with CheckpointFile(self.chkpt_path, 'w') as chk:
+                if output.multichkpt:
+                    chkpt_mode = 'a'
+                else:
+                    chkpt_mode = 'w'
+                with CheckpointFile(self.chkpt_path, chkpt_mode) as chk:
                     chk.save_mesh(self.domain.mesh)
                     for field_name in self.to_pick_up:
-                        chk.save_function(state_fields(field_name), name=field_name)
+                        if output.multichkpt:
+                            chk.save_function(state_fields(field_name), idx=step-1, name=field_name,
+                                              timestepping_info=({'time': float(t)}))
+                        else:
+                            chk.save_function(state_fields(field_name), name=field_name)
                     chk.set_attr("/", "time", t)
                     chk.set_attr("/", "step", step)
                     if initial_steps is not None:
