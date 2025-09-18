@@ -10,7 +10,7 @@ def test_swavlbpe():
 
     nx = 10
     Lx = 1
-    H=0
+    H = 0
 
     mesh = PeriodicSquareMesh(nx=nx, ny=nx, L=Lx, quadrilateral=True)
 
