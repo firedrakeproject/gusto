@@ -21,9 +21,9 @@ import pdb
 from decimal import Decimal, ROUND_HALF_UP
 
 ### options changed in Cheng Li 2020
-Bu = 2
+Bu = 10
 b = 1.5
-Ro = 0.2
+Ro = 0.23
 
 ### specify Ld (Laura's setup)
 Laurasetup = False
@@ -34,8 +34,8 @@ nx = 256
 ny = nx
 Lx = 7e7
 Ly = Lx
-# rstar = Lx/2-3*Lx/nx
-rstar = 3*Lx/7
+rstar = Lx/2-3*Lx/nx
+# rstar = 3*Lx/7
 
 ### setup smoothing parameters
 smooth_degree = 5
@@ -64,20 +64,20 @@ H = phi0/g
 t_day = 2*pi/Omega
 
 ### timing options
-dump_freq = 1    # dump frequency of output
+dump_freq = 30    # dump frequency of output
 dt = 250          # timestep (in seconds)
-tmax = 10*t_day       # duration of the simulation (in seconds)
+tmax = 500*t_day       # duration of the simulation (in seconds)
 
 restart = False
 restart_name = 'new_single_halfoffset_fplane_Bu2b1p5Rop2_l1dt250df1'
 t0 = 200*t_day
 
 ### vortex locations
-south_lat_deg = [90.]#, 84., 84., 84., 84., 84.]#, 70.]
-south_lon_deg = [0.]#, 72., 144., 216., 288., 0.]#, 0.]
+south_lat_deg = [90., 83., 83., 83., 83., 83., 70.]
+south_lon_deg = [0., 72., 144., 216., 288., 0., 0.]
 
 ### name
-setup = 'smallrstar_new_single'
+setup = 'int'
 
 ### add noise to initial depth profile?
 noise = False
@@ -89,7 +89,7 @@ avlpe_diag = True
 D_perturb = True
 
 ### coriolis form (fplane, flattrap, fulltrap)
-coriolisform = 'flattrap'
+coriolisform = 'fulltrap'
 
 ### extract points - if True it extracts transect of y=ypole, x=xpole±40 'grid points'
 extract_points = True
@@ -389,7 +389,7 @@ if smooth_degree == 5:
     fsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
 
 ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
-ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)
+ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)-2*Omega
 
 if fplane:
     ftrap = 2*Omega

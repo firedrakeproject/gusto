@@ -21,9 +21,9 @@ def colourbar(mappable, extend):
     return cb
 
 
-filepath = 'new_single_flattrap_Bu2b1p5Rop2_l1000dt250df30'
+filepath = 'new_single_flattrap_Bu2b1p5Rop2_l10dt250df1'
 field_name = 'D_error'
-folder = 'D_error_changecb'
+folder = 'D_error'
 
 plot_dir = f'/data/home/sh1293/results/jupiter_sw/{filepath}/Plots/{folder}'
 if not os.path.exists(plot_dir):
@@ -73,7 +73,7 @@ for i in tqdm(range(len(times)), desc='Making plots'):
     # print(f'{i:0{digits}d}')
     fig, ax = plt.subplots(1,1, figsize=(8,8))
     ax.set_aspect('equal')
-    pcolor = PV_structured[:,:,i].plot.imshow(ax=ax, x='x', y='y', cmap='RdBu_r', extend='both', add_colorbar=False)#, vmin=vmin, vmax=vmax)
+    pcolor = PV_structured[:,:,i].plot.imshow(ax=ax, x='x', y='y', cmap='RdBu_r', extend='both', add_colorbar=False, vmin=vmin, vmax=vmax)
     cb = colourbar(pcolor, extend='both')
     ax.set_xlabel('')
     ax.set_ylabel('')
