@@ -21,7 +21,7 @@ jobs:
         uses: rbialon/flake8-annotations@v1
       - name: Install linter
         run: |
-          pip install flake8 pylint
+          pip install flake8 pylint nbqa
       - name: Lint codebase
         run: |
           make lint GITHUB_ACTIONS_FORMATTING=1
