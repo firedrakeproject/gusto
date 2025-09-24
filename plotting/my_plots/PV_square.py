@@ -21,9 +21,9 @@ def colourbar(mappable, extend):
     return cb
 
 
-filepath = 'new_single_flattrap_Bu2b1p5Rop2_l10dt250df1'
-field_name = 'D_error'
-folder = 'D_error'
+filepath = 'int_Bu10b1p5Rop23_l500dt250df30'
+field_name = 'PotentialVorticity'
+folder = 'PV'
 
 plot_dir = f'/data/home/sh1293/results/jupiter_sw/{filepath}/Plots/{folder}'
 if not os.path.exists(plot_dir):

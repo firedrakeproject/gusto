@@ -5,7 +5,9 @@ from gusto import (
     ShallowWaterPotentialEnstrophy, ShallowWaterAvailablePotentialEnergy,
     SteadyStateError, IO, SubcyclingOptions, TrapeziumRule, SSPRK3,
     DGUpwind, SemiImplicitQuasiNewton, VectorFunctionSpace, assemble,
-    Function, FunctionSpace
+    Function, FunctionSpace, WaterVapour, CloudWater, DG1Limiter,
+    MoistConvectiveSWSolver, SWSaturationAdjustment, ForwardEuler,
+    ZeroLimiter, MixedFSLimiter
 )
 from firedrake import (
     SpatialCoordinate, VertexOnlyMesh, as_vector, pi, interpolate, exp, cos, sin,
@@ -20,101 +22,6 @@ import shutil
 import pdb
 from decimal import Decimal, ROUND_HALF_UP
 
-### options changed in Cheng Li 2020
-Bu = 10
-b = 1.5
-Ro = 0.23
-
-### specify Ld (Laura's setup)
-Laurasetup = False
-Ld = 3060e3
-
-### setup grid parameters
-nx = 256
-ny = nx
-Lx = 7e7
-Ly = Lx
-rstar = Lx/2-3*Lx/nx
-# rstar = 3*Lx/7
-
-### setup smoothing parameters
-smooth_degree = 5
-smooth_delta = 2
-
-# setup shallow water parameters
-# Bu = 10
-# H = 5e4
-g = 24.79
-Omega = 1.74e-4
-R = 71.4e6
-
-# b = 1.5               # Steepness parameter
-# Ro = 0.23             # Rossby Number
-f0 = 2 * Omega        # Planetary vorticity
-rm = 1e6              # Radius of vortex (m)
-vm = Ro * f0 * rm     # Calculate speed with Ro
-
-if Laurasetup:
-    Bu = (Ld/rm)**2
-    Buf = Decimal(str(Bu))
-    Bu2dp = Buf.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    Bu = float(Bu2dp)
-phi0 = Bu * (f0*rm)**2
-H = phi0/g
-t_day = 2*pi/Omega
-
-### timing options
-dump_freq = 30    # dump frequency of output
-dt = 250          # timestep (in seconds)
-tmax = 500*t_day       # duration of the simulation (in seconds)
-
-restart = False
-restart_name = 'new_single_halfoffset_fplane_Bu2b1p5Rop2_l1dt250df1'
-t0 = 200*t_day
-
-### vortex locations
-south_lat_deg = [90., 83., 83., 83., 83., 83., 70.]
-south_lon_deg = [0., 72., 144., 216., 288., 0., 0.]
-
-### name
-setup = 'int'
-
-### add noise to initial depth profile?
-noise = False
-
-### include available potential energy diagnostic or no?
-avlpe_diag = True
-
-### include perturbation of D diagnostic
-D_perturb = True
-
-### coriolis form (fplane, flattrap, fulltrap)
-coriolisform = 'fulltrap'
-
-### extract points - if True it extracts transect of y=ypole, x=xpole±40 'grid points'
-extract_points = True
-res = 1
-
-### anticyclone?
-ac = False
-
-##########################################################################
-
-if coriolisform == 'fplane':
-    fplane = True
-    flattrap = False
-elif coriolisform == 'flattrap':
-    fplane = False
-    flattrap = True
-elif coriolisform == 'fulltrap':
-    fplane = False
-    flattrap = False
-else:
-    logger.info('Incorrect coriolisform option')
-
-tmin = np.ceil(t0/dump_freq)*dump_freq
-tmax = np.ceil(tmax/dump_freq)*dump_freq
-
 def split_number(x):
     x = float(x)
     xint, xdec = str(x).split('.')
@@ -126,27 +33,6 @@ def split_number(x):
         xdec = f'p{xdec}'
     return xint, xdec
 
-bint, bdec = split_number(b)
-Roint, Rodec = split_number(Ro)
-Buint, Budec = split_number(Bu)
-
-if setup != '':
-    setup = f'{setup}_'
-if ac:
-    setup = f'{setup}ac_'
-if fplane:
-    setup = f'{setup}fplane_'
-elif flattrap:
-    setup = f'{setup}flattrap_'
-if noise:
-    noise_name = f'_n'
-else:
-    noise_name = ''
-folder_name = f'{setup}Bu{Buint}{Budec}b{bint}{bdec}Ro{Roint}{Rodec}_l{round(tmax/t_day)}dt{int(dt)}df{dump_freq}{noise_name}'
-
-dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}'
-dirnameold=f'/data/home/sh1293/results/jupiter_sw/{restart_name}'
-
 def create_restart_nc(dirname, dirnameold):#, groups):
     if not os.path.exists(f'{dirname}/'):
         os.makedirs(f'{dirname}')
@@ -155,36 +41,6 @@ def create_restart_nc(dirname, dirnameold):#, groups):
     input_file = f'{dirnameold}/field_output.nc'
     output_file = f'{dirname}/field_output.nc'
     # new_groups(input_file, output_file, groups, 'D')
-
-# Set up the mesh
-if not restart:
-    mesh = PeriodicRectangleMesh(nx=nx, ny=ny, Lx=Lx, Ly=Ly, quadrilateral=True)
-    output = OutputParameters(dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}', dumpfreq=dump_freq, dump_nc=True, checkpoint=True)
-elif restart:
-    create_restart_nc(dirname=dirname, dirnameold=dirnameold)
-    output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=dump_freq, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5')
-    chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
-    mesh = chkpt_mesh
-
-
-# V = FunctionSpace(mesh, "DG", 0)
-# f = Function(V)
-# print(f'Number of cells: {len(f.dat.data)}')
-
-# V = FunctionSpace(mesh, "DG", 0)
-# min = Function(V).interpolate(MinCellEdgeLength(mesh))
-# max = Function(V).interpolate(MaxCellEdgeLength(mesh))
-# print(f'Cell size min and max: {min.dat.data}, {max.dat.data}')
-# pdb.set_trace()
-
-
-x, y = SpatialCoordinate(mesh)
-# x *= Lx
-# y *= Ly
-
-parameters = ShallowWaterParameters(mesh, H=H, g=g, Omega=Omega)
-
-domain = Domain(mesh, dt, "RTCF", 1)
 
 def rtheta_from_xy(x, y, angle_units='rad'):
     """
@@ -322,7 +178,7 @@ def xy_from_rtheta(r, theta, angle_units='rad'):
 
     return x_shift, y_shift
 
-def smooth_f_profile(degree, delta, style, rstar=rstar, Omega=parameters.Omega, R=R, Lx=Lx, nx=nx):
+def smooth_f_profile(degree, delta, style, rstar, Omega, R, Lx, nx):
     import sympy as sp
 
     delta *= Lx/nx
@@ -373,70 +229,6 @@ def smooth_f_profile(degree, delta, style, rstar=rstar, Omega=parameters.Omega, 
     # )
     return coeffs
 
-r, theta = rtheta_from_xy(x, y)
-
-# lon, lat = lonlat_from_rtheta(r, theta)
-
-# Create a spatially varying function for the Coriolis force:
-Omega = parameters.Omega
-fexpr = 2*Omega*(1-0.5*r**2/R**2)
-if flattrap:
-    fexpr = 2*Omega*(1-0.5*(rstar-smooth_delta*Lx/nx)**2/R**2)
-# ftrap = conditional(r < rstar, fexpr, 2*Omega)
-coeffs = smooth_f_profile(degree=smooth_degree, delta=smooth_delta, style='flat' if flattrap else 'polar')
-fsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
-if smooth_degree == 5:
-    fsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
-
-ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
-ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)-2*Omega
-
-if fplane:
-    ftrap = 2*Omega
-
-eqns = ShallowWaterEquations(domain, parameters, fexpr=ftrap)
-logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
-
-Ld = sqrt(H*g)/f0
-logger.info(f'Ld={Ld/1e3:.2f} km')
-
-# diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D'),
-#                      RelativeVorticity(), PotentialVorticity(),
-#                      ShallowWaterKineticEnergy(),
-#                      ShallowWaterPotentialEnergy(parameters),
-#                      ShallowWaterPotentialEnstrophy(),
-#                      CourantNumber()]#, MeridionalComponent('u'), ZonalComponent('u')]
-
-diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
-                    ShallowWaterKineticEnergy(), 
-                    ShallowWaterPotentialEnergy(parameters),
-                    ShallowWaterPotentialEnstrophy()]
-if avlpe_diag:
-    diagnostic_fields.append(ShallowWaterAvailablePotentialEnergy(parameters))
-if D_perturb:
-    diagnostic_fields.append(SteadyStateError('D'))
-
-io = IO(domain, output=output, diagnostic_fields=diagnostic_fields)
-
-subcycling_options = SubcyclingOptions(subcycle_by_courant=0.33)
-transported_fields = [TrapeziumRule(domain, "u"),
-                      SSPRK3(domain, "D", subcycling_options=subcycling_options)]
-transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
-stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                  transport_methods)
-
-u0 = stepper.fields("u")
-D0 = stepper.fields("D")
-
-# south_lat_deg = [90., 85., 85., 85., 85., 75.]
-
-
-# south_lat = [deg*pi/180. for deg in south_lat_deg]
-# south_lon = [deg*pi/180. for deg in south_lon_deg]
-
-south_lat = np.deg2rad(south_lat_deg)
-south_lon = np.deg2rad(south_lon_deg)
-
 def initialise_D(X, idx):
     # computes the initial depth perturbation corresponding to vortex
     # idx, given coordinates X
@@ -476,6 +268,293 @@ def initialise_D(X, idx):
     # return list of D values in correct order
     return D_values
 
+def sat_func(x_in):
+    D = x_in.split()[1]
+    return (q0*H/D)*exp(20*theta)
+
+def gamma_v(x_in):
+    qsat = sat_func(x_in)
+    D = x_in.split()[1]
+    return (1+qsat*beta1/D)**(-1)
+
+### options changed in Cheng Li 2020
+Bu = 10
+b = 1.5
+Ro = 0.23
+
+### specify Ld (Laura's setup)
+Laurasetup = False
+Ld = 3060e3
+
+### setup grid parameters
+nx = 256
+ny = nx
+Lx = 7e7
+Ly = Lx
+rstar = Lx/2-3*Lx/nx
+# rstar = 3*Lx/7
+
+### setup smoothing parameters
+smooth_degree = 5
+smooth_delta = 2
+
+# setup shallow water parameters
+# Bu = 10
+# H = 5e4
+g = 24.79
+Omega = 1.74e-4
+R = 71.4e6
+
+# b = 1.5               # Steepness parameter
+# Ro = 0.23             # Rossby Number
+f0 = 2 * Omega        # Planetary vorticity
+rm = 1e6              # Radius of vortex (m)
+vm = Ro * f0 * rm     # Calculate speed with Ro
+
+if Laurasetup:
+    Bu = (Ld/rm)**2
+    Buf = Decimal(str(Bu))
+    Bu2dp = Buf.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    Bu = float(Bu2dp)
+
+phi0 = Bu * (f0*rm)**2
+H = phi0/g
+t_day = 2*pi/Omega
+
+### timing options
+dump_freq = 1    # dump frequency of output
+dt = 250          # timestep (in seconds)
+tmax = 1*t_day       # duration of the simulation (in seconds)
+
+restart = False
+restart_name = 'int_Bu10b1p5Rop23_l500dt250df30'
+t0 = 500*t_day
+
+### vortex locations
+south_lat_deg = [90., 83., 83., 83., 83., 83., 70.]
+south_lon_deg = [0., 72., 144., 216., 288., 0., 0.]
+
+### name
+setup = 'int'
+
+### add noise to initial depth profile?
+noise = False
+
+### include available potential energy diagnostic or no?
+avlpe_diag = True
+
+### include perturbation of D diagnostic
+D_perturb = True
+
+### coriolis form (fplane, flattrap, fulltrap)
+coriolisform = 'fulltrap'
+
+### extract points - if True it extracts transect of y=ypole, x=xpole±40 'grid points'
+extract_points = True
+res = 1
+
+### anticyclone?
+ac = False
+
+### moist convective setup?
+moist = True
+
+### moist variables
+u_max = 20.  # characteristic zonal flow velocity
+epsilon = 1./150.  # 1/T0 where T0 is standard reference temperature
+xi = 1e-4  # how far below saturation we start
+q0 = 1e-4  # scaling such that max(q0*H/D*exp(20*theta))=atmospheric specific humidity in kg/kg
+beta1 = 43 # calculated from formula - maybe put later 
+
+##########################################################################
+
+if coriolisform == 'fplane':
+    fplane = True
+    flattrap = False
+elif coriolisform == 'flattrap':
+    fplane = False
+    flattrap = True
+elif coriolisform == 'fulltrap':
+    fplane = False
+    flattrap = False
+else:
+    logger.info('Incorrect coriolisform option')
+
+tmin = np.ceil(t0/dump_freq)*dump_freq
+tmax = np.ceil(tmax/dump_freq)*dump_freq
+
+bint, bdec = split_number(b)
+Roint, Rodec = split_number(Ro)
+Buint, Budec = split_number(Bu)
+
+if setup != '':
+    setup = f'{setup}_'
+if ac:
+    setup = f'{setup}ac_'
+if fplane:
+    setup = f'{setup}fplane_'
+elif flattrap:
+    setup = f'{setup}flattrap_'
+if noise:
+    noise_name = f'_n'
+else:
+    noise_name = ''
+if moist:
+    moist_name = f'moist_'
+else:
+    moist_name = ''
+folder_name = f'{moist_name}{setup}Bu{Buint}{Budec}b{bint}{bdec}Ro{Roint}{Rodec}_l{round(tmax/t_day)}dt{int(dt)}df{dump_freq}{noise_name}'
+
+dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}'
+dirnameold=f'/data/home/sh1293/results/jupiter_sw/{restart_name}'
+
+# Set up the mesh
+if not restart:
+    mesh = PeriodicRectangleMesh(nx=nx, ny=ny, Lx=Lx, Ly=Ly, quadrilateral=True)
+    output = OutputParameters(dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}', dumpfreq=dump_freq, dump_nc=True, checkpoint=True)
+elif restart:
+    create_restart_nc(dirname=dirname, dirnameold=dirnameold)
+    output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=dump_freq, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5')
+    chkpt_mesh = pick_up_mesh(output, 'firedrake_default')
+    mesh = chkpt_mesh
+
+
+# V = FunctionSpace(mesh, "DG", 0)
+# f = Function(V)
+# print(f'Number of cells: {len(f.dat.data)}')
+
+# V = FunctionSpace(mesh, "DG", 0)
+# min = Function(V).interpolate(MinCellEdgeLength(mesh))
+# max = Function(V).interpolate(MaxCellEdgeLength(mesh))
+# print(f'Cell size min and max: {min.dat.data}, {max.dat.data}')
+# pdb.set_trace()
+
+
+x, y = SpatialCoordinate(mesh)
+# x *= Lx
+# y *= Ly
+
+parameters = ShallowWaterParameters(mesh, H=H, g=g, Omega=Omega)
+
+domain = Domain(mesh, dt, "RTCF", 1)
+
+r, theta_coord = rtheta_from_xy(x, y)
+
+_, lat = lonlat_from_rtheta(r, theta_coord)
+
+# Create a spatially varying function for the Coriolis force:
+Omega = parameters.Omega
+fexpr = 2*Omega*(1-0.5*r**2/R**2)
+if flattrap:
+    fexpr = 2*Omega*(1-0.5*(rstar-smooth_delta*Lx/nx)**2/R**2)
+# ftrap = conditional(r < rstar, fexpr, 2*Omega)
+coeffs = smooth_f_profile(degree=smooth_degree, delta=smooth_delta, style='flat' if flattrap else 'polar', rstar=rstar, Omega=parameters.Omega, R=R, Lx=Lx, nx=nx)
+fsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
+if smooth_degree == 5:
+    fsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
+
+ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
+ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)-2*Omega
+
+if fplane:
+    ftrap = 2*Omega
+
+tracers = []
+if moist:
+    tracers = [
+        WaterVapour(space='DG'), CloudWater(space='DG')]
+    
+
+eqns = ShallowWaterEquations(domain, parameters, fexpr=ftrap, active_tracers=tracers)
+logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
+
+Ld = sqrt(H*g)/f0
+logger.info(f'Ld={Ld/1e3:.2f} km')
+
+# diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D'),
+#                      RelativeVorticity(), PotentialVorticity(),
+#                      ShallowWaterKineticEnergy(),
+#                      ShallowWaterPotentialEnergy(parameters),
+#                      ShallowWaterPotentialEnstrophy(),
+#                      CourantNumber()]#, MeridionalComponent('u'), ZonalComponent('u')]
+
+diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
+                    ShallowWaterKineticEnergy(), 
+                    ShallowWaterPotentialEnergy(parameters),
+                    ShallowWaterPotentialEnstrophy()]
+if avlpe_diag:
+    diagnostic_fields.append(ShallowWaterAvailablePotentialEnergy(parameters))
+if D_perturb:
+    diagnostic_fields.append(SteadyStateError('D'))
+
+io = IO(domain, output=output, diagnostic_fields=diagnostic_fields)
+
+subcycling_options = SubcyclingOptions(subcycle_by_courant=0.33)
+transported_fields = [TrapeziumRule(domain, "u"),
+                      SSPRK3(domain, "D", subcycling_options=subcycling_options)]
+transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
+
+
+if not moist:
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods
+    )
+elif moist:
+    w = Omega*R*u_max+(u_max**2)/2
+    sigma = w/10
+    theta0 = epsilon*phi0**2
+    numerator = theta0 + sigma*((cos(lat))**2)*((w+sigma)*(cos(lat))**2 + 2*(phi0-w-sigma))
+    denominator = phi0**2 + (w+sigma)**2*(sin(lat))**4 - 2*phi0*(w+sigma)*(sin(lat))**2
+    theta = numerator/denominator
+
+    DG1limiter = DG1Limiter(domain.spaces('DG'))
+    zerolimiter = ZeroLimiter(domain.spaces('DG'))
+    physics_sublimiters = {'water_vapour': zerolimiter,
+                            'cloud_water': zerolimiter}
+    transport_sublimiters = {'water_vapour': DG1limiter,
+                            'cloud_water': DG1limiter}
+    physics_limiter = MixedFSLimiter(eqns, physics_sublimiters)
+    transport_limiter = MixedFSLimiter(eqns, transport_sublimiters)
+    transported_fields.append((
+        SSPRK3(domain, "water_vapour", limiter=DG1limiter),
+        SSPRK3(domain, "cloud_water", limiter=DG1limiter),
+    ))
+    linear_solver = MoistConvectiveSWSolver(eqns)
+
+    # Physics schemes
+    sat_adj = SWSaturationAdjustment(
+        eqns, sat_func, time_varying_saturation=True,
+        convective_feedback=True, beta1=beta1, gamma_v=gamma_v,
+        time_varying_gamma_v=True, parameters=parameters
+    )
+
+    physics_schemes = [
+        (sat_adj, ForwardEuler(domain, limiter=physics_limiter))
+    ]
+
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io,
+        transport_schemes=transported_fields,
+        spatial_methods=transport_methods,
+        linear_solver=linear_solver,
+        physics_schemes=physics_schemes
+    )
+
+
+
+u0 = stepper.fields("u")
+D0 = stepper.fields("D")
+if moist:
+    wv0 = stepper.fields("water_vapour")
+
+# south_lat_deg = [90., 85., 85., 85., 85., 75.]
+
+
+# south_lat = [deg*pi/180. for deg in south_lat_deg]
+# south_lon = [deg*pi/180. for deg in south_lon_deg]
+
+south_lat = np.deg2rad(south_lat_deg)
+south_lon = np.deg2rad(south_lon_deg)
 
 if not restart:
     logger.info('Setting initial depth field')
@@ -530,8 +609,14 @@ if not restart:
 
     uexpr = as_vector([u_veloc, v_veloc])
 
+    ### needs editing
+    initial_msat = q0/(g*Dfinal) * exp(20*theta)
+    wvexpr = (1-xi) * initial_msat
+    print(f'Max theta is {np.max(theta)}')
+
     u0.project(uexpr)
     D0.interpolate(Dfinal)
+    wv0.interpolate(wvexpr)
 
     if noise:
         pcg = PCG64()
