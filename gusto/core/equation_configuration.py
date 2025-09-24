@@ -123,8 +123,9 @@ class PMLParameters(EquationParameters):
     c_max = 350 # Fastest wave speed in the medium
     delta_frac = 0.1 # Fraction of domain that is the PML
     tol = 1e-3 # Tolerance for the PML error
-    gamma0 = 0.1 # Stretching parameter
+    gamma0 = 0.0 # Stretching parameter
     H = None # Height of the domain
+    alpha_fact = 0.05
 
 
 class DiffusionParameters(EquationParameters):
