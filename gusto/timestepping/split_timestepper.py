@@ -214,15 +214,13 @@ class SplitPhysicsTimestepper(Timestepper):
     def setup_scheme(self):
         self.setup_equation(self.equation)
 
-        if self.scheme.augmentation is not None:
-            if self.scheme.augmentation.name == 'mean_mixing_ratio':
-                # For the mean mixing ratio residual,
-                # go through and label all non-physics terms with a "dynamics" label
-                dynamics = Label('dynamics')
-                self.scheme.augmentation.residual = self.scheme.augmentation.residual.label_map(
-                    lambda t: not any(t.has_label(time_derivative, physics_label)),
-                    map_if_true=lambda t: dynamics(t)
-                )
+        if hasattr(self.augmentation, 'setup_residual'):
+            # In the augmentation residual,
+            dynamics = Label('dynamics')
+            self.scheme.augmentation.residual = self.scheme.augmentation.residual.label_map(
+                lambda t: not any(t.has_label(time_derivative, physics_label)),
+                map_if_true=lambda t: dynamics(t)
+            )
 
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
@@ -309,15 +307,14 @@ class SplitPrescribedTransport(Timestepper):
     def setup_scheme(self):
         self.setup_equation(self.equation)
 
-        if self.scheme.augmentation is not None:
-            if self.scheme.augmentation.name == 'mean_mixing_ratio':
-                # For the mean mixing ratio residual,
-                # go through and label all non-physics terms with a "dynamics" label
-                dynamics = Label('dynamics')
-                self.scheme.augmentation.residual = self.scheme.augmentation.residual.label_map(
-                    lambda t: not any(t.has_label(time_derivative, physics_label)),
-                    map_if_true=lambda t: dynamics(t)
-                )
+        if hasattr(self.augmentation, 'setup_residual'):
+            # In the augmentation residual,
+            # go through and label all non-physics terms with a "dynamics" label
+            dynamics = Label('dynamics')
+            self.scheme.augmentation.residual = self.scheme.augmentation.residual.label_map(
+                lambda t: not any(t.has_label(time_derivative, physics_label)),
+                map_if_true=lambda t: dynamics(t)
+            )
 
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')

@@ -111,13 +111,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             for method in self.spatial_methods:
                 method.replace_form(equation)
 
-        # If we have a mean mixing ratio augmentation, set up its residual now
-        # that we have replaced the transport forms.
-        if hasattr(self, 'scheme'):
-            if self.scheme.augmentation is not None:
-                if self.scheme.augmentation.name == 'mean_mixing_ratio':
-                    self.scheme.augmentation.setup_residual(self.equation)
-                    print('Mean mixing ratio residual has been setup')
+        # If we have an augmentation with a separate residual to set up,
+        # do so now that we have replaced the transport forms.
+        if hasattr(self.augmentation, 'setup_residual') and callable(self.augmentation.setup_residual):
+            self.scheme.augmentation.setup_residual(self.equation)
 
     def setup_transporting_velocity(self, scheme):
         """
