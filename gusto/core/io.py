@@ -475,10 +475,38 @@ class IO(object):
             self.to_dump_latlon = []
             for name in self.output.dumplist_latlon:
                 f = state_fields(name)
-                field = Function(
-                    functionspaceimpl.WithGeometry.create(
-                        f.function_space(), mesh_ll),
-                    val=f.topological, name=name+'_ll')
+                V = f.function_space()
+                try:  # firedrake main
+                    from firedrake import MeshSequenceGeometry
+
+                    if V.parent and isinstance(V.parent.topological, functionspaceimpl.MixedFunctionSpace):
+                        if not isinstance(V.parent.mesh(), MeshSequenceGeometry):
+                            raise ValueError("Expecting a MeshSequenceGeometry")
+                        if len(set(V.parent.mesh().meshes)) > 1:
+                            raise ValueError("Expecting a single mesh")
+                        parent = functionspaceimpl.WithGeometry.create(
+                            V.parent.topological,
+                            MeshSequenceGeometry(
+                                tuple(mesh_ll for _ in V.parent.mesh().meshes),
+                            ),
+                        )
+                    else:
+                        parent = None
+                    field = Function(
+                        functionspaceimpl.WithGeometry.create(
+                            V.topological, mesh_ll, parent=parent,
+                        ),
+                        val=f.topological,
+                        name=name+'_ll',
+                    )
+                except ImportError:  # firedrake release
+                    field = Function(
+                        functionspaceimpl.WithGeometry.create(
+                            V.topological, mesh_ll,
+                        ),
+                        val=f.topological,
+                        name=name+'_ll',
+                    )
                 self.to_dump_latlon.append(field)
 
         # we create new netcdf files to write to, unless pick_up=True and they
@@ -741,10 +769,18 @@ class IO(object):
                 if last_ref_update_time is not None:
                     self.chkpt.write_attribute("/", "last_ref_update_time", last_ref_update_time)
             else:
-                with CheckpointFile(self.chkpt_path, 'w') as chk:
+                if output.multichkpt:
+                    chkpt_mode = 'a'
+                else:
+                    chkpt_mode = 'w'
+                with CheckpointFile(self.chkpt_path, chkpt_mode) as chk:
                     chk.save_mesh(self.domain.mesh)
                     for field_name in self.to_pick_up:
-                        chk.save_function(state_fields(field_name), name=field_name)
+                        if output.multichkpt:
+                            chk.save_function(state_fields(field_name), idx=step-1, name=field_name,
+                                              timestepping_info=({'time': float(t)}))
+                        else:
+                            chk.save_function(state_fields(field_name), name=field_name)
                     chk.set_attr("/", "time", t)
                     chk.set_attr("/", "step", step)
                     if initial_steps is not None:
