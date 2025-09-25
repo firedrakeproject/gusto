@@ -13,12 +13,10 @@ used.
 """
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from petsc4py import PETSc
-PETSc.Sys.popErrorHandler()
 import itertools
 from firedrake import (
     as_vector, SpatialCoordinate, PeriodicIntervalMesh, ExtrudedMesh, exp, sin,
-    Function, pi, COMM_WORLD, sqrt
+    PETSc, Function, pi, COMM_WORLD, sqrt
 )
 import numpy as np
 from gusto import (
@@ -28,6 +26,7 @@ from gusto import (
     compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
     hydrostatic_parameters, SubcyclingOptions,
 )
+PETSc.Sys.popErrorHandler()
 
 skamarock_klemp_nonhydrostatic_defaults = {
     'ncolumns': 150,
@@ -138,6 +137,65 @@ def skamarock_klemp_nonhydrostatic(
         DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
     ]
 
+    lu_params = {
+        'ksp_type': 'preonly',
+        'pc_type': 'lu',
+        'pc_factor_mat_solver_type': 'mumps',
+    }
+
+    gamg_params = {
+        'ksp_type': 'fgmres',
+        'ksp_rtol': 1.0e-8,
+        'ksp_atol': 1.0e-8,
+        'ksp_max_it': 100,
+        'pc_type': 'gamg',
+        'pc_gamg_sym_graph': None,
+        'mg_levels': {
+            'ksp_type': 'gmres',
+            'ksp_max_it': 5,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+        },
+        'mg_coarse': lu_params
+    }
+
+    scpc_parameters = {
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.SCPC',
+        'pc_sc_eliminate_fields': '0, 1',
+        'condensed_field': gamg_params
+    }
+
+    slate_parameters = {
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'additive',
+        'pc_fieldsplit_type': 'schur',
+        'pc_fieldsplit_schur_fact_type': 'full',
+        'pc_fieldsplit_0_fields': '0,1',
+        'pc_fieldsplit_1_fields': '2',
+        'fieldsplit_0': {
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.AssembledPC',
+            'assembled_pc_type': 'ilu',
+        },
+        'fieldsplit_1': {
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'gusto.SlateSchurPC',
+            'pc_slateschur_fields': 2,
+            'slateschur': gamg_params
+        },
+    }
+
+    solver_parameters = scpc_parameters
+    # solver_parameters = slate_parameters
+
+
     # Linear solver
     if hydrostatic:
         if timestepper == 'TR-BDF2':
@@ -148,7 +206,9 @@ def skamarock_klemp_nonhydrostatic(
             overwrite_solver_parameters=True
         )
     else:
-        linear_solver = CompressibleSolver(eqns)
+        linear_solver = CompressibleSolver(
+            eqns, solver_parameters=solver_parameters,
+            overwrite_solver_parameters=True)
 
     # Time stepper
     if timestepper == 'TR-BDF2':
