@@ -352,7 +352,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             # Use previous stage value as a first guess (otherwise may not converge)
             self.field_i[stage+1].assign(self.field_i[stage])
-            if self.limiter is not None:
+            if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
+                self.augmentation.limit(self.field_i[stage])
+            elif self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
 
             for evaluate in self.evaluate_source:
@@ -363,7 +365,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             if (stage == self.nStages - 1):
                 self.x1.assign(self.field_i[stage+1])
-                if self.limiter is not None:
+                if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
+                    self.augmentation.limit(self.x1)
+                elif self.limiter is not None:
                     self.limiter.apply(self.x1)
 
         elif self.rk_formulation == RungeKuttaFormulation.linear:
