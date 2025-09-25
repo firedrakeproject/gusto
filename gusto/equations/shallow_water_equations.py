@@ -2,7 +2,7 @@
 
 from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg,
                        dS, split, conditional, exp, sqrt, Function,
-                       SpatialCoordinate, Constant)
+                       SpatialCoordinate, Constant, min_value)
 from firedrake.fml import subject, drop, all_terms
 from gusto.core.labels import (
     linearisation, pressure_gradient, coriolis, prognostic
@@ -16,7 +16,6 @@ from gusto.equations.common_forms import (
     linear_vector_invariant_form, linear_circulation_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
-import numpy as np
 
 
 __all__ = ["ShallowWaterEquations", "LinearShallowWaterEquations",
@@ -192,8 +191,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 r = sqrt(inner(xyz, xyz))
                 radius_field = Function(CG1)
                 radius_field.interpolate(r)
-                # TODO: this should use global min kernel
-                radius = Constant(np.min(radius_field.dat.data_ro))
+                radius = Constant(min_value(radius_field.dat.data_ro))
                 fexpr = 2*self.parameters.Omega*xyz[2]/radius
             elif rotation is CoriolisOptions.fplane:
                 fexpr = self.parameters.f0
