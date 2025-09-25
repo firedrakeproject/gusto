@@ -13,7 +13,8 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, DefaultTransport,
     ForwardEuler, SteadyStateError, ShallowWaterParameters,
     LinearShallowWaterEquations, GeneralIcosahedralSphereMesh,
-    ZonalComponent, MeridionalComponent, RelativeVorticity
+    ZonalComponent, MeridionalComponent, RelativeVorticity,
+    Timestepper, TrapeziumRule
 )
 
 linear_williamson_2_defaults = {
@@ -21,6 +22,7 @@ linear_williamson_2_defaults = {
     'dt': 900.0,               # 15 minutes
     'tmax': 5.*24.*60.*60.,    # 5 days
     'dumpfreq': 96,            # once per day with default options
+    'siqn': False,             # default is TrapeziumRule
     'dirname': 'linear_williamson_2'
 }
 
@@ -30,6 +32,7 @@ def linear_williamson_2(
         dt=linear_williamson_2_defaults['dt'],
         tmax=linear_williamson_2_defaults['tmax'],
         dumpfreq=linear_williamson_2_defaults['dumpfreq'],
+        siqn=linear_williamson_2_defaults['siqn'],
         dirname=linear_williamson_2_defaults['dirname']
 ):
 
@@ -61,6 +64,10 @@ def linear_williamson_2(
     eqns = LinearShallowWaterEquations(domain, parameters)
 
     # I/O
+    # Adjust default directory name
+    if siqn and dirname == linear_williamson_2_defaults['dirname']:
+        dirname = f'siqn_{dirname}'
+
     output = OutputParameters(
         dirname=dirname, dumpfreq=dumpfreq, dump_nc=False, dump_vtus=True
     )
@@ -69,14 +76,17 @@ def linear_williamson_2(
                          RelativeVorticity()]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    # Transport schemes
-    transport_schemes = [ForwardEuler(domain, "D")]
-    transport_methods = [DefaultTransport(eqns, "D")]
+    if siqn:
+        # Transport schemes
+        transport_schemes = [ForwardEuler(domain, "D")]
+        transport_methods = [DefaultTransport(eqns, "D")]
 
-    # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transport_schemes, transport_methods
-    )
+        # Time stepper
+        stepper = SemiImplicitQuasiNewton(
+            eqns, io, transport_schemes, transport_methods
+        )
+    else:
+        stepper = Timestepper(eqns, TrapeziumRule(domain), io)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -143,6 +153,15 @@ if __name__ == "__main__":
         help="The name of the directory to write to.",
         type=str,
         default=linear_williamson_2_defaults['dirname']
+    )
+    parser.add_argument(
+        '--siqn',
+        help=(
+            "Whether to use the Semi-Implicit Quasi-Newton stepper. Otherwise "
+            + "use the Trapezium Rule."
+        ),
+        action="store_true",
+        default=linear_williamson_2_defaults['siqn']
     )
     args, unknown = parser.parse_known_args()
 
