@@ -66,9 +66,9 @@ def williamson_2(
     Omega = parameters.Omega
     _, lat, _ = rotated_lonlatr_coords(xyz, rotate_pole_to)
     e_lon, _, _ = rotated_lonlatr_vectors(xyz, rotate_pole_to)
-    fexpr = 2*Omega*sin(lat)
+
     eqns = ShallowWaterEquations(
-        domain, parameters, fexpr=fexpr, u_transport_option=u_eqn_type)
+        domain, parameters, u_transport_option=u_eqn_type)
 
     # I/O
     output = OutputParameters(
