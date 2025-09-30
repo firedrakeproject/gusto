@@ -147,7 +147,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 "factors for their timestep."
             )
         else:
-            self.fast_physics_schemes = []
+            self.tr_fast_physics_schemes = []
         if bdf_fast_physics_schemes is not None:
             self.bdf_fast_physics_schemes = bdf_fast_physics_schemes
             raise NotImplementedError(
@@ -157,7 +157,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 "factors for their timestep."
             )
         else:
-            self.fast_physics_schemes = []
+            self.bdf_fast_physics_schemes = []
         self.all_physics_schemes = (self.slow_physics_schemes
                                     + self.tr_fast_physics_schemes
                                     + self.bdf_fast_physics_schemes
