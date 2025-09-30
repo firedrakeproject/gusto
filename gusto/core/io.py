@@ -15,6 +15,8 @@ from pyop2.mpi import MPI
 import numpy as np
 from gusto.core.logging import logger, update_logfile_location
 from collections import namedtuple
+from enum import Enum
+from ufl.core.expr import Expr
 
 __all__ = ["pick_up_mesh", "IO", "TimeData"]
 
@@ -258,7 +260,7 @@ class IO(object):
         """
         if hasattr(equation, 'parameters') and equation.parameters is not None:
             logger.info("Physical parameters that take non-default values:")
-            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items() if type(v) is not MeshGeometry))
+            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items() if type(v) is not MeshGeometry and not isinstance(v, Expr) and not isinstance(v, Enum)))
 
     def setup_log_courant(self, state_fields, name='u', component="whole",
                           expression=None):
@@ -473,10 +475,38 @@ class IO(object):
             self.to_dump_latlon = []
             for name in self.output.dumplist_latlon:
                 f = state_fields(name)
-                field = Function(
-                    functionspaceimpl.WithGeometry.create(
-                        f.function_space(), mesh_ll),
-                    val=f.topological, name=name+'_ll')
+                V = f.function_space()
+                try:  # firedrake main
+                    from firedrake import MeshSequenceGeometry
+
+                    if V.parent and isinstance(V.parent.topological, functionspaceimpl.MixedFunctionSpace):
+                        if not isinstance(V.parent.mesh(), MeshSequenceGeometry):
+                            raise ValueError("Expecting a MeshSequenceGeometry")
+                        if len(set(V.parent.mesh().meshes)) > 1:
+                            raise ValueError("Expecting a single mesh")
+                        parent = functionspaceimpl.WithGeometry.create(
+                            V.parent.topological,
+                            MeshSequenceGeometry(
+                                tuple(mesh_ll for _ in V.parent.mesh().meshes),
+                            ),
+                        )
+                    else:
+                        parent = None
+                    field = Function(
+                        functionspaceimpl.WithGeometry.create(
+                            V.topological, mesh_ll, parent=parent,
+                        ),
+                        val=f.topological,
+                        name=name+'_ll',
+                    )
+                except ImportError:  # firedrake release
+                    field = Function(
+                        functionspaceimpl.WithGeometry.create(
+                            V.topological, mesh_ll,
+                        ),
+                        val=f.topological,
+                        name=name+'_ll',
+                    )
                 self.to_dump_latlon.append(field)
 
         # we create new netcdf files to write to, unless pick_up=True and they
