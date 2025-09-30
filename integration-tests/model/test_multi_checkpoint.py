@@ -33,10 +33,10 @@ def run_sw_fplane(run_num, ndt, output, chkfile=None):
     # Equation
     H = 2
     g = 50
-    parameters = ShallowWaterParameters(mesh, H=H, g=g)
     f0 = 10
-    fexpr = Constant(f0)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
+    parameters = ShallowWaterParameters(mesh, rotation=CoriolisOptions.fplane,
+                                        f0=f0, H=H, g=g)
+    eqns = ShallowWaterEquations(domain, parameters)
 
     # I/O
     output = output
