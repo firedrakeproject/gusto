@@ -34,11 +34,11 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                  tr_solver=None,
                  bdf_solver=None,
                  diffusion_schemes=None,
-                 physics_schemes=None,
                  slow_physics_schemes=None,
                  tr_fast_physics_schemes=None,
                  bdf_fast_physics_schemes=None,
                  middle_physics_schemes=None,
+                 final_physics_schemes=None,
                  gamma=(1-sqrt(2)/2),
                  num_outer_tr=2, num_inner_tr=2,
                  num_outer_bdf=2, num_inner_bdf=2,
@@ -123,8 +123,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.implicit_terms = [incompressible, sponge]
         self.spatial_methods = spatial_methods
 
-        if physics_schemes is not None:
-            self.final_physics_schemes = physics_schemes
+        if final_physics_schemes is not None:
+            self.final_physics_schemes = final_physics_schemes
         else:
             self.final_physics_schemes = []
 
