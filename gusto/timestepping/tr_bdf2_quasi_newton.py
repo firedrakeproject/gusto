@@ -34,11 +34,16 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                  tr_solver=None,
                  bdf_solver=None,
                  diffusion_schemes=None,
+<<<<<<< HEAD
                  final_physics_schemes=None,
+=======
+>>>>>>> ef24c0fee15f350d096a82e425cf002f69383798
                  slow_physics_schemes=None,
                  tr_fast_physics_schemes=None,
                  bdf_fast_physics_schemes=None,
                  middle_physics_schemes=None,
+                 final_physics_schemes=None,
+                 scaled_final_physics_schemes=None,
                  gamma=(1-sqrt(2)/2),
                  num_outer_tr=2, num_inner_tr=2,
                  num_outer_bdf=2, num_inner_bdf=2,
@@ -128,6 +133,11 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         else:
             self.final_physics_schemes = []
 
+        if scaled_final_physics_schemes is not None:
+            self.scaled_final_physics_schemes = scaled_final_physics_schemes
+        else:
+            self.scaled_final_physics_schemes = []
+
         if slow_physics_schemes is not None:
             self.slow_physics_schemes = slow_physics_schemes
         else:
@@ -162,7 +172,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                                     + self.tr_fast_physics_schemes
                                     + self.bdf_fast_physics_schemes
                                     + self.middle_physics_schemes
-                                    + self.final_physics_schemes)
+                                    + self.final_physics_schemes
+                                    + self.scaled_final_physics_schemes)
 
         for parametrisation, scheme in self.all_physics_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
@@ -256,7 +267,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         apply_bcs = True
         self.setup_equation(self.equation)
         for _, scheme in self.active_transport:
-            scheme.setup(self.equation, apply_bcs, transport)
             self.setup_transporting_velocity(scheme)
             if self.io.output.log_courant:
                 scheme.courant_max = self.io.courant_max
@@ -264,7 +274,21 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         apply_bcs = True
         for _, scheme in self.diffusion_schemes:
             scheme.setup(self.equation, apply_bcs, diffusion)
-        for parametrisation, scheme in self.all_physics_schemes:
+
+        # setup physics schemes
+        for parametrisation, scheme in self.middle_physics_schemes:
+            apply_bcs = True
+            dt_scale = 2*self.gamma
+            scheme.setup(self.equation, apply_bcs, 
+                         parametrisation.label, dt_scale=dt_scale)
+            
+        for parametrisation, scheme in self.scaled_final_physics_schemes:
+            apply_bcs = True
+            dt_scale = (1 - 2*self.gamma*self.gamma3)
+            scheme.setup(self.equation, apply_bcs, 
+                         parametrisation.label, dt_scale=dt_scale)
+
+        for parametrisation, scheme in self.final_physics_schemes:
             apply_bcs = True
             scheme.setup(self.equation, apply_bcs, parametrisation.label)
 
@@ -421,8 +445,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
         # set xp here so that variables that are not transported have
         # the correct values
+        
         xp(self.field_name).assign(xn(fname))
-        xpm(self.field_name).assign(xm(fname))
+        xpm(self.field_name).assign(x_after_middle(fname))
         xnp1(self.field_name).assign(xn(fname))  # First guess doesn't seem to make much difference
 
         # OUTER ----------------------------------------------------------------
@@ -434,7 +459,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 self.update_transporting_velocity(xnp1('u'), xnp1('u'), 1-2*self.gamma)
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'BDF m: transporting velocity, outer iteration {outer}')
-                self.transport_fields(f'BDF m: {outer}', xm, xpm)
+                self.transport_fields(f'BDF m: {outer}', x_after_middle, xpm)
 
                 # Transport by u^np1 for dt, so scale u by 1
                 self.update_transporting_velocity(xnp1('u'), xnp1('u'), 1)
@@ -483,6 +508,11 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             for name, scheme in self.diffusion_schemes:
                 logger.debug(f"TR-BDF2 Quasi-Newton diffusing {name}")
                 scheme.apply(xnp1(name), xnp1(name))
+
+        if len(self.scaled_final_physics_schemes) > 0:
+            with timed_stage("Scaled Final Physics"):
+                for _, scheme in self.scaled_final_physics_schemes:
+                    scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
 
         if len(self.final_physics_schemes) > 0:
             with timed_stage("Final Physics"):

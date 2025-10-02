@@ -63,7 +63,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
     def __init__(self, domain, field_name=None, subcycling_options=None,
                  solver_parameters=None, limiter=None, options=None,
-                 augmentation=None):
+                 augmentation=None, dt_scale=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -98,6 +98,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.courant_max = None
         self.augmentation = augmentation
         self.subcycling_options = subcycling_options
+        
+        if dt_scale is not None:
+            self.dt *= dt_scale
+            self.original_dt *= dt_scale
 
         if self.subcycling_options is not None:
             self.subcycling_options.check_options()
@@ -445,7 +449,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
     def __init__(self, domain, field_name=None, subcycling_options=None,
                  solver_parameters=None, limiter=None, options=None,
-                 augmentation=None):
+                 augmentation=None, dt=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the

@@ -90,7 +90,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                  subcycling_options=None,
                  rk_formulation=RungeKuttaFormulation.increment,
                  solver_parameters=None, limiter=None, options=None,
-                 augmentation=None):
+                 augmentation=None, dt_scale=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -121,7 +121,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options,
-                         augmentation=augmentation)
+                         augmentation=augmentation,
+                         dt_scale=dt_scale)
         self.butcher_matrix = butcher_matrix
         self.nStages = int(np.shape(self.butcher_matrix)[0])
         self.rk_formulation = rk_formulation
@@ -466,7 +467,7 @@ class ForwardEuler(ExplicitRungeKutta):
             self, domain, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
             solver_parameters=None, limiter=None, options=None,
-            augmentation=None
+            augmentation=None, dt_scale=None
     ):
         """
         Args:
@@ -500,7 +501,8 @@ class ForwardEuler(ExplicitRungeKutta):
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options,
-                         augmentation=augmentation)
+                         augmentation=augmentation, 
+                         dt_scale=dt_scale)
 
 
 class SSPRK2(ExplicitRungeKutta):
