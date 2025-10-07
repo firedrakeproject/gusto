@@ -14,7 +14,7 @@ from tomplot import (
     extract_gusto_field
 )
 
-test = 'dry_bryan_fritsch'
+test = 'dry_bryan_fritsch_trbdf2_alt2x22x1'
 
 # ---------------------------------------------------------------------------- #
 # Directory for results and plots

@@ -12,22 +12,23 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from firedrake import (
     as_vector, VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh,
-    SpatialCoordinate, exp, pi, cos, Function, Mesh, Constant
+    SpatialCoordinate, exp, pi, cos, Function, Mesh, Constant, sqrt
 )
 from gusto import (
     Domain, CompressibleParameters, CompressibleSolver, logger,
     OutputParameters, IO, SSPRK3, DGUpwind, SemiImplicitQuasiNewton,
     compressible_hydrostatic_balance, SpongeLayerParameters, Exner, ZComponent,
     Perturbation, SUPGOptions, TrapeziumRule, MaxKernel, MinKernel,
-    CompressibleEulerEquations, SubcyclingOptions, RungeKuttaFormulation
+    CompressibleEulerEquations, SubcyclingOptions, RungeKuttaFormulation,
+    TRBDF2QuasiNewton, EmbeddedDGOptions
 )
 
 schaer_mountain_defaults = {
     'ncolumns': 100,
     'nlayers': 50,
-    'dt': 8.0,
+    'dt': 16.0,
     'tmax': 5*60*60.,   # 5 hours
-    'dumpfreq': 2250,   # dump at end with default settings
+    'dumpfreq': 1125,   # dump at end with default settings
     'dirname': 'schaer_mountain'
 }
 
@@ -64,10 +65,8 @@ def schaer_mountain(
     # Our settings for this set up
     # ------------------------------------------------------------------------ #
 
-    spinup_steps = 5  # Not necessary but helps balance initial conditions
-    alpha = 0.51      # Necessary to absorb grid scale waves
     element_order = 1
-    u_eqn_type = 'vector_invariant_form'
+    u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -115,33 +114,37 @@ def schaer_mountain(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    subcycling_opts = SubcyclingOptions(subcycle_by_courant=0.25)
-    theta_opts = SUPGOptions()
+    theta_opts = EmbeddedDGOptions()
+    subcycling_options = None
     transported_fields = [
-        TrapeziumRule(domain, "u", subcycling_options=subcycling_opts),
+        SSPRK3(domain, "u", subcycling_options=subcycling_options),
         SSPRK3(
-            domain, "rho", rk_formulation=RungeKuttaFormulation.predictor,
-            subcycling_options=subcycling_opts
+            domain, "rho", subcycling_options=subcycling_options,
+            rk_formulation=RungeKuttaFormulation.linear
         ),
         SSPRK3(
-            domain, "theta", options=theta_opts,
-            subcycling_options=subcycling_opts
+            domain, "theta", subcycling_options=subcycling_options,
+            options=theta_opts
         )
     ]
     transport_methods = [
         DGUpwind(eqns, "u"),
         DGUpwind(eqns, "rho", advective_then_flux=True),
-        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
+        DGUpwind(eqns, "theta")
     ]
 
     # Linear solver
     tau_values = {'rho': 1.0, 'theta': 1.0}
-    linear_solver = CompressibleSolver(eqns, alpha, tau_values=tau_values)
+    gamma = (1-sqrt(2)/2)
+    gamma2 = (1 - 2*float(gamma))/(2 - 2*float(gamma))
+    tr_solver = CompressibleSolver(eqns, alpha=gamma, tau_values=tau_values)
+    bdf_solver = CompressibleSolver(eqns, alpha=gamma2, tau_values=tau_values)
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(
+    stepper = TRBDF2QuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, alpha=alpha, spinup_steps=spinup_steps
+        gamma=gamma, tr_solver=tr_solver, bdf_solver=bdf_solver,
+        alt_formulation=True, num_inner_tr=1, num_inner_bdf=1
     )
 
     # ------------------------------------------------------------------------ #

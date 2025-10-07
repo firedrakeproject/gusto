@@ -41,6 +41,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                  num_outer_tr=2, num_inner_tr=2,
                  num_outer_bdf=2, num_inner_bdf=2,
                  reference_update_freq=None,
+                 alt_formulation=False
                  ):
         """
         Args:
@@ -99,6 +100,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 reference profiles will remain at their initial values.
                 Defaults to None.
         """
+
+        self.alt_formulation = alt_formulation
 
         self.num_outer_tr = num_outer_tr
         self.num_inner_tr = num_inner_tr
@@ -222,7 +225,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
     def setup_fields(self):
         """Sets up time levels"""
         self.x = TimeLevelFields(self.equation, 1)
-        self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast", "m", "pm"))
+        self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast", "m", "pm", "p_tr"))
         # Only the prescribed fields of the main equation need passing to StateFields
         self.fields = StateFields(self.x, self.equation.prescribed_fields,
                                   *self.io.output.dumplist)
@@ -302,6 +305,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         xnp1 = self.x.np1
         xstar = self.x.star
         xp = self.x.p
+        xp_tr = self.x.p_tr
         xpm = self.x.pm
         xm = self.x.m
         x_after_slow = self.x.after_slow
@@ -347,6 +351,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'TR: transporting velocity, outer iteration {outer}')
                 self.transport_fields(f'TR: {outer}', xstar, xp)
+
+            if self.alt_formulation:
+                xp_tr(self.field_name).assign(xp(self.field_name))
 
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))
@@ -399,20 +406,36 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
             # Transport --------------------------------------------------------
             with timed_stage("Transport"):
-                # Transport by u^np1 for (1-2*gamma)*dt, so scale u by (1-2*gamma)
-                self.update_transporting_velocity(xnp1('u'), xnp1('u'), 1-2*self.gamma)
-                self.io.log_courant(self.fields, 'transporting_velocity',
-                                    message=f'BDF m: transporting velocity, outer iteration {outer}')
-                self.transport_fields(f'BDF m: {outer}', xm, xpm)
+                if self.alt_formulation:
+                    # Transport by u^np1 for (1-2*gamma)*dt, so scale u by (1-2*gamma)
+                    self.update_transporting_velocity(xnp1('u'), xnp1('u'), 1-2*self.gamma)
 
-                # Transport by u^np1 for dt, so scale u by 1
-                self.update_transporting_velocity(xnp1('u'), xnp1('u'), 1)
-                self.io.log_courant(self.fields, 'transporting_velocity',
-                                    message=f'BDF n: transporting velocity, outer iteration {outer}')
-                self.transport_fields(f'BDF n:{outer}', xn, xp)
+                    # Combine transported fields into a single variable
+                    xpm(fname).assign(
+                        (1 - self.gamma3)*(xn(fname) + xp_tr(fname) - xstar(fname))
+                        + self.gamma3*xm(fname)
+                    )
 
-            # Combine transported fields into a single variable
-            xp(fname).assign((1 - self.gamma3)*xp(fname) + self.gamma3*xpm(fname))
+                    self.io.log_courant(self.fields, 'transporting_velocity',
+                                        message=f'BDF m: transporting velocity, outer iteration {outer}')
+                    self.transport_fields(f'BDF m: {outer}', xpm, xp)
+
+                else:
+                    # Transport by u^np1 for (1-2*gamma)*dt, so scale u by (1-2*gamma)
+                    self.update_transporting_velocity(xnp1('u'), xnp1('u'), 1-2*self.gamma)
+                    self.io.log_courant(self.fields, 'transporting_velocity',
+                                        message=f'BDF m: transporting velocity, outer iteration {outer}')
+                    self.transport_fields(f'BDF m: {outer}', xm, xpm)
+
+                    # Transport by u^np1 for dt, so scale u by 1
+                    self.update_transporting_velocity(xnp1('u'), xnp1('u'), 1)
+                    self.io.log_courant(self.fields, 'transporting_velocity',
+                                        message=f'BDF n: transporting velocity, outer iteration {outer}')
+                    self.transport_fields(f'BDF n:{outer}', xn, xp)
+
+            if not self.alt_formulation:
+                # Combine transported fields into a single variable
+                xp(fname).assign((1 - self.gamma3)*xp(fname) + self.gamma3*xpm(fname))
 
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))

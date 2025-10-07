@@ -14,7 +14,7 @@ from tomplot import (
     extract_gusto_coords, extract_gusto_field, reshape_gusto_data
 )
 
-test = 'schaer_mountain'
+test = 'schaer_mountain_trbdf2'
 
 # ---------------------------------------------------------------------------- #
 # Directory for results and plots

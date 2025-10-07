@@ -26,18 +26,18 @@ from gusto import (
     DGUpwind, logger, SUPGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
     compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
-    hydrostatic_parameters, SubcyclingOptions,
+    hydrostatic_parameters, SubcyclingOptions, EmbeddedDGOptions
 )
 
 skamarock_klemp_nonhydrostatic_defaults = {
     'ncolumns': 150,
     'nlayers': 10,
-    'dt': 6.0,
+    'dt': 30.0,
     'tmax': 3000.,
-    'dumpfreq': 250,
+    'dumpfreq': 100,
     'dirname': 'skamarock_klemp_nonhydrostatic',
     'hydrostatic': False,
-    'timestepper': 'SIQN'
+    'timestepper': 'TR-BDF2'
 }
 
 
@@ -86,41 +86,21 @@ def skamarock_klemp_nonhydrostatic(
     else:
         eqns = CompressibleEulerEquations(domain, parameters)
 
-    # I/O
-    points_x = np.linspace(0., domain_width, 100)
-    points_z = [domain_height/2.]
-    points = np.array([p for p in itertools.product(points_x, points_z)])
-
     # Adjust default directory name
     if hydrostatic and dirname == skamarock_klemp_nonhydrostatic_defaults['dirname']:
         dirname = f'hyd_switch_{dirname}'
 
-    # Dumping point data using legacy PointDataOutput is not supported in parallel
-    if COMM_WORLD.size == 1:
-        output = OutputParameters(
-            dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=False, dump_nc=True,
-            point_data=[('theta_perturbation', points)]
-        )
-    else:
-        logger.warning(
-            'Dumping point data using legacy PointDataOutput is not'
-            ' supported in parallel\nDisabling PointDataOutput'
-        )
-        output = OutputParameters(
-            dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
-            dump_vtus=False, dump_nc=True,
-        )
+    output = OutputParameters(
+        dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
+        dump_vtus=False, dump_nc=True,
+    )
 
     diagnostic_fields = [Perturbation('theta')]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    theta_opts = SUPGOptions()
-    if timestepper == 'SIQN':
-        subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
-    else:
-        subcycling_options = None
+    theta_opts = EmbeddedDGOptions()
+    subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
     transported_fields = [
         SSPRK3(domain, "u", subcycling_options=subcycling_options),
         SSPRK3(
@@ -135,10 +115,11 @@ def skamarock_klemp_nonhydrostatic(
     transport_methods = [
         DGUpwind(eqns, "u"),
         DGUpwind(eqns, "rho", advective_then_flux=True),
-        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
+        DGUpwind(eqns, "theta")
     ]
 
     # Linear solver
+    tau_values = {'rho': 1.0, 'theta': 1.0}
     if hydrostatic:
         if timestepper == 'TR-BDF2':
             raise ValueError('Hydrostatic equations not implmented for TR-BDF2')
@@ -148,19 +129,18 @@ def skamarock_klemp_nonhydrostatic(
             overwrite_solver_parameters=True
         )
     else:
-        linear_solver = CompressibleSolver(eqns)
+        linear_solver = CompressibleSolver(eqns, tau_values=tau_values)
 
     # Time stepper
     if timestepper == 'TR-BDF2':
         gamma = (1-sqrt(2)/2)
         gamma2 = (1 - 2*float(gamma))/(2 - 2*float(gamma))
-        tr_solver = CompressibleSolver(eqns, alpha=gamma)
-        bdf_solver = CompressibleSolver(eqns, alpha=gamma2)
+        tr_solver = CompressibleSolver(eqns, alpha=gamma, tau_values=tau_values)
+        bdf_solver = CompressibleSolver(eqns, alpha=gamma2, tau_values=tau_values)
         stepper = TRBDF2QuasiNewton(
             eqns, io, transported_fields, transport_methods,
-            gamma=gamma,
-            tr_solver=tr_solver,
-            bdf_solver=bdf_solver
+            gamma=gamma, tr_solver=tr_solver, bdf_solver=bdf_solver,
+            alt_formulation=True
         )
 
     elif timestepper == 'SIQN':
@@ -269,7 +249,7 @@ if __name__ == "__main__":
         default=skamarock_klemp_nonhydrostatic_defaults['hydrostatic']
     )
     parser.add_argument(
-        'timestepper',
+        '--timestepper',
         help='Which time stepper to use, takes SIQN or TR-BDF2',
         type=str,
         choices=['SIQN', 'TR-BDF2'],
