@@ -179,7 +179,7 @@ def unsaturated_bubble(
     # Calculate hydrostatic fields
     unsaturated_hydrostatic_balance(
         eqns, stepper.fields, theta_d, rel_hum,
-        exner_boundary=Constant(exner_surf)
+        exner_boundary=Constant(float(exner_surf))
     )
 
     # make mean fields
@@ -265,7 +265,7 @@ def unsaturated_bubble(
             )
 
     # Set wind, cloud and rain to be zero
-    zero = Constant(0.0, domain=mesh)
+    zero = Constant(0.0)
     u0.project(as_vector([zero, zero]))
     water_c0.interpolate(zero)
     water_r0.interpolate(zero)
