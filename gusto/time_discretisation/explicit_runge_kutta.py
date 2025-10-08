@@ -90,7 +90,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                  subcycling_options=None,
                  rk_formulation=RungeKuttaFormulation.increment,
                  solver_parameters=None, limiter=None, options=None,
-                 augmentation=None, dt_scale=None):
+                 augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -121,13 +121,12 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options,
-                         augmentation=augmentation,
-                         dt_scale=dt_scale)
+                         augmentation=augmentation)
         self.butcher_matrix = butcher_matrix
         self.nStages = int(np.shape(self.butcher_matrix)[0])
         self.rk_formulation = rk_formulation
 
-    def setup(self, equation, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True, *active_labels, dt_scale=None,):
         """
         Set up the time discretisation based on the equation.
 
@@ -136,7 +135,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, apply_bcs, *active_labels)
+        super().setup(equation, apply_bcs, *active_labels, dt_scale=dt_scale)
 
         if self.rk_formulation == RungeKuttaFormulation.predictor:
             self.field_i = [Function(self.fs) for _ in range(self.nStages+1)]
@@ -467,7 +466,7 @@ class ForwardEuler(ExplicitRungeKutta):
             self, domain, field_name=None, subcycling_options=None,
             rk_formulation=RungeKuttaFormulation.increment,
             solver_parameters=None, limiter=None, options=None,
-            augmentation=None, dt_scale=None
+            augmentation=None
     ):
         """
         Args:
@@ -501,8 +500,8 @@ class ForwardEuler(ExplicitRungeKutta):
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options,
-                         augmentation=augmentation, 
-                         dt_scale=dt_scale)
+                         augmentation=augmentation
+                         )
 
 
 class SSPRK2(ExplicitRungeKutta):

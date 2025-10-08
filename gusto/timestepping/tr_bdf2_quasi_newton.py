@@ -34,10 +34,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                  tr_solver=None,
                  bdf_solver=None,
                  diffusion_schemes=None,
-<<<<<<< HEAD
-                 final_physics_schemes=None,
-=======
->>>>>>> ef24c0fee15f350d096a82e425cf002f69383798
                  slow_physics_schemes=None,
                  tr_fast_physics_schemes=None,
                  bdf_fast_physics_schemes=None,
@@ -267,6 +263,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         apply_bcs = True
         self.setup_equation(self.equation)
         for _, scheme in self.active_transport:
+            scheme.setup(self.equation, apply_bcs, transport)
             self.setup_transporting_velocity(scheme)
             if self.io.output.log_courant:
                 scheme.courant_max = self.io.courant_max
@@ -278,15 +275,15 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         # setup physics schemes
         for parametrisation, scheme in self.middle_physics_schemes:
             apply_bcs = True
-            dt_scale = 2*self.gamma
-            scheme.setup(self.equation, apply_bcs, 
-                         parametrisation.label, dt_scale=dt_scale)
+            dt_scale = 2.0*self.gamma
+            scheme.setup(self.equation, apply_bcs, parametrisation.label, 
+                         dt_scale=dt_scale)
             
         for parametrisation, scheme in self.scaled_final_physics_schemes:
             apply_bcs = True
-            dt_scale = (1 - 2*self.gamma*self.gamma3)
-            scheme.setup(self.equation, apply_bcs, 
-                         parametrisation.label, dt_scale=dt_scale)
+            dt_scale = (1 - 2.0*self.gamma)*self.gamma3
+            scheme.setup(self.equation, apply_bcs, parametrisation.label,
+                         dt_scale=dt_scale)
 
         for parametrisation, scheme in self.final_physics_schemes:
             apply_bcs = True

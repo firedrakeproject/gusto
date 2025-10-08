@@ -63,7 +63,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
     def __init__(self, domain, field_name=None, subcycling_options=None,
                  solver_parameters=None, limiter=None, options=None,
-                 augmentation=None, dt_scale=None):
+                 augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -99,10 +99,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.augmentation = augmentation
         self.subcycling_options = subcycling_options
         
-        if dt_scale is not None:
-            self.dt *= dt_scale
-            self.original_dt *= dt_scale
-
         if self.subcycling_options is not None:
             self.subcycling_options.check_options()
 
@@ -145,7 +141,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         else:
             self.solver_parameters = solver_parameters
 
-    def setup(self, equation, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True, *active_labels, dt_scale=None,):
         """
         Set up the time discretisation based on the equation.
 
@@ -158,6 +154,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """
         self.equation = equation
         self.residual = equation.residual
+
+        if dt_scale is not None:
+            self.dt = self.dt * dt_scale
+            self.original_dt = self.original_dt * dt_scale
 
         if self.field_name is not None and hasattr(equation, "field_names"):
             if isinstance(self.field_name, list):
@@ -449,7 +449,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
     def __init__(self, domain, field_name=None, subcycling_options=None,
                  solver_parameters=None, limiter=None, options=None,
-                 augmentation=None, dt=None):
+                 augmentation=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -475,9 +475,10 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options,
-                         augmentation=augmentation)
+                         augmentation=augmentation
+                         )
 
-    def setup(self, equation, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True,  *active_labels, dt_scale=None):
         """
         Set up the time discretisation based on the equation.
 
@@ -488,7 +489,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, apply_bcs, *active_labels)
+        super().setup(equation, apply_bcs, *active_labels, dt_scale=dt_scale)
 
         # get default solver options if none passed in
         self.solver_parameters.update(mass_parameters(
