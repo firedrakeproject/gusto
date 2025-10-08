@@ -128,7 +128,7 @@ def dry_bryan_fritsch(
     theta_b = Function(Vt).interpolate(Constant(Tsurf))
 
     # Set initial wind to be zero
-    zero = Constant(0.0, domain=mesh)
+    zero = Constant(0.0)
     u0.project(as_vector([zero, zero]))
 
     # Calculate hydrostatic fields
