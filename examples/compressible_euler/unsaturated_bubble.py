@@ -171,7 +171,7 @@ def unsaturated_bubble(
     physics_boundary_method = BoundaryMethod.extruded
 
     # Define constant theta_e and water_t
-    exner_surf = (psurf / eqns.parameters.p_0) ** eqns.parameters.kappa
+    exner_surf = (float(psurf) / float(eqns.parameters.p_0)) ** float(eqns.parameters.kappa)
     theta_surf = thermodynamics.theta(eqns.parameters, Tsurf, psurf)
     theta_d = Function(Vt).interpolate(theta_surf * exp(S*z))
     rel_hum = Function(Vt).assign(rel_hum_background)
@@ -179,7 +179,7 @@ def unsaturated_bubble(
     # Calculate hydrostatic fields
     unsaturated_hydrostatic_balance(
         eqns, stepper.fields, theta_d, rel_hum,
-        exner_boundary=Constant(float(exner_surf))
+        exner_boundary=Constant(exner_surf)
     )
 
     # make mean fields
