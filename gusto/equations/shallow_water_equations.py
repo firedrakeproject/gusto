@@ -217,7 +217,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
         if topog_expr is not None:
             self.prescribed_fields('topography', self.domain.spaces('DG')).interpolate(topog_expr)
             topography_form = subject(prognostic
-                                      (-g*div(w)*topog_expr*dx(quad), 'u'),
+                                      (-g*div(w)*topog_expr*dx(degree=quad), 'u'),
                                       self.X)
             residual += topography_form
 
