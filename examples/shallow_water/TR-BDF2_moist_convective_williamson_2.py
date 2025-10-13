@@ -24,10 +24,10 @@ from gusto import (
 )
 
 moist_convect_williamson_2_defaults = {
-    'ncells_per_edge': 16,     # number of cells per icosahedron edge
+    'ncells_per_edge': 12,     # number of cells per icosahedron edge
     'dt': 900.0,               # 15 minutes
-    'tmax': 5.*24.*60.*60.,    # 5 days
-    'dumpfreq': 96,            # once per day with default options
+    'tmax': 1.*24.*60.*60.,    # 5 days
+    'dumpfreq': 4,            # once per day with default options
     'dirname': 'moist_convective_williamson_2',
     'case': 'A'
 }
@@ -53,7 +53,7 @@ def moist_convect_williamson_2(
     theta_0 = epsilon*phi_0**2  # ref depth-integrated temperature (no units)
     g = 9.80616                 # acceleration due to gravity (m/s^2)
     mean_depth = phi_0/g        # reference depth (m)
-    xi = 0                      # fraction of excess vapour/cloud not converted
+    xi = 0.2                     # fraction of excess vapour/cloud not converted
     q0 = 200                    # saturation mixing ratio scaling (kg/kg)
     beta1 = 1600                # depth-vaporisation factor (m)
     gamma_v = 0.98              # vaporisation implicit factor
@@ -92,7 +92,7 @@ def moist_convect_williamson_2(
     # IO
     output = OutputParameters(
         dirname=dirname, dumpfreq=dumpfreq, dump_nc=True, dump_vtus=True,
-        dumplist_latlon=['D', 'D_error']
+        dumplist_latlon=['D', 'D_error']    
     )
     diagnostic_fields = [
         SteadyStateError('u'), SteadyStateError('D'),
@@ -120,7 +120,7 @@ def moist_convect_williamson_2(
     limiter = DG1Limiter(domain.spaces('DG'))
 
     transported_fields = [
-        SSPRK3(domain, "u"), # try trapezium
+        TrapeziumRule(domain, "u"), # try trapezium
         SSPRK3(domain, "D"),
         SSPRK3(domain, "water_vapour", limiter=limiter),
         SSPRK3(domain, "cloud_water", limiter=limiter),
