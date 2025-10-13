@@ -24,11 +24,11 @@ from gusto import (
 )
 
 moist_convect_williamson_2_defaults = {
-    'ncells_per_edge': 12,     # number of cells per icosahedron edge
+    'ncells_per_edge': 16,     # number of cells per icosahedron edge
     'dt': 900.0,               # 15 minutes
     'tmax': 1.*24.*60.*60.,    # 5 days
     'dumpfreq': 4,            # once per day with default options
-    'dirname': 'moist_convective_williamson_2',
+    'dirname': 'moist_convective_williamson_2_nonsense',
     'case': 'A'
 }
 
@@ -53,7 +53,7 @@ def moist_convect_williamson_2(
     theta_0 = epsilon*phi_0**2  # ref depth-integrated temperature (no units)
     g = 9.80616                 # acceleration due to gravity (m/s^2)
     mean_depth = phi_0/g        # reference depth (m)
-    xi = 0.2                     # fraction of excess vapour/cloud not converted
+    xi = 0.0                    # fraction of excess vapour/cloud not converted
     q0 = 200                    # saturation mixing ratio scaling (kg/kg)
     beta1 = 1600                # depth-vaporisation factor (m)
     gamma_v = 0.98              # vaporisation implicit factor
@@ -127,7 +127,7 @@ def moist_convect_williamson_2(
         SSPRK3(domain, "rain", limiter=limiter)
     ]
 
-    gamma = 2-sqrt(2)/2  # parameter for TR-BDF2
+    gamma = 1-sqrt(2)/2  # parameter for TR-BDF2
     gamma2 = (1 - 2*float(gamma))/(2 - 2*float(gamma))
     tr_linear_solver = MoistConvectiveSWSolver(eqns, alpha=gamma, tau_values={'D': 1.0} )
     bdf_linear_solver = MoistConvectiveSWSolver(eqns, alpha=gamma2, tau_values={'D': 1.0} )
