@@ -365,8 +365,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'TR-BDF2 Quasi Newton: TR Implicit forcing {(outer, inner)}')
                     self.tr_forcing.apply(xp, xm, xrhs, "implicit")
+                    xrhs += xrhs_phys
                     if inner > 0:
-                        xrhs += xrhs_phys
                         # Zero implicit forcing to accelerate solver convergence
                         self.tr_forcing.zero_non_wind_terms(self.equation, xm, xrhs, self.equation.field_names)
 
