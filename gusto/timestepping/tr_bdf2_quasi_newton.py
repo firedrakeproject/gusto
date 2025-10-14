@@ -129,20 +129,20 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         else:
             self.final_physics_schemes = []
 
-        #if scaled_final_physics_schemes is not None:
-        #    self.scaled_final_physics_schemes = scaled_final_physics_schemes
-        #else:
-        #    self.scaled_final_physics_schemes = []
+        if scaled_final_physics_schemes is not None:
+            self.scaled_final_physics_schemes = scaled_final_physics_schemes
+        else:
+            self.scaled_final_physics_schemes = []
 #
         #if slow_physics_schemes is not None:
         #    self.slow_physics_schemes = slow_physics_schemes
         #else:
         #    self.slow_physics_schemes = []
        #
-        #if middle_physics_schemes is not None:
-        #    self.middle_physics_schemes = middle_physics_schemes
-        #else:         
-        #    self.middle_physics_schemes = []
+        if middle_physics_schemes is not None:
+            self.middle_physics_schemes = middle_physics_schemes
+        else:         
+            self.middle_physics_schemes = []
 #
         #if tr_fast_physics_schemes is not None:
         #    self.tr_fast_physics_schemes = tr_fast_physics_schemes
@@ -168,9 +168,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.all_physics_schemes = (#self.slow_physics_schemes
                                     #+ self.tr_fast_physics_schemes
                                     #+ self.bdf_fast_physics_schemes
-                                    #+ self.middle_physics_schemes
-                                     self.final_physics_schemes
-                                    #+ self.scaled_final_physics_schemes)
+                                    self.middle_physics_schemes
+                                    + self.final_physics_schemes
+                                    + self.scaled_final_physics_schemes
                                     )
         for parametrisation, scheme in self.all_physics_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
@@ -274,17 +274,17 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             scheme.setup(self.equation, apply_bcs, diffusion)
 
         # setup physics schemes
-       # for parametrisation, scheme in self.middle_physics_schemes:
-       #     apply_bcs = True
-       #     dt_scale = 2.0*self.gamma
-       #     scheme.setup(self.equation, apply_bcs, parametrisation.label, 
-       #                  dt_scale=dt_scale)
-       #     
-       # for parametrisation, scheme in self.scaled_final_physics_schemes:
-       #     apply_bcs = True
-       #     dt_scale = 1 - 2.0*self.gamma*self.gamma3
-       #     scheme.setup(self.equation, apply_bcs, parametrisation.label,
-       #                  dt_scale=dt_scale)
+        for parametrisation, scheme in self.middle_physics_schemes:
+            apply_bcs = True
+            dt_scale = 2.0*self.gamma
+            scheme.setup(self.equation, apply_bcs, parametrisation.label, 
+                         dt_scale=dt_scale)
+            
+        for parametrisation, scheme in self.scaled_final_physics_schemes:
+            apply_bcs = True
+            dt_scale = 1 - 2.0*self.gamma*self.gamma3
+            scheme.setup(self.equation, apply_bcs, parametrisation.label,
+                         dt_scale=dt_scale)
         print(f'Setting up final physics schemes with dt_scale = 1.0')
         for parametrisation, scheme in self.final_physics_schemes:
             apply_bcs = True
@@ -436,11 +436,11 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
         # middle physics ---------------------------------------------------------
         x_after_middle(fname).assign(xm(fname))
-        #if len(self.middle_physics_schemes) > 0:
-        #    with timed_stage("Middle physics"):
-        #        logger.info('TR-BDF2 Quasi Newton: Middle physics')
-        #        for _, scheme in self.middle_physics_schemes:
-        #            scheme.apply(x_after_middle(scheme.field_name), x_after_middle(scheme.field_name))    
+        if len(self.middle_physics_schemes) > 0:
+            with timed_stage("Middle physics"):
+                logger.info('TR-BDF2 Quasi Newton: Middle physics')
+                for _, scheme in self.middle_physics_schemes:
+                    scheme.apply(x_after_middle(scheme.field_name), x_after_middle(scheme.field_name))    
 
         # BDF step =============================================================
 
@@ -510,10 +510,10 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 logger.debug(f"TR-BDF2 Quasi-Newton diffusing {name}")
                 scheme.apply(xnp1(name), xnp1(name))
 
-        #if len(self.scaled_final_physics_schemes) > 0:
-        #    with timed_stage("Scaled Final Physics"):
-        #        for _, scheme in self.scaled_final_physics_schemes:
-        #            scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
+        if len(self.scaled_final_physics_schemes) > 0:
+            with timed_stage("Scaled Final Physics"):
+                for _, scheme in self.scaled_final_physics_schemes:
+                    scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
 
         physics_debug(fname).assign(xnp1(fname))
         if len(self.final_physics_schemes) > 0:
