@@ -416,3 +416,28 @@ class ShallowWaterAvailablePotentialEnergy(Energy):
         D = state_fields("D")
         self.expr = 0.5*g*(D-H)**2
         super().setup(domain, state_fields)
+
+
+class MoistConvectiveSWRelativeHumidity(DiagnosticField):
+    """
+    Diagnostic for computing relative humidity, given a saturation function
+    which is a function of depth only.
+    """
+    name = "RelativeHumidity"
+
+    def __init__(self, sat_func, name="water_vapour"):
+        """
+        Args:
+            fdsfdsdsf
+        """
+        self.fname = name
+        self.sat_func = sat_func
+        super().__init__(self, method='assign', required_fields=(self.fname, "D"))
+
+    def setup(self, domain, state_fields):
+        """
+        
+        Args:
+        """
+        q_v = state_fields(self.fname)
+        space = domain.spaces("DG")
