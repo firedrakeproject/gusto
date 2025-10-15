@@ -431,24 +431,27 @@ class MoistConvectiveSWRelativeHumidity(DiagnosticField):
         Args:
             sat_func (function?): saturation function being used in the model.
         """
-        self.fname = "water_vapour"
         self.sat_func = sat_func
-        super().__init__(method='assign', required_fields=(self.fname, "D"))
+        super().__init__(method='interpolate', required_fields=("water_vapour", "D"))
 
     def setup(self, domain, state_fields):
         """
         
         Args:
         """
-        q_v = state_fields(self.fname)
+        # import pdb
+        self.q_v = state_fields("water_vapour")
+        # pdb.set_trace()
         self.D = state_fields("D")
         space = domain.spaces("DG")
         self.sat_val = Function(space)
-        # self.sat_val.interpolate(self.sat_func(self.D))
-        self.expr = (q_v/self.sat_val)*100
+        self.sat_val.interpolate(self.sat_func(self.D))
+        self.expr = (self.q_v/self.sat_val)*100
         super().setup(domain, state_fields, space=space)
+        # pdb.set_trace()
         
     def compute(self):
-    
-        self.sat_val.interpolate(self.sat_func(self.D))
+        # import pdb
+        self.field.interpolate(self.expr)
+        # pdb.set_trace()
 
