@@ -11,7 +11,8 @@ from gusto.diagnostics.diagnostics import DiagnosticField, Energy
 __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
            "ShallowWaterPotentialEnstrophy", "PotentialVorticity",
            "RelativeVorticity", "AbsoluteVorticity", "PartitionedVapour",
-           "PartitionedCloud", "ShallowWaterAvailablePotentialEnergy"]
+           "PartitionedCloud", "ShallowWaterAvailablePotentialEnergy",
+           "MoistConvectiveSWRelativeHumidity"]
 
 
 class ShallowWaterKineticEnergy(Energy):
@@ -425,14 +426,14 @@ class MoistConvectiveSWRelativeHumidity(DiagnosticField):
     """
     name = "RelativeHumidity"
 
-    def __init__(self, sat_func, name="water_vapour"):
+    def __init__(self, sat_func):
         """
         Args:
-            fdsfdsdsf
+            sat_func (function?): saturation function being used in the model.
         """
-        self.fname = name
+        self.fname = "water_vapour"
         self.sat_func = sat_func
-        super().__init__(self, method='assign', required_fields=(self.fname, "D"))
+        super().__init__(method='assign', required_fields=(self.fname, "D"))
 
     def setup(self, domain, state_fields):
         """
@@ -440,4 +441,14 @@ class MoistConvectiveSWRelativeHumidity(DiagnosticField):
         Args:
         """
         q_v = state_fields(self.fname)
+        self.D = state_fields("D")
         space = domain.spaces("DG")
+        self.sat_val = Function(space)
+        # self.sat_val.interpolate(self.sat_func(self.D))
+        self.expr = (q_v/self.sat_val)*100
+        super().setup(domain, state_fields, space=space)
+        
+    def compute(self):
+    
+        self.sat_val.interpolate(self.sat_func(self.D))
+
