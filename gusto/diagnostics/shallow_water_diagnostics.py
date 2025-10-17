@@ -3,7 +3,8 @@
 
 from firedrake import (
     dx, TestFunction, TrialFunction, grad, inner, curl, Function, assemble,
-    LinearVariationalProblem, LinearVariationalSolver, conditional
+    LinearVariationalProblem, LinearVariationalSolver, conditional,
+    SpatialCoordinate
 )
 from firedrake.__future__ import interpolate
 from gusto.diagnostics.diagnostics import DiagnosticField, Energy
@@ -439,19 +440,15 @@ class MoistConvectiveSWRelativeHumidity(DiagnosticField):
         
         Args:
         """
-        # import pdb
         self.q_v = state_fields("water_vapour")
-        # pdb.set_trace()
         self.D = state_fields("D")
         space = domain.spaces("DG")
+        # x = domain.mesh.coordinates
         self.sat_val = Function(space)
         self.sat_val.interpolate(self.sat_func(self.D))
         self.expr = (self.q_v/self.sat_val)*100
         super().setup(domain, state_fields, space=space)
-        # pdb.set_trace()
         
     def compute(self):
-        # import pdb
         self.field.interpolate(self.expr)
-        # pdb.set_trace()
 
