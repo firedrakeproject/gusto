@@ -175,7 +175,7 @@ def schaer_mountain(
 
     # First solve hydrostatic balance that gives Exner = 1 at bottom boundary
     # This gives us a guess for the top boundary condition
-    bottom_boundary = Constant(exner_surf, domain=mesh)
+    bottom_boundary = Constant(exner_surf)
     logger.info(f'Solving hydrostatic with bottom Exner of {exner_surf}')
     compressible_hydrostatic_balance(
         eqns, theta_b, rho_b, exner, top=False, exner_boundary=bottom_boundary,
@@ -185,7 +185,7 @@ def schaer_mountain(
     # Solve hydrostatic balance again, but now use minimum value from first
     # solve as the *top* boundary condition for Exner
     top_value = min_kernel.apply(exner)
-    top_boundary = Constant(top_value, domain=mesh)
+    top_boundary = Constant(top_value)
     logger.info(f'Solving hydrostatic with top Exner of {top_value}')
     compressible_hydrostatic_balance(
         eqns, theta_b, rho_b, exner, top=True, exner_boundary=top_boundary

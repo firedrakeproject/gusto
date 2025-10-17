@@ -25,15 +25,15 @@ class BoussinesqEquations(PrognosticEquationSet):
     to compressible.
 
     The compressible form of the equations is
-    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
-    ∂p/∂t + cs**2 ∇.u = p,                                                    \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p - b*k = 0,                                     \n
+    ∂p/∂t + (u.∇)p + cs**2 ∇.u = 0,                                           \n
     ∂b/∂t + (u.∇)b = 0,                                                       \n
     where k is the vertical unit vector, Ω is the planet's rotation vector
     and cs is the sound speed.
 
     For the incompressible form of the equations, the pressure features as
     a Lagrange multiplier to enforce incompressibility. The equations are     \n
-    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p - b*k = 0,                                     \n
     ∇.u = p,                                                                  \n
     ∂b/∂t + (u.∇)b = 0,                                                       \n
     where k is the vertical unit vector and Ω is the planet's rotation vector.
@@ -226,15 +226,15 @@ class LinearBoussinesqEquations(BoussinesqEquations):
     to compressible.
 
     The compressible form of the equations is
-    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
-    ∂p/∂t + cs**2 ∇.u = p,                                                    \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p - b*k = 0,                                     \n
+    ∂p/∂t + (u.∇)p + cs**2 ∇.u = 0,                                           \n
     ∂b/∂t + (u.∇)b = 0,                                                       \n
     where k is the vertical unit vector, Ω is the planet's rotation vector
     and cs is the sound speed.
 
     For the incompressible form of the equations, the pressure features as
     a Lagrange multiplier to enforce incompressibility. The equations are     \n
-    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p - b*k = 0,                                     \n
     ∇.u = p,                                                                  \n
     ∂b/∂t + (u.∇)b = 0,                                                       \n
     where k is the vertical unit vector and Ω is the planet's rotation vector.
