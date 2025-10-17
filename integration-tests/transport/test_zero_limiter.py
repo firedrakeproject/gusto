@@ -45,6 +45,7 @@ def setup_zero_limiter(dirname, limiter=False, rain=False):
     # Equations
     parameters = ShallowWaterParameters(mesh, H=H, g=g)
     Omega = parameters.Omega
+    fexpr = 2*Omega*x[2]/R
 
     if rain:
         tracers = [WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')]
@@ -52,7 +53,7 @@ def setup_zero_limiter(dirname, limiter=False, rain=False):
         tracers = [WaterVapour(space='DG'), CloudWater(space='DG')]
 
     eqns = ThermalShallowWaterEquations(
-        domain, parameters,
+        domain, parameters, fexpr=fexpr,
         u_transport_option='vector_advection_form',
         active_tracers=tracers)
 
@@ -127,7 +128,6 @@ def setup_zero_limiter(dirname, limiter=False, rain=False):
 
     uexpr = xyz_vector_from_lonlatr(u_max*cos(phi), 0, 0, x)
     g = parameters.g
-    Omega = parameters.Omega
     w = Omega*R*u_max + (u_max**2)/2
     sigma = w/10
 

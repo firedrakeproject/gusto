@@ -85,20 +85,22 @@ def moist_thermal_williamson_5(
     x, y, z = SpatialCoordinate(mesh)
     lamda, phi, _ = lonlatr_from_xyz(x, y, z)
 
+    # Equation: coriolis
+    parameters = ShallowWaterParameters(mesh, H=mean_depth, g=g)
+    Omega = parameters.Omega
+    fexpr = 2*Omega*z/radius
+
     # Equation: topography
     rsq = min_value(R0**2, (lamda - lamda_c)**2 + (phi - phi_c)**2)
     r = sqrt(rsq)
     tpexpr = mountain_height * (1 - r/R0)
-
-    parameters = ShallowWaterParameters(mesh, H=mean_depth, g=g,
-                                        topog_expr=tpexpr)
 
     # Equation: moisture
     tracers = [
         WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')
     ]
     eqns = ThermalShallowWaterEquations(
-        domain, parameters,
+        domain, parameters, fexpr=fexpr, topog_expr=tpexpr,
         active_tracers=tracers, u_transport_option=u_eqn_type
     )
 
@@ -159,7 +161,6 @@ def moist_thermal_williamson_5(
     v0 = stepper.fields("water_vapour")
     c0 = stepper.fields("cloud_water")
     r0 = stepper.fields("rain")
-    Omega = parameters.Omega
 
     uexpr = as_vector([-u_max*y/radius, u_max*x/radius, 0.0])
 

@@ -1035,10 +1035,10 @@ class TracerDensity(DiagnosticField):
             if domain.spaces.extruded_mesh:
                 # Extract the base horizontal and vertical elements
                 # for the mixing ratio and density.
-                m_X_horiz = m_X_space.ufl_element().factor_elements[0]
-                m_X_vert = m_X_space.ufl_element().factor_elements[1]
-                rho_d_horiz = rho_d_space.ufl_element().factor_elements[0]
-                rho_d_vert = rho_d_space.ufl_element().factor_elements[1]
+                m_X_horiz = m_X_space.ufl_element().sub_elements[0]
+                m_X_vert = m_X_space.ufl_element().sub_elements[1]
+                rho_d_horiz = rho_d_space.ufl_element().sub_elements[0]
+                rho_d_vert = rho_d_space.ufl_element().sub_elements[1]
 
                 horiz_degree = m_X_horiz.degree() + rho_d_horiz.degree()
                 vert_degree = m_X_vert.degree() + rho_d_vert.degree()

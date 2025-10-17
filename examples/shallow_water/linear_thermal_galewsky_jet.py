@@ -65,7 +65,9 @@ def linear_thermal_galewsky_jet(
 
     # Equation
     parameters = ShallowWaterParameters(mesh, H=H)
-    eqns = LinearThermalShallowWaterEquations(domain, parameters)
+    Omega = parameters.Omega
+    fexpr = 2*Omega*xyz[2]/R
+    eqns = LinearThermalShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # I/O
     output = OutputParameters(
@@ -136,8 +138,8 @@ def linear_thermal_galewsky_jet(
 
     # Function for depth field in terms of u function
     def h_func(y):
-        h_array = u_func(y)*float(R)/float(g)*(
-            2*float(Omega)*np.sin(y)
+        h_array = u_func(y)*R/g*(
+            2*Omega*np.sin(y)
         )
 
         return h_array

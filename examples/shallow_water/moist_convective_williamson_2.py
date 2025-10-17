@@ -77,13 +77,15 @@ def moist_convect_williamson_2(
 
     # Equations
     parameters = ShallowWaterParameters(mesh, H=mean_depth, g=g)
+    Omega = parameters.Omega
+    fexpr = 2*Omega*z/radius
 
     tracers = [
         WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')
     ]
 
     eqns = ShallowWaterEquations(
-        domain, parameters, u_transport_option=u_eqn_type,
+        domain, parameters, fexpr=fexpr, u_transport_option=u_eqn_type,
         active_tracers=tracers
     )
 
@@ -158,7 +160,6 @@ def moist_convect_williamson_2(
 
     uexpr = xyz_vector_from_lonlatr(u_max*cos(phi), 0, 0, (x, y, z))
     g = parameters.g
-    Omega = parameters.Omega
     w = Omega*radius*u_max + (u_max**2)/2
     sigma = 0
 

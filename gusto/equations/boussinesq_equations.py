@@ -26,7 +26,7 @@ class BoussinesqEquations(PrognosticEquationSet):
 
     The compressible form of the equations is
     ∂u/∂t + (u.∇)u + 2Ω×u + ∇p - b*k = 0,                                     \n
-    ∂p/∂t + (u.∇)p + cs**2 ∇.u = 0,                                           \n
+    ∂p/∂t + cs**2 ∇.u = p,                                                    \n
     ∂b/∂t + (u.∇)b = 0,                                                       \n
     where k is the vertical unit vector, Ω is the planet's rotation vector
     and cs is the sound speed.
@@ -227,7 +227,7 @@ class LinearBoussinesqEquations(BoussinesqEquations):
 
     The compressible form of the equations is
     ∂u/∂t + (u.∇)u + 2Ω×u + ∇p - b*k = 0,                                     \n
-    ∂p/∂t + (u.∇)p + cs**2 ∇.u = 0,                                           \n
+    ∂p/∂t + cs**2 ∇.u = p,                                                    \n
     ∂b/∂t + (u.∇)b = 0,                                                       \n
     where k is the vertical unit vector, Ω is the planet's rotation vector
     and cs is the sound speed.

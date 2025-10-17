@@ -30,6 +30,7 @@ def run_instant_rain(dirname, physics_coupling):
     # parameters
     H = 30
     g = 10
+    fexpr = Constant(0)
 
     # Equation
     # TODO: This should become a CoupledAdvectionEquation. Currently we set u
@@ -38,9 +39,8 @@ def run_instant_rain(dirname, physics_coupling):
     rain = Rain(name="rain", space="DG",
                 transport_eqn=TransportEquationType.no_transport)
 
-    parameters = ShallowWaterParameters(mesh, H=H, g=g,
-                                        rotation=CoriolisOptions.nonrotating)
-    eqns = ShallowWaterEquations(domain, parameters,
+    parameters = ShallowWaterParameters(mesh, H=H, g=g)
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
                                  active_tracers=[vapour, rain])
 
     # I/O

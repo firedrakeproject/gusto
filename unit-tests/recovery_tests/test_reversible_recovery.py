@@ -59,10 +59,7 @@ def expr(geometry, mesh):
 def low_projector(method, field_in, field_out):
 
     if method == 'interpolate':
-        operator = lambda: assemble(
-            interpolate(field_in, field_out.function_space()),
-            tensor=field_out
-        )
+        operator = lambda: assemble(interpolate(field_in, field_out), tensor=field_out)
     elif method == 'project':
         operator = Projector(field_in, field_out)
     elif method == 'broken':

@@ -31,9 +31,10 @@ def run_tracer(setup):
     g = parameters.g
     umax = setup.umax
     R = setup.radius
+    fexpr = 2*Omega*x[2]/R
 
     # Equations
-    eqns = LinearShallowWaterEquations(domain, parameters)
+    eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
     tracer_eqn = AdvectionEquation(domain, domain.spaces("DG"), "tracer")
 
     # set up transport schemes

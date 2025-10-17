@@ -33,10 +33,13 @@ def setup_sw(dirname, dt, u_transport_option):
                                  refinement_level=refinements,
                                  degree=2)
     domain = Domain(mesh, dt, family="BDM", degree=1)
+    x = SpatialCoordinate(mesh)
 
     # Equation
     parameters = ShallowWaterParameters(mesh, H=H)
-    eqns = ShallowWaterEquations(domain, parameters,
+    Omega = parameters.Omega
+    fexpr = 2*Omega*x[2]/R
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr,
                                  u_transport_option=u_transport_option)
 
     # I/O

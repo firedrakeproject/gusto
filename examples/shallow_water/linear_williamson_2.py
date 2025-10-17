@@ -61,7 +61,9 @@ def linear_williamson_2(
 
     # Equation
     parameters = ShallowWaterParameters(mesh, H=mean_depth)
-    eqns = LinearShallowWaterEquations(domain, parameters)
+    Omega = parameters.Omega
+    fexpr = 2*Omega*z/radius
+    eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
 
     # I/O
     # Adjust default directory name
@@ -96,7 +98,6 @@ def linear_williamson_2(
 
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
-    Omega = parameters.Omega
 
     uexpr = as_vector([-u_max*y/radius, u_max*x/radius, 0.0])
     Dexpr = - ((radius*Omega*u_max) * (z/radius)**2) / g

@@ -112,7 +112,7 @@ class ThetaLimiter(object):
             raise ValueError('The Theta Limiter can only be used on an extruded mesh')
 
         # check that horizontal degree is 1 and vertical degree is 2
-        sub_elements = space.ufl_element().factor_elements
+        sub_elements = space.ufl_element().sub_elements
         if (sub_elements[0].family() not in ['Discontinuous Lagrange', 'DQ']
                 or sub_elements[1].family() != 'Lagrange'
                 or space.ufl_element().degree() != (1, 2)):

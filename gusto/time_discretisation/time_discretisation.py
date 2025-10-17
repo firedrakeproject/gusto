@@ -414,7 +414,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             max_subcycles = self.subcycling_options.max_subcycles
 
             # Set number of subcycles
-            self.ncycles = max(1, math.ceil(float(self.courant_max)/subcycle_by_courant))
+            self.ncycles = math.ceil(float(self.courant_max)/subcycle_by_courant)
 
             # Cap number of subcycles
             if max_subcycles is not None:

@@ -153,7 +153,7 @@ def straka_bubble(
     )
 
     # Set initial fields
-    zero = Constant(0.0)
+    zero = Constant(0.0, domain=mesh)
     u0.project(as_vector([zero, zero]))
     theta0.interpolate(theta_b + T_pert_expr*exner)
     rho0.assign(rho_b)
