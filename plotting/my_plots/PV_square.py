@@ -21,20 +21,32 @@ def colourbar(mappable, extend):
     return cb
 
 
-filepath = 'int_Bu10b1p5Rop23_l500dt250df30'
-field_name = 'PotentialVorticity'
-folder = 'PV'
+filepath = 'beta390q01em2xi1em2_Bu1b1p5Rop2_l1dt250df1'
+field_name = 'RelativeHumidity'
+folder = 'RelativeHumidity'
+
+diff = False
+
+extend = 'both'
 
 plot_dir = f'/data/home/sh1293/results/jupiter_sw/{filepath}/Plots/{folder}'
+if diff:
+    plot_dir = f'/data/home/sh1293/results/jupiter_sw/{filepath}/Plots/{folder}_diff'
 if not os.path.exists(plot_dir):
     os.makedirs(plot_dir)
 
 PV_structured, times = fcs.make_structured(filepath, field_name)
 
+if diff:
+    PV_structured = PV_structured.diff(dim='time')
+    times = times[1:]
+
 if field_name in ['PotentialVorticity', 'RelativeVorticity']:
+    cmap = 'RdBu_r'
     vmin = np.min(PV_structured[:,:,0])
     vmax = np.max(PV_structured[:,:,0])
 elif field_name == 'D_error':
+    cmap = 'RdBu_r'
     But = filepath.split('Bu')[1].split('b')[0]
     try:
         Bui = float(But.split('p')[0])
@@ -55,6 +67,32 @@ elif field_name == 'D_error':
         vmin=-vmax
     else:
         vmax=-vmin
+elif field_name in ['cloud_water', 'water_vapour']:
+    cmap = plt.cm.YlGnBu.copy()
+    cmap.set_under('white')
+    vmin = 0
+    vmax = np.max(PV_structured)
+    if diff:
+        vmax = np.max(PV_structured[:,:,1:])
+        vmin = np.min(PV_structured[:,:,1:])
+        if abs(vmax)<abs(vmin):
+            vmin = -vmax
+        else:
+            vmax = -vmin
+        cmap = 'RdBu'
+    # extend = 'max'
+    PV_structured = PV_structured.where(PV_structured>0, drop=False)
+elif field_name == 'RelativeHumidity':
+    cmap = plt.cm.YlGnBu.copy()
+    cmap.set_under('white')
+    vmin = 0
+    vmax = 100
+    if diff:
+        vmax = 100
+        vmin = -100
+        cmap = 'RdBu'
+    # extend = 'max'
+    PV_structured = PV_structured.where(PV_structured>0, drop=False)
 # elif field_name == 'PotentialVorticity_error':
     # vmin = np.min(PV_structured[:,:,0])
     # vmax = np.max(PV_structured[:,:,0])
@@ -73,8 +111,12 @@ for i in tqdm(range(len(times)), desc='Making plots'):
     # print(f'{i:0{digits}d}')
     fig, ax = plt.subplots(1,1, figsize=(8,8))
     ax.set_aspect('equal')
-    pcolor = PV_structured[:,:,i].plot.imshow(ax=ax, x='x', y='y', cmap='RdBu_r', extend='both', add_colorbar=False, vmin=vmin, vmax=vmax)
-    cb = colourbar(pcolor, extend='both')
+    pcolor = PV_structured[:,:,i].plot.imshow(ax=ax, x='x', y='y', cmap=cmap, extend=extend, add_colorbar=False, vmin=vmin, vmax=vmax)
+
+    ### pcolormesh option, it's worse so don't use
+    # pcolor = PV_structured[:,:,i].plot.pcolormesh(ax=ax, x='x', y='y', cmap=cmap, extend=extend, add_colorbar=False, vmin=vmin, vmax=vmax)
+
+    cb = colourbar(pcolor, extend=extend)
     ax.set_xlabel('')
     ax.set_ylabel('')
     ax.set_xticks([])
