@@ -7,7 +7,7 @@ from gusto import (
     DGUpwind, SemiImplicitQuasiNewton, VectorFunctionSpace, assemble,
     Function, FunctionSpace, WaterVapour, CloudWater, DG1Limiter,
     MoistConvectiveSWSolver, SWSaturationAdjustment, ForwardEuler,
-    ZeroLimiter, MixedFSLimiter
+    ZeroLimiter, MixedFSLimiter, MoistConvectiveSWRelativeHumidity
 )
 from firedrake import (
     SpatialCoordinate, VertexOnlyMesh, as_vector, pi, interpolate, exp, cos, sin,
@@ -23,7 +23,7 @@ import pdb
 from decimal import Decimal, ROUND_HALF_UP
 
 def split_number(x):
-    x = float(x)
+    x = float(abs(x))
     xint, xdec = str(x).split('.')
     if xint == '0':
         xint = ''
@@ -268,19 +268,90 @@ def initialise_D(X, idx):
     # return list of D values in correct order
     return D_values
 
-def sat_func(x_in):
-    D = x_in.split()[1]
-    return (q0*H/D)*exp(20*theta)
+def sat_func_phys(x_in):
+    D = x_in.subfunctions[1]
+    result = sat_func(D)
+    return result
+
+def sat_func(D):
+    return (q0*H/D)
 
 def gamma_v(x_in):
-    qsat = sat_func(x_in)
-    D = x_in.split()[1]
+    qsat = sat_func_phys(x_in)
+    D = x_in.subfunctions[1]
     return (1+qsat*beta1/D)**(-1)
 
+def smooth_tophat(degree, delta, rstar, Lx, nx):
+    import sympy as sp
+
+    delta *= Lx/nx
+    r = sp.symbols('r')
+    left_val = 1
+    right_val = 0
+    left_diff_val = 0
+    left_diff2_val = 0
+
+    a = sp.symbols(f'a_0:{degree+1}')
+    P = a[0]
+    for i in range(1, degree+1):
+        P += a[i]*r**i
+
+    if degree == 3:
+        eqns = [
+            P.subs(r, rstar-delta) - left_val,
+            P.subs(r, rstar+delta) - right_val,
+            sp.diff(P, r).subs(r, rstar-delta) - left_diff_val,
+            sp.diff(P, r).subs(r, rstar+delta)
+        ]
+    elif degree == 5:
+        eqns = [
+            P.subs(r, rstar-delta) - left_val,
+            P.subs(r, rstar+delta) - right_val,
+            sp.diff(P, r).subs(r, rstar-delta) - left_diff_val,
+            sp.diff(P, r).subs(r, rstar+delta),
+            sp.diff(P, r, 2).subs(r, rstar-delta) - left_diff2_val,
+            sp.diff(P, r, 2).subs(r, rstar+delta)
+        ]
+    else:
+        print('do not have BCs for this degree')
+
+    sol = sp.solve(eqns, a)
+    coeffs = [sol[sp.Symbol(f'a_{i}')] for i in range(degree+1)]
+    # P_smooth = P.subs(sol)
+    # f_smooth = sp.Piecewise(
+    #     (1, r<rstar-delta),
+    #     (P_smooth, (rstar-delta<=r) & (r<=rstar+delta)),
+    #     (0, rstar+delta<r)
+    # )
+    return coeffs
+
+def extract_points(fields, res):
+    import xarray as xr
+    # factor=2 gives the same scaled as field_output.nc
+    factor = res
+    xpoints = [Lx/(nx*factor)*i for i in range(int((nx/2-20)*factor), int((nx/2+20)*factor))]
+    ypoint = Ly/2
+    points = [(x, ypoint) for x in xpoints]
+    vom = VertexOnlyMesh(mesh, points)
+    P0DG = FunctionSpace(vom, "DG", 0)
+    P0DG_io = FunctionSpace(vom.input_ordering, "DG", 0)
+    data_vars={}
+    for field in fields:
+        PV = stepper.fields(field)
+        PV_at_points = assemble(interpolate(PV, P0DG))
+        PV_at_input_points = assemble(interpolate(PV_at_points, P0DG_io))
+        data_vars[field] = (['x'], PV_at_input_points.dat.data_ro)
+        ds = xr.DataSet(
+            data_vars=data_vars,
+            coords=dict(x=('x', xpoints)),
+            attrs=dict(y=ypoint/1e3)
+        )
+        ds.to_netcdf(f'{dirname}/end_fields.nc')
+
 ### options changed in Cheng Li 2020
-Bu = 10
+Bu = 1
 b = 1.5
-Ro = 0.23
+Ro = 0.2
 
 ### specify Ld (Laura's setup)
 Laurasetup = False
@@ -327,15 +398,15 @@ dt = 250          # timestep (in seconds)
 tmax = 1*t_day       # duration of the simulation (in seconds)
 
 restart = False
-restart_name = 'int_Bu10b1p5Rop23_l500dt250df30'
-t0 = 500*t_day
+restart_name = 'trapmoisture_beta39000q01em2xi1em2_Bu1b1p5Rop2_l1dt250df1'
+t0 = 1*t_day
 
 ### vortex locations
-south_lat_deg = [90., 83., 83., 83., 83., 83., 70.]
-south_lon_deg = [0., 72., 144., 216., 288., 0., 0.]
+south_lat_deg = [90., 83., 83., 83., 83., 83.]#, 70.]
+south_lon_deg = [0., 72., 144., 216., 288., 0.]#, 0.]
 
 ### name
-setup = 'int'
+setup = ''
 
 ### add noise to initial depth profile?
 noise = False
@@ -350,8 +421,9 @@ D_perturb = True
 coriolisform = 'fulltrap'
 
 ### extract points - if True it extracts transect of y=ypole, x=xpole±40 'grid points'
-extract_points = True
-res = 1
+save_points = False
+extract_fields = ('PotentialVorticity', 'D', 'cloud_water')
+extract_res = 2
 
 ### anticyclone?
 ac = False
@@ -360,11 +432,10 @@ ac = False
 moist = True
 
 ### moist variables
-u_max = 20.  # characteristic zonal flow velocity
-epsilon = 1./150.  # 1/T0 where T0 is standard reference temperature
-xi = 1e-4  # how far below saturation we start
-q0 = 1e-4  # scaling such that max(q0*H/D*exp(20*theta))=atmospheric specific humidity in kg/kg
-beta1 = 43 # calculated from formula - maybe put later 
+epsilon = 1./165.  # 1/T0 where T0 is standard reference temperature
+xi = 1e-2   # how far below saturation we start
+q0 = 1e-2  # scaling such that max(q0*H/D*exp(20*theta))=atmospheric specific humidity in kg/kg
+beta1 = 390 # calculated from formula - maybe put later 
 
 ##########################################################################
 
@@ -386,6 +457,22 @@ tmax = np.ceil(tmax/dump_freq)*dump_freq
 bint, bdec = split_number(b)
 Roint, Rodec = split_number(Ro)
 Buint, Budec = split_number(Bu)
+if xi < 0:
+    xiprefix = 'm'
+else:
+    xiprefix = ''
+q01, q02 = f'{q0:.2e}'.split('e')
+q01f = float(q01)
+q02i = int(q02)
+if q02i < 0:
+    q02i = f'm{abs(q02i)}'
+q01fint, q01fdec = split_number(q01f)
+xi1, xi2 = f'{abs(xi):.2e}'.split('e')
+xi1f = float(xi1)
+xi2i = int(xi2)
+if xi2i < 0:
+    xi2i = f'm{abs(xi2i)}'
+xi1fint, xi1fdec = split_number(xi1f)
 
 if setup != '':
     setup = f'{setup}_'
@@ -400,10 +487,10 @@ if noise:
 else:
     noise_name = ''
 if moist:
-    moist_name = f'moist_'
+    moist_name = f'beta{beta1}q0{q01fint}{q01fdec}e{q02i}xi{xiprefix}{xi1fint}{xi1fdec}e{xi2i}_'
 else:
     moist_name = ''
-folder_name = f'{moist_name}{setup}Bu{Buint}{Budec}b{bint}{bdec}Ro{Roint}{Rodec}_l{round(tmax/t_day)}dt{int(dt)}df{dump_freq}{noise_name}'
+folder_name = f'{setup}{moist_name}Bu{Buint}{Budec}b{bint}{bdec}Ro{Roint}{Rodec}_l{round(tmax/t_day)}dt{int(dt)}df{dump_freq}{noise_name}'
 
 dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}'
 dirnameold=f'/data/home/sh1293/results/jupiter_sw/{restart_name}'
@@ -462,7 +549,9 @@ if fplane:
 tracers = []
 if moist:
     tracers = [
-        WaterVapour(space='DG'), CloudWater(space='DG')]
+        WaterVapour(space='DG'),
+        CloudWater(space='DG')
+    ]
     
 
 eqns = ShallowWaterEquations(domain, parameters, fexpr=ftrap, active_tracers=tracers)
@@ -481,32 +570,27 @@ logger.info(f'Ld={Ld/1e3:.2f} km')
 diagnostic_fields = [RelativeVorticity(), PotentialVorticity(),
                     ShallowWaterKineticEnergy(), 
                     ShallowWaterPotentialEnergy(parameters),
-                    ShallowWaterPotentialEnstrophy()]
+                    ShallowWaterPotentialEnstrophy()
+                    ]
 if avlpe_diag:
     diagnostic_fields.append(ShallowWaterAvailablePotentialEnergy(parameters))
 if D_perturb:
     diagnostic_fields.append(SteadyStateError('D'))
+if moist:
+    diagnostic_fields.append(MoistConvectiveSWRelativeHumidity(sat_func))
 
 io = IO(domain, output=output, diagnostic_fields=diagnostic_fields)
 
 subcycling_options = SubcyclingOptions(subcycle_by_courant=0.33)
-transported_fields = [TrapeziumRule(domain, "u"),
-                      SSPRK3(domain, "D", subcycling_options=subcycling_options)]
-transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
-
 
 if not moist:
+    transported_fields = [TrapeziumRule(domain, "u"),
+                          SSPRK3(domain, "D", subcycling_options=subcycling_options)]
+    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods
     )
 elif moist:
-    w = Omega*R*u_max+(u_max**2)/2
-    sigma = w/10
-    theta0 = epsilon*phi0**2
-    numerator = theta0 + sigma*((cos(lat))**2)*((w+sigma)*(cos(lat))**2 + 2*(phi0-w-sigma))
-    denominator = phi0**2 + (w+sigma)**2*(sin(lat))**4 - 2*phi0*(w+sigma)*(sin(lat))**2
-    theta = numerator/denominator
-
     DG1limiter = DG1Limiter(domain.spaces('DG'))
     zerolimiter = ZeroLimiter(domain.spaces('DG'))
     physics_sublimiters = {'water_vapour': zerolimiter,
@@ -515,15 +599,19 @@ elif moist:
                             'cloud_water': DG1limiter}
     physics_limiter = MixedFSLimiter(eqns, physics_sublimiters)
     transport_limiter = MixedFSLimiter(eqns, transport_sublimiters)
-    transported_fields.append((
-        SSPRK3(domain, "water_vapour", limiter=DG1limiter),
-        SSPRK3(domain, "cloud_water", limiter=DG1limiter),
-    ))
+    transported_fields = [TrapeziumRule(domain, "u"),
+                          SSPRK3(domain, "D", subcycling_options=subcycling_options),
+                          SSPRK3(domain, "water_vapour", limiter=DG1limiter),
+                          SSPRK3(domain, "cloud_water", limiter=DG1limiter)]
+    transport_methods = [DGUpwind(eqns, "u"),
+                         DGUpwind(eqns, "D"),
+                         DGUpwind(eqns, 'water_vapour'),
+                         DGUpwind(eqns, 'cloud_water')]
     linear_solver = MoistConvectiveSWSolver(eqns)
 
     # Physics schemes
     sat_adj = SWSaturationAdjustment(
-        eqns, sat_func, time_varying_saturation=True,
+        eqns, sat_func_phys, time_varying_saturation=True,
         convective_feedback=True, beta1=beta1, gamma_v=gamma_v,
         time_varying_gamma_v=True, parameters=parameters
     )
@@ -609,14 +697,18 @@ if not restart:
 
     uexpr = as_vector([u_veloc, v_veloc])
 
-    ### needs editing
-    initial_msat = q0/(g*Dfinal) * exp(20*theta)
-    wvexpr = (1-xi) * initial_msat
-    print(f'Max theta is {np.max(theta)}')
-
     u0.project(uexpr)
     D0.interpolate(Dfinal)
-    wv0.interpolate(wvexpr)
+    if moist:
+        initial_msat = q0*H/Dfinal
+        coeffs = smooth_tophat(degree=smooth_degree, delta=smooth_delta, rstar=rstar, Lx=Lx, nx=nx)
+        hatsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
+        if smooth_degree == 5:
+            hatsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
+        tophat1 = conditional(r<rstar-smooth_delta*Lx/nx, 1, hatsmooth)
+        tophat = conditional(r<rstar+smooth_delta*Lx/nx, tophat1, 0)
+        wvexpr = (1-xi) * initial_msat * tophat
+        wv0.interpolate(wvexpr)
 
     if noise:
         pcg = PCG64()
@@ -637,21 +729,8 @@ elif restart:
 
 end_time = time.time()
 
-if extract_points:
-    # factor=2 gives the same scaled as field_output.nc
-    factor = res
-    xpoints = [Lx/(nx*factor)*i for i in range(int((nx/2-20)*factor), int((nx/2+20)*factor))]
-    ypoint = Ly/2
-    points = [(x, ypoint) for x in xpoints]
-    vom = VertexOnlyMesh(mesh, points)
-    P0DG = FunctionSpace(vom, "DG", 0)
-    P0DG_io = FunctionSpace(vom.input_ordering, "DG", 0)
-    PV = stepper.fields('PotentialVorticity')
-    PV_at_points = assemble(interpolate(PV, P0DG))
-    PV_at_input_points = assemble(interpolate(PV_at_points, P0DG_io))
-    import xarray as xr
-    pvend = xr.DataArray(PV_at_input_points.dat.data_ro, dims=['x'], coords=dict(x=('x', xpoints)), attrs=dict(y=ypoint/1e3))
-    pvend.to_netcdf(f'{dirname}/end_pv.nc')
+if save_points:
+    extract_points(extract_fields, extract_res)
 
 t_start = tmin if restart else 0
 
