@@ -21,6 +21,7 @@ import os
 import shutil
 import pdb
 from decimal import Decimal, ROUND_HALF_UP
+import sympy as sp
 
 def split_number(x):
     x = float(abs(x))
@@ -275,6 +276,7 @@ def sat_func_phys(x_in):
 
 def sat_func(D):
     return (q0*H/D)
+    # return q0
 
 def gamma_v(x_in):
     qsat = sat_func_phys(x_in)
@@ -282,8 +284,6 @@ def gamma_v(x_in):
     return (1+qsat*beta1/D)**(-1)
 
 def smooth_tophat(degree, delta, rstar, Lx, nx):
-    import sympy as sp
-
     delta *= Lx/nx
     r = sp.symbols('r')
     left_val = 1
@@ -405,9 +405,6 @@ t0 = 1*t_day
 south_lat_deg = [90., 83., 83., 83., 83., 83.]#, 70.]
 south_lon_deg = [0., 72., 144., 216., 288., 0.]#, 0.]
 
-### name
-setup = ''
-
 ### add noise to initial depth profile?
 noise = False
 
@@ -435,7 +432,10 @@ moist = True
 epsilon = 1./165.  # 1/T0 where T0 is standard reference temperature
 xi = 1e-2   # how far below saturation we start
 q0 = 1e-2  # scaling such that max(q0*H/D*exp(20*theta))=atmospheric specific humidity in kg/kg
-beta1 = 390 # calculated from formula - maybe put later 
+beta1 = 3900 # calculated from formula - maybe put later
+
+### name
+setup = ''
 
 ##########################################################################
 
@@ -700,7 +700,7 @@ if not restart:
     u0.project(uexpr)
     D0.interpolate(Dfinal)
     if moist:
-        initial_msat = q0*H/Dfinal
+        initial_msat = sat_func(Dfinal)
         coeffs = smooth_tophat(degree=smooth_degree, delta=smooth_delta, rstar=rstar, Lx=Lx, nx=nx)
         hatsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
         if smooth_degree == 5:
