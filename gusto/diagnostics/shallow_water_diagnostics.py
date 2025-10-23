@@ -290,7 +290,7 @@ class PartitionedVapour(DiagnosticField):
     """
     name = "PartitionedVapour"
 
-    def __init__(self, equation, name='q_t', space=None,
+    def __init__(self, equation, full_field_name='q_t', space=None,
                  method='interpolate'):
         """
         Args:
@@ -304,7 +304,7 @@ class PartitionedVapour(DiagnosticField):
                 for this diagnostic. Valid options are 'interpolate', 'project',
                 'assign' and 'solve'. Defaults to 'interpolate'.
         """
-        self.fname = name
+        self.fname = full_field_name
         self.equation = equation
         super().__init__(space=space, method=method, required_fields=(self.fname,))
 
@@ -340,7 +340,7 @@ class PartitionedCloud(DiagnosticField):
     """
     name = "PartitionedCloud"
 
-    def __init__(self, equation, name='q_t', space=None,
+    def __init__(self, equation, full_field_name='q_t', space=None,
                  method='interpolate'):
         """
         Args:
@@ -354,7 +354,7 @@ class PartitionedCloud(DiagnosticField):
                 for this diagnostic. Valid options are 'interpolate', 'project',
                 'assign' and 'solve'. Defaults to 'interpolate'.
         """
-        self.fname = name
+        self.fname = full_field_name
         self.equation = equation
         super().__init__(space=space, method=method, required_fields=(self.fname,))
 
