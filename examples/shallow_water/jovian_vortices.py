@@ -2,7 +2,8 @@ import scipy
 import numpy as np
 
 from gusto import *
-from firedrake import PeriodicRectangleMesh, SpatialCoordinate, as_vector, pi, interpolate, exp, cos, sin, sqrt, atan2, conditional
+from firedrake import (PeriodicRectangleMesh, SpatialCoordinate, as_vector,
+                       interpolate, exp, sqrt, conditional)
 
 dt = 250.          # timestep (in seconds)
 tmax = 5*dt        # duration of the simulation (in seconds)
@@ -21,145 +22,11 @@ H = 5e4
 g = 24.79
 Omega = 1.74e-4
 R = 71.4e6
-parameters = ShallowWaterParameters(mesh, H=H, g=g, Omega=Omega)
+parameters = ShallowWaterParameters(mesh, H=H, g=g, R=R,
+                                    rotation=CoriolisOptions.gammaplane)
 
 domain = Domain(mesh, dt, "RTCF", 1)
 
-def rtheta_from_xy(x, y, angle_units='rad'):
-    """
-    Returns the r, theta coordinates (where theta is measured anticlockwise from horizontal) from the planar
-    Cartesian x, y coordinates.
-
-    Args:
-        x (:class:`np.ndarray` or :class:`ufl.Expr`): x-coordinate.
-        y (:class:`np.ndarray` or :class:`ufl.Expr`): y-coordinate.
-        angle_units (str, optional): the units to use for the angle. Valid
-            options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
-
-    Returns:
-        tuple of :class`np.ndarray` or tuple of :class:`ufl.Expr`: the tuple
-            of (r, theta) coordinates in the appropriate form given the
-            provided arguments.
-    """
-
-    if angle_units not in ['rad', 'deg']:
-        raise ValueError(f'angle_units arg {angle_units} not valid')
-
-    if angle_units == 'deg':
-        unit_factor = 180./pi
-    if angle_units == 'rad':
-        unit_factor = 1.0
-
-    x_shift = x-Lx/2
-    y_shift = y-Ly/2
-
-    theta = atan2(y_shift, x_shift)
-    r = sqrt(x_shift**2 + y_shift**2)
-
-    return r, theta*unit_factor
-
-def lonlat_from_rtheta(r, theta, angle_units='rad', pole='north'):
-    """
-    Returns the lon lat coordinates from the polar r theta coordinates
-
-    Args:
-        r (:class:`np.ndarray` or :class:`ufl.Expr`): r-coordinate.
-        theta (:class:`np.ndarray` or :class:`ufl.Expr`): theta-coordinate.
-        angle_units (str, optional): the units to use for the angle. Valid
-            options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
-
-    Returns:
-        tuple of :class`np.ndarray` or tuple of :class:`ufl.Expr`: the tuple
-            of (lon, lat) coordinates in the appropriate form given the
-            provided arguments.
-    """
-
-    if angle_units not in ['rad', 'deg']:
-        raise ValueError(f'angle_units arg {angle_units} not valid')
-
-    if angle_units == 'deg':
-        unit_factor = 180./pi
-    if angle_units == 'rad':
-        unit_factor = 1.0
-
-    theta_scaled = theta/unit_factor
-
-    lon = pi/2-theta_scaled
-    lat = pi/2 - r/R
-    if pole == 'south':
-        lat*=-1
-
-    return lon*unit_factor, lat*unit_factor
-
-def rtheta_from_lonlat(lon, lat, angle_units='rad', pole='north'):
-    """
-    Returns the polar r theta coordinates from the lon lat coordinates
-
-    Args:
-        lon (:class:`np.ndarray` or :class:`ufl.Expr`): lon-coordinate.
-        lat (:class:`np.ndarray` or :class:`ufl.Expr`): lat-coordinate.
-        angle_units (str, optional): the units to use for the angle. Valid
-            options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
-
-    Returns:
-        tuple of :class`np.ndarray` or tuple of :class:`ufl.Expr`: the tuple
-            of (r, theta) coordinates in the appropriate form given the
-            provided arguments.
-    """
-
-    if angle_units not in ['rad', 'deg']:
-        raise ValueError(f'angle_units arg {angle_units} not valid')
-
-    if angle_units == 'deg':
-        unit_factor = 180./pi
-    if angle_units == 'rad':
-        unit_factor = 1.0
-
-    if pole == 'south':
-        lat*=-1
-
-    lon_scaled = lon/unit_factor
-    lat_scaled = lat/unit_factor
-
-    theta = pi/2-lon_scaled
-    r = R*(pi/2-lat_scaled)
-
-    return r, theta*unit_factor
-
-def xy_from_rtheta(r, theta, angle_units='rad'):
-    """
-    Returns the planar cartsian x, y coordinates from the
-    r, theta coordinates
-
-    Args:
-        r (:class:`np.ndarray` or :class:`ufl.Expr`): r-coordinate.
-        theta (:class:`np.ndarray` or :class:`ufl.Expr`): theta-coordinate.
-        angle_units (str, optional): the units to use for the angle. Valid
-            options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
-
-    Returns:
-        tuple of :class`np.ndarray` or tuple of :class:`ufl.Expr`: the tuple
-            of (x, y) coordinates in the appropriate form given the
-            provided arguments.
-    """
-
-    if angle_units not in ['rad', 'deg']:
-        raise ValueError(f'angle_units arg {angle_units} not valid')
-
-    if angle_units == 'deg':
-        unit_factor = 180./pi
-    if angle_units == 'rad':
-        unit_factor = 1.0
-
-    theta = theta/unit_factor
-
-    x = r * cos(theta)
-    y = r * sin(theta)
-
-    x_shift = x+Lx/2
-    y_shift = y+Ly/2
-
-    return x_shift, y_shift
 
 def smooth_f_profile(delta, rstar, Omega=parameters.Omega, R=R, Lx=Lx, nx=nx):
     """
@@ -171,15 +38,8 @@ def smooth_f_profile(delta, rstar, Omega=parameters.Omega, R=R, Lx=Lx, nx=nx):
     """
     import sympy as sp
     delta *= Lx/nx
-    Omega=Omega.dat.data[0]
+    Omega = Omega.dat.data[0]
     r = sp.symbols('r')
-
-    print("Omega:", Omega, type(Omega))
-    print("R:", R, type(R))
-    print("r:", r, type(r))
-    print("rstar:", rstar, type(rstar))
-    print("delta:", delta, type(delta))
-    print("float:", float)
 
     fexpr = 2*Omega*(1-0.5*r**2/R**2)
     left_val = fexpr.subs(r, rstar-delta)
@@ -187,7 +47,7 @@ def smooth_f_profile(delta, rstar, Omega=parameters.Omega, R=R, Lx=Lx, nx=nx):
     left_diff_val = sp.diff(fexpr, r).subs(r, rstar-delta)
     left_diff2_val = sp.diff(fexpr, r, 2).subs(r, rstar-delta)
 
-    a = sp.symbols(f'a_0:6')
+    a = sp.symbols('a_0:6')
     P = a[0]
     for i in range(1, 6):
         P += a[i]*r**i
@@ -204,6 +64,7 @@ def smooth_f_profile(delta, rstar, Omega=parameters.Omega, R=R, Lx=Lx, nx=nx):
     coeffs = [sol[sp.Symbol(f'a_{i}')] for i in range(6)]
     return coeffs
 
+
 r, theta = rtheta_from_xy(x, y)
 
 Omega = parameters.Omega
@@ -211,15 +72,15 @@ Omega = parameters.Omega
 fexpr = 2*Omega*(1-0.5*r**2/R**2)
 # extract the coefficients of the smooth region. Here the trap radius is 3 cells from the edge of the domain, and the smoothing takes 2 cells either side of this trap radius
 delta = 2
-rstar = Lx/2-3*Lx/nx
+rstar = Lx/2 - 3*Lx/nx
 coeffs = smooth_f_profile(delta, rstar)
 # define a firedrake function using the polynomial coefficients
 fsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3 + float(coeffs[4])*r**4 + float(coeffs[5])*r**5
 # use the gamma plane expression (fexpr), the smoothing (fsmooth) and the trap value (2*Omega) to build a full Coriolis expression
-ftrap1 = conditional(r<rstar-delta*Lx/nx, fexpr, fsmooth)
-ftrap = conditional(r<rstar+delta*Lx/nx, ftrap1, 2*Omega)
+ftrap1 = conditional(r < rstar-delta*Lx/nx, fexpr, fsmooth)
+ftrap = conditional(r < rstar+delta*Lx/nx, ftrap1, 2*Omega)
 
-eqns = ShallowWaterEquations(domain, parameters, fexpr=ftrap)
+eqns = ShallowWaterEquations(domain, parameters)
 
 output = OutputParameters(dirname="singlevortextrial7", dumpfreq=5)
 
@@ -243,8 +104,8 @@ stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
 u0 = stepper.fields("u")
 D0 = stepper.fields("D")
 
-south_lat_deg = [85.]#, 85., 85., 85., 85., 85.]#, 75.]
-south_lon_deg = [0.]#, 0., 72., 144., 216., 288.]#, 0.]
+south_lat_deg = [85.]
+south_lon_deg = [0.]
 
 b = 1.5               # Steepness parameter
 Ro = 0.23             # Rossby Number
@@ -258,6 +119,7 @@ Bu = phi0 / (f0 * rm)**2
 south_lat = np.deg2rad(south_lat_deg)
 south_lon = np.deg2rad(south_lon_deg)
 
+
 def initialise_D(X, idx):
     # computes the initial depth perturbation corresponding to vortex
     # idx, given coordinates X
@@ -267,7 +129,7 @@ def initialise_D(X, idx):
     phi_c = south_lat[idx]
 
     # find the x-y (grid) coordinates of the centre of the vortex
-    r_c, theta_c = rtheta_from_lonlat(lamda_c, phi_c)
+    r_c, theta_c = rtheta_from_lonlat(lamda_c, phi_c, R)
     x_c, y_c = xy_from_rtheta(r_c, theta_c)
 
     # make an empty list of D values to append to
@@ -283,6 +145,7 @@ def initialise_D(X, idx):
 
     # return list of D values in correct order
     return D_values
+
 
 # get the function space from the field we would like to initialise (D0)
 VD = D0.function_space()
@@ -308,14 +171,14 @@ u_veloc = 0.*x
 v_veloc = 0.*y
 
 for i in range(len(south_lat)):
-    r_c, theta_c = rtheta_from_lonlat(south_lon[i], south_lat[i])
+    r_c, theta_c = rtheta_from_lonlat(south_lon[i], south_lat[i], R)
     x_c, y_c = xy_from_rtheta(r_c, theta_c)
     dx = x - x_c
     dy = y - y_c
     dr = sqrt(dx**2 + dy**2)
 
     # Overide u,v components in velocity field
-    mag_veloc = vm * ( dr / rm ) * exp( (1/b) * ( 1 - ( dr / rm )**b ) )
+    mag_veloc = vm * (dr / rm) * exp((1/b) * (1 - (dr / rm)**b))
 
     u_veloc += - mag_veloc * (dy / dr)
     v_veloc += mag_veloc * (dx / dr)
@@ -330,4 +193,3 @@ stepper.set_reference_profiles([('D', Dbar)])
 
 # Run the timestepper and generate the output.
 stepper.run(t=0, tmax=tmax)
-

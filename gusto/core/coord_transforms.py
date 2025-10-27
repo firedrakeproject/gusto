@@ -11,7 +11,8 @@ import ufl
 __all__ = ["xyz_from_lonlatr", "lonlatr_from_xyz", "xyz_vector_from_lonlatr",
            "lonlatr_components_from_xyz", "rodrigues_rotation", "pole_rotation",
            "rotated_lonlatr_vectors", "rotated_lonlatr_coords",
-           "periodic_distance", "great_arc_angle"]
+           "periodic_distance", "great_arc_angle", "xy_from_rtheta",
+           "rtheta_from_xy", "rtheta_from_lonlat", "lonlat_from_rtheta"]
 
 
 def firedrake_or_numpy(variable):
@@ -531,3 +532,157 @@ def great_arc_angle(lon1, lat1, lon2, lat2, units='rad'):
         arc_length *= 180.0 / pi
 
     return arc_length
+
+
+def xy_from_rtheta(r, theta, angle_units='rad'):
+    """
+    Returns the planar cartsian x, y coordinates from the
+    r, theta coordinates
+
+    Args:
+        r (:class:`np.ndarray` or :class:`ufl.Expr`): r-coordinate.
+        theta (:class:`np.ndarray` or :class:`ufl.Expr`): theta-coordinate.
+        angle_units (str, optional): the units to use for the angle. Valid
+            options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
+
+    Returns:
+        tuple of :class`np.ndarray` or tuple of :class:`ufl.Expr`: the tuple
+            of (x, y) coordinates in the appropriate form given the
+            provided arguments.
+    """
+
+    # Import routines
+    module, _ = firedrake_or_numpy(r)
+    cos = module.cos
+    sin = module.sin
+    pi = module.pi
+
+    if angle_units not in ['rad', 'deg']:
+        raise ValueError(f'angle_units arg {angle_units} not valid')
+
+    if angle_units == 'deg':
+        unit_factor = 180./pi
+    if angle_units == 'rad':
+        unit_factor = 1.0
+
+    theta = theta/unit_factor
+
+    x = r * cos(theta)
+    y = r * sin(theta)
+
+    return x, y
+
+
+def rtheta_from_xy(x, y, angle_units='rad'):
+    """
+    Returns the r, theta coordinates (where theta is measured anticlockwise from horizontal) from the planar
+    Cartesian x, y coordinates.
+
+    Args:
+        x (:class:`np.ndarray` or :class:`ufl.Expr`): x-coordinate.
+        y (:class:`np.ndarray` or :class:`ufl.Expr`): y-coordinate.
+        angle_units (str, optional): the units to use for the angle. Valid
+            options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
+
+    Returns:
+        tuple of :class`np.ndarray` or tuple of :class:`ufl.Expr`: the tuple
+            of (r, theta) coordinates in the appropriate form given the
+            provided arguments.
+    """
+
+    # Import routines
+    module, _ = firedrake_or_numpy(x)
+    atan2 = module.atan2 if hasattr(module, "atan2") else module.arctan2
+    sqrt = module.sqrt
+    pi = module.pi
+
+    if angle_units not in ['rad', 'deg']:
+        raise ValueError(f'angle_units arg {angle_units} not valid')
+
+    if angle_units == 'deg':
+        unit_factor = 180./pi
+    if angle_units == 'rad':
+        unit_factor = 1.0
+
+    theta = atan2(y, x)
+    r = sqrt(x**2 + y**2)
+
+    return r, theta*unit_factor
+
+
+def rtheta_from_lonlat(lon, lat, R, angle_units='rad', pole='north'):
+    """
+    Returns the polar r theta coordinates from the lon lat coordinates
+
+    Args:
+        lon (:class:`np.ndarray` or :class:`ufl.Expr`): lon-coordinate.
+        lat (:class:`np.ndarray` or :class:`ufl.Expr`): lat-coordinate.
+        angle_units (str, optional): the units to use for the angle. Valid
+            options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
+
+    Returns:
+        tuple of :class`np.ndarray` or tuple of :class:`ufl.Expr`: the tuple
+            of (r, theta) coordinates in the appropriate form given the
+            provided arguments.
+    """
+
+    # Import routines
+    module, _ = firedrake_or_numpy(lon)
+    pi = module.pi
+
+    if angle_units not in ['rad', 'deg']:
+        raise ValueError(f'angle_units arg {angle_units} not valid')
+
+    if angle_units == 'deg':
+        unit_factor = 180./pi
+    if angle_units == 'rad':
+        unit_factor = 1.0
+
+    if pole == 'south':
+        lat *= -1
+
+    lon_scaled = lon/unit_factor
+    lat_scaled = lat/unit_factor
+
+    theta = pi/2-lon_scaled
+    r = R*(pi/2-lat_scaled)
+
+    return r, theta*unit_factor
+
+
+def lonlat_from_rtheta(r, theta, R, angle_units='rad', pole='north'):
+    """
+    Returns the lon lat coordinates from the polar r theta coordinates
+
+    Args:
+        r (:class:`np.ndarray` or :class:`ufl.Expr`): r-coordinate.
+        theta (:class:`np.ndarray` or :class:`ufl.Expr`): theta-coordinate.
+        angle_units (str, optional): the units to use for the angle. Valid
+            options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
+
+    Returns:
+        tuple of :class`np.ndarray` or tuple of :class:`ufl.Expr`: the tuple
+            of (lon, lat) coordinates in the appropriate form given the
+            provided arguments.
+    """
+
+    # Import routines
+    module, _ = firedrake_or_numpy(r)
+    pi = module.pi
+
+    if angle_units not in ['rad', 'deg']:
+        raise ValueError(f'angle_units arg {angle_units} not valid')
+
+    if angle_units == 'deg':
+        unit_factor = 180./pi
+    if angle_units == 'rad':
+        unit_factor = 1.0
+
+    theta_scaled = theta/unit_factor
+
+    lon = pi/2-theta_scaled
+    lat = pi/2 - r/R
+    if pole == 'south':
+        lat *= -1
+
+    return lon*unit_factor, lat*unit_factor

@@ -16,6 +16,7 @@ class CoriolisOptions(Enum):
     nonrotating = 11  # no Coriolis term
     fplane = 23       # constant Coriolis term equal to f0
     betaplane = 31    # Coriolis term equal to f0 + beta(y-y0)
+    gammaplane = 37   # Coriolis term equal to f0 - gamma r**2
     sphere = 42       # Coriolis term equal to 2 Omega sin(lat)
 
 
@@ -108,9 +109,10 @@ class ShallowWaterParameters(EquationParameters):
     # Coriolis options: controlled by rotation parameter
     rotation = CoriolisOptions.sphere  # type of Coriolis term
     Omega = 7.292e-5  # rotation rate
-    f0 = None    # f- and beta- plane Coriolis parameter
+    f0 = None    # f-, beta- and gamma-plane Coriolis parameter
     beta = None  # beta-plane y-variation parameter
     y0 = None    # beta-plane y-centre
+    R = None     # Radius of planet used to compute gamma in gamma-plane approx
     topog_expr = None  # topography expression
     H = None  # mean depth
     # Factor that multiplies the vapour in the equivalent buoyancy
