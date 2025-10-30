@@ -244,8 +244,16 @@ def RexiiCoefficients(rexi_parameters):
             c1[n+N] += b[n-k+M]*h*a[k+L].real
             c2[n+N] += b[n-k+M]*h*a[k+L].imag
 
-    for n in range(start_n, N+1):
+    # Check that: c1*[n] =  c1[-n]
+    #             c2*[n] = -c2[-n]
+    if not reduce_to_half:
+        for n in range(1,N+1):
+            diff_c1 = numpy.conjugate(c1[n+N]) - c1[-n+N]
+            assert( abs(diff_c1) < 2.0e-15)
+            diff_c2 = numpy.conjugate(c2[n+N]) + c2[-n+N]
+            assert( abs(diff_c2) < 2.0e-15 )
 
+    for n in range(start_n, N+1):
         if reduce_to_half and n != 0:
             Gamma = 2.
         else:
@@ -256,5 +264,20 @@ def RexiiCoefficients(rexi_parameters):
         # Include Gamma in both C1 and C2 terms. It will cancel out in C1/C2 but be present in the leading C2 term.
         C1[n-start_n] = Gamma * ( c1[n+N] * h * mu + c2[n+N] * h * n)
         C2[n-start_n] = Gamma * 1j * c2[n+N]
+
+    # Check that: alpha[n] = alpha*[-n]
+    if not reduce_to_half:
+        for n in range(1,N+1):
+            diff_alpha = alpha[n+N] - numpy.conjugate(alpha[-n+N])
+            assert( diff_alpha < 1.0e-33 )
+
+    # Check that    C1*[n] = C1[-n]
+    #               C2*[n] = C2[-n]
+    if not reduce_to_half:
+        for n in range(1,N+1):
+            diff_C1 = numpy.conjugate(C1[n+N]) - C1[-n+N]
+            assert( abs(diff_C1) < 1.0e-14 )
+            diff_C2 = numpy.conjugate(C2[n+N]) - C2[-n+N]
+            assert (abs(diff_C2) < 1.0e-15 )
 
     return alpha, C1, C2
