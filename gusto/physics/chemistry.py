@@ -99,8 +99,8 @@ class TerminatorToy(PhysicsParametrisation):
             self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
             self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
 
-            self.source_interpolate = [interpolate(source1_expr, self.source_int[0]),
-                                       interpolate(source2_expr, self.source_int[1])]
+            self.source_interpolate = [interpolate(source1_expr, self.source_int[0].function_space()),
+                                       interpolate(source2_expr, self.source_int[1].function_space())]
 
             equation.residual -= source_label(self.label(subject(prognostic(test1 * self.source_expr[0] * dx, species1_name), equation.X), self.evaluate))
             equation.residual -= source_label(self.label(subject(prognostic(test2 * self.source_expr[1] * dx, species2_name), equation.X), self.evaluate))
