@@ -15,6 +15,8 @@ nx = 256
 ny = nx
 mesh = PeriodicRectangleMesh(nx, ny, Lx, Ly, quadrilateral=True)
 x, y = SpatialCoordinate(mesh)
+mesh.coordinates.dat.data[:, 0] -= 0.5 * Lx
+mesh.coordinates.dat.data[:, 1] -= 0.5 * Ly
 
 # setup shallow water parameters
 # specify g and Omega here if different from Earth values
