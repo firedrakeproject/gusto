@@ -113,9 +113,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         # If we have an augmentation with a separate residual to set up,
         # do so now that we have replaced the transport forms.
-        if hasattr(self.scheme, 'augmentation'):
-            if hasattr(self.scheme.augmentation, 'setup_residual') and callable(self.scheme.augmentation.setup_residual):
-                self.scheme.augmentation.setup_residual(self.equation)
+        if hasattr(self, 'scheme'):
+            if self.scheme.augmentation is not None:
+                if hasattr(self.scheme.augmentation, 'setup_residual') and callable(self.scheme.augmentation.setup_residual):
+                    self.scheme.augmentation.setup_residual(self.equation)
 
     def setup_transporting_velocity(self, scheme):
         """
