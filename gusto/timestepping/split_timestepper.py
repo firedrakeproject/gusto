@@ -215,7 +215,7 @@ class SplitPhysicsTimestepper(Timestepper):
         self.setup_equation(self.equation)
 
         if self.scheme.augmentation is not None:
-            if hasattr(self.augmentation, 'setup_residual') and callable(self.augmentation.setup_residual):
+            if hasattr(self.scheme.augmentation, 'setup_residual') and callable(self.scheme.augmentation.setup_residual):
                 # In the augmentation residual,
                 dynamics = Label('dynamics')
                 self.scheme.augmentation.residual = self.scheme.augmentation.residual.label_map(
@@ -309,7 +309,7 @@ class SplitPrescribedTransport(Timestepper):
         self.setup_equation(self.equation)
 
         if self.scheme.augmentation is not None:
-            if hasattr(self.augmentation, 'setup_residual') and callable(self.augmentation.setup_residual):
+            if hasattr(self.scheme.augmentation, 'setup_residual') and callable(self.scheme.augmentation.setup_residual):
                 # In the augmentation residual,
                 # go through and label all non-physics terms with a "dynamics" label
                 dynamics = Label('dynamics')
