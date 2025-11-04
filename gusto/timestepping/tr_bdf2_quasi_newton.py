@@ -404,15 +404,15 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         # Update reference profiles --------------------------------------------
         self.update_reference_profiles()
 
-        # Slow physics ---------------------------------------------------------
+        # TR step ==============================================================
+
+        # TR slow physics ------------------------------------------------------
         x_after_tr_slow(fname).assign(xn(fname))
         if len(self.tr_slow_physics_schemes) > 0:
             with timed_stage("Slow physics"):
                 logger.info('TR-BDF2 Quasi Newton: TR Slow physics')
                 for _, scheme in self.tr_slow_physics_schemes:
                     scheme.apply(x_after_tr_slow(scheme.field_name), x_after_tr_slow(scheme.field_name))
-
-        # TR step ==============================================================
 
         # Explicit forcing -----------------------------------------------------
         with timed_stage("Apply forcing terms"):
@@ -499,9 +499,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 for _, scheme in self.bdf_mid_physics_schemes:
                     scheme.apply(x_after_bdf_mid(scheme.field_name), x_after_bdf_mid(scheme.field_name))
 
-        # set xp here so that variables that are not transported have
+        # set xp and xpm here so that variables that are not transported have
         # the correct values
-
         xp(fname).assign(x_after_bdf_slow(fname))
         xpm(fname).assign(x_after_bdf_mid(fname))
         xnp1(fname).assign(xn(fname))  # First guess doesn't seem to make much difference
