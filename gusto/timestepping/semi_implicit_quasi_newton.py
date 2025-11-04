@@ -44,7 +44,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  predictor=None, reference_update_freq=None,
                  spinup_steps=0, solver_prognostics=None,
                  linear_solver_parameters=None,
-                 overwrite_linear_solver_parameters=False):
+                 overwrite_linear_solver_parameters=False,
+                 fix_u_in_spinup=False):
         """
         Args:
             equation_set (:class:`PrognosticEquationSet`): the prognostic
@@ -128,6 +129,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 `solver_parameters` that have been passed in. If False then
                 update the default parameters with the `solver_parameters`
                 passed in. Defaults to False.
+            fix_u_in_spinup (bool, optional): Whether or not the wind field
+                will stay at its initial value when spinning up a model. If
+                this is True the wind will remain at its initial value
+                throughout the spinup period. Defaults to False.
         """
 
         # Basic parts of the SIQN structure ------------------------------------
@@ -139,6 +144,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.predictor = predictor
         self.accelerator = accelerator
         self.implicit_terms = [incompressible, sponge]
+
+        # Save whether or not wind is fixed at its initial value during
+        # spinup
+        self.fix_u_in_spinup = fix_u_in_spinup
 
         # default is to not offcentre transporting velocity but if it
         # is offcentred then use the same value as alpha
@@ -454,6 +463,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.linear_solver.update_reference_profiles()
         self.forcing.solvers['explicit'].invalidate_jacobian()
         self.forcing.solvers['implicit'].invalidate_jacobian()
+        if self.fix_u_in_spinup:
+            self.fix_u = True
+            self.initial_u = Function(self.x.n("u").function_space()).assign(self.x.n("u"))
         # This only needs doing once, so update the flag
         self.spinup_begun = True
 
@@ -472,6 +484,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.forcing.solvers['implicit'].invalidate_jacobian()
         # This only needs doing once, so update the flag
         self.spinup_done = True
+        # Update the flag so that u updates
+        self.fix_u = False
 
     def timestep(self):
         """Defines the timestep"""
@@ -553,6 +567,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                 xnp1X = xnp1(self.field_name)
                 xnp1X += dy
+
+                if self.fix_u:
+                    xnp1("u").assign(self.initial_u)
 
             # Update xnp1 values for active tracers not included in the linear solve
             self.copy_active_tracers(x_after_fast, xnp1)
