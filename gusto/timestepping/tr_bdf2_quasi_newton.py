@@ -1,12 +1,11 @@
 """
 The TR-BDF2 Quasi-Newton timestepper.
 """
-
+import numpy as np
 from firedrake import (
-    Function, FunctionSpace, sqrt
+    Function, FunctionSpace, sqrt, Constant
 )
 
-from dans_utilities import plot_time_level_state, Williamson2PhysicsComparison
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (transport, diffusion, sponge, incompressible)
@@ -112,34 +111,30 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.num_inner_bdf = num_inner_bdf
 
         mesh = equation_set.domain.mesh
-        R = FunctionSpace(mesh, "R", 0)
-        self.gamma = Function(R, val=float(gamma))
-        self.gamma2 = Function(R, val=((1 - 2*float(gamma))/(2 - 2*float(gamma))))
-        self.gamma3 = Function(R, val=((1-float(self.gamma2))/(2*float(gamma))))
+        self.R = FunctionSpace(mesh, "R", 0)
+        
+        self.gamma = Function(self.R, val=float(gamma))
+        self.gamma2 = Function(self.R, val=((1 - 2*float(gamma))/(2 - 2*float(gamma))))
+        self.gamma3 = Function(self.R, val=((1-float(self.gamma2))/(2*float(gamma))))
 
         # Options relating to reference profiles
         self.reference_update_freq = reference_update_freq
         self.to_update_ref_profile = False
 
         # Set transporting velocity to be average
-        self.alpha_u = Function(R, val=0.5)
+        self.alpha_u = Function(self.R, val=0.5)
         self.implicit_terms = [incompressible, sponge]
         self.spatial_methods = spatial_methods
 
-        if final_physics_schemes is not None:
-            self.final_physics_schemes = final_physics_schemes
-        else:
-            self.final_physics_schemes = []
-
-        if scaled_final_physics_schemes is not None:
-            self.scaled_final_physics_schemes = scaled_final_physics_schemes
-        else:
-            self.scaled_final_physics_schemes = []
-#
         if tr_slow_physics_schemes is not None:
             self.tr_slow_physics_schemes = tr_slow_physics_schemes
         else:
             self.tr_slow_physics_schemes = []
+
+        if middle_physics_schemes is not None:
+            self.middle_physics_schemes = middle_physics_schemes
+        else:
+            self.middle_physics_schemes = []
 
         if bdf_slow_physics_schemes is not None:
             self.bdf_slow_physics_schemes = bdf_slow_physics_schemes
@@ -151,10 +146,15 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         else:
             self.bdf_mid_physics_schemes = []
 
-        if middle_physics_schemes is not None:
-            self.middle_physics_schemes = middle_physics_schemes
+        if final_physics_schemes is not None:
+            self.final_physics_schemes = final_physics_schemes
         else:
-            self.middle_physics_schemes = []
+            self.final_physics_schemes = []
+
+        if scaled_final_physics_schemes is not None:
+            self.scaled_final_physics_schemes = scaled_final_physics_schemes
+        else:
+            self.scaled_final_physics_schemes = []
 
         # if tr_fast_physics_schemes is not None:
         #    self.tr_fast_physics_schemes = tr_fast_physics_schemes
@@ -178,14 +178,16 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         #    self.bdf_fast_physics_schemes = []
 
         self.all_physics_schemes = (self.tr_slow_physics_schemes
+                                    + self.middle_physics_schemes
                                     + self.bdf_slow_physics_schemes
                                     + self.bdf_mid_physics_schemes
                                     # + self.tr_fast_physics_schemes
                                     # + self.bdf_fast_physics_schemes
-                                    + self.middle_physics_schemes
                                     + self.final_physics_schemes
                                     + self.scaled_final_physics_schemes
                                     )
+        print(f'Checking length of physics schemes')
+        breakpoint()
         for parametrisation, scheme in self.all_physics_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             if hasattr(parametrisation, "explicit_only") and parametrisation.explicit_only:
@@ -286,49 +288,86 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         apply_bcs = True
         for _, scheme in self.diffusion_schemes:
             scheme.setup(self.equation, apply_bcs, diffusion)
-
-        for parametrisation, scheme in self.tr_slow_physics_schemes:
-            apply_bcs = True
-            dt_scale = 2.0*self.gamma
-            scheme.setup(self.equation, apply_bcs, parametrisation.label,
-                         dt_scale=dt_scale)
-
         # setup physics schemes
-        for parametrisation, scheme in self.middle_physics_schemes:
+
+        # debugging vals
+        g1 = 1 - np.sqrt(2) / 2   # 0.293
+        g2 = 1 - np.sqrt(2) / 2   # 0.293
+        g3 = (1 + np.sqrt(2)) / 2 # 1.207
+
+        # TR slow physics
+        for parametrisation, scheme in self.tr_slow_physics_schemes:
+            print(f'TR slow physics length check')
+            breakpoint()
             apply_bcs = True
             dt_scale = 2.0*self.gamma
+            scale_proxy = 2.0*g1
+            logger.info(f'TR-BDF2 TR slow physics: dt scaling is {scale_proxy}')
             scheme.setup(self.equation, apply_bcs, parametrisation.label,
                          dt_scale=dt_scale)
+            logger.info(f'TR-BDF2 TR slow physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
 
+        # Middle step phsyics
+        for parametrisation, scheme in self.middle_physics_schemes:
+            print(f'Mid physics length check')
+            breakpoint()
+            apply_bcs = True
+            dt_scale = 2.0*self.gamma
+            scale_proxy = 2.0*g1
+            logger.info(f'TR-BDF2 Mid Physics: dt scaling set to {scale_proxy}')
+            scheme.setup(self.equation, apply_bcs, parametrisation.label,
+                         dt_scale=dt_scale)
+            logger.info(f'TR-BDF2 Mid Physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
+
+        # BDF slow step physics
         for parametrisation, scheme in self.bdf_slow_physics_schemes:
             apply_bcs = True
+            print(f'BDF slow physics length check')
+            breakpoint()
             if len(self.tr_slow_physics_schemes) > 0:
-                dt_scale = (1 - 2.0*self.gamma*self.gamma3)/(1 - self.gamma3)
+                dt_scale = (1.0 - 2.0*self.gamma*self.gamma3)/(1.0 - self.gamma3)
+                scale_proxy = (1.0 - 2.0*g2*g3)/(1.0 - g3)
             elif len(self.bdf_mid_physics_schemes) > 0:
-                dt_scale = 1
+                dt_scale = 1.0
+                scale_proxy = 1.0
             else:
-                dt_scale = 1 / (1 - self.gamma3)
-            scheme.setup(self.equation, apply_bcs, parametrisation.label,
-                         dt_scale=dt_scale)
+                dt_scale = 1.0 / (1.0 - self.gamma3)
+                scale_proxy = 1.0 / (1.0 - g3)
+            logger.info(f'TR-BDF2 BDF slow physics: dt scaling set to {scale_proxy}')
+            scheme.setup(self.equation, apply_bcs, parametrisation.label, dt_scale=dt_scale)
+            logger.info(f'TR-BDF2 BDF slow physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
 
+        # BDF mid step physics
         for parametrisation, scheme in self.bdf_mid_physics_schemes:
             apply_bcs = True
-            dt_scale = 1
-            scheme.setup(self.equation, apply_bcs, parametrisation.label,
-                         dt_scale=dt_scale)
+            print(f'BDF mid physics length check')
+            breakpoint()
+            dt_scale = 1.0
+            logger.info(f'TR-BDF2 BDF mid physics: dt scaling set to {dt_scale}')
+            scheme.setup(self.equation, apply_bcs, parametrisation.label)
+            logger.info(f'TR-BDF2 BDF mid physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
 
+        # Scaled final physics
         for parametrisation, scheme in self.scaled_final_physics_schemes:
             apply_bcs = True
-            dt_scale = 1 - 2.0*self.gamma*self.gamma3
+            print(f'Scaled final physics length check')
+            breakpoint()
+            dt_scale = 1.0 - 2.0*self.gamma*self.gamma3
+            scale_proxy = 1.0 - 2.0*g1*g3
+            logger.info(f'Scaled final physics: dt scaling set to {scale_proxy}')
             scheme.setup(self.equation, apply_bcs, parametrisation.label,
                          dt_scale=dt_scale)
+            logger.info(f'Scaled final physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
 
-        print(f'Setting up final physics schemes with dt_scale = 1.0')
+        # Final physics
         for parametrisation, scheme in self.final_physics_schemes:
             apply_bcs = True
-            logger.info(f'Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
+            print(f'Scaled final physics length check')
+            breakpoint()
+            dt_scale = 1.0
+            logger.info(f'Final physics: dt scaling set to {dt_scale}')
             scheme.setup(self.equation, apply_bcs, parametrisation.label)
-            logger.info(f'Scaled dt set to {scheme.dt.dat.data}')
+            logger.info(f'Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
 
     def copy_active_tracers(self, x_in, x_out):
         """
@@ -566,6 +605,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
         if len(self.scaled_final_physics_schemes) > 0:
             with timed_stage("Scaled Final Physics"):
+                logger.info('TR-BDF2 Quasi Newton: Scaled final physics')
                 for _, scheme in self.scaled_final_physics_schemes:
                     scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
    
