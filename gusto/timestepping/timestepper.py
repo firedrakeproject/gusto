@@ -190,7 +190,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             pick_up: (bool): specify whether to pick_up from a previous run
         """
         self.first_run = first_run
-        if self.first_run == True:
+        if self.first_run:
             # Set up diagnostics, which may set up some fields necessary to pick up
             self.io.setup_diagnostics(self.fields)
             self.io.setup_log_courant(self.fields)
@@ -220,7 +220,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         else:
             self.step = 1
-
 
         self.log_field_stats()
 
