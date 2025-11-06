@@ -11,7 +11,7 @@ from firedrake.fml import subject
 from gusto.core.logging import logger
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
 from gusto.core.labels import source_label
-from types import FunctionType
+from types import FunctionType, MethodType
 
 
 __all__ = ["InstantRain", "SWSaturationAdjustment"]
@@ -109,14 +109,14 @@ class InstantRain(PhysicsParametrisation):
             logger.info("Timescale for rain conversion has been set to dt. If this is not the intention then provide a tau parameter as an argument to InstantRain.")
 
         if self.time_varying_saturation:
-            if isinstance(saturation_curve, FunctionType):
+            if isinstance(saturation_curve, FunctionType) or isinstance(saturation_curve, MethodType):
                 self.saturation_computation = saturation_curve
                 self.saturation_curve = Function(Vv)
             else:
                 raise NotImplementedError(
                     "If time_varying_saturation is True then saturation must be a Python function of a prognostic field.")
         else:
-            assert not isinstance(saturation_curve, FunctionType), "If time_varying_saturation is not True then saturation cannot be a Python function."
+            assert not isinstance(saturation_curve, FunctionType) or isinstance(saturation_curve, MethodType), "If time_varying_saturation is not True then saturation cannot be a Python function."
             self.saturation_curve = saturation_curve
 
         # lose proportion of vapour above the saturation curve
@@ -292,14 +292,14 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             logger.info("Timescale for moisture conversion between vapour and cloud has been set to dt. If this is not the intention then provide a tau parameter as an argument to SWSaturationAdjustment.")
 
         if self.time_varying_saturation:
-            if isinstance(saturation_curve, FunctionType):
+            if isinstance(saturation_curve, FunctionType) or isinstance(saturation_curve, MethodType):
                 self.saturation_computation = saturation_curve
                 self.saturation_curve = Function(Vv)
             else:
                 raise NotImplementedError(
                     "If time_varying_saturation is True then saturation must be a Python function of at least one prognostic field.")
         else:
-            assert not isinstance(saturation_curve, FunctionType), "If time_varying_saturation is not True then saturation cannot be a Python function."
+            assert not isinstance(saturation_curve, FunctionType) or isinstance(saturation_curve, MethodType), "If time_varying_saturation is not True then saturation cannot be a Python function."
             self.saturation_curve = saturation_curve
 
         # Saturation adjustment expression, adjusted to stop negative values
@@ -314,14 +314,14 @@ class SWSaturationAdjustment(PhysicsParametrisation):
 
         # If gamma_v depends on variables
         if self.time_varying_gamma_v:
-            if isinstance(gamma_v, FunctionType):
+            if isinstance(gamma_v, FunctionType) or isinstance(gamma_v, MethodType):
                 self.gamma_v_computation = gamma_v
                 self.gamma_v = Function(Vv)
             else:
                 raise NotImplementedError(
                     "If time_varying_thermal_feedback is True then gamma_v must be a Python function of at least one prognostic field.")
         else:
-            assert not isinstance(gamma_v, FunctionType), "If time_varying_thermal_feedback is not True then gamma_v cannot be a Python function."
+            assert not isinstance(gamma_v, FunctionType) or isinstance(gamma_v, MethodType), "If time_varying_thermal_feedback is not True then gamma_v cannot be a Python function."
             self.gamma_v = gamma_v
 
         # Factors for multiplying source for different variables
