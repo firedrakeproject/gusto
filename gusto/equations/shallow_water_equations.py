@@ -205,8 +205,8 @@ class ShallowWaterEquations(PrognosticEquationSet):
             elif rotation is CoriolisOptions.gammaplane:
                 x, y = SpatialCoordinate(self.domain.mesh)
                 r, _ = rtheta_from_xy(x, y)
-                gamma = self.parameters.Omega / (self.parameters.R**2)
-                fexpr = 2*self.parameters.Omega * (1 - 0.5 * gamma * r**2)
+                Rsq = self.parameters.R**2
+                fexpr = 2*self.parameters.Omega * (1 - 0.5 * r**2 / Rsq)
             else:
                 raise NotImplementedError('Coriolis option is not implemented')
             self.prescribed_fields('coriolis', CG1).interpolate(fexpr)
