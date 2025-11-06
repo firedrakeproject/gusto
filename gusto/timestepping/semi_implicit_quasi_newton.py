@@ -575,7 +575,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         logger.debug("Leaving Semi-implicit Quasi-Newton timestep method")
 
-    def run(self, t, tmax, pick_up=False):
+    def run(self, t, tmax, pick_up=False, first_run=True):
         """
         Runs the model for the specified time, from t to tmax.
 
@@ -597,7 +597,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             # Indicate that linear solver profile needs updating
             self.to_update_ref_profile = True
 
-        super().run(t, tmax, pick_up=pick_up)
+        super().run(t, tmax, pick_up=pick_up, first_run=first_run)
 
 
 class Forcing(object):
