@@ -447,7 +447,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             self.limiter.apply(x_in)
 
         self.x1.assign(x_in)
-
+        print(f'Apply cycle of ')
         for i in range(self.nStages):
             self.solve_stage(x_in, i)
         x_out.assign(self.x1)
