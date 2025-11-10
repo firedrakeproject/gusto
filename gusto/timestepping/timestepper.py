@@ -20,11 +20,12 @@ __all__ = ["BaseTimestepper", "Timestepper", "PrescribedTransport"]
 class BaseTimestepper(object, metaclass=ABCMeta):
     """Base class for timesteppers."""
 
-    def __init__(self, equation, io):
+    def __init__(self, equation, io, init_io=True):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation.
             io (:class:`IO`): the model's object for controlling input/output.
+            init_io (:bool): whether or not to set up the IO
         """
 
         self.equation = equation
@@ -38,6 +39,8 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.setup_scheme()
 
         self.io.log_parameters(equation)
+
+        self.init_io = init_io
 
     @abstractproperty
     def transporting_velocity(self):
@@ -180,7 +183,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 max_val = field_data.max()
                 logger.debug(f'{field_name}, min: {min_val}, max: {max_val}')
 
-    def run(self, t, tmax, pick_up=False, first_run=True):
+    def run(self, t, tmax, pick_up=False):
         """
         Runs the model for the specified time, from t to tmax
 
@@ -189,8 +192,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             tmax (float): the end time of the run
             pick_up: (bool): specify whether to pick_up from a previous run
         """
-        self.first_run = first_run
-        if self.first_run:
+        if self.init_io:
             # Set up diagnostics, which may set up some fields necessary to pick up
             self.io.setup_diagnostics(self.fields)
             self.io.setup_log_courant(self.fields)
@@ -206,7 +208,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 logger.debug('Dumping output to disk')
                 self.io.setup_dump(self.fields, t, pick_up)
 
-            self.first_run = False
+            self.init_io = False
 
         if pick_up:
             # Pick up fields, and return other info to be picked up
