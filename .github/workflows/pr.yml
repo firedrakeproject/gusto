@@ -14,7 +14,7 @@ jobs:
       firedrake_docker_version: ${{ steps.find.outputs.firedrake_docker_version }}
     steps:
       - id: find
-        run:
+        run: |
           if [ ${{ github.base_ref }} = 'main' ]; then
             echo "firedrake_docker_version=dev-release" >> "$GITHUB_OUTPUT"
           else
