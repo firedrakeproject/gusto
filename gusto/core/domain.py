@@ -107,12 +107,12 @@ class Domain(object):
         # WARNING: if we ever wanted to run on other domains (e.g. circle, disk
         # or torus) then the identification of domains would no longer be unique
         if hasattr(mesh, "_base_mesh") and hasattr(mesh._base_mesh, 'geometric_dimension'):
-            self.on_sphere = (mesh._base_mesh.geometric_dimension() == 3 and mesh._base_mesh.topological_dimension() == 2)
+            self.on_sphere = (mesh._base_mesh.geometric_dimension == 3 and mesh._base_mesh.topological_dimension == 2)
         else:
-            self.on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)
+            self.on_sphere = (mesh.geometric_dimension == 3 and mesh.topological_dimension == 2)
 
         #  build the vertical normal and define perp for 2d geometries
-        dim = mesh.topological_dimension()
+        dim = mesh.topological_dimension
         if self.on_sphere:
             x = SpatialCoordinate(mesh)
             R = sqrt(inner(x, x))
@@ -223,13 +223,13 @@ def construct_domain_metadata(mesh, coords, on_sphere):
         metadata['domain_type'] = 'extruded_spherical_shell'
     elif on_sphere:
         metadata['domain_type'] = 'spherical_shell'
-    elif mesh.geometric_dimension() == 1 and mesh.topological_dimension() == 1:
+    elif mesh.geometric_dimension == 1 and mesh.topological_dimension == 1:
         metadata['domain_type'] = 'interval'
-    elif mesh.geometric_dimension() == 2 and mesh.topological_dimension() == 2 and mesh.extruded:
+    elif mesh.geometric_dimension == 2 and mesh.topological_dimension == 2 and mesh.extruded:
         metadata['domain_type'] = 'vertical_slice'
-    elif mesh.geometric_dimension() == 2 and mesh.topological_dimension() == 2:
+    elif mesh.geometric_dimension == 2 and mesh.topological_dimension == 2:
         metadata['domain_type'] = 'plane'
-    elif mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 3 and mesh.extruded:
+    elif mesh.geometric_dimension == 3 and mesh.topological_dimension == 3 and mesh.extruded:
         metadata['domain_type'] = 'extruded_plane'
     else:
         raise ValueError('Unable to determine domain type')

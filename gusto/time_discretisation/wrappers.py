@@ -337,7 +337,7 @@ class SUPGWrapper(Wrapper):
         # -------------------------------------------------------------------- #
 
         # construct tau, if it is not specified
-        dim = domain.mesh.topological_dimension()
+        dim = domain.mesh.topological_dimension
         if self.options.tau is not None:
             # if tau is provided, check that is has the right size
             self.tau = self.options.tau

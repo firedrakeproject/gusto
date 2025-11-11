@@ -25,7 +25,7 @@ def test_vector_recovered_space_setup(tmpdir, geometry, tracer_setup):
     setup = tracer_setup(tmpdir, geometry, degree=0)
     domain = setup.domain
     mesh = domain.mesh
-    gdim = mesh.geometric_dimension()
+    gdim = mesh.geometric_dimension
 
     # Spaces for recovery
     Vu = domain.spaces("HDiv")

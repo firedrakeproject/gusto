@@ -359,7 +359,7 @@ class DeRhamComplex(object):
 
             return Vcg, Vcurl, Vu, Vdg, Vth
 
-        elif self.mesh.topological_dimension() > 1:
+        elif self.mesh.topological_dimension > 1:
             # 2D: two de Rham complexes (hcurl or hdiv) with 3 spaces
             # 3D: one de Rham complexes with 4 spaces
             # either way, build all spaces
