@@ -13,18 +13,19 @@ jobs:
     outputs:
       firedrake_docker_version: ${{ steps.find.outputs.firedrake_docker_version }}
     steps:
-      id: find
-      run:
-        if [ ${{ github.base_ref }} = 'main' ]; then
-          echo "firedrake_docker_version=dev-release" >> "$GITHUB_OUTPUT"
-        else
-          test ${{ github.base_ref }} = 'future' || exit 1
-          echo "firedrake_docker_version=dev-main" >> "$GITHUB_OUTPUT"
-        fi
+      - id: find
+        run:
+          if [ ${{ github.base_ref }} = 'main' ]; then
+            echo "firedrake_docker_version=dev-release" >> "$GITHUB_OUTPUT"
+          else
+            test ${{ github.base_ref }} = 'future' || exit 1
+            echo "firedrake_docker_version=dev-main" >> "$GITHUB_OUTPUT"
+          fi
 
   test:
+    needs: setup
     uses: ./.github/workflows/test.yml
     with:
       source_ref: ${{ github.ref }}
-      firedrake_docker_version: ${{ needs.setup.firedrake_docker_version }}
+      firedrake_docker_version: ${{ needs.setup.outputs.firedrake_docker_version }}
     secrets: inherit
