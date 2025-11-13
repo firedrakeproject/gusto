@@ -1,14 +1,12 @@
-name: Test push
+name: Weekly tests
 
 on:
-  push:
-    branches:
-      - main
-      - future
+  schedule:
+    # Scheduled for 0330 UTC on Monday mornings to detect bitrot
+    - cron:  '30 3 * * 1'
 
 jobs:
   test_main:
-    if: github.ref_name == 'main'
     uses: ./.github/workflows/test.yml
     with:
       source_ref: main
@@ -16,7 +14,6 @@ jobs:
     secrets: inherit
 
   test_future:
-    if: github.ref_name == 'future'
     uses: ./.github/workflows/test.yml
     with:
       source_ref: future
