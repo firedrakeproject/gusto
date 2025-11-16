@@ -265,7 +265,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         else:
             self.physics_schemes = []
         if final_physics_schemes is not None:
-            self.final_physics_schemes = physics_schemes
+            self.final_physics_schemes = final_physics_schemes
         else:
             self.final_physics_schemes = []
         if slow_physics_schemes is not None:
