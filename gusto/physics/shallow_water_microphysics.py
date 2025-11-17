@@ -10,11 +10,12 @@ from firedrake.__future__ import interpolate
 from firedrake.fml import subject
 from gusto.core.logging import logger
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
-from gusto.core.labels import source_label
+from gusto.core.labels import source_label, prognostic
 from types import FunctionType
 
 
-__all__ = ["InstantRain", "SWSaturationAdjustment"]
+__all__ = ["InstantRain", "SWSaturationAdjustment",
+           "SWHeightRelax"]
 
 
 class InstantRain(PhysicsParametrisation):
@@ -384,3 +385,49 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         # If a source output is provided, assign the source term to it
         if x_out is not None:
             x_out.assign(self.source)
+
+
+class SWHeightRelax(PhysicsParametrisation):
+    """
+    Setup a relaxation to a specified height profile in the shallow water equations
+
+    The modified mass conservation equation is:
+    Dh/Dt + h nabla.v + (h-H)/tau_r = 0,
+    where H is the specified height profile, and tau_r is the relaxation time
+    """
+
+    def __init__(self, equation, H_rel, tau_r):
+        """
+        Args:
+            equation: the modification term to the mass conservation equation
+            H: the height profile towards which the relaxation occurs
+            tau_r: the relaxation time constant
+        """
+
+        label_name = 'SWHeightRelax'
+        super().__init__(equation, label_name, parameters=None)
+
+        # if height_name not in equation.field_names:
+        #    raise ValueError(f"Field {height_name} does not exist in the equation set")
+
+        self.D_idx = equation.field_names.index('D')
+
+        W = equation.function_space
+        Vd = W.sub(self.D_idx)
+        self.D = Function(Vd)
+
+        test = equation.tests[self.D_idx]
+
+        height_expr = test * (self.D - H_rel)/tau_r * dx
+
+        equation.residual += self.label(subject(prognostic(height_expr, 'D'), equation.X), self.evaluate)
+
+    def evaluate(self, x_in, dt):
+        """
+        Does something I don't understand
+
+        Args:
+            x_in : the field to be evolved
+            dt : the time interval for the scheme
+        """
+        self.D.assign(x_in.subfunctions[self.D_idx])
