@@ -7,7 +7,8 @@ from gusto import (
     DGUpwind, SemiImplicitQuasiNewton, VectorFunctionSpace, assemble,
     Function, FunctionSpace, WaterVapour, CloudWater, DG1Limiter,
     MoistConvectiveSWSolver, SWSaturationAdjustment, ForwardEuler,
-    ZeroLimiter, MixedFSLimiter, MoistConvectiveSWRelativeHumidity
+    ZeroLimiter, MixedFSLimiter, MoistConvectiveSWRelativeHumidity,
+    SWHeightRelax
 )
 from firedrake import (
     SpatialCoordinate, VertexOnlyMesh, as_vector, pi, interpolate, exp, cos, sin,
@@ -180,8 +181,6 @@ def xy_from_rtheta(r, theta, angle_units='rad'):
     return x_shift, y_shift
 
 def smooth_f_profile(degree, delta, style, rstar, Omega, R, Lx, nx):
-    import sympy as sp
-
     delta *= Lx/nx
     r = sp.symbols('r')
     if style == 'polar':
@@ -398,12 +397,12 @@ dt = 250          # timestep (in seconds)
 tmax = 1*t_day       # duration of the simulation (in seconds)
 
 restart = False
-restart_name = 'trapmoisture_beta39000q01em2xi1em2_Bu1b1p5Rop2_l1dt250df1'
-t0 = 1*t_day
+restart_name = 'highf0_single_radt5beta3900q01em2xi1em1_Bu1b1p5Rop2_l5dt250df1'
+t0 = 5*t_day
 
 ### vortex locations
-south_lat_deg = [90., 83., 83., 83., 83., 83.]#, 70.]
-south_lon_deg = [0., 72., 144., 216., 288., 0.]#, 0.]
+south_lat_deg = [90.]#, 83., 83., 83., 83., 83.]#, 70.]
+south_lon_deg = [0.]#, 72., 144., 216., 288., 0.]#, 0.]
 
 ### add noise to initial depth profile?
 noise = False
@@ -430,12 +429,16 @@ moist = True
 
 ### moist variables
 epsilon = 1./165.  # 1/T0 where T0 is standard reference temperature
-xi = 1e-2   # how far below saturation we start
+xi = 1e-1   # how far below saturation we start
 q0 = 1e-2  # scaling such that max(q0*H/D*exp(20*theta))=atmospheric specific humidity in kg/kg
-beta1 = 3900 # calculated from formula - maybe put later
+beta1 = 390000 # calculated from formula
+
+### radiative damping
+raddamp = True
+tau_r = 5  # number of days for timescale 
 
 ### name
-setup = ''
+setup = 'highf0_single'
 
 ##########################################################################
 
@@ -457,6 +460,7 @@ tmax = np.ceil(tmax/dump_freq)*dump_freq
 bint, bdec = split_number(b)
 Roint, Rodec = split_number(Ro)
 Buint, Budec = split_number(Bu)
+taurint, taurdec = split_number(tau_r)
 if xi < 0:
     xiprefix = 'm'
 else:
@@ -490,7 +494,11 @@ if moist:
     moist_name = f'beta{beta1}q0{q01fint}{q01fdec}e{q02i}xi{xiprefix}{xi1fint}{xi1fdec}e{xi2i}_'
 else:
     moist_name = ''
-folder_name = f'{setup}{moist_name}Bu{Buint}{Budec}b{bint}{bdec}Ro{Roint}{Rodec}_l{round(tmax/t_day)}dt{int(dt)}df{dump_freq}{noise_name}'
+if raddamp:
+    rad_name = f'radt{taurint}{taurdec}'
+else:
+    rad_name = ''
+folder_name = f'{setup}{rad_name}{moist_name}Bu{Buint}{Budec}b{bint}{bdec}Ro{Roint}{Rodec}_l{round(tmax/t_day)}dt{int(dt)}df{dump_freq}{noise_name}'
 
 dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}'
 dirnameold=f'/data/home/sh1293/results/jupiter_sw/{restart_name}'
@@ -541,7 +549,7 @@ if smooth_degree == 5:
     fsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
 
 ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
-ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)-2*Omega
+ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)#-2*Omega
 
 if fplane:
     ftrap = 2*Omega
@@ -616,9 +624,14 @@ elif moist:
         time_varying_gamma_v=True, parameters=parameters
     )
 
+    height_relax = SWHeightRelax(eqns, H_rel=H, tau_r=tau_r*t_day)
+
     physics_schemes = [
         (sat_adj, ForwardEuler(domain, limiter=physics_limiter))
     ]
+
+    if raddamp:
+        physics_schemes.append((height_relax, ForwardEuler(domain)))
 
     stepper = SemiImplicitQuasiNewton(
         eqns, io,
