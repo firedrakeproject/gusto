@@ -20,7 +20,7 @@ __all__ = ["BaseTimestepper", "Timestepper", "PrescribedTransport"]
 class BaseTimestepper(object, metaclass=ABCMeta):
     """Base class for timesteppers."""
 
-    def __init__(self, equation, io, init_io=True):
+    def __init__(self, equation, io):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation.
@@ -30,6 +30,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         self.equation = equation
         self.io = io
+        self.init_io = True    # flag so that IO is only set up once
         self.dt = self.equation.domain.dt
         self.t = self.equation.domain.t
         self.reference_profiles_initialised = False
