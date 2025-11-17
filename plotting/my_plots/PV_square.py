@@ -10,6 +10,7 @@ import time
 import pdb
 from tqdm import tqdm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import sys
 
 def colourbar(mappable, extend):
     ax = mappable.axes
@@ -21,11 +22,25 @@ def colourbar(mappable, extend):
     return cb
 
 
-filepath = 'beta390q01em2xi1em2_Bu1b1p5Rop2_l1dt250df1'
-field_name = 'RelativeHumidity'
-folder = 'RelativeHumidity'
+# filepath = 'beta390q01em2xi1em2_Bu1b1p5Rop2_l5dt250df1'
+# field_name = 'RelativeHumidity'
+# folder = 'RelativeHumidity'
+
+if len(sys.argv) != 3:
+    print('Wrong number of arguments')
+    print(len(sys.argv))
+    sys.exit(1)
+
+filepath = sys.argv[1]
+field_name = sys.argv[2]
+folder = field_name
+
 
 diff = False
+if field_name == 'cloud_water_diff':
+    diff = True
+    field_name = 'cloud_water'
+    folder = 'cloud_water'
 
 extend = 'both'
 
@@ -41,7 +56,7 @@ if diff:
     PV_structured = PV_structured.diff(dim='time')
     times = times[1:]
 
-if field_name in ['PotentialVorticity', 'RelativeVorticity']:
+if field_name in ['PotentialVorticity', 'RelativeVorticity', 'D']:
     cmap = 'RdBu_r'
     vmin = np.min(PV_structured[:,:,0])
     vmax = np.max(PV_structured[:,:,0])
@@ -73,8 +88,8 @@ elif field_name in ['cloud_water', 'water_vapour']:
     vmin = 0
     vmax = np.max(PV_structured)
     if diff:
-        vmax = np.max(PV_structured[:,:,1:])
-        vmin = np.min(PV_structured[:,:,1:])
+        vmax = np.max(PV_structured[:,:,50:])
+        vmin = np.min(PV_structured[:,:,50:])
         if abs(vmax)<abs(vmin):
             vmin = -vmax
         else:
@@ -83,8 +98,10 @@ elif field_name in ['cloud_water', 'water_vapour']:
     # extend = 'max'
     PV_structured = PV_structured.where(PV_structured>0, drop=False)
 elif field_name == 'RelativeHumidity':
+    PV_structured = PV_structured.where(PV_structured!=100, 101)
     cmap = plt.cm.YlGnBu.copy()
     cmap.set_under('white')
+    cmap.set_over('purple')
     vmin = 0
     vmax = 100
     if diff:
