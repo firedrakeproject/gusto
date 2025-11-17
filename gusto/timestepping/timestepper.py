@@ -41,8 +41,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         self.io.log_parameters(equation)
 
-        self.init_io = init_io
-
     @abstractproperty
     def transporting_velocity(self):
         return NotImplementedError
