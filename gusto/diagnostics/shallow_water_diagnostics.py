@@ -443,12 +443,12 @@ class MoistConvectiveSWRelativeHumidity(DiagnosticField):
         self.q_v = state_fields("water_vapour")
         self.D = state_fields("D")
         space = domain.spaces("DG")
-        # x = domain.mesh.coordinates
         self.sat_val = Function(space)
         self.sat_val.interpolate(self.sat_func(self.D))
         self.expr = (self.q_v/self.sat_val)*100
         super().setup(domain, state_fields, space=space)
         
     def compute(self):
+        self.sat_val.interpolate(self.sat_func(self.D))
         self.field.interpolate(self.expr)
 
