@@ -327,7 +327,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
 
         # Factors for multiplying source for different variables
         # the order matches the order in V_idx (vapour, cloud, depth, buoyancy)
-        factors = [self.gamma_v, -self.gamma_v]
+        factors = [self.gamma_v, -1*self.gamma_v]
         if convective_feedback:
             factors.append(self.gamma_v*beta1)
         if thermal_feedback:
@@ -338,7 +338,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         self.source = Function(W)
         self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
         self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
-        self.source_interpolate = [interpolate(sat_adj_expr*factor, source)
+        self.source_interpolate = [interpolate(sat_adj_expr*factor, source.function_space())
                                    for source, factor in zip(self.source_int, factors)]
 
         # test functions have the same order as factors and sources (vapour,
