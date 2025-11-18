@@ -338,7 +338,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         self.source = Function(W)
         self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
         self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
-        self.source_interpolate = [interpolate(sat_adj_expr*factor, source)
+        self.source_interpolate = [interpolate(sat_adj_expr*factor, source.function_space())
                                    for source, factor in zip(self.source_int, factors)]
 
         # test functions have the same order as factors and sources (vapour,
