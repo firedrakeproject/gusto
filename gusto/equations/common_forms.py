@@ -446,7 +446,7 @@ def split_linear_advection_form(test, qbar, ubar, ubar_full):
         :class:`LabelledForm`: a labelled transport form.
     """
 
-    L = test*dot(ubar, grad(qbar))*dx
+    L = inner(test, dot(ubar, grad(qbar)))*dx
     form = transporting_velocity(L, ubar_full)
 
     return transport(form, TransportEquationType.advective)
