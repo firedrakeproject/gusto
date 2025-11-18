@@ -452,3 +452,36 @@ class MoistConvectiveSWRelativeHumidity(DiagnosticField):
         self.sat_val.interpolate(self.sat_func(self.D))
         self.field.interpolate(self.expr)
 
+
+class MoistThermalSWRelativeHumidity(DiagnosticField):
+    """
+    Diagnostic for computing relative humidity, given a saturation function
+    which is a function of depth only.
+    """
+    name = "RelativeHumidity"
+
+    def __init__(self, sat_func):
+        """
+        Args:
+            sat_func (function?): saturation function being used in the model.
+        """
+        self.sat_func = sat_func
+        super().__init__(method='interpolate', required_fields=("water_vapour", "D", "b"))
+
+    def setup(self, domain, state_fields):
+        """
+        
+        Args:
+        """
+        self.q_v = state_fields("water_vapour")
+        self.b = state_fields("b")
+        self.D = state_fields("D")
+        space = domain.spaces("DG")
+        self.sat_val = Function(space)
+        self.sat_val.interpolate(self.sat_func(self.b, self.D))
+        self.expr = (self.q_v/self.sat_val)*100
+        super().setup(domain, state_fields, space=space)
+        
+    def compute(self):
+        self.sat_val.interpolate(self.sat_func(self.b, self.D))
+        self.field.interpolate(self.expr)
