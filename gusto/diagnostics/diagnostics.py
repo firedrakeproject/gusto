@@ -1043,7 +1043,7 @@ class TracerDensity(DiagnosticField):
                 horiz_degree = m_X_horiz.degree() + rho_d_horiz.degree()
                 vert_degree = m_X_vert.degree() + rho_d_vert.degree()
 
-                cell = domain.mesh._base_mesh.ufl_cell().cellname()
+                cell = domain.mesh._base_mesh.ufl_cell().cellname
                 horiz_elt = FiniteElement('DG', cell, horiz_degree)
                 vert_elt = FiniteElement('DG', cell, vert_degree)
                 elt = TensorProductElement(horiz_elt, vert_elt)
@@ -1052,7 +1052,7 @@ class TracerDensity(DiagnosticField):
                 rho_d_degree = rho_d_space.ufl_element().degree()
                 degree = m_X_degree + rho_d_degree
 
-                cell = domain.mesh.ufl_cell().cellname()
+                cell = domain.mesh.ufl_cell().cellname
                 elt = FiniteElement('DG', cell, degree)
 
             tracer_density_space = FunctionSpace(domain.mesh, elt, name='tracer_density_space')
