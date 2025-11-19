@@ -87,6 +87,8 @@ jobs:
           pip install --no-binary netCDF4 --no-build-isolation netCDF4
 
       - name: Run tests (nprocs = 1)
+        # Run even if earlier tests failed
+        if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
           : # Use pytest-xdist here so we can have a single collated output (not possible
@@ -95,7 +97,6 @@ jobs:
         timeout-minutes: 60
 
       - name: Run tests (nprocs = 2)
-        # Run even if earlier tests failed
         if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
