@@ -492,7 +492,7 @@ class Gradient(DiagnosticField):
         """
         f = state_fields(self.fname)
 
-        mesh_dim = domain.mesh.geometric_dimension()
+        mesh_dim = domain.mesh.geometric_dimension
         try:
             field_dim = state_fields(self.fname).ufl_shape[0]
         except IndexError:
@@ -602,7 +602,7 @@ class XComponent(VectorComponent):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        dim = domain.mesh.topological_dimension()
+        dim = domain.mesh.topological_dimension
         e_x = as_vector([Constant(1.0)]+[Constant(0.0)]*(dim-1))
         super().setup(domain, state_fields, e_x)
 
@@ -624,7 +624,7 @@ class YComponent(VectorComponent):
         """
         assert domain.metadata['domain_type'] not in ['interval', 'vertical_slice'], \
             f'Y-component diagnostic cannot be used with domain {domain.metadata["domain_type"]}'
-        dim = domain.mesh.topological_dimension()
+        dim = domain.mesh.topological_dimension
         e_y = as_vector([Constant(0.0), Constant(1.0)]+[Constant(0.0)]*(dim-2))
         super().setup(domain, state_fields, e_y)
 
@@ -646,7 +646,7 @@ class ZComponent(VectorComponent):
         """
         assert domain.metadata['domain_type'] not in ['interval', 'plane'], \
             f'Z-component diagnostic cannot be used with domain {domain.metadata["domain_type"]}'
-        dim = domain.mesh.topological_dimension()
+        dim = domain.mesh.topological_dimension
         e_x = as_vector([Constant(0.0)]*(dim-1)+[Constant(1.0)])
         super().setup(domain, state_fields, e_x)
 
@@ -682,7 +682,7 @@ class SphericalComponent(VectorComponent):
         """
 
         # check geometric dimension is 3D
-        if domain.mesh.geometric_dimension() != 3:
+        if domain.mesh.geometric_dimension != 3:
             raise ValueError('Spherical components only work when the geometric dimension is 3!')
 
         if np.prod(field.ufl_shape) != 3:
@@ -1043,7 +1043,7 @@ class TracerDensity(DiagnosticField):
                 horiz_degree = m_X_horiz.degree() + rho_d_horiz.degree()
                 vert_degree = m_X_vert.degree() + rho_d_vert.degree()
 
-                cell = domain.mesh._base_mesh.ufl_cell().cellname()
+                cell = domain.mesh._base_mesh.ufl_cell().cellname
                 horiz_elt = FiniteElement('DG', cell, horiz_degree)
                 vert_elt = FiniteElement('DG', cell, vert_degree)
                 elt = TensorProductElement(horiz_elt, vert_elt)
@@ -1052,7 +1052,7 @@ class TracerDensity(DiagnosticField):
                 rho_d_degree = rho_d_space.ufl_element().degree()
                 degree = m_X_degree + rho_d_degree
 
-                cell = domain.mesh.ufl_cell().cellname()
+                cell = domain.mesh.ufl_cell().cellname
                 elt = FiniteElement('DG', cell, degree)
 
             tracer_density_space = FunctionSpace(domain.mesh, elt, name='tracer_density_space')

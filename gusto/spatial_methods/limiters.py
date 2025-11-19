@@ -52,12 +52,12 @@ class DG1Limiter(object):
 
         # Create equispaced DG1 space needed for limiting
         if space.extruded:
-            cell = mesh._base_mesh.ufl_cell().cellname()
+            cell = mesh._base_mesh.ufl_cell().cellname
             DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
             DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
             DG1_element = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
         else:
-            cell = mesh.ufl_cell().cellname()
+            cell = mesh.ufl_cell().cellname
             DG1_element = FiniteElement("DG", cell, 1, variant="equispaced")
 
         DG1_equispaced = FunctionSpace(mesh, DG1_element)
@@ -123,7 +123,7 @@ class ThetaLimiter(object):
         self.Vt_brok = FunctionSpace(mesh, BrokenElement(space.ufl_element()))
 
         # Create equispaced DG1 space needed for limiting
-        cell = mesh._base_mesh.ufl_cell().cellname()
+        cell = mesh._base_mesh.ufl_cell().cellname
         DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
         DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
         CG2_vert_elt = FiniteElement("CG", interval, 2)

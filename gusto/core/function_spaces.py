@@ -224,13 +224,13 @@ class Spaces(object):
         """
 
         if self.extruded_mesh:
-            cell = self.mesh._base_mesh.ufl_cell().cellname()
+            cell = self.mesh._base_mesh.ufl_cell().cellname
             hori_elt = FiniteElement('DG', cell, 1, variant='equispaced')
             vert_elt = FiniteElement('DG', interval, 1, variant='equispaced')
             V_elt = TensorProductElement(hori_elt, vert_elt)
             continuity = {'horizontal': False, 'vertical': False}
         else:
-            cell = self.mesh.ufl_cell().cellname()
+            cell = self.mesh.ufl_cell().cellname
             V_elt = FiniteElement('DG', cell, 1, variant='equispaced')
             continuity = False
 
@@ -285,9 +285,9 @@ class DeRhamComplex(object):
         """
 
         if self.extruded_mesh:
-            cell = self.mesh._base_mesh.ufl_cell().cellname()
+            cell = self.mesh._base_mesh.ufl_cell().cellname
         else:
-            cell = self.mesh.ufl_cell().cellname()
+            cell = self.mesh.ufl_cell().cellname
 
         hdiv_family = hcurl_hdiv_dict[family]
         hcurl_family = hdiv_hcurl_dict[family]
@@ -359,7 +359,7 @@ class DeRhamComplex(object):
 
             return Vcg, Vcurl, Vu, Vdg, Vth
 
-        elif self.mesh.topological_dimension() > 1:
+        elif self.mesh.topological_dimension > 1:
             # 2D: two de Rham complexes (hcurl or hdiv) with 3 spaces
             # 3D: one de Rham complexes with 4 spaces
             # either way, build all spaces

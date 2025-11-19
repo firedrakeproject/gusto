@@ -106,7 +106,7 @@ class VorticityTransport(Augmentation):
         sign_u = 0.5*(sign(dot(u, n)) + 1)
         upw = lambda f: (sign_u('+')*f('+') + sign_u('-')*f('-'))
 
-        if domain.mesh.topological_dimension() == 2:
+        if domain.mesh.topological_dimension == 2:
             mix_test = test_F - domain.perp(grad(test_Z))
             F_cross_u = Z*domain.perp(u)
         elif domain.mesh.topological_dimension == 3:
@@ -151,14 +151,14 @@ class VorticityTransport(Augmentation):
             DG0 = FunctionSpace(domain.mesh, 'DG', 0)
             ones = Function(DG0).interpolate(Constant(1.0))
             area = assemble(ones*dx)
-            mean_dx = (area/DG0.dof_count)**(1/domain.mesh.geometric_dimension())
+            mean_dx = (area/DG0.dof_count)**(1/domain.mesh.geometric_dimension)
 
             # Divide by approximately (1 + c)
             tau /= (1.0 + sqrt(dot(u, u))*domain.dt/Constant(mean_dx))
 
             dxqp = dx(degree=3)
 
-            if domain.mesh.topological_dimension() == 2:
+            if domain.mesh.topological_dimension == 2:
                 time_deriv_form -= inner(mix_test, tau*Z*domain.perp(u)/domain.dt)*dxqp
                 transport_form -= inner(
                     mix_test, tau*domain.perp(u)*domain.divperp(Z*domain.perp(u))
@@ -168,7 +168,7 @@ class VorticityTransport(Augmentation):
                         mix_test,
                         tau*domain.perp(u)*domain.divperp(u_dot_nabla_F)
                     )*dxqp
-            elif domain.mesh.topological_dimension() == 3:
+            elif domain.mesh.topological_dimension == 3:
                 time_deriv_form -= inner(mix_test, tau*cross(Z, u)/domain.dt)*dxqp
                 transport_form -= inner(
                     mix_test, tau*cross(curl(Z*u), u)
