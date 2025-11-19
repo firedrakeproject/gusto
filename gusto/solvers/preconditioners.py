@@ -131,6 +131,12 @@ class VerticalHybridizationPC(PCBase):
 
         V = test.function_space()
         mesh = V.mesh()
+        try:
+            from firedrake import MeshSequenceGeometry  # noqa: F401
+
+            unique_mesh = mesh.unique()
+        except ImportError:
+            unique_mesh = mesh
 
         # Magically determine which spaces are vector and scalar valued
         for i, Vi in enumerate(V):
@@ -161,7 +167,7 @@ class VerticalHybridizationPC(PCBase):
         DG = FiniteElement("DG", cell, deg)
         CG = FiniteElement("CG", interval, 1)
         Vv_tr_element = TensorProductElement(DG, CG)
-        Vv_tr = FunctionSpace(mesh, Vv_tr_element)
+        Vv_tr = FunctionSpace(unique_mesh, Vv_tr_element)
 
         # Break the spaces
         broken_elements = MixedElement([BrokenElement(Vi.ufl_element()) for Vi in V])
@@ -186,7 +192,7 @@ class VerticalHybridizationPC(PCBase):
                    trial: TrialFunction(V_d)}
         Atilde = Tensor(replace(self.ctx.a, arg_map))
         gammar = TestFunction(Vv_tr)
-        n = FacetNormal(mesh)
+        n = FacetNormal(unique_mesh)
         sigma = TrialFunctions(V_d)[self.vidx]
 
         # Again, assumes tensor product structure. Why use this if you
@@ -222,7 +228,7 @@ class VerticalHybridizationPC(PCBase):
                 trace_subdomains.extend(sorted({"top", "bottom"} - extruded_neumann_subdomains))
 
             measures.extend((ds(sd) for sd in sorted(neumann_subdomains)))
-            markers = [int(x) for x in mesh.exterior_facets.unique_markers]
+            markers = [int(x) for x in unique_mesh.exterior_facets.unique_markers]
             dirichlet_subdomains = set(markers) - neumann_subdomains
             trace_subdomains.extend(sorted(dirichlet_subdomains))
 
