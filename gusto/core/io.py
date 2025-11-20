@@ -9,7 +9,7 @@ from gusto.diagnostics import Diagnostics, CourantNumber
 from gusto.core.meshes import get_flat_latlon_mesh
 from firedrake import (Function, functionspaceimpl, Constant, COMM_WORLD,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile,
-                       MeshGeometry)
+                       MeshGeometry, PointEvaluator)
 from firedrake.output import VTKFile
 from pyop2.mpi import MPI
 import numpy as np
@@ -89,10 +89,12 @@ class PointDataOutput(object):
         self.dump_count = 0
         self.filename = filename
         self.field_points = field_points
-        self.tolerance = tolerance
         self.comm = comm
-        if self.comm.size > 1:
-            raise GustoIOError("PointDataOutput does not work in parallel")
+
+        self.point_evals = {}
+        for field_name, points in field_points:
+            self.point_evals[field_name] = PointEvaluator(field_creator(field_name).mesh(), points, tolerance=tolerance)
+
         if not create:
             return
         if self.comm.rank == 0:
@@ -136,8 +138,10 @@ class PointDataOutput(object):
         """
 
         val_list = []
-        for field_name, points in self.field_points:
-            val_list.append((field_name, np.asarray(field_creator(field_name).at(points, tolerance=self.tolerance))))
+        for field_name, _ in self.field_points:
+            val_list.append((field_name,
+                             self.point_evals(field_name).evaluate(
+                                 field_creator(field_name))).dat.data_ro[:])
 
         if self.comm.rank == 0:
             with Dataset(self.filename, "a") as dataset:
