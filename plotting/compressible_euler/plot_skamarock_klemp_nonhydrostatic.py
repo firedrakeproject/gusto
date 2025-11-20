@@ -25,8 +25,8 @@ test = 'skamarock_klemp_nonhydrostatic'
 # ---------------------------------------------------------------------------- #
 # When copying this example these paths need editing, which will usually involve
 # removing the abspath part to set directory paths relative to this file
-results_file_name = f'{abspath(dirname(__file__))}/../../results/{test}/field_output.nc'
-plot_stem = f'{abspath(dirname(__file__))}/../../figures/compressible_euler/{test}'
+results_file_name = f'{abspath(dirname(__file__))}/../../examples/compressible_euler/results/{test}/field_output.nc'
+plot_stem = f'{abspath(dirname(__file__))}/../../figures/compressible_euler/{test}_old_solver'
 
 # ---------------------------------------------------------------------------- #
 # Initial plot details

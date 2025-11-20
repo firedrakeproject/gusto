@@ -141,6 +141,7 @@ def skamarock_klemp_compressible_bouss(
     def trace_nullsp(T):
         return VectorSpaceBasis(constant=True)
 
+
     appctx = {
         'auxform': eqns.schur_complement_form(alpha=0.5),
         "trace_nullspace": trace_nullsp,
