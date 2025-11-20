@@ -93,7 +93,7 @@ class PointDataOutput(object):
 
         self.point_evals = {}
         for field_name, points in field_points:
-            self.point_evals[field_name] = PointEvaluator(field_creator(field_name).mesh(), points, tolerance=tolerance)
+            self.point_evals[field_name] = PointEvaluator(field_creator(field_name).function_space().mesh(), points, tolerance=tolerance)
 
         if not create:
             return
@@ -140,8 +140,8 @@ class PointDataOutput(object):
         val_list = []
         for field_name, _ in self.field_points:
             val_list.append((field_name,
-                             self.point_evals(field_name).evaluate(
-                                 field_creator(field_name))).dat.data_ro[:])
+                             self.point_evals[field_name].evaluate(
+                                 field_creator(field_name))))
 
         if self.comm.rank == 0:
             with Dataset(self.filename, "a") as dataset:
