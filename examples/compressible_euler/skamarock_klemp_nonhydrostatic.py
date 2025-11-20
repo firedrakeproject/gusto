@@ -95,12 +95,19 @@ def skamarock_klemp_nonhydrostatic(
     if hydrostatic and dirname == skamarock_klemp_nonhydrostatic_defaults['dirname']:
         dirname = f'hyd_switch_{dirname}'
 
+
+    # def update_points(fields):
+        # calculate new points based on fields passed in
+        # return new points
+
+
     # Dumping point data using legacy PointDataOutput is not supported in parallel
     if COMM_WORLD.size == 1:
         output = OutputParameters(
             dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
             dump_vtus=False, dump_nc=True,
             point_data=[('theta_perturbation', points)]
+            # point_data=[('theta_perturbation', points, update_points)]
         )
     else:
         logger.warning(
