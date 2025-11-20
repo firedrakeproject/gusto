@@ -269,7 +269,7 @@ if __name__ == "__main__":
         default=skamarock_klemp_nonhydrostatic_defaults['hydrostatic']
     )
     parser.add_argument(
-        'timestepper',
+        '--timestepper',
         help='Which time stepper to use, takes SIQN or TR-BDF2',
         type=str,
         choices=['SIQN', 'TR-BDF2'],
