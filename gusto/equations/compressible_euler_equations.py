@@ -318,15 +318,13 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # vertical projection
         def V(u):
             return k*inner(u, k)
-        
+
         # hydrostatic projection
         h_project = lambda u: u - k*inner(u, k)
 
         # Specify degree for some terms as estimated degree is too large
         dx_qp = dx(degree=(self.domain.max_quad_degree))
-        dS_v_qp = dS_v(degree=(self.domain.max_quad_degree))
         dS_h_qp = dS_h(degree=(self.domain.max_quad_degree))
-        ds_v_qp = ds_v(degree=(self.domain.max_quad_degree))
         ds_tb_qp = (ds_t(degree=(self.domain.max_quad_degree))
                     + ds_b(degree=(self.domain.max_quad_degree)))
 
