@@ -93,6 +93,10 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.butcher_exp = butcher_exp
         self.nStages = int(np.shape(self.butcher_imp)[1])
 
+        self.ksp_max = 0
+        self.ksp_it = 0
+        self.newton_it = 0
+
         # Set default linear and nonlinear solver options if none passed in
         if linear_solver_parameters is None:
             self.linear_solver_parameters = {'snes_type': 'ksponly',
@@ -231,7 +235,7 @@ class IMEXRungeKutta(TimeDiscretisation):
     def solvers(self):
         """Set up a list of solvers for each problem at a stage."""
         solvers = []
-        for stage in range(self.nStages):
+        for stage in range(1, self.nStages):
             # setup solver using residual defined in derived class
             problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
@@ -253,19 +257,25 @@ class IMEXRungeKutta(TimeDiscretisation):
         solver_list = self.solvers
 
         for stage in range(self.nStages):
-            self.solver = solver_list[stage]
-            # Set initial solver guess
-            if (stage > 0):
-                self.x_out.assign(self.xs[stage-1])
-                # Evaluate source terms
-                for evaluate in self.evaluate_source:
-                    evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
-            self.solver.solve()
+            if stage == 0:
+                self.xs[stage].assign(x_in)
+            else:
+                self.solver = solver_list[stage-1]
+                # Set initial solver guess
+                if (stage > 0):
+                    self.x_out.assign(self.xs[stage-1])
+                    # Evaluate source terms
+                    for evaluate in self.evaluate_source:
+                        evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
+                self.solver.solve()
+                self.newton_it += self.solver.snes.getIterationNumber()
+                self.ksp_it += self.solver.snes.getLinearSolveIterations()
+                self.ksp_max = max(self.ksp_max, self.solver.snes.getLinearSolveIterations())
 
-            # Apply limiter
-            if self.limiter is not None:
-                self.limiter.apply(self.x_out)
-            self.xs[stage].assign(self.x_out)
+                # Apply limiter
+                if self.limiter is not None:
+                    self.limiter.apply(self.x_out)
+                self.xs[stage].assign(self.x_out)
 
         # Solve final stage
         for evaluate in self.evaluate_source:

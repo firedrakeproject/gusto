@@ -57,7 +57,7 @@ def pick_up_mesh(output, mesh_name, comm=COMM_WORLD):
     else:
         dumpdir = path.join("results", output.dirname)
         chkfile = path.join(dumpdir, "chkpt.h5")
-    with CheckpointFile(chkfile, 'r', comm=comm) as chk:
+    with CheckpointFile(chkfile, 'r', comm) as chk:
         mesh = chk.load_mesh(mesh_name)
 
     if dumpdir:
@@ -665,7 +665,7 @@ class IO(object):
                     step = chk.read_attribute("/", "step")
 
             else:
-                with CheckpointFile(chkfile, 'r', comm) as chk:
+                with CheckpointFile(chkfile, 'r', self.domain.mesh.comm) as chk:
                     mesh = self.domain.mesh
                     # Recover compulsory fields from the checkpoint
                     for field_name in self.to_pick_up:
@@ -773,7 +773,7 @@ class IO(object):
                     chkpt_mode = 'a'
                 else:
                     chkpt_mode = 'w'
-                with CheckpointFile(self.chkpt_path, chkpt_mode) as chk:
+                with CheckpointFile(self.chkpt_path, chkpt_mode, self.mesh.comm) as chk:
                     chk.save_mesh(self.domain.mesh)
                     for field_name in self.to_pick_up:
                         if output.multichkpt:
@@ -981,7 +981,7 @@ def make_nc_dataset(filename, access, comm):
 
     """
     try:
-        nc_field_file = Dataset(filename, access, parallel=True)
+        nc_field_file = Dataset(filename, access, parallel=True, comm=comm)
         nc_supports_parallel = True
     except ValueError:
         # parallel netCDF not available, use the serial version instead

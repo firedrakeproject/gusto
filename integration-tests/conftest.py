@@ -17,9 +17,13 @@ TracerSetup.__new__.__defaults__ = (None,)*len(opts)
 
 def tracer_sphere(tmpdir, degree, small_dt):
     radius = 1
-    mesh = IcosahedralSphereMesh(radius=radius,
-                                 refinement_level=3,
-                                 degree=1)
+
+    dirname = str(tmpdir)
+    mesh = IcosahedralSphereMesh(
+        radius=radius,
+        refinement_level=3,
+        degree=1
+    )
     x = SpatialCoordinate(mesh)
 
     # Parameters chosen so that dt != 1
@@ -30,7 +34,7 @@ def tracer_sphere(tmpdir, degree, small_dt):
     else:
         dt = pi/3. * 0.02
 
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=15)
+    output = OutputParameters(dirname=dirname, dumpfreq=15)
     domain = Domain(mesh, dt, family="BDM", degree=degree)
     io = IO(domain, output)
 
@@ -49,6 +53,8 @@ def tracer_sphere(tmpdir, degree, small_dt):
 
 def tracer_slice(tmpdir, degree, small_dt):
     n = 30 if degree == 0 else 15
+
+    dirname = str(tmpdir)
     m = PeriodicIntervalMesh(n, 1.)
     mesh = ExtrudedMesh(m, layers=n, layer_height=1./n)
 
@@ -61,7 +67,7 @@ def tracer_slice(tmpdir, degree, small_dt):
     else:
         dt = 0.01
     tmax = 0.75
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
+    output = OutputParameters(dirname=dirname, dumpfreq=25)
     domain = Domain(mesh, dt, family="CG", degree=degree)
     io = IO(domain, output)
 
@@ -89,10 +95,11 @@ def tracer_blob_slice(tmpdir, degree, small_dt):
     else:
         dt = 0.01
     L = 10.
+    dirname = str(tmpdir)
     m = PeriodicIntervalMesh(10, L)
     mesh = ExtrudedMesh(m, layers=10, layer_height=1.)
 
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
+    output = OutputParameters(dirname=dirname, dumpfreq=25)
     domain = Domain(mesh, dt, family="CG", degree=degree)
     io = IO(domain, output)
 
