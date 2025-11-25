@@ -121,7 +121,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success() || steps.install-two.conclusion == 'success'
         with:
-          name: pytest-logs
+          name: pytest-logs-${{ inputs.firedrake_docker_version }}
           path: pytest_*.log
           retention-days: 5
 
@@ -129,7 +129,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success() || steps.install-two.conclusion == 'success'
         with:
-          name: gusto-logs
+          name: gusto-logs-${{ inputs.firedrake_docker_version }}
           path: gusto*.log
           retention-days: 5
 
