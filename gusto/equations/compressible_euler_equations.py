@@ -311,6 +311,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         k = self.domain.k             # Upward pointing unit vector
         theta = -dot(k, u)*dot(k, grad(thetabar))*beta_t
 
+        #q22 = - beta_t*beta_u*cp*(dot(k, w)*dot(k, grad(exner))*dot(k, u)*dot(k, grad(thetabar)))*dx
+
         # The exner prime term (here, bars are for mean and no bars are
         # for linear perturbations)
         exner = exnerbar_theta*theta + exnerbar_rho*rho
@@ -323,10 +325,12 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         h_project = lambda u: u - k*inner(u, k)
 
         # Specify degree for some terms as estimated degree is too large
-        dx_qp = dx(degree=(self.domain.max_quad_degree))
-        dS_h_qp = dS_h(degree=(self.domain.max_quad_degree))
-        ds_tb_qp = (ds_t(degree=(self.domain.max_quad_degree))
-                    + ds_b(degree=(self.domain.max_quad_degree)))
+        dx_qp = dx(degree=(equations.domain.max_quad_degree))
+        dS_v_qp = dS_v(degree=(equations.domain.max_quad_degree))
+        dS_h_qp = dS_h(degree=(equations.domain.max_quad_degree))
+        ds_v_qp = ds_v(degree=(equations.domain.max_quad_degree))
+        ds_tb_qp = (ds_t(degree=(equations.domain.max_quad_degree))
+                    + ds_b(degree=(equations.domain.max_quad_degree)))
 
         # Add effect of density of water upon theta, using moisture reference profiles
         # TODO: Explore if this is the right thing to do for the linear problem
@@ -359,23 +363,29 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             # momentum equation
             u_mass
             - beta_u*cp*div(theta_w*V(w))*exnerbar*dx_qp
-            # following does nothing but is preserved in the comments
-            # to remind us why (because V(w) is purely vertical).
-            # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
+            # # following does nothing but is preserved in the comments
+            # # to remind us why (because V(w) is purely vertical).
+            # # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
             + beta_u*cp*jump(theta_w*V(w), n=n)*avg(exnerbar('+'))*dS_h_qp
             + beta_u*cp*dot(theta_w*V(w), n)*avg(exnerbar)*ds_tb_qp
             - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
+            # Terms appearing after integrating momentum equation
+            + beta_u*cp*jump(thetabar_w*w, n=n)*avg(exner('+'))*(dS_v_qp + dS_h_qp)
+            + beta_u*cp*dot(thetabar_w*w, n)*avg(exner)*(ds_tb_qp + ds_v_qp)
             # mass continuity equation
-            + (phi*(rho) - beta_r*inner(grad(phi), u)*rhobar)*dx
-            + beta_r*jump(phi*u, n=n)*rhobar('+')*(dS_v + dS_h)
+            + (phi*rho - beta_r*inner(grad(phi), u)*rhobar)*dx
+            + beta_r*jump(phi*u, n=n)*avg(rhobar('+'))*(dS_v + dS_h)
+            # term added because u.n=0 is enforced weakly via the traces
+            + beta_r*phi*dot(u, n)*avg(rhobar)*(ds_tb + ds_v)
+            #(phi*rho + beta_r*phi*div(rhobar*u))*dx
         )
 
         if hasattr(self, "mu"):
-            seqn += dt*self.mu*inner(w, k)*inner(u, k)*dx
+            seqn += beta_u*self.mu*inner(w, k)*inner(u, k)*dx
 
         if self.parameters.Omega is not None:
             Omega = as_vector((0, 0, self.parameter.Omega))
-            seqn += inner(w, cross(2*Omega, u))*dx
+            seqn += beta_u*inner(w, cross(2*Omega, u))*dx
 
         # Boundary conditions (assumes extruded mesh)
         # BCs are declared for the plain velocity space. As we need them in
