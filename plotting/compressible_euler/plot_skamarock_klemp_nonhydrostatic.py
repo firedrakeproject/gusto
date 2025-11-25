@@ -18,7 +18,7 @@ from tomplot import (
     extract_gusto_field, reshape_gusto_data, add_colorbar_fig
 )
 
-test = 'skamarock_klemp_nonhydrostatic_trbdf2'
+test = 'skamarock_klemp_nonhydrostatic'
 
 # ---------------------------------------------------------------------------- #
 # Directory for results and plots
