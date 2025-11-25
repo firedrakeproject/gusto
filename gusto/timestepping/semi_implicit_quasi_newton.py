@@ -22,7 +22,7 @@ from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisa
 from gusto.timestepping.timestepper import BaseTimestepper
 
 
-__all__ = ["SemiImplicitQuasiNewton", "Forcing"]
+__all__ = ["SemiImplicitQuasiNewton", "Forcing", "SIQNLinearSolver"]
 
 
 class SemiImplicitQuasiNewton(BaseTimestepper):
@@ -786,7 +786,7 @@ class SIQNLinearSolver(object):
 
     def __init__(self, equation, solver_prognostics, implicit_terms,
                  alpha, tau_values=None, solver_parameters=None,
-                 overwrite_solver_parameters=False, reference_dependent=True):
+                 overwrite_solver_parameters=False, reference_dependent=True, appctx=None):
         """
         Args:
             equations (:class:`PrognosticEquation`): the model's equation.
@@ -808,6 +808,7 @@ class SIQNLinearSolver(object):
                 passed in. Defaults to False.
             reference_dependent: this indicates that the solver Jacobian should
                 be rebuilt if the reference profiles have been updated.
+            appctx: appctx for the  underlying :class:`LinearVariationalSolver`.
         """
 
         # Update or set solver parameters --------------------------------------
@@ -886,7 +887,7 @@ class SIQNLinearSolver(object):
             constant_jacobian=True)
 
         self.solver = LinearVariationalSolver(
-            problem, solver_parameters=self.solver_parameters,
+            problem, appctx=appctx, solver_parameters=self.solver_parameters,
             options_prefix='linear_solver'
         )
 

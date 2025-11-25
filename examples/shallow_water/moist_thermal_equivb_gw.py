@@ -5,14 +5,14 @@ equations. The initial conditions are saturated and cloudy everywhere.
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
-    SpatialCoordinate, pi, sqrt, min_value, cos, Constant, Function, exp, sin
+    SpatialCoordinate, pi, sqrt, min_value, cos, Constant, Function, exp, sin,
 )
 from gusto import (
     Domain, IO, OutputParameters, DGUpwind, ShallowWaterParameters,
     ThermalShallowWaterEquations, lonlatr_from_xyz, MeridionalComponent,
     GeneralIcosahedralSphereMesh, SubcyclingOptions, ZonalComponent,
-    PartitionedCloud, RungeKuttaFormulation, SSPRK3, ThermalSWSolver,
-    SemiImplicitQuasiNewton, xyz_vector_from_lonlatr
+    PartitionedCloud, RungeKuttaFormulation, SSPRK3, LinearTimesteppingSolver,
+    SemiImplicitQuasiNewton, xyz_vector_from_lonlatr,
 )
 
 moist_thermal_gw_defaults = {
@@ -61,6 +61,8 @@ def moist_thermal_gw(
     # Equation parameters
     parameters = ShallowWaterParameters(mesh, H=mean_depth, q0=q0,
                                         nu=nu, beta2=beta2)
+    Omega = parameters.Omega
+    fexpr = 2*Omega*xyz[2]/radius
 
     # Equation
     eqns = ThermalShallowWaterEquations(
@@ -81,7 +83,70 @@ def moist_thermal_gw(
         DGUpwind(eqns, field_name) for field_name in eqns.field_names
     ]
 
-    linear_solver = ThermalSWSolver(eqns)
+    params = {
+        'ksp_monitor_true_residual': None,
+        'ksp_view': ':ksp_view.log',
+        'ksp_error_if_not_converged': None,
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'additive',
+        'pc_fieldsplit_0_fields': '0,1,2',
+        'pc_fieldsplit_1_fields': '3',  # do nothing for scalar field
+        'fieldsplit_0': {
+            'pc_type': 'fieldsplit',
+            'pc_fieldsplit_type': 'schur',
+            'pc_fieldsplit_schur_fact_type': 'full',
+            'pc_fieldsplit_1_fields': '0,1',
+            'pc_fieldsplit_0_fields': '2',  # eliminate temperature
+            'fieldsplit_L2': {
+                'ksp_monitor': None,
+                'ksp_type': 'preonly',
+                'pc_type': 'python',
+                'pc_python_type': 'firedrake.AssembledPC',
+                'assembled_pc_type': 'bjacobi',
+                'assembled_sub_pc_type': 'ilu',
+            },
+            'fieldsplit_1': {
+                'ksp_monitor': None,
+                'ksp_type': 'preonly',
+                'pc_type': 'python',
+                'pc_python_type': 'gusto.AuxiliaryPC',
+                'aux': {
+                    'mat_type': 'matfree',
+                    'pc_type': 'python',
+                    'pc_python_type': 'firedrake.HybridizationPC',
+                    'hybridization': {
+                        'ksp_type': 'cg',
+                        'pc_type': 'gamg',
+                        'ksp_rtol': 1e-8,
+                        'mg_levels': {
+                            'ksp_type': 'chebyshev',
+                            'ksp_max_it': 2,
+                            'pc_type': 'bjacobi',
+                            'sub_pc_type': 'ilu'
+                        },
+                        'mg_coarse': {
+                            'ksp_type': 'preonly',
+                            'pc_type': 'lu',
+                            'pc_factor_mat_solver_type': 'mumps',
+                        },
+                    },
+                },
+            },
+        },
+        'fieldsplit_L2': {
+            'ksp_type': 'preonly',
+            'pc_type': 'none',
+        },
+    }
+
+    appctx = {'auxform': eqns.schur_complement_form(alpha=0.5)}
+
+    linear_solver = LinearTimesteppingSolver(
+        eqns, alpha=0.5, options_prefix="swe",
+        solver_parameters=params, appctx=appctx
+    )
 
     # ------------------------------------------------------------------------ #
     # Timestepper
