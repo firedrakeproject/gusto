@@ -446,9 +446,7 @@ class CourantNumber(DiagnosticField):
         self.cell_flux_form = 2*avg(un*test)*dS_calc + un*test*ds_calc
 
         # Final Courant number expression
-        cell_flux = self.cell_flux.riesz_representation(
-            'l2', solver_options={'function_space': V}
-        )
+        cell_flux = Function(V, val=self.cell_flux.dat)
         self.expr = cell_flux * domain.dt / cell_volume
 
         super().setup(domain, state_fields)
