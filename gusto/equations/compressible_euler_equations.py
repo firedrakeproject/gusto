@@ -366,17 +366,17 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             # # following does nothing but is preserved in the comments
             # # to remind us why (because V(w) is purely vertical).
             # # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
-            + beta_u*cp*jump(theta_w*V(w), n=n)*avg(exnerbar('+'))*dS_h_qp
-            + beta_u*cp*dot(theta_w*V(w), n)*avg(exnerbar)*ds_tb_qp
+            + beta_u*cp*jump(theta_w*V(w), n=n)*avg(exnerbar)*dS_h_qp
+            + beta_u*cp*dot(theta_w*V(w), n)*exnerbar*ds_tb_qp
             - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
             # Terms appearing after integrating momentum equation
-            + beta_u*cp*jump(thetabar_w*w, n=n)*avg(exner('+'))*(dS_v_qp + dS_h_qp)
-            + beta_u*cp*dot(thetabar_w*w, n)*avg(exner)*(ds_tb_qp + ds_v_qp)
+            + beta_u*cp*jump(thetabar_w*w, n=n)*avg(exner)*(dS_v_qp + dS_h_qp)
+            + beta_u*cp*dot(thetabar_w*w, n)*exner*(ds_tb_qp + ds_v_qp)
             # mass continuity equation
             + (phi*rho - beta_r*inner(grad(phi), u)*rhobar)*dx
-            + beta_r*jump(phi*u, n=n)*avg(rhobar('+'))*(dS_v + dS_h)
+            + beta_r*jump(phi*u, n=n)*avg(rhobar)*(dS_v + dS_h)
             # term added because u.n=0 is enforced weakly via the traces
-            + beta_r*phi*dot(u, n)*avg(rhobar)*(ds_tb + ds_v)
+            + beta_r*phi*dot(u, n)*rhobar*(ds_tb + ds_v)
             #(phi*rho + beta_r*phi*div(rhobar*u))*dx
         )
 
