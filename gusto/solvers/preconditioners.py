@@ -470,3 +470,335 @@ class VerticalHybridizationPC(PCBase):
         viewer.pushASCIITab()
         viewer.printfASCII("Project the broken hdiv solution into the HDiv space.\n")
         viewer.popASCIITab()
+
+class CompressibleHybridisedSCPC(PCBase):
+    """
+    A bespoke hybridised preconditioner for the compressible Euler equations.
+
+    This solves a linear problem for the compressible Euler equations in
+    theta-exner formulation with prognostic variables u (velocity), rho
+    (density) and theta (potential temperature). It follows the following
+    strategy:
+
+    (1) Analytically eliminate theta (introduces error near topography)
+
+    (2a) Formulate the resulting mixed system for u and rho using a
+         hybridized mixed method. This breaks continuity in the
+         linear perturbations of u, and introduces a new unknown on the
+         mesh interfaces approximating the average of the Exner pressure
+         perturbations. These trace unknowns also act as Lagrange
+         multipliers enforcing normal continuity of the "broken" u variable.
+
+    (2b) Statically condense the block-sparse system into a single system
+         for the Lagrange multipliers. This is the only globally coupled
+         system requiring a linear solver.
+
+    (2c) Using the computed trace variables, we locally recover the
+         broken velocity and density perturbations. This is accomplished
+         in two stages:
+         (i): Recover rho locally using the multipliers.
+         (ii): Recover "broken" u locally using rho and the multipliers.
+
+    (2d) Project the "broken" velocity field into the HDiv-conforming
+         space using local averaging.
+
+    (3) Reconstruct theta
+    """
+
+    _prefix="compressible_hybrid_scpc"
+
+    scpc_parameters = {'mat_type': 'matfree',
+                        'ksp_type': 'preonly',
+                        'pc_type': 'python',
+                        'pc_python_type': 'firedrake.SCPC',
+                        'pc_sc_eliminate_fields': '0, 1',
+                        # The reduced operator is not symmetric
+                        'condensed_field': {'ksp_type': 'fgmres',
+                                            'ksp_rtol': 1.0e-8,
+                                            'ksp_atol': 1.0e-8,
+                                            'ksp_max_it': 100,
+                                            'pc_type': 'gamg',
+                                            'pc_gamg_sym_graph': None,
+                                            'mg_levels': {'ksp_type': 'gmres',
+                                                        'ksp_max_it': 5,
+                                                        'pc_type': 'bjacobi',
+                                                        'sub_pc_type': 'ilu'}}}
+
+    def initialize(self, pc):
+        """
+        Set up problem and solver
+        """
+        from firedrake import (split, LinearVariationalProblem, Constant, LinearVariationalSolver,
+                                TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
+                                rhs, FacetNormal, div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b,
+                                ds_tb, inner, dot, grad, Function, cross,
+                                BrokenElement, FunctionSpace, MixedFunctionSpace, as_vector)
+        from gusto.equations.thermodynamics import TracerVariableType
+        from gusto.core.labels import hydrostatic
+        if pc.getType() != "python":
+            raise ValueError("Expecting PC type python")
+
+        self._process_context(pc)
+
+        # Equations and parameters
+        equations = self.equations
+        dt = self.dt
+        cp = equations.cp
+
+        # Set relaxation parameters. If an alternative has not been given, set
+        # to semi-implicit off-centering factor
+        beta_u = dt*self.tau_values.get("u", self.alpha)
+        beta_t = dt*self.tau_values.get("theta", self.alpha)
+        beta_r = dt*self.tau_values.get("rho", self.alpha)
+
+        # Get function spaces
+        self.Vu = self.equations.domain.spaces("HDiv")
+        self.Vrho = self.equations.domain.spaces("DG")
+        self.Vtheta = self.equations.domain.spaces("DG")
+
+        # Build trace and broken spaces
+        self.Vu_broken = FunctionSpace(self.mesh, BrokenElement(self.Vu.ufl_element()))
+        h_deg = self.Vrho.ufl_element().degree()[0]
+        v_deg = self.Vrho.ufl_element().degree()[1]
+        self.Vtrace = FunctionSpace(self.mesh, "HDiv Trace", degree=(h_deg, v_deg))
+
+        # Mixed Function Spaces
+        self.W = self.equation.W # (Vu, Vrho, Vtheta)
+        self.W_hyb = MixedFunctionSpace((self.Vu_broken, self.Vrho, self.Vtrace))
+
+        # Define
+        self.x = Cofunction(self.W.dual())
+        self.x_hybrid = Cofunction(self.W_hyb.dual())
+        self.y = Function(self.W)
+        self.y_hybrid = Function(self.W_hyb)
+
+        u_in, rho_in, theta_in = split(self.x)[0:3]
+
+        # Get bcs
+        self.bcs = self.equations.bcs['u']
+
+        # Set up hybridized solver for (u, rho, l) system
+        w, phi, dl = TestFunctions(self.W_hyb)
+        u, rho, l0 = TrialFunctions(self.W_hyb)
+        n = FacetNormal(self.mesh)
+
+        # Get background fields
+        _, rhobar, thetabar = split(self.equations.X_ref)[0:3]
+        exnerbar = equations.thermodynamics.exner_pressure(equations.parameters, rhobar, thetabar)
+        exnerbar_rho = equations.thermodynamics.dexner_drho(equations.parameters, rhobar, thetabar)
+        exnerbar_theta = equations.thermodynamics.dexner_dtheta(equations.parameters, rhobar, thetabar)
+
+        # Analytical (approximate) elimination of theta
+        k = equations.domain.k       # Upward pointing unit vector
+        theta = -dot(k, u)*dot(k, grad(thetabar))*beta_t + theta_in
+
+        # Only include theta' (rather than exner') in the vertical
+        # component of the gradient
+
+        # The exner prime term (here, bars are for mean and no bars are
+        # for linear perturbations)
+        exner = exnerbar_theta*theta + exnerbar_rho*rho
+
+        # Vertical projection
+        def V(u):
+            return k*inner(u, k)
+
+        # hydrostatic projection
+        h_project = lambda u: u - k*inner(u, k)
+
+        # Specify degree for some terms as estimated degree is too large
+        dx_qp = dx(degree=(equations.domain.max_quad_degree))
+        dS_v_qp = dS_v(degree=(equations.domain.max_quad_degree))
+        dS_h_qp = dS_h(degree=(equations.domain.max_quad_degree))
+        ds_v_qp = ds_v(degree=(equations.domain.max_quad_degree))
+        ds_tb_qp = (ds_t(degree=(equations.domain.max_quad_degree))
+                    + ds_b(degree=(equations.domain.max_quad_degree)))
+
+        # Add effect of density of water upon theta, using moisture reference profiles
+        # TODO: Explore if this is the right thing to do for the linear problem
+        if equations.active_tracers is not None:
+            mr_t = Constant(0.0)*thetabar
+            for tracer in equations.active_tracers:
+                if tracer.chemical == 'H2O':
+                    if tracer.variable_type == TracerVariableType.mixing_ratio:
+                        idx = equations.field_names.index(tracer.name)
+                        mr_bar = split(equations.X_ref)[idx]
+                        mr_t += mr_bar
+                    else:
+                        raise NotImplementedError('Only mixing ratio tracers are implemented')
+
+            theta_w = theta / (1 + mr_t)
+            thetabar_w = thetabar / (1 + mr_t)
+        else:
+            theta_w = theta
+            thetabar_w = thetabar
+
+
+        _dl = TestFunction(self.Vtrace)
+        a_tr = _dl('+')*l0('+')*(dS_v_qp + dS_h_qp) + _dl*l0*ds_v_qp + _dl*l0*ds_tb_qp
+
+        def L_tr(f):
+            return _dl('+')*avg(f)*(dS_v_qp + dS_h_qp) + _dl*f*ds_v_qp + _dl*f*ds_tb_qp
+
+        cg_ilu_parameters = {'ksp_type': 'cg',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+
+        # Project field averages into functions on the trace space
+        rhobar_avg = Function(self.Vtrace)
+        exnerbar_avg = Function(self.Vtrace)
+
+        rho_avg_prb = LinearVariationalProblem(a_tr, L_tr(rhobar), rhobar_avg,
+                                               constant_jacobian=True)
+        exner_avg_prb = LinearVariationalProblem(a_tr, L_tr(exnerbar), exnerbar_avg,
+                                                 constant_jacobian=True)
+
+        self.rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
+                                                      solver_parameters=cg_ilu_parameters,
+                                                      options_prefix='rhobar_avg_solver')
+        self.exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
+                                                        solver_parameters=cg_ilu_parameters,
+                                                        options_prefix='exnerbar_avg_solver')
+
+        # "broken" u, rho, and trace system
+        # NOTE: no ds_v integrals since equations are defined on
+        # a periodic (or sphere) base mesh.
+        if any([t.has_label(hydrostatic) for t in self.equations.residual]):
+            u_mass = inner(w, (h_project(u) - u_in))*dx
+        else:
+            u_mass = inner(w, (u - u_in))*dx
+
+        eqn = (
+            # momentum equation
+            u_mass
+            - beta_u*cp*div(theta_w*V(w))*exnerbar*dx_qp
+            # following does nothing but is preserved in the comments
+            # to remind us why (because V(w) is purely vertical).
+            # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
+            + beta_u*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_h_qp
+            + beta_u*cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tb_qp
+            - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
+            # trace terms appearing after integrating momentum equation
+            + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_v_qp + dS_h_qp)
+            + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tb_qp + ds_v_qp)
+            # mass continuity equation
+            + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
+            + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
+            # term added because u.n=0 is enforced weakly via the traces
+            + beta_r*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v)
+            # constraint equation to enforce continuity of the velocity
+            # through the interior facets and weakly impose the no-slip
+            # condition
+            + dl('+')*jump(u, n=n)*(dS_v + dS_h)
+            + dl*dot(u, n)*(ds_t + ds_b + ds_v)
+        )
+        # TODO: can we get this term using FML?
+        # contribution of the sponge term
+        if hasattr(self.equations, "mu"):
+            eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx_qp
+
+        if equations.parameters.Omega is not None:
+            Omega = as_vector([0, 0, equations.parameters.Omega])
+            eqn += beta_u*inner(w, cross(2*Omega, u))*dx
+
+        aeqn = lhs(eqn)
+        Leqn = rhs(eqn)
+
+        appctx = {'slateschur_form': aeqn}
+
+        hybridized_prb = LinearVariationalProblem(aeqn, Leqn, self.y_hybrid,
+                                                  constant_jacobian=True)
+        self.hybridized_solver = LinearVariationalSolver(hybridized_prb,
+                                                    solver_parameters=self.scpc_parameters,
+                                                    options_prefix=self._prefix,
+                                                    appctx=appctx)
+
+        # Project broken u into the HDiv space using facet averaging.
+        # Weight function counting the dofs of the HDiv element:
+        self._weight = Function(self.Vu)
+        weight_kernel = AverageWeightings(self.Vu)
+        weight_kernel.apply(self._weight)
+
+        # Averaging kernel
+        self._average_kernel = AverageKernel(self.Vu)
+
+        # HDiv-conforming velocity
+        self.u_hdiv = Function(self.Vu)
+
+        # Reconstruction of theta
+        theta = TrialFunction(self.Vtheta)
+        gamma = TestFunction(self.Vtheta)
+
+        self.theta = Function(self.Vtheta)
+        theta_eqn = gamma*(theta - theta_in
+                           + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta_t)*dx
+
+        theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta,
+                                                 constant_jacobian=True)
+        self.theta_solver = LinearVariationalSolver(theta_problem,
+                                                    solver_parameters=cg_ilu_parameters,
+                                                    options_prefix='thetabacksubstitution')
+
+
+
+    def apply(self, pc, x, y):
+        """
+        Apply the preconditioner to x, putting the result in y.
+
+        Args:
+            pc (:class:`PETSc.PC`): the preconditioner object.
+            x (:class:`PETSc.Vec`): the vector to apply the preconditioner to.
+            y (:class:`PETSc.Vec`): the vector to store the result.
+        """
+        with self.x.dat.vec_wo as v:
+            x.copy(v)
+
+        # Transfer data into hybrid space
+        self.x_hybrid.subfunctions[0].assign(self.x.subfunctions[0])
+        self.x_hybrid.subfunctions[1].assign(self.x.subfunctions[1])
+        self.x_hybrid.subfunctions[2].assign(0)  # zero initial guess for multipliers
+
+        # Solve hybridized system
+        self.y_hybrid.assign(0)
+        self.hybridized_solver.solve()
+
+        # Recover broken u and rho
+        u_broken, rho, l = self.y_hybrid.subfunctions
+        self.u_hdiv.assign(0)
+        self._average_kernel.apply(self.u_hdiv, self._weight, u_broken)
+
+        for bc in self.bcs:
+            bc.apply(self.u_hdiv)
+
+        # Reconstruct theta
+        self.theta_solver.solve()
+
+        # Transfer data to non-hybrid space
+        self.y.subfunctions[0].assign(self.u_hdiv)
+        self.y.subfunctions[1].assign(rho)
+        self.y.subfunctions[2].assign(self.theta)
+
+        with self.y.dat.vec_ro as v:
+            v.copy(y)
+
+    def update(self, pc):
+        self.rho_avg_solver.solve()
+        self.exner_avg_solver.solve()
+        self.hybridized_solver.invalidate_jacobian()
+
+
+    def _process_context(self, pc):
+        appctx = self.get_appctx(pc)
+        self.appctx = appctx
+        self.prefix = pc.getOptionsPrefix() + self._prefix
+
+        self.equations = appctx.get('equations')
+        self.mesh = self.equations.domain.mesh
+
+        self.alpha = appctx.get('alpha')
+        self.tau_values = appctx.get('tau_values')
+
+        self.dt = self.equations.dt
+
+
+
