@@ -324,6 +324,31 @@ class CompressibleSolver(TimesteppingSolver):
             + dl('+')*jump(u, n=n)*(dS_v + dS_h)
             + dl*dot(u, n)*(ds_t + ds_b + ds_v)
         )
+
+# eqn = (
+#     # momentum equation
+#     u_mass
+#     - beta_u*cp*div(theta_w*V(w))*exnerbar*dx_qp
+#     # following does nothing but is preserved in the comments
+#     # to remind us why (because V(w) is purely vertical).
+#     # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
+#     + beta_u*cp*jump(theta_w*V(w), n=n)*avg(exnerbar)*dS_h_qp
+#     + beta_u*cp*dot(theta_w*V(w), n)*exnerbar*ds_tb_qp
+#     - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
+#     # trace terms appearing after integrating momentum equation
+#     + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_v_qp + dS_h_qp)
+#     + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tb_qp + ds_v_qp)
+#     # mass continuity equation
+#     + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
+#     + beta_r*jump(phi*u, n=n)*avg(rhobar)*dS_h
+#     # term added because u.n=0 is enforced weakly via the traces
+#     + beta_r*phi*dot(u, n)*rhobar*(ds_tb + ds_v)
+#     # constraint equation to enforce continuity of the velocity
+#     # through the interior facets and weakly impose the no-slip
+#     # condition
+#     + dl('+')*jump(u, n=n)*(dS_v + dS_h)
+#     + dl*dot(u, n)*(ds_t + ds_b + ds_v)
+# )
         # TODO: can we get this term using FML?
         # contribution of the sponge term
         if hasattr(self.equations, "mu"):
@@ -413,13 +438,28 @@ class CompressibleSolver(TimesteppingSolver):
             dy (:class:`Function`): the resulting field in the appropriate
                 :class:`MixedFunctionSpace`.
         """
+        from firedrake import norm, PETSc
+
         self.xrhs.assign(xrhs)
+
+        u_before = self.xrhs.subfunctions[0]
+        rho_before = self.xrhs.subfunctions[1]
+        theta_before = self.xrhs.subfunctions[2]
+
+        PETSc.Sys.Print(f"||u||_2 = {norm(u_before):.6e} (after Riesz)")
+        PETSc.Sys.Print(f"||rho||_2 = {norm(rho_before):.6e} (after Riesz)")
+        PETSc.Sys.Print(f"||theta||_2 = {norm(theta_before):.6e} (after Riesz)")
 
         # Solve the hybridized system
         logger.info('Compressible linear solver: hybridized solve')
+        self.rho_avg_solver.solve()
+        self.exner_avg_solver.solve()
+        self.hybridized_solver.invalidate_jacobian()
         self.hybridized_solver.solve()
 
         broken_u, rho1, _ = self.urhol0.subfunctions
+        PETSc.Sys.Print(f"||u_broken||_2 = {norm(broken_u):.6e} (after hybrid solve)")
+        PETSc.Sys.Print(f"||rho||_2 = {norm(rho1):.6e} (after hybrid solve)")
         u1 = self.u_hdiv
 
         # Project broken_u into the HDiv space
@@ -432,6 +472,7 @@ class CompressibleSolver(TimesteppingSolver):
         # Reapply bcs to ensure they are satisfied
         for bc in self.bcs:
             bc.apply(u1)
+        PETSc.Sys.Print(f"||u_hdiv||_2 = {norm(self.u_hdiv):.6e} (after BC)")
 
         # Copy back into u and rho cpts of dy
         u, rho, theta = dy.subfunctions[0:3]
@@ -445,6 +486,8 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Copy into theta cpt of dy
         theta.assign(self.theta)
+
+        PETSc.Sys.Print(f"||theta||_2 = {norm(self.theta):.6e} (after theta solve)")
 
 
 class BoussinesqSolver(TimesteppingSolver):

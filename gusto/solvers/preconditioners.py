@@ -509,6 +509,8 @@ class CompressibleHybridisedSCPC(PCBase):
 
     scpc_parameters = {'mat_type': 'matfree',
                         'ksp_type': 'preonly',
+                        'ksp_converged_reason': None,
+                        'ksp_monitor_true_residual': None,
                         'pc_type': 'python',
                         'pc_python_type': 'firedrake.SCPC',
                         'pc_sc_eliminate_fields': '0, 1',
@@ -567,14 +569,16 @@ class CompressibleHybridisedSCPC(PCBase):
 
         # Define
         self.xstar = Cofunction(self.W.dual())
-        self.x = Function(self.W)
+        self.xrhs = Function(self.W)
         self.y = Function(self.W)
+
         self.y_hybrid = Function(self.W_hyb)
 
-        u_in, rho_in, theta_in = self.x.subfunctions[0:3]
+        u_in, rho_in, theta_in = self.xrhs.subfunctions[0:3]
 
         # Get bcs
         self.bcs = self.equations.bcs['u']
+        
 
         # Set up hybridized solver for (u, rho, l) system
         w, phi, dl = TestFunctions(self.W_hyb)
@@ -636,31 +640,32 @@ class CompressibleHybridisedSCPC(PCBase):
         thetabar_w = thetabar
 
 
-        # _dl = TestFunction(self.Vtrace)
-        # a_tr = _dl('+')*l0('+')*(dS_v_qp + dS_h_qp) + _dl*l0*ds_v_qp + _dl*l0*ds_tb_qp
+        _l0 = TrialFunction(self.Vtrace)
+        _dl = TestFunction(self.Vtrace)
+        a_tr = _dl('+')*_l0('+')*(dS_v_qp + dS_h_qp) + _dl*_l0*ds_v_qp + _dl*_l0*ds_tb_qp
 
-        # def L_tr(f):
-        #     return _dl('+')*avg(f)*(dS_v_qp + dS_h_qp) + _dl*f*ds_v_qp + _dl*f*ds_tb_qp
+        def L_tr(f):
+            return _dl('+')*avg(f)*(dS_v_qp + dS_h_qp) + _dl*f*ds_v_qp + _dl*f*ds_tb_qp
 
-        # cg_ilu_parameters = {'ksp_type': 'cg',
-        #                      'pc_type': 'bjacobi',
-        #                      'sub_pc_type': 'ilu'}
+        cg_ilu_parameters = {'ksp_type': 'cg',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
 
-        # # Project field averages into functions on the trace space
-        # rhobar_avg = Function(self.Vtrace)
-        # exnerbar_avg = Function(self.Vtrace)
+        # Project field averages into functions on the trace space
+        rhobar_avg = Function(self.Vtrace)
+        exnerbar_avg = Function(self.Vtrace)
 
-        # rho_avg_prb = LinearVariationalProblem(a_tr, L_tr(rhobar), rhobar_avg,
-        #                                        constant_jacobian=True)
-        # exner_avg_prb = LinearVariationalProblem(a_tr, L_tr(exnerbar), exnerbar_avg,
-        #                                          constant_jacobian=True)
+        rho_avg_prb = LinearVariationalProblem(a_tr, L_tr(rhobar), rhobar_avg,
+                                               constant_jacobian=True)
+        exner_avg_prb = LinearVariationalProblem(a_tr, L_tr(exnerbar), exnerbar_avg,
+                                                 constant_jacobian=True)
 
-        # self.rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
-        #                                               solver_parameters=cg_ilu_parameters,
-        #                                               options_prefix='rhobar_avg_solver')
-        # self.exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
-        #                                                 solver_parameters=cg_ilu_parameters,
-        #                                                 options_prefix='exnerbar_avg_solver')
+        self.rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
+                                                      solver_parameters=cg_ilu_parameters,
+                                                      options_prefix='rhobar_avg_solver')
+        self.exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
+                                                        solver_parameters=cg_ilu_parameters,
+                                                        options_prefix='exnerbar_avg_solver')
 
         # # "broken" u, rho, and trace system
         # # NOTE: no ds_v integrals since equations are defined on
@@ -678,23 +683,49 @@ class CompressibleHybridisedSCPC(PCBase):
             # following does nothing but is preserved in the comments
             # to remind us why (because V(w) is purely vertical).
             # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
-            + beta_u*cp*jump(theta_w*V(w), n=n)*avg(exnerbar)*dS_h_qp
-            + beta_u*cp*dot(theta_w*V(w), n)*exnerbar*ds_tb_qp
+            + beta_u*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_h_qp
+            + beta_u*cp*dot(theta_w*V(w), n)*exnerbar_avg*ds_tb_qp
             - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
             # trace terms appearing after integrating momentum equation
             + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_v_qp + dS_h_qp)
             + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tb_qp + ds_v_qp)
             # mass continuity equation
             + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
-            + beta_r*jump(phi*u, n=n)*avg(rhobar)*dS_h
+            + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
             # term added because u.n=0 is enforced weakly via the traces
-            + beta_r*phi*dot(u, n)*rhobar*(ds_tb + ds_v)
+            + beta_r*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v)
             # constraint equation to enforce continuity of the velocity
             # through the interior facets and weakly impose the no-slip
             # condition
             + dl('+')*jump(u, n=n)*(dS_v + dS_h)
             + dl*dot(u, n)*(ds_t + ds_b + ds_v)
         )
+
+
+        # eqn = (
+        #     # momentum equation
+        #     u_mass
+        #     - beta_u*cp*div(theta_w*V(w))*exnerbar*dx_qp
+        #     # following does nothing but is preserved in the comments
+        #     # to remind us why (because V(w) is purely vertical).
+        #     # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
+        #     + beta_u*cp*jump(theta_w*V(w), n=n)*avg(exnerbar)*dS_h_qp
+        #     + beta_u*cp*dot(theta_w*V(w), n)*exnerbar*ds_tb_qp
+        #     - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
+        #     # trace terms appearing after integrating momentum equation
+        #     + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_v_qp + dS_h_qp)
+        #     + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tb_qp + ds_v_qp)
+        #     # mass continuity equation
+        #     + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
+        #     + beta_r*jump(phi*u, n=n)*avg(rhobar)*dS_h
+        #     # term added because u.n=0 is enforced weakly via the traces
+        #     + beta_r*phi*dot(u, n)*rhobar*(ds_tb + ds_v)
+        #     # constraint equation to enforce continuity of the velocity
+        #     # through the interior facets and weakly impose the no-slip
+        #     # condition
+        #     + dl('+')*jump(u, n=n)*(dS_v + dS_h)
+        #     + dl*dot(u, n)*(ds_t + ds_b + ds_v)
+        # )
         # TODO: can we get this term using FML?
         # contribution of the sponge term
         if hasattr(self.equations, "mu"):
@@ -756,39 +787,85 @@ class CompressibleHybridisedSCPC(PCBase):
             x (:class:`PETSc.Vec`): the vector to apply the preconditioner to.
             y (:class:`PETSc.Vec`): the vector to store the result.
         """
-        with self.xstar.dat.vec_wo as v:
-            x.copy(v)
+        from firedrake import norm
+
+        
+        # --- input vector norm (as seen by PETSc) ---
+        n2_x = x.norm(PETSc.NormType.NORM_2)
+        ninf_x = x.norm(PETSc.NormType.NORM_INFINITY)
+        PETSc.Sys.Print(f"[PC.apply] ||x||_2 = {n2_x:.6e}, ||x||_inf = {ninf_x:.6e}")
+
+        xsize = x.getSize()
+        PETSc.Sys.Print(f"[PC.apply] x block size = {xsize}")
+
+        # transfer x -> self.xstar
+        with self.xstar.dat.vec_wo as xv:
+            x.copy(xv)
+
+        # OPTIONAL: inspect what you just copied
+        with self.xstar.dat.vec_ro as v:
+            PETSc.Sys.Print(f"[PC.apply] ||xstar||_2 = {v.norm(PETSc.NormType.NORM_2):.6e}")
 
         # # Transfer data into hybrid space
         # self.x_hybrid.subfunctions[0].assign(0)
-        self.x.assign(self.xstar.riesz_representation())
+        self.xrhs.assign(self.xstar.riesz_representation())
+
+        u_before = self.xrhs.subfunctions[0]
+        rho_before = self.xrhs.subfunctions[1]
+        theta_before = self.xrhs.subfunctions[2]
+
+        PETSc.Sys.Print(f"||u||_2 = {norm(u_before):.6e} (after Riesz)")
+        PETSc.Sys.Print(f"||rho||_2 = {norm(rho_before):.6e} (after Riesz)")
+        PETSc.Sys.Print(f"||theta||_2 = {norm(theta_before):.6e} (after Riesz)")
+
+        PETSc.Sys.Print(f"||x||_2 = {norm(self.xrhs):.6e} (after Riesz)")
 
         # Solve hybridized system
         #self.y_hybrid.assign(0)
+        self.rho_avg_solver.solve()
+        self.exner_avg_solver.solve()
+        self.hybridized_solver.invalidate_jacobian()
+        PETSc.Sys.Print(f"||x||_2 = {norm(self.xrhs):.6e} (after Riesz)")
         self.hybridized_solver.solve()
+        #PETSc.Sys.Print(f"||y_hybrid||_2 = {norm(self.y_hybrid):.6e} (after hybrid solve)")
 
         # Recover broken u and rho
         u_broken, rho, l = self.y_hybrid.subfunctions
+        PETSc.Sys.Print(f"||u_broken||_2 = {norm(u_broken):.6e} (after hybrid solve)")
+        PETSc.Sys.Print(f"||rho||_2 = {norm(rho):.6e} (after hybrid solve)")
         self.u_hdiv.assign(0)
         self._average_kernel.apply(self.u_hdiv, self._weight, u_broken)
-
+        PETSc.Sys.Print(f"||u_hdiv||_2 = {norm(self.u_hdiv):.6e} (after averaging)")
         for bc in self.bcs:
             bc.apply(self.u_hdiv)
-
-        # Reconstruct theta
-        self.theta_solver.solve()
-
-        # Transfer data to non-hybrid space
+        PETSc.Sys.Print(f"||u_hdiv||_2 = {norm(self.u_hdiv):.6e} (after BC)")
+                # Transfer data to non-hybrid space
         self.y.subfunctions[0].assign(self.u_hdiv)
         self.y.subfunctions[1].assign(rho)
+        self.theta.assign(0)
+        self.theta_solver.solve()
+        PETSc.Sys.Print(f"||theta||_2 = {norm(self.theta):.6e} (after theta solve)")
+
+
+
         self.y.subfunctions[2].assign(self.theta)
 
-        with self.y.dat.vec_ro as v:
-            v.copy(y)
+        
+        with self.y.dat.vec_ro as vout:
+            # vout currently holds the Firedrake data you will copy to PETSc y
+            n2_vout = vout.norm(PETSc.NormType.NORM_2)
+            PETSc.Sys.Print(f"[PC.apply] ||y(Firedrake)||_2 = {n2_vout:.6e}")
+
+            # copy into PETSc output vector
+            vout.copy(y)
+
+        # Now y is populated; print PETSc y norm as seen by KSP/PC
+        PETSc.Sys.Print(f"[PC.apply] ||y(PETSc)||_2 = {y.norm(PETSc.NormType.NORM_2):.6e}")
+
 
     def update(self, pc):
-        # self.rho_avg_solver.solve()
-        # self.exner_avg_solver.solve()
+        self.rho_avg_solver.solve()
+        self.exner_avg_solver.solve()
         self.hybridized_solver.invalidate_jacobian()
 
 
@@ -805,7 +882,7 @@ class CompressibleHybridisedSCPC(PCBase):
         self.tau_values = tau_values if tau_values is not None else {}
 
         self.dt = self.equations.domain.dt
-    
+
     def applyTranspose(self, pc, x, y):
         """
         Apply the transpose of the preconditioner.

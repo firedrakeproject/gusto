@@ -5,7 +5,8 @@ and GungHo dynamical cores.
 
 from firedrake import (
     Function, Constant, TrialFunctions, DirichletBC, div, assemble,
-    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace, action
+    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace, action,
+    inner, TestFunction, dx
 )
 from firedrake.fml import drop, replace_subject, Term
 from firedrake.__future__ import interpolate
@@ -475,6 +476,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
     def timestep(self):
         """Defines the timestep"""
+        from firedrake import PETSc, norm
         xn = self.x.n
         xnp1 = self.x.np1
         xstar = self.x.star
@@ -540,11 +542,22 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
                     xrhs += xrhs_phys
 
+                    PETSc.Sys.Print(f"||u||_2 = {norm(xrhs.subfunctions[0]):.6e} (after Physics)")
+                    PETSc.Sys.Print(f"||rho||_2 = {norm(xrhs.subfunctions[1]):.6e} (after Physics)")
+                    PETSc.Sys.Print(f"||theta||_2 = {norm(xrhs.subfunctions[2]):.6e} (after Physics)")
+
                     if (inner > 0 and self.accelerator):
                         # Zero implicit forcing to accelerate solver convergence
                         self.forcing.zero_non_wind_terms(self.equation, xnp1, xrhs, self.equation.field_names)
-
+                PETSc.Sys.Print(f"||theta||_2 = {norm(self.xrhs.subfunctions[1] - xnp1('rho')):.6e} (rho rhs - np1 xnp1)")
                 xrhs -= xnp1(self.field_name)
+                PETSc.Sys.Print(f"||u||_2 = {norm(xrhs.subfunctions[0]):.6e} (after -xnp1)")
+                PETSc.Sys.Print(f"||rho||_2 = {norm(xrhs.subfunctions[1]):.6e} (after -xnp1)")
+                PETSc.Sys.Print(f"||theta||_2 = {norm(xrhs.subfunctions[2]):.6e} (after -xnp1)")
+
+
+
+                PETSc.Sys.Print(f"||rho||_2 = {norm(xnp1('rho')):.6e} (of xnp1)")
 
                 # Linear solve -------------------------------------------------
                 with timed_stage("Implicit solve"):
@@ -868,11 +881,11 @@ class SIQNLinearSolver(object):
 
         W = equation.function_space
         self.xrhs = Function(W)
+        v = TestFunction(W)
 
         aeqn = residual
-        Leqn = residual.label_map(
-            lambda t: t.has_label(time_derivative), map_if_false=drop
-        )
+        self.Leqn = inner(self.xrhs, v)*dx
+        
 
         # Place to put result of solver
         self.dy = Function(W)
@@ -883,7 +896,7 @@ class SIQNLinearSolver(object):
             for bc in equation.bcs['u']
         ]
         problem = LinearVariationalProblem(
-            aeqn.form, action(Leqn.form, self.xrhs), self.dy, bcs=bcs,
+            aeqn.form, self.Leqn, self.dy,
             constant_jacobian=True)
 
         self.solver = LinearVariationalSolver(
@@ -912,6 +925,52 @@ class SIQNLinearSolver(object):
             dy (:class:`Function`): the resulting increment field in the
                 appropriate :class:`MixedFunctionSpace`.
         """
+        from firedrake import PETSc, norm, Cofunction, assemble, TestFunction, dx, Constant, Function, inner
         self.xrhs.assign(xrhs)
+        self.dy.assign(Constant(0.0))
+        u_before = self.xrhs.subfunctions[0]
+        rho_before = self.xrhs.subfunctions[1]
+        theta_before = self.xrhs.subfunctions[2]
+     
+        PETSc.Sys.Print(f"||u||_2 = {norm(u_before):.6e}, ||rho||_2 = {norm(rho_before):.6e}, ||theta||_2 = {norm(theta_before):.6e} (before linear solve)")
+
+        W = self.xrhs.function_space()
+        xrhs_co = Cofunction(W.dual())
+        xrhs_co = assemble(inner(self.xrhs, TestFunction(W))*dx)
+        xrhs_2 = Function(W)
+        xrhs_2.assign(xrhs_co.riesz_representation())
+
+        u_before2 = xrhs_2.subfunctions[0]
+        rho_before2 = xrhs_2.subfunctions[1]
+        theta_before2 = xrhs_2.subfunctions[2]
+
+        PETSc.Sys.Print(f"||u||_2 = {norm(u_before2):.6e}, ||rho||_2 = {norm(rho_before2):.6e}, ||theta||_2 = {norm(theta_before2):.6e} (before linear solve, post Riesz)")
+        
+        xrhs_2.assign(assemble(self.Leqn).riesz_representation())
+
+        u_before2 = xrhs_2.subfunctions[0]
+        rho_before2 = xrhs_2.subfunctions[1]
+        theta_before2 = xrhs_2.subfunctions[2]
+
+        PETSc.Sys.Print(f"||u||_2 = {norm(u_before2):.6e}, ||rho||_2 = {norm(rho_before2):.6e}, ||theta||_2 = {norm(theta_before2):.6e} (before linear solve, post Riesz)")
+        
+        b_norm = norm(xrhs_2)
+
+
+        with xrhs.dat.vec_ro as b_petsc:
+            PETSc.Sys.Print("Original RHS PETSc norm:", b_petsc.norm())
+
+
+            # 2. Create a new PETSc Vec of the same size
+            new_vec = PETSc.Vec().createMPI(b_petsc.getSize(), comm=PETSc.COMM_WORLD)
+
+            # 3. Copy data from Firedrake RHS into the new Vec
+            b_petsc.copy(new_vec)
+
+            # 4. Compute the norm of the new Vec
+            PETSc.Sys.Print("New PETSc Vec norm:", new_vec.norm(PETSc.NormType.NORM_2))
+
+
+        PETSc.Sys.Print(f"RHS norm = {b_norm:.6e}")
         self.solver.solve()
         dy.assign(self.dy)
