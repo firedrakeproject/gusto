@@ -589,9 +589,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                         self.forcing.zero_non_wind_terms(self.equation, xnp1, xrhs, self.equation.field_names)
 
                 # Implicit physics
-                logger.info(f'Semi-implicit Quasi Newton: Implicit physics {(outer, inner)}')
                 if abs(self.physics_beta) > 0.0:
                     for _, scheme in self.inner_physics_schemes:
+                        logger.info(f'Semi-implicit Quasi Newton: Implicit physics {(outer, inner)}')
                         scheme.apply(x_implicit_phys(self.field_name), xnp1(self.field_name))
                         xrhs += self.physics_beta*(x_implicit_phys(self.field_name) - xnp1(self.field_name))
 
