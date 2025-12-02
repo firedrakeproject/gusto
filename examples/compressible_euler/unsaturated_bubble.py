@@ -148,7 +148,7 @@ def unsaturated_bubble(
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, physics_schemes=physics_schemes
+        linear_solver=linear_solver, final_physics_schemes=physics_schemes
     )
 
     # ------------------------------------------------------------------------ #
