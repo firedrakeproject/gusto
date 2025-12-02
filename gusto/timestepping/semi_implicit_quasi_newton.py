@@ -799,7 +799,7 @@ class SIQNLinearSolver(object):
 
     def __init__(self, equation, solver_prognostics, implicit_terms,
                  alpha, tau_values=None, solver_parameters=None,
-                 overwrite_solver_parameters=False, reference_dependent=True, appctx=None):
+                 overwrite_solver_parameters=False, reference_dependent=True, appctx=None, enforce_pc_on_rhs=False):
         """
         Args:
             equations (:class:`PrognosticEquation`): the model's equation.
@@ -822,6 +822,8 @@ class SIQNLinearSolver(object):
             reference_dependent: this indicates that the solver Jacobian should
                 be rebuilt if the reference profiles have been updated.
             appctx: appctx for the  underlying :class:`LinearVariationalSolver`.
+            enforce_pc_on_rhs: whether to enforce the preconditioner to act on rhs
+            vector b
         """
 
         # Update or set solver parameters --------------------------------------
@@ -904,6 +906,8 @@ class SIQNLinearSolver(object):
             options_prefix='linear_solver'
         )
 
+        self.enforce_pc_on_rhs = enforce_pc_on_rhs
+
     @staticmethod
     def log_ksp_residuals(ksp):
         if logger.isEnabledFor(DEBUG):
@@ -913,6 +917,9 @@ class SIQNLinearSolver(object):
     def update_reference_profiles(self):
         if self.reference_dependent:
             self.solver.invalidate_jacobian()
+            pc = self.solver.snes.getKSP().getPC()
+            if pc.getType() == "python":
+                pc.getPythonContext().update(pc)
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -927,7 +934,7 @@ class SIQNLinearSolver(object):
         """
         from firedrake import PETSc, norm, Cofunction, assemble, TestFunction, dx, Constant, Function, inner
         self.xrhs.assign(xrhs)
-        self.dy.assign(Constant(0.0))
+        #self.dy.assign(Constant(0.0))
         u_before = self.xrhs.subfunctions[0]
         rho_before = self.xrhs.subfunctions[1]
         theta_before = self.xrhs.subfunctions[2]
@@ -972,5 +979,9 @@ class SIQNLinearSolver(object):
 
 
         PETSc.Sys.Print(f"RHS norm = {b_norm:.6e}")
+
+        if self.enforce_pc_on_rhs:
+            self.dy.assign(Constant(0.0))
+        self.update_reference_profiles()
         self.solver.solve()
         dy.assign(self.dy)

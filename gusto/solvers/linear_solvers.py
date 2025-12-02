@@ -325,30 +325,6 @@ class CompressibleSolver(TimesteppingSolver):
             + dl*dot(u, n)*(ds_t + ds_b + ds_v)
         )
 
-# eqn = (
-#     # momentum equation
-#     u_mass
-#     - beta_u*cp*div(theta_w*V(w))*exnerbar*dx_qp
-#     # following does nothing but is preserved in the comments
-#     # to remind us why (because V(w) is purely vertical).
-#     # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
-#     + beta_u*cp*jump(theta_w*V(w), n=n)*avg(exnerbar)*dS_h_qp
-#     + beta_u*cp*dot(theta_w*V(w), n)*exnerbar*ds_tb_qp
-#     - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
-#     # trace terms appearing after integrating momentum equation
-#     + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_v_qp + dS_h_qp)
-#     + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tb_qp + ds_v_qp)
-#     # mass continuity equation
-#     + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
-#     + beta_r*jump(phi*u, n=n)*avg(rhobar)*dS_h
-#     # term added because u.n=0 is enforced weakly via the traces
-#     + beta_r*phi*dot(u, n)*rhobar*(ds_tb + ds_v)
-#     # constraint equation to enforce continuity of the velocity
-#     # through the interior facets and weakly impose the no-slip
-#     # condition
-#     + dl('+')*jump(u, n=n)*(dS_v + dS_h)
-#     + dl*dot(u, n)*(ds_t + ds_b + ds_v)
-# )
         # TODO: can we get this term using FML?
         # contribution of the sponge term
         if hasattr(self.equations, "mu"):
@@ -452,9 +428,6 @@ class CompressibleSolver(TimesteppingSolver):
 
         # Solve the hybridized system
         logger.info('Compressible linear solver: hybridized solve')
-        self.rho_avg_solver.solve()
-        self.exner_avg_solver.solve()
-        self.hybridized_solver.invalidate_jacobian()
         self.hybridized_solver.solve()
 
         broken_u, rho1, _ = self.urhol0.subfunctions

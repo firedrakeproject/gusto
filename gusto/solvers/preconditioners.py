@@ -530,12 +530,14 @@ class CompressibleHybridisedSCPC(PCBase):
         """
         Set up problem and solver
         """
-        from firedrake import (split, LinearVariationalProblem, Constant, LinearVariationalSolver,
+        from firedrake import (split, LinearVariationalProblem, LinearVariationalSolver,
                                 TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
                                 rhs, FacetNormal, div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b,
                                 ds_tb, inner, dot, grad, Function, cross,
                                 BrokenElement, FunctionSpace, MixedFunctionSpace, as_vector,
-                                Cofunction, Projector)
+                                Cofunction, Constant)
+        from gusto.equations.active_tracers import TracerVariableType
+        from gusto.core.labels import hydrostatic
         if pc.getType() != "python":
             raise ValueError("Expecting PC type python")
 
@@ -578,7 +580,6 @@ class CompressibleHybridisedSCPC(PCBase):
 
         # Get bcs
         self.bcs = self.equations.bcs['u']
-        
 
         # Set up hybridized solver for (u, rho, l) system
         w, phi, dl = TestFunctions(self.W_hyb)
@@ -620,24 +621,24 @@ class CompressibleHybridisedSCPC(PCBase):
         ds_tb_qp = (ds_t(degree=(equations.domain.max_quad_degree))
                     + ds_b(degree=(equations.domain.max_quad_degree)))
 
-        # # Add effect of density of water upon theta, using moisture reference profiles
-        # # TODO: Explore if this is the right thing to do for the linear problem
-        # if equations.active_tracers is not None:
-        #     mr_t = Constant(0.0)*thetabar
-        #     for tracer in equations.active_tracers:
-        #         if tracer.chemical == 'H2O':
-        #             if tracer.variable_type == TracerVariableType.mixing_ratio:
-        #                 idx = equations.field_names.index(tracer.name)
-        #                 mr_bar = split(equations.X_ref)[idx]
-        #                 mr_t += mr_bar
-        #             else:
-        #                 raise NotImplementedError('Only mixing ratio tracers are implemented')
+        # Add effect of density of water upon theta, using moisture reference profiles
+        # TODO: Explore if this is the right thing to do for the linear problem
+        if equations.active_tracers is not None:
+            mr_t = Constant(0.0)*thetabar
+            for tracer in equations.active_tracers:
+                if tracer.chemical == 'H2O':
+                    if tracer.variable_type == TracerVariableType.mixing_ratio:
+                        idx = equations.field_names.index(tracer.name)
+                        mr_bar = split(equations.X_ref)[idx]
+                        mr_t += mr_bar
+                    else:
+                        raise NotImplementedError('Only mixing ratio tracers are implemented')
 
-        #     theta_w = theta / (1 + mr_t)
-        #     thetabar_w = thetabar / (1 + mr_t)
-        # else:
-        theta_w = theta
-        thetabar_w = thetabar
+            theta_w = theta / (1 + mr_t)
+            thetabar_w = thetabar / (1 + mr_t)
+        else:
+            theta_w = theta
+            thetabar_w = thetabar
 
 
         _l0 = TrialFunction(self.Vtrace)
@@ -670,11 +671,10 @@ class CompressibleHybridisedSCPC(PCBase):
         # # "broken" u, rho, and trace system
         # # NOTE: no ds_v integrals since equations are defined on
         # # a periodic (or sphere) base mesh.
-        # if any([t.has_label(hydrostatic) for t in self.equations.residual]):
-        #     u_mass = inner(w, (h_project(u) - u_in))*dx
-        # else:
-        
-        u_mass = inner(w, (u - u_in ))*dx
+        if  any([t.has_label(hydrostatic) for t in equations.residual]):
+            u_mass = inner(w, (h_project(u) - u_in))*dx
+        else:
+            u_mass = inner(w, (u - u_in ))*dx
 
         eqn = (
             # momentum equation
@@ -701,31 +701,6 @@ class CompressibleHybridisedSCPC(PCBase):
             + dl*dot(u, n)*(ds_t + ds_b + ds_v)
         )
 
-
-        # eqn = (
-        #     # momentum equation
-        #     u_mass
-        #     - beta_u*cp*div(theta_w*V(w))*exnerbar*dx_qp
-        #     # following does nothing but is preserved in the comments
-        #     # to remind us why (because V(w) is purely vertical).
-        #     # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
-        #     + beta_u*cp*jump(theta_w*V(w), n=n)*avg(exnerbar)*dS_h_qp
-        #     + beta_u*cp*dot(theta_w*V(w), n)*exnerbar*ds_tb_qp
-        #     - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
-        #     # trace terms appearing after integrating momentum equation
-        #     + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_v_qp + dS_h_qp)
-        #     + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tb_qp + ds_v_qp)
-        #     # mass continuity equation
-        #     + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
-        #     + beta_r*jump(phi*u, n=n)*avg(rhobar)*dS_h
-        #     # term added because u.n=0 is enforced weakly via the traces
-        #     + beta_r*phi*dot(u, n)*rhobar*(ds_tb + ds_v)
-        #     # constraint equation to enforce continuity of the velocity
-        #     # through the interior facets and weakly impose the no-slip
-        #     # condition
-        #     + dl('+')*jump(u, n=n)*(dS_v + dS_h)
-        #     + dl*dot(u, n)*(ds_t + ds_b + ds_v)
-        # )
         # TODO: can we get this term using FML?
         # contribution of the sponge term
         if hasattr(self.equations, "mu"):
@@ -776,6 +751,10 @@ class CompressibleHybridisedSCPC(PCBase):
                                                     solver_parameters=cg_ilu_parameters,
                                                     options_prefix='thetabacksubstitution')
 
+        self.rho_avg_solver.solve()
+        self.exner_avg_solver.solve()
+        self.hybridized_solver.invalidate_jacobian()
+
 
 
     def apply(self, pc, x, y):
@@ -822,9 +801,7 @@ class CompressibleHybridisedSCPC(PCBase):
 
         # Solve hybridized system
         #self.y_hybrid.assign(0)
-        self.rho_avg_solver.solve()
-        self.exner_avg_solver.solve()
-        self.hybridized_solver.invalidate_jacobian()
+
         PETSc.Sys.Print(f"||x||_2 = {norm(self.xrhs):.6e} (after Riesz)")
         self.hybridized_solver.solve()
         #PETSc.Sys.Print(f"||y_hybrid||_2 = {norm(self.y_hybrid):.6e} (after hybrid solve)")
@@ -864,9 +841,12 @@ class CompressibleHybridisedSCPC(PCBase):
 
 
     def update(self, pc):
-        self.rho_avg_solver.solve()
-        self.exner_avg_solver.solve()
-        self.hybridized_solver.invalidate_jacobian()
+        PETSc.Sys.Print("[PC.update] Updating hybridized PC")
+
+        if hasattr(self, "rho_avg_solver"):
+            self.rho_avg_solver.solve()
+            self.exner_avg_solver.solve()
+            self.hybridized_solver.invalidate_jacobian()
 
 
     def _process_context(self, pc):
