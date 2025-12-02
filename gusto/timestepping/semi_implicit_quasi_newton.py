@@ -37,7 +37,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
     def __init__(self, equation_set, io, transport_schemes, spatial_methods,
                  auxiliary_equations_and_schemes=None, linear_solver=None,
-                 diffusion_schemes=None, physics_schemes=None,
+                 diffusion_schemes=None, inner_physics_schemes=None,
                  final_physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
                  alpha=0.5, tau_values=None, off_centred_u=False,
@@ -65,7 +65,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             diffusion_schemes (iter, optional): iterable of pairs of the form
                 ``(field_name, scheme)`` indicating the fields to diffuse, and
                 the :class:`~.TimeDiscretisation` to use. Defaults to None.
-            physics_schemes: (list, optional): a list of tuples of the form
+            inner_physics_schemes: (list, optional): a list of tuples of the form
                 (:class:`PhysicsParametrisation`, :class:`TimeDiscretisation`),
                 pairing physics parametrisations and timestepping schemes to use
                 for each. Timestepping schemes for physics must be explicit.
@@ -260,10 +260,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         # Physics schemes ------------------------------------------------------
         self.physics_beta = physics_beta
-        if physics_schemes is not None:
-            self.physics_schemes = physics_schemes
+        if inner_physics_schemes is not None:
+            self.inner_physics_schemes = inner_physics_schemes
         else:
-            self.physics_schemes = []
+            self.inner_physics_schemes = []
         if final_physics_schemes is not None:
             self.final_physics_schemes = final_physics_schemes
         else:
@@ -279,7 +279,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.all_physics_schemes = (self.slow_physics_schemes
                                     + self.fast_physics_schemes
                                     + self.final_physics_schemes
-                                    + self.physics_schemes)
+                                    + self.inner_physics_schemes)
 
         for parametrisation, scheme in self.all_physics_schemes:
             assert scheme.nlevels == 1, \
@@ -542,7 +542,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         # Explicit physics
         if abs(self.physics_beta - 1.0) > 0.0:
-            for _, scheme in self.physics_schemes:
+            for _, scheme in self.inner_physics_schemes:
                 logger.info("Semi-implicit Quasi-Newton: Explicit physics")
                 # Evaluate explict physics on xn
                 scheme.apply(x_explicit_phys(scheme.field_name), xn(scheme.field_name))
@@ -591,7 +591,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 # Implicit physics
                 logger.info(f'Semi-implicit Quasi Newton: Implicit physics {(outer, inner)}')
                 if abs(self.physics_beta) > 0.0:
-                    for _, scheme in self.physics_schemes:
+                    for _, scheme in self.inner_physics_schemes:
                         scheme.apply(x_implicit_phys(self.field_name), xnp1(self.field_name))
                         xrhs += self.physics_beta*(x_implicit_phys(self.field_name) - xnp1(self.field_name))
 
