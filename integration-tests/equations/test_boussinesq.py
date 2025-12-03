@@ -58,13 +58,9 @@ def run_boussinesq(tmpdir, compressible):
         transport_methods = [DGUpwind(eqn, "u"),
                              DGUpwind(eqn, "b", ibp=b_opts.ibp)]
 
-    # Linear solver
-    linear_solver = BoussinesqSolver(eqn)
-
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
-                                      transport_methods,
-                                      linear_solver=linear_solver)
+                                      transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

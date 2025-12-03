@@ -16,7 +16,8 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, SUPGOptions, Divergence, Perturbation, CourantNumber,
     BoussinesqParameters, BoussinesqEquations, BoussinesqSolver,
-    boussinesq_hydrostatic_balance
+    boussinesq_hydrostatic_balance, incompressible, sponge, SIQNLinearSolver,
+    HybridisedSolverParameters, LinearTimesteppingSolver
 )
 
 skamarock_klemp_incompressible_bouss_defaults = {
@@ -88,7 +89,28 @@ def skamarock_klemp_incompressible_bouss(
     ]
 
     # Linear solver
-    linear_solver = BoussinesqSolver(eqns)
+    solver_parameters = HybridisedSolverParameters(eqns.name)
+    def trace_nullsp(T):
+        return VectorSpaceBasis(constant=True)
+
+
+    appctx = {
+        'auxform': eqns.schur_complement_form(alpha=0.5),
+        "trace_nullspace": trace_nullsp,
+    }
+
+    linear_solver = SIQNLinearSolver(
+        eqns, solver_prognostics=["u", "p", "b"], alpha=0.5, implicit_terms=[incompressible, sponge],
+        solver_parameters=solver_parameters,
+        appctx=appctx
+    )
+    linear_solver = LinearTimesteppingSolver(eqns, alpha=0.5, options_prefix="boussinesq",
+        solver_parameters=solver_parameters,
+        appctx=appctx
+    )
+
+    #linear_solver = BoussinesqSolver(eqns)
+
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(

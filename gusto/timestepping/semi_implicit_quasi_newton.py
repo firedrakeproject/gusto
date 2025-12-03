@@ -21,6 +21,8 @@ from gusto.solvers import mass_parameters
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
+from gusto.solvers.solver_presets import HybridisedSolverParameters
+from gusto.equations.compressible_euler_equations import CompressibleEulerEquations
 
 
 __all__ = ["SemiImplicitQuasiNewton", "Forcing", "SIQNLinearSolver"]
@@ -45,7 +47,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  predictor=None, reference_update_freq=None,
                  spinup_steps=0, solver_prognostics=None,
                  linear_solver_parameters=None,
-                 overwrite_linear_solver_parameters=False):
+                 appctx=None):
         """
         Args:
             equation_set (:class:`PrognosticEquationSet`): the prognostic
@@ -125,10 +127,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             linear_solver_parameters (dict, optional): contains the options to
                 be passed to the underlying :class:`LinearVariationalSolver`.
                 Defaults to None.
-            overwrite_solver_parameters (bool, optional): if True use only the
-                `solver_parameters` that have been passed in. If False then
-                update the default parameters with the `solver_parameters`
-                passed in. Defaults to False.
+            appctx (dict, optional): a dictionary of application context for the
+                underlying :class:`LinearVariationalSolver`.
+                Defaults to None.
         """
 
         # Basic parts of the SIQN structure ------------------------------------
@@ -193,11 +194,22 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.bcs = equation_set.bcs
         self.forcing = Forcing(equation_set, self.implicit_terms, self.alpha)
         if linear_solver is None:
+            if linear_solver_parameters is None:
+                self.linear_solver_parameters, self.appctx = \
+                    HybridisedSolverParameters(equation_set, alpha=self.alpha, tau_values=tau_values)
+            else:
+                self.linear_solver_parameters = linear_solver_parameters
+                self.appctx = appctx
+            if isinstance(equation_set, CompressibleEulerEquations):
+                self.enforce_pc_on_rhs=True
+            else:
+                self.enforce_pc_on_rhs=False
             self.linear_solver = SIQNLinearSolver(
                 equation_set, solver_prognostics, self.implicit_terms,
                 self.alpha, tau_values=tau_values,
-                solver_parameters=linear_solver_parameters,
-                overwrite_solver_parameters=overwrite_linear_solver_parameters
+                solver_parameters=self.linear_solver_parameters,
+                appctx=self.appctx,
+                enforce_pc_on_rhs=self.enforce_pc_on_rhs
             )
         else:
             self.linear_solver = linear_solver
@@ -542,22 +554,10 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
                     xrhs += xrhs_phys
 
-                    PETSc.Sys.Print(f"||u||_2 = {norm(xrhs.subfunctions[0]):.6e} (after Physics)")
-                    PETSc.Sys.Print(f"||rho||_2 = {norm(xrhs.subfunctions[1]):.6e} (after Physics)")
-                    PETSc.Sys.Print(f"||theta||_2 = {norm(xrhs.subfunctions[2]):.6e} (after Physics)")
-
                     if (inner > 0 and self.accelerator):
                         # Zero implicit forcing to accelerate solver convergence
                         self.forcing.zero_non_wind_terms(self.equation, xnp1, xrhs, self.equation.field_names)
-                PETSc.Sys.Print(f"||theta||_2 = {norm(self.xrhs.subfunctions[1] - xnp1('rho')):.6e} (rho rhs - np1 xnp1)")
                 xrhs -= xnp1(self.field_name)
-                PETSc.Sys.Print(f"||u||_2 = {norm(xrhs.subfunctions[0]):.6e} (after -xnp1)")
-                PETSc.Sys.Print(f"||rho||_2 = {norm(xrhs.subfunctions[1]):.6e} (after -xnp1)")
-                PETSc.Sys.Print(f"||theta||_2 = {norm(xrhs.subfunctions[2]):.6e} (after -xnp1)")
-
-
-
-                PETSc.Sys.Print(f"||rho||_2 = {norm(xnp1('rho')):.6e} (of xnp1)")
 
                 # Linear solve -------------------------------------------------
                 with timed_stage("Implicit solve"):
@@ -783,23 +783,9 @@ class SIQNLinearSolver(object):
     Quasi-Newton problem.
     """
 
-    solver_parameters = {
-        'ksp_type': 'preonly',
-        'mat_type': 'matfree',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.HybridizationPC',
-        'hybridization': {'ksp_type': 'cg',
-                          'pc_type': 'gamg',
-                          'ksp_rtol': 1e-8,
-                          'mg_levels': {'ksp_type': 'chebyshev',
-                                        'ksp_max_it': 2,
-                                        'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'}}
-    }
-
     def __init__(self, equation, solver_prognostics, implicit_terms,
-                 alpha, tau_values=None, solver_parameters=None,
-                 overwrite_solver_parameters=False, reference_dependent=True, appctx=None, enforce_pc_on_rhs=False):
+                 alpha, solver_parameters, tau_values=None,
+                 reference_dependent=True, appctx=None, enforce_pc_on_rhs=False):
         """
         Args:
             equations (:class:`PrognosticEquation`): the model's equation.
@@ -826,13 +812,13 @@ class SIQNLinearSolver(object):
             vector b
         """
 
-        # Update or set solver parameters --------------------------------------
-        if solver_parameters is not None:
-            if not overwrite_solver_parameters:
-                p = flatten_parameters(self.solver_parameters)
-                p.update(flatten_parameters(solver_parameters))
-                solver_parameters = p
-            self.solver_parameters = solver_parameters
+        # Set solver parameters --------------------------------------
+        self.solver_parameters = solver_parameters
+
+        if appctx is not None:
+            self.appctx = appctx
+        else:
+            self.appctx = {}
 
         if logger.isEnabledFor(DEBUG):
             self.solver_parameters["ksp_monitor_true_residual"] = None
@@ -887,7 +873,7 @@ class SIQNLinearSolver(object):
 
         aeqn = residual
         self.Leqn = inner(self.xrhs, v)*dx
-        
+
 
         # Place to put result of solver
         self.dy = Function(W)
@@ -898,11 +884,10 @@ class SIQNLinearSolver(object):
             for bc in equation.bcs['u']
         ]
         problem = LinearVariationalProblem(
-            aeqn.form, self.Leqn, self.dy,
-            constant_jacobian=True)
+            aeqn.form, self.Leqn, self.dy)
 
         self.solver = LinearVariationalSolver(
-            problem, appctx=appctx, solver_parameters=self.solver_parameters,
+            problem, appctx=self.appctx, solver_parameters=self.solver_parameters,
             options_prefix='linear_solver'
         )
 
@@ -917,9 +902,6 @@ class SIQNLinearSolver(object):
     def update_reference_profiles(self):
         if self.reference_dependent:
             self.solver.invalidate_jacobian()
-            pc = self.solver.snes.getKSP().getPC()
-            if pc.getType() == "python":
-                pc.getPythonContext().update(pc)
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -932,56 +914,9 @@ class SIQNLinearSolver(object):
             dy (:class:`Function`): the resulting increment field in the
                 appropriate :class:`MixedFunctionSpace`.
         """
-        from firedrake import PETSc, norm, Cofunction, assemble, TestFunction, dx, Constant, Function, inner
+
         self.xrhs.assign(xrhs)
-        #self.dy.assign(Constant(0.0))
-        u_before = self.xrhs.subfunctions[0]
-        rho_before = self.xrhs.subfunctions[1]
-        theta_before = self.xrhs.subfunctions[2]
-     
-        PETSc.Sys.Print(f"||u||_2 = {norm(u_before):.6e}, ||rho||_2 = {norm(rho_before):.6e}, ||theta||_2 = {norm(theta_before):.6e} (before linear solve)")
+        self.dy.assign(Constant(0.0))
 
-        W = self.xrhs.function_space()
-        xrhs_co = Cofunction(W.dual())
-        xrhs_co = assemble(inner(self.xrhs, TestFunction(W))*dx)
-        xrhs_2 = Function(W)
-        xrhs_2.assign(xrhs_co.riesz_representation())
-
-        u_before2 = xrhs_2.subfunctions[0]
-        rho_before2 = xrhs_2.subfunctions[1]
-        theta_before2 = xrhs_2.subfunctions[2]
-
-        PETSc.Sys.Print(f"||u||_2 = {norm(u_before2):.6e}, ||rho||_2 = {norm(rho_before2):.6e}, ||theta||_2 = {norm(theta_before2):.6e} (before linear solve, post Riesz)")
-        
-        xrhs_2.assign(assemble(self.Leqn).riesz_representation())
-
-        u_before2 = xrhs_2.subfunctions[0]
-        rho_before2 = xrhs_2.subfunctions[1]
-        theta_before2 = xrhs_2.subfunctions[2]
-
-        PETSc.Sys.Print(f"||u||_2 = {norm(u_before2):.6e}, ||rho||_2 = {norm(rho_before2):.6e}, ||theta||_2 = {norm(theta_before2):.6e} (before linear solve, post Riesz)")
-        
-        b_norm = norm(xrhs_2)
-
-
-        with xrhs.dat.vec_ro as b_petsc:
-            PETSc.Sys.Print("Original RHS PETSc norm:", b_petsc.norm())
-
-
-            # 2. Create a new PETSc Vec of the same size
-            new_vec = PETSc.Vec().createMPI(b_petsc.getSize(), comm=PETSc.COMM_WORLD)
-
-            # 3. Copy data from Firedrake RHS into the new Vec
-            b_petsc.copy(new_vec)
-
-            # 4. Compute the norm of the new Vec
-            PETSc.Sys.Print("New PETSc Vec norm:", new_vec.norm(PETSc.NormType.NORM_2))
-
-
-        PETSc.Sys.Print(f"RHS norm = {b_norm:.6e}")
-
-        if self.enforce_pc_on_rhs:
-            self.dy.assign(Constant(0.0))
-        self.update_reference_profiles()
         self.solver.solve()
         dy.assign(self.dy)

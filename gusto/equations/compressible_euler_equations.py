@@ -37,6 +37,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
     pressure.
     """
 
+    name = "CompressibleEulerEquations"
+
     def __init__(self, domain, parameters, sponge_options=None,
                  extra_terms=None, space_names=None,
                  linearisation_map=all_terms,

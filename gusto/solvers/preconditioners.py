@@ -750,7 +750,7 @@ class CompressibleHybridisedSCPC(PCBase):
         self.theta_solver = LinearVariationalSolver(theta_problem,
                                                     solver_parameters=cg_ilu_parameters,
                                                     options_prefix='thetabacksubstitution')
-
+        # Project reference profiles at initialisation
         self.rho_avg_solver.solve()
         self.exner_avg_solver.solve()
         self.hybridized_solver.invalidate_jacobian()
@@ -766,78 +766,36 @@ class CompressibleHybridisedSCPC(PCBase):
             x (:class:`PETSc.Vec`): the vector to apply the preconditioner to.
             y (:class:`PETSc.Vec`): the vector to store the result.
         """
-        from firedrake import norm
-
-        
-        # --- input vector norm (as seen by PETSc) ---
-        n2_x = x.norm(PETSc.NormType.NORM_2)
-        ninf_x = x.norm(PETSc.NormType.NORM_INFINITY)
-        PETSc.Sys.Print(f"[PC.apply] ||x||_2 = {n2_x:.6e}, ||x||_inf = {ninf_x:.6e}")
-
-        xsize = x.getSize()
-        PETSc.Sys.Print(f"[PC.apply] x block size = {xsize}")
 
         # transfer x -> self.xstar
         with self.xstar.dat.vec_wo as xv:
             x.copy(xv)
 
-        # OPTIONAL: inspect what you just copied
-        with self.xstar.dat.vec_ro as v:
-            PETSc.Sys.Print(f"[PC.apply] ||xstar||_2 = {v.norm(PETSc.NormType.NORM_2):.6e}")
-
-        # # Transfer data into hybrid space
-        # self.x_hybrid.subfunctions[0].assign(0)
         self.xrhs.assign(self.xstar.riesz_representation())
-
-        u_before = self.xrhs.subfunctions[0]
-        rho_before = self.xrhs.subfunctions[1]
-        theta_before = self.xrhs.subfunctions[2]
-
-        PETSc.Sys.Print(f"||u||_2 = {norm(u_before):.6e} (after Riesz)")
-        PETSc.Sys.Print(f"||rho||_2 = {norm(rho_before):.6e} (after Riesz)")
-        PETSc.Sys.Print(f"||theta||_2 = {norm(theta_before):.6e} (after Riesz)")
-
-        PETSc.Sys.Print(f"||x||_2 = {norm(self.xrhs):.6e} (after Riesz)")
-
+        
         # Solve hybridized system
-        #self.y_hybrid.assign(0)
-
-        PETSc.Sys.Print(f"||x||_2 = {norm(self.xrhs):.6e} (after Riesz)")
         self.hybridized_solver.solve()
-        #PETSc.Sys.Print(f"||y_hybrid||_2 = {norm(self.y_hybrid):.6e} (after hybrid solve)")
 
         # Recover broken u and rho
         u_broken, rho, l = self.y_hybrid.subfunctions
-        PETSc.Sys.Print(f"||u_broken||_2 = {norm(u_broken):.6e} (after hybrid solve)")
-        PETSc.Sys.Print(f"||rho||_2 = {norm(rho):.6e} (after hybrid solve)")
         self.u_hdiv.assign(0)
         self._average_kernel.apply(self.u_hdiv, self._weight, u_broken)
-        PETSc.Sys.Print(f"||u_hdiv||_2 = {norm(self.u_hdiv):.6e} (after averaging)")
         for bc in self.bcs:
             bc.apply(self.u_hdiv)
-        PETSc.Sys.Print(f"||u_hdiv||_2 = {norm(self.u_hdiv):.6e} (after BC)")
-                # Transfer data to non-hybrid space
+
+        # Transfer data to non-hybrid space
         self.y.subfunctions[0].assign(self.u_hdiv)
         self.y.subfunctions[1].assign(rho)
+
+        # Recover theta
         self.theta.assign(0)
         self.theta_solver.solve()
-        PETSc.Sys.Print(f"||theta||_2 = {norm(self.theta):.6e} (after theta solve)")
-
-
-
         self.y.subfunctions[2].assign(self.theta)
 
         
         with self.y.dat.vec_ro as vout:
-            # vout currently holds the Firedrake data you will copy to PETSc y
-            n2_vout = vout.norm(PETSc.NormType.NORM_2)
-            PETSc.Sys.Print(f"[PC.apply] ||y(Firedrake)||_2 = {n2_vout:.6e}")
-
             # copy into PETSc output vector
             vout.copy(y)
-
-        # Now y is populated; print PETSc y norm as seen by KSP/PC
-        PETSc.Sys.Print(f"[PC.apply] ||y(PETSc)||_2 = {y.norm(PETSc.NormType.NORM_2):.6e}")
 
 
     def update(self, pc):

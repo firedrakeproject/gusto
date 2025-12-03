@@ -2,7 +2,8 @@
 
 from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg, DirichletBC,
                        dS, split, conditional, exp, sqrt, Function,
-                       SpatialCoordinate, Constant, TrialFunctions, TestFunctions, dot, grad)
+                       SpatialCoordinate, Constant, TrialFunctions, TestFunctions, dot, grad,
+                       interpolate)
 from firedrake.fml import subject, drop, all_terms
 from gusto.core.labels import (
     linearisation, pressure_gradient, coriolis, prognostic
@@ -554,11 +555,27 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         Dref, bref = self.X_ref.subfunctions[1:3]
         b_ = -dot(u_, grad(bref))*beta_b
 
+        if self.equivalent_buoyancy:
+            # compute q_v using q_sat to partition q_t into q_v and q_c
+            self.q_sat_func = Function(VD)
+            self.qvbar = Function(VD)
+            qtbar = split(self.X_ref)[3]
+
+            # set up interpolators that use the X_ref values for D and b_e
+            self.q_sat_expr_interpolate = interpolate(
+                self.compute_saturation(self.X_ref), VD)
+            self.q_v_interpolate = interpolate(
+                conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
+                VD)
+
+            # bbar was be_bar and here we correct to become bbar
+            bref += self.parameters.beta2 * self.qvbar
+
         seqn = (
             inner(w_, u_) * dx
             - beta_u * D_ * div(w_*bref) * dx
             + beta_u * jump(w_*bref, n) * avg(D_) * dS
-            # - beta_u * 0.5 * Dref * bref * div(w_) * dx
+            - beta_u * 0.5 * Dref * bref * div(w_) * dx
             - beta_u * 0.5 * Dref * b_ * div(w_) * dx
             - beta_u * 0.5 * bref * div(w_*D_) * dx
             + beta_u * 0.5 * jump(D_*w_, n) * avg(bref) * dS
@@ -668,6 +685,8 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
             in the equations. Defaults to None.
     """
 
+    name = "ShallowWaterEquations_1d"
+
     def __init__(self, domain, parameters,
                  space_names=None, linearisation_map=all_terms,
                  diffusion_options=None,
@@ -766,6 +785,8 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
     This is set up the from the underlying :class:`ShallowWaterEquations_1d`,
     which is then linearised.
     """
+
+    name = "LinearShallowWaterEquations_1d"
 
     def __init__(self, domain, parameters,
                  space_names=None, linearisation_map=all_terms,

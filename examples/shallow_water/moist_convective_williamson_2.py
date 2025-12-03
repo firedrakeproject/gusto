@@ -128,47 +128,6 @@ def moist_convect_williamson_2(
         SSPRK3(domain, "rain", limiter=limiter)
     ]
 
-    solver_parameters = {
-        'mat_type': 'matfree',
-        'ksp_type': 'preonly',
-        "pc_type": "fieldsplit",
-        "pc_fieldsplit_type": "additive",
-        "pc_fieldsplit_0_fields": "0,1",    # (u, D)
-        "pc_fieldsplit_1_fields": "2,3,4",  # (scalars,)
-        "fieldsplit_0": {  # hybridisation on the (u,D) system
-            'ksp_monitor_true_residual': None,
-            'ksp_type': 'preonly',
-            'pc_type': 'python',
-            'pc_python_type': 'firedrake.HybridizationPC',
-            'hybridization': {
-                'ksp_type': 'cg',
-                'pc_type': 'gamg',
-                'ksp_rtol': 1e-8,
-                'mg_levels': {
-                    'ksp_type': 'chebyshev',
-                    'ksp_max_it': 2,
-                    'pc_type': 'bjacobi',
-                    'sub_pc_type': 'ilu'
-                }
-            }
-        },
-        "fieldsplit_1": {  # Don't touch the transported fields
-            "ksp_type": "preonly",
-            "pc_type": "none"
-        },
-    }
-
-    # Provide callback for the nullspace of the trace system
-    def trace_nullsp(T):
-        return VectorSpaceBasis(constant=True, comm=COMM_WORLD)
-    appctx = {"trace_nullspace": trace_nullsp}
-
-    linear_solver = LinearTimesteppingSolver(
-        eqns, alpha=0.5,
-        reference_dependent=True,
-        solver_parameters=solver_parameters,
-        options_prefix="swe", appctx=appctx)
-
     # Physics schemes
     sat_adj = SWSaturationAdjustment(
         eqns, sat_func, time_varying_saturation=True,
@@ -186,7 +145,7 @@ def moist_convect_williamson_2(
 
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transport_schemes=transported_fields,
-        spatial_methods=transport_methods, linear_solver=linear_solver,
+        spatial_methods=transport_methods,
         physics_schemes=physics_schemes
     )
 

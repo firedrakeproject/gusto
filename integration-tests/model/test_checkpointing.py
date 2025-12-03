@@ -34,13 +34,10 @@ def set_up_model_objects(mesh, dt, output, stepper_type, ref_update_freq):
                               SSPRK3(domain, "rho"),
                               SSPRK3(domain, "theta")]
 
-        # Set up linear solver
-        linear_solver = CompressibleSolver(eqns)
 
         # build time stepper
         stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                           transport_methods,
-                                          linear_solver=linear_solver,
                                           reference_update_freq=ref_update_freq)
 
     elif stepper_type == 'multi_level':

@@ -40,6 +40,8 @@ class BoussinesqEquations(PrognosticEquationSet):
     where k is the vertical unit vector and Ω is the planet's rotation vector.
     """
 
+    name = "BoussinesqEquations"
+
     def __init__(self, domain, parameters,
                  compressible=True,
                  space_names=None,

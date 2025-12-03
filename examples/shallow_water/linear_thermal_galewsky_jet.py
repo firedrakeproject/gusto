@@ -81,67 +81,8 @@ def linear_thermal_galewsky_jet(
     transport_schemes = [ForwardEuler(domain, "D")]
     transport_methods = [DefaultTransport(eqns, "D"), DGUpwind(eqns, "b")]
 
-    # Linear solver
-    solver_parameters = {
-        'ksp_monitor_true_residual': None,
-        'ksp_view': ':ksp_view.log',
-        'ksp_error_if_not_converged': None,
-        'mat_type': 'matfree',
-        'ksp_type': 'preonly',
-        'pc_type': 'fieldsplit',
-        'pc_fieldsplit_type': 'schur',
-        'pc_fieldsplit_schur_fact_type': 'full',
-        'pc_fieldsplit_1_fields': '0,1',
-        'pc_fieldsplit_0_fields': '2',  # eliminate temperature
-        'fieldsplit_L2': {
-            'ksp_monitor': None,
-            'ksp_type': 'preonly',
-            'pc_type': 'python',
-            'pc_python_type': 'firedrake.AssembledPC',
-            'assembled_pc_type': 'bjacobi',
-            'assembled_sub_pc_type': 'ilu',
-        },
-        'fieldsplit_1': {
-            'ksp_monitor': None,
-            'ksp_type': 'preonly',
-            'pc_type': 'python',
-            'pc_python_type': 'gusto.AuxiliaryPC',
-            'aux': {
-                'mat_type': 'matfree',
-                'pc_type': 'python',
-                'pc_python_type': 'firedrake.HybridizationPC',
-                'hybridization': {
-                    'ksp_type': 'cg',
-                    'pc_type': 'gamg',
-                    'ksp_rtol': 1e-8,
-                    'mg_levels': {
-                        'ksp_type': 'chebyshev',
-                        'ksp_max_it': 2,
-                        'pc_type': 'bjacobi',
-                        'sub_pc_type': 'ilu'
-                    },
-                    'mg_coarse': {
-                        'ksp_type': 'preonly',
-                        'pc_type': 'lu',
-                        'pc_factor_mat_solver_type': 'mumps',
-                    },
-                },
-            },
-        },
-    }
-
-    appctx = {'auxform': eqns.schur_complement_form(alpha=0.5)}
-
-    linear_solver = LinearTimesteppingSolver(
-        eqns, alpha=0.5, options_prefix="swe",
-        solver_parameters=solver_parameters,
-        appctx=appctx
-    )
-
-    # Time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transport_schemes, transport_methods,
-        linear_solver=linear_solver
+        eqns, io, transport_schemes, transport_methods
     )
 
     # ------------------------------------------------------------------------ #

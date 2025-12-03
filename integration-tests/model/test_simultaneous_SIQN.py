@@ -125,9 +125,6 @@ def run_simult_SIQN(tmpdir, order):
         ["u", "rho", "theta", "water_vapour", "cloud_water"]
     ]
 
-    # Linear solver
-    linear_solver = CompressibleSolver(eqns)
-
     # Physics schemes (condensation/evaporation)
     physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain))]
 

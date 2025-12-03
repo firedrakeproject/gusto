@@ -13,21 +13,21 @@ used.
 """
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
+from petsc4py import PETSc
+PETSc.Sys.popErrorHandler()
 import itertools
 from firedrake import (
     as_vector, SpatialCoordinate, PeriodicIntervalMesh, ExtrudedMesh, exp, sin,
-    PETSc, Function, pi, COMM_WORLD, sqrt
+    Function, pi, COMM_WORLD, sqrt
 )
 import numpy as np
 from gusto import (
     Domain, IO, OutputParameters, TRBDF2QuasiNewton, SemiImplicitQuasiNewton, SSPRK3,
     DGUpwind, logger, SUPGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
-    compressible_hydrostatic_balance, RungeKuttaFormulation,
-    SubcyclingOptions, incompressible, sponge, SIQNLinearSolver,
-    HybridisedSolverParameters
+    compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
+    hydrostatic_parameters, SubcyclingOptions,
 )
-PETSc.Sys.popErrorHandler()
 
 skamarock_klemp_nonhydrostatic_defaults = {
     'ncolumns': 150,
@@ -138,29 +138,24 @@ def skamarock_klemp_nonhydrostatic(
         DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
     ]
 
-    # Time stepper and linear solver
-    if timestepper == 'TR-BDF2':
-        if hydrostatic:
+    # Linear solver
+    if hydrostatic:
+        if timestepper == 'TR-BDF2':
             raise ValueError('Hydrostatic equations not implmented for TR-BDF2')
+
+        linear_solver = CompressibleSolver(
+            eqns, solver_parameters=hydrostatic_parameters,
+            overwrite_solver_parameters=True
+        )
+    else:
+        linear_solver = CompressibleSolver(eqns)
+
+    # Time stepper
+    if timestepper == 'TR-BDF2':
         gamma = (1-sqrt(2)/2)
         gamma2 = (1 - 2*float(gamma))/(2 - 2*float(gamma))
-
-
-        # Linear solver
-        solver_parameters_tr, appctx_tr = HybridisedSolverParameters(eqns, alpha=gamma)
-        solver_parameters_bdf, appctx_bdf = HybridisedSolverParameters(eqns, alpha=gamma2)
-
-        tr_solver = SIQNLinearSolver(
-            eqns, solver_prognostics=["u", "rho", "theta"], alpha=gamma, implicit_terms=[incompressible, sponge],
-            solver_parameters=solver_parameters_tr,
-            appctx=appctx_tr, enforce_pc_on_rhs=True
-        )
-        bdf_solver = SIQNLinearSolver(
-            eqns, solver_prognostics=["u", "rho", "theta"], alpha=gamma2, implicit_terms=[incompressible, sponge],
-            solver_parameters=solver_parameters_bdf,
-            appctx=appctx_bdf, enforce_pc_on_rhs=True
-        )
-
+        tr_solver = CompressibleSolver(eqns, alpha=gamma)
+        bdf_solver = CompressibleSolver(eqns, alpha=gamma2)
         stepper = TRBDF2QuasiNewton(
             eqns, io, transported_fields, transport_methods,
             gamma=gamma,
@@ -170,7 +165,8 @@ def skamarock_klemp_nonhydrostatic(
 
     elif timestepper == 'SIQN':
         stepper = SemiImplicitQuasiNewton(
-            eqns, io, transported_fields, transport_methods
+            eqns, io, transported_fields, transport_methods,
+            linear_solver=linear_solver
         )
     # ------------------------------------------------------------------------ #
     # Initial conditions

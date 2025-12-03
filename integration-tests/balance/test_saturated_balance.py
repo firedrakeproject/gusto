@@ -91,7 +91,23 @@ def setup_saturated(dirname, recovered):
                          DGUpwind(eqns, 'cloud_water')]
 
     # Linear solver
-    linear_solver = CompressibleSolver(eqns)
+    solver_parameters = HybridisedSolverParameters(eqns.name)
+
+    def trace_nullsp(T):
+        return VectorSpaceBasis(constant=True)
+
+
+    appctx = {
+        'equations': eqns,
+        'alpha': 0.5,
+        'trace_nullspace': trace_nullsp
+    }
+
+    linear_solver = SIQNLinearSolver(
+        eqns, solver_prognostics=["u", "rho", "theta"], alpha=0.5, implicit_terms=[incompressible, sponge],
+        solver_parameters=solver_parameters,
+        appctx=appctx, enforce_pc_on_rhs=True
+    )
 
     # Physics schemes
     physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain))]
