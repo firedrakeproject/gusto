@@ -370,7 +370,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.x = TimeLevelFields(self.equation, 1)
         if self.simult is True:
             # If there is any simultaneous transport, add an extra 'simult' field:
-            self.x.add_fields(self.equation, levels=("star", "p", "simult", "after_slow", "after_fast"))
+            self.x.add_fields(self.equation, levels=("star", "p", "simult", "after_slow", "after_fast",
+                                                     "implicit_phys", "explicit_phys"))
         else:
             self.x.add_fields(self.equation, levels=("star", "p", "after_slow", "after_fast",
                                                      "implicit_phys", "explicit_phys"))
