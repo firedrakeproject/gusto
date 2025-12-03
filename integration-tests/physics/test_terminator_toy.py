@@ -68,6 +68,18 @@ def run_terminator_toy(dirname, physics_coupling):
             eqn, transport_scheme, io, time_varying_velocity,
             spatial_methods=transport_method, physics_schemes=physics_schemes
         )
+    elif physics_coupling == "analytic":
+        physics_schemes = [(TerminatorToy(eqn, k1=k1, k2=k2, species1_name='Y',
+                            species2_name='Y2', analytical_formulation=True),
+                            ForwardEuler(domain))]
+
+        transport_scheme = SSPRK3(domain)
+        time_varying_velocity = True
+        stepper = SplitPrescribedTransport(
+            eqn, transport_scheme, io, time_varying_velocity,
+            spatial_methods=transport_method, physics_schemes=physics_schemes
+        )
+
     else:
         physics_parametrisation = [TerminatorToy(eqn, k1=k1, k2=k2, species1_name='Y',
                                                  species2_name='Y2')]
@@ -108,7 +120,7 @@ def run_terminator_toy(dirname, physics_coupling):
     return stepper, Y_steady, Y2_steady
 
 
-@pytest.mark.parametrize("physics_coupling", ["split", "nonsplit"])
+@pytest.mark.parametrize("physics_coupling", ["split", "nonsplit", "analytic"])
 def test_terminator_toy_setup(tmpdir, physics_coupling):
     dirname = str(tmpdir)
     stepper, Y_steady, Y2_steady = run_terminator_toy(dirname, physics_coupling)
