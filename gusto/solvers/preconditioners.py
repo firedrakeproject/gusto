@@ -749,7 +749,7 @@ class CompressibleHybridisedSCPC(PCBase):
                             'sub_pc_type': 'ilu'}
         self.theta_solver = LinearVariationalSolver(theta_problem,
                                                     solver_parameters=cg_ilu_parameters,
-                                                    options_prefix='thetabacksubstitution')
+                                                    options_prefix=pc.getOptionsPrefix()+'thetabacksubstitution')
         # Project reference profiles at initialisation
         self.rho_avg_solver.solve()
         self.exner_avg_solver.solve()
