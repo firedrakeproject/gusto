@@ -200,16 +200,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             else:
                 self.linear_solver_parameters = linear_solver_parameters
                 self.appctx = appctx
-            if isinstance(equation_set, CompressibleEulerEquations):
-                self.enforce_pc_on_rhs=True
-            else:
-                self.enforce_pc_on_rhs=False
             self.linear_solver = SIQNLinearSolver(
                 equation_set, solver_prognostics, self.implicit_terms,
                 self.alpha, tau_values=tau_values,
                 solver_parameters=self.linear_solver_parameters,
-                appctx=self.appctx,
-                enforce_pc_on_rhs=self.enforce_pc_on_rhs
+                appctx=self.appctx
             )
         else:
             self.linear_solver = linear_solver
@@ -785,7 +780,7 @@ class SIQNLinearSolver(object):
 
     def __init__(self, equation, solver_prognostics, implicit_terms,
                  alpha, solver_parameters, tau_values=None,
-                 reference_dependent=True, appctx=None, enforce_pc_on_rhs=False):
+                 reference_dependent=True, appctx=None):
         """
         Args:
             equations (:class:`PrognosticEquation`): the model's equation.
@@ -808,8 +803,6 @@ class SIQNLinearSolver(object):
             reference_dependent: this indicates that the solver Jacobian should
                 be rebuilt if the reference profiles have been updated.
             appctx: appctx for the  underlying :class:`LinearVariationalSolver`.
-            enforce_pc_on_rhs: whether to enforce the preconditioner to act on rhs
-            vector b
         """
 
         # Set solver parameters --------------------------------------
@@ -820,8 +813,8 @@ class SIQNLinearSolver(object):
         else:
             self.appctx = {}
 
-        if logger.isEnabledFor(DEBUG):
-            self.solver_parameters["ksp_monitor_true_residual"] = None
+        # if logger.isEnabledFor(DEBUG):
+        #     self.solver_parameters["ksp_monitor_true_residual"] = None
 
         dt = equation.domain.dt
         self.reference_dependent = reference_dependent
@@ -869,10 +862,11 @@ class SIQNLinearSolver(object):
 
         W = equation.function_space
         self.xrhs = Function(W)
-        v = TestFunction(W)
 
         aeqn = residual
-        self.Leqn = inner(self.xrhs, v)*dx
+        Leqn = residual.label_map(
+            lambda t: t.has_label(time_derivative), map_if_false=drop
+        )
 
 
         # Place to put result of solver
@@ -884,14 +878,13 @@ class SIQNLinearSolver(object):
             for bc in equation.bcs['u']
         ]
         problem = LinearVariationalProblem(
-            aeqn.form, self.Leqn, self.dy)
+            aeqn.form, action(Leqn.form, self.xrhs), self.dy, bcs=bcs, constant_jacobian=True
+        )
 
         self.solver = LinearVariationalSolver(
             problem, appctx=self.appctx, solver_parameters=self.solver_parameters,
             options_prefix='linear_solver'
         )
-
-        self.enforce_pc_on_rhs = enforce_pc_on_rhs
 
     @staticmethod
     def log_ksp_residuals(ksp):
@@ -916,7 +909,7 @@ class SIQNLinearSolver(object):
         """
 
         self.xrhs.assign(xrhs)
-        self.dy.assign(Constant(0.0))
+        #self.dy.assign(Constant(0.0))
 
         self.solver.solve()
         dy.assign(self.dy)

@@ -182,6 +182,7 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
         elif fields[0:2] == ['u', 'D'] and len(fields) > 2 and fields[2] not in ['b', 'b_e']:
 
             # (u, D, scalars) system - moist convective shallow water
+            print("Moist convective shallow water hybridised solver settings")
 
             # Create scalars list
             scalars = ",".join(str(idx) for idx, name in enumerate(fields) if name not in ['u', 'D'])
@@ -190,9 +191,9 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                 'ksp_type': 'preonly',
                 "pc_type": "fieldsplit",
                 "pc_fieldsplit_type": "additive",
-                "pc_fieldsplit_0_fields": "0,1",    # (u, D)
-                "pc_fieldsplit_1_fields": scalars,  # (scalars,)
-                "fieldsplit_0": {  # hybridisation on the (u,D) system
+                "pc_fieldsplit_0_fields": "0,1",
+                "pc_fieldsplit_1_fields": scalars,
+                "fieldsplit_0": {
                     'ksp_monitor_true_residual': None,
                     'ksp_type': 'preonly',
                     'pc_type': 'python',
@@ -209,13 +210,15 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                         }
                     }
                 },
-                "fieldsplit_1": {  # Don't touch the transported fields
+                "fieldsplit_1": {
                     "ksp_type": "preonly",
                     "pc_type": "none"
                 },
             }
+
+            # Provide callback for the nullspace of the trace system
             def trace_nullsp(T):
-                return VectorSpaceBasis(constant=True, comm=COMM_WORLD)
+                return VectorSpaceBasis(constant=True)
             appctx = {"trace_nullspace": trace_nullsp}
         elif (fields[0:3] == ['u', 'D', 'b'] or fields[0:3] == ['u', 'D', 'b_e']) and len(fields) > 3:
             # (u, D, b, scalars) system - moist thermal shallow water
