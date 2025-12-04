@@ -666,7 +666,7 @@ class CompressibleHybridisedSCPC(PCBase):
                                                       options_prefix=pc.getOptionsPrefix()+'rhobar_avg_solver')
         self.exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
                                                         solver_parameters=cg_ilu_parameters,
-                                                        options_prefix='exnerbar_avg_solver')
+                                                        options_prefix=pc.getOptionsPrefix()+'exnerbar_avg_solver')
 
         # # "broken" u, rho, and trace system
         # # NOTE: no ds_v integrals since equations are defined on
