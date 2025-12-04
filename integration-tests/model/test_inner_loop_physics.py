@@ -1,7 +1,8 @@
 """
-Setting up a small problem that uses inner loop physics to later make into a test.
-Based on the moist thermal gravity wave test. Takes a few timesteps with inner
-loop physics and compares this to the solution using standard, end-of-timestep physics.
+Testing inner loop physics and the MoistThermalSWSolver.
+Based on the moist thermal gravity wave test. Takes 3 timesteps with inner
+loop physics and compares this to the solution using standard, end-of-timestep
+physics and the ThermalSWSolver.
 """
 
 from gusto import *
