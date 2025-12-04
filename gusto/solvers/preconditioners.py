@@ -663,7 +663,7 @@ class CompressibleHybridisedSCPC(PCBase):
 
         self.rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
                                                       solver_parameters=cg_ilu_parameters,
-                                                      options_prefix='rhobar_avg_solver')
+                                                      options_prefix=pc.getOptionsPrefix()+'rhobar_avg_solver')
         self.exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
                                                         solver_parameters=cg_ilu_parameters,
                                                         options_prefix='exnerbar_avg_solver')
