@@ -719,7 +719,7 @@ class CompressibleHybridisedSCPC(PCBase):
                                                   constant_jacobian=True)
         self.hybridized_solver = LinearVariationalSolver(hybridized_prb,
                                                     solver_parameters=self.scpc_parameters,
-                                                    options_prefix=self._prefix,
+                                                    options_prefix=pc.getOptionsPrefix()+self._prefix,
                                                     appctx=appctx)
 
         # Project broken u into the HDiv space using facet averaging.
