@@ -41,7 +41,10 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                         'ksp_type': 'preonly',
                         'mat_type': 'matfree',
                         'pc_type': 'python',
-                        'pc_python_type': 'gusto.CompressibleHybridisedSCPC'}
+                        'pc_python_type': 'gusto.CompressibleHybridisedSCPC',
+                        'compressible_hybrid_scpc': scpc_params,
+                        'rhobar_avg_solver': robar_params,
+                        ...
 
 
         appctx = {

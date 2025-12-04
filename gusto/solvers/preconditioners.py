@@ -663,10 +663,10 @@ class CompressibleHybridisedSCPC(PCBase):
 
         self.rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
                                                       solver_parameters=cg_ilu_parameters,
-                                                      options_prefix='rhobar_avg_solver')
+                                                      options_prefix=pc.getOptionsPrefix()+'rhobar_avg_solver')
         self.exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
                                                         solver_parameters=cg_ilu_parameters,
-                                                        options_prefix='exnerbar_avg_solver')
+                                                        options_prefix=pc.getOptionsPrefix()+'exnerbar_avg_solver')
 
         # # "broken" u, rho, and trace system
         # # NOTE: no ds_v integrals since equations are defined on
@@ -719,7 +719,7 @@ class CompressibleHybridisedSCPC(PCBase):
                                                   constant_jacobian=True)
         self.hybridized_solver = LinearVariationalSolver(hybridized_prb,
                                                     solver_parameters=self.scpc_parameters,
-                                                    options_prefix=self._prefix,
+                                                    options_prefix=pc.getOptionsPrefix()+self._prefix,
                                                     appctx=appctx)
 
         # Project broken u into the HDiv space using facet averaging.
@@ -749,7 +749,7 @@ class CompressibleHybridisedSCPC(PCBase):
                             'sub_pc_type': 'ilu'}
         self.theta_solver = LinearVariationalSolver(theta_problem,
                                                     solver_parameters=cg_ilu_parameters,
-                                                    options_prefix='thetabacksubstitution')
+                                                    options_prefix=pc.getOptionsPrefix()+'thetabacksubstitution')
         # Project reference profiles at initialisation
         self.rho_avg_solver.solve()
         self.exner_avg_solver.solve()
@@ -781,7 +781,7 @@ class CompressibleHybridisedSCPC(PCBase):
         self.u_hdiv.assign(0)
         self._average_kernel.apply(self.u_hdiv, self._weight, u_broken)
         for bc in self.bcs:
-            bc.apply(self.u_hdiv)
+            bc.zero(self.u_hdiv)
 
         # Transfer data to non-hybrid space
         self.y.subfunctions[0].assign(self.u_hdiv)
