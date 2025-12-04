@@ -781,7 +781,7 @@ class CompressibleHybridisedSCPC(PCBase):
         self.u_hdiv.assign(0)
         self._average_kernel.apply(self.u_hdiv, self._weight, u_broken)
         for bc in self.bcs:
-            bc.apply(self.u_hdiv)
+            bc.zero(self.u_hdiv)
 
         # Transfer data to non-hybrid space
         self.y.subfunctions[0].assign(self.u_hdiv)
