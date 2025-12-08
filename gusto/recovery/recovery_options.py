@@ -51,7 +51,7 @@ class RecoverySpaces(object):
                 theta_boundary_method = boundary_method['theta']
             else:
                 theta_boundary_method = None
-            cell = mesh._base_mesh.ufl_cell().cellname()
+            cell = mesh._base_mesh.ufl_cell().cellname
             DG_hori_ele = FiniteElement('DG', cell, 1, variant='equispaced')
             DG_vert_ele = FiniteElement('DG', interval, (domain.vertical_degree + 1), variant='equispaced')
             CG_hori_ele = FiniteElement('CG', cell, 1)
@@ -66,7 +66,7 @@ class RecoverySpaces(object):
                                                  recovered_space=VCG_theta,
                                                  boundary_method=theta_boundary_method)
         else:
-            cell = self.mesh.ufl_cell().cellname()
+            cell = self.mesh.ufl_cell().cellname
 
         # ----------------------------------------------------------------------
         # Building the DG options

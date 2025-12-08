@@ -143,7 +143,7 @@ class InstantRain(PhysicsParametrisation):
         self.source_interpolate = interpolate(conditional(
             self.water_v > self.saturation_curve,
             (1/self.tau)*gamma_r*(self.water_v - self.saturation_curve),
-            0), self.source_int)
+            0), self.source_int.function_space())
 
     def evaluate(self, x_in, dt, x_out=None):
         """
@@ -168,7 +168,7 @@ class InstantRain(PhysicsParametrisation):
             self.tau.assign(dt)
         self.water_v.assign(x_in.subfunctions[self.Vv_idx])
 
-        self.source_int.assign(assemble(self.source_interpolate))
+        assemble(self.source_interpolate, tensor=self.source_int)
 
         if x_out is not None:
             x_out.assign(self.source)
@@ -336,7 +336,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         self.source = Function(W)
         self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
         self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
-        self.source_interpolate = [interpolate(sat_adj_expr*factor, source)
+        self.source_interpolate = [interpolate(sat_adj_expr*factor, source.function_space())
                                    for source, factor in zip(self.source_int, factors)]
 
         # test functions have the same order as factors and sources (vapour,

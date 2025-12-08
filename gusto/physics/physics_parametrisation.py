@@ -124,14 +124,14 @@ class SourceSink(PhysicsParametrisation):
 
         # Handle method of evaluating source/sink
         if self.method == 'interpolate':
-            self.source_interpolate = interpolate(expression, self.source_int)
+            self.source_interpolate = interpolate(expression, self.source_int.function_space())
         else:
             self.source_projector = Projector(expression, self.source_int)
 
         # If not time-varying, evaluate for the first time here
         if not self.time_varying:
             if self.method == 'interpolate':
-                self.source_int.assign(assemble(self.source_interpolate))
+                assemble(self.source_interpolate, tensor=self.source_int)
             else:
                 self.source_projector.project()
 

@@ -323,7 +323,7 @@ class CompressibleSolver(TimesteppingSolver):
 
         if equations.parameters.Omega is not None:
             Omega = as_vector([0, 0, equations.parameters.Omega])
-            eqn += inner(w, cross(2*Omega, u))*dx
+            eqn += beta_u*inner(w, cross(2*Omega, u))*dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
@@ -508,14 +508,14 @@ class BoussinesqSolver(TimesteppingSolver):
             cs = equation.parameters.cs
             eqn += phi * (p - p_in) * dx + beta_p * phi * cs**2 * div(u) * dx
         else:
-            eqn += phi * div(u) * dx
+            eqn += beta_p * phi * div(u) * dx
 
         if hasattr(self.equations, "mu"):
             eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
 
         if equation.parameters.Omega is not None:
             Omega = as_vector((0, 0, equation.parameter.Omega))
-            eqn += inner(w, cross(2*Omega, u))*dx
+            eqn += beta_u*inner(w, cross(2*Omega, u))*dx
 
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)

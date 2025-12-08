@@ -7,7 +7,7 @@ answer to confirm that REXI is correct.
 from os.path import join, abspath, dirname
 from gusto import *
 from gusto.rexi import *
-from firedrake import (PeriodicUnitSquareMesh, SpatialCoordinate, Constant, sin,
+from firedrake import (PeriodicUnitSquareMesh, SpatialCoordinate, sin,
                        cos, pi, as_vector, Function, COMM_WORLD, Ensemble)
 from firedrake.output import VTKFile
 
@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 
-def run_rexi_sw(tmpdir, ensemble=None):
+def run_rexi_sw(tmpdir, coefficients, ensemble=None):
     # Parameters
     tmax = 0.1
     H = 1
@@ -45,9 +45,9 @@ def run_rexi_sw(tmpdir, ensemble=None):
     domain = Domain(mesh, tmax, 'BDM', 1)
 
     # Equation
-    parameters = ShallowWaterParameters(mesh, H=H, g=g)
-    fexpr = Constant(f)
-    eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr)
+    parameters = ShallowWaterParameters(mesh, H=H, g=g,
+                                        rotation=CoriolisOptions.fplane, f0=f)
+    eqns = LinearShallowWaterEquations(domain, parameters)
 
     # Initial conditions
     x, y = SpatialCoordinate(mesh)
@@ -66,7 +66,8 @@ def run_rexi_sw(tmpdir, ensemble=None):
         rexi_output.write(u, D)
 
     # Compute exponential solution and write it out
-    rexi = Rexi(eqns, RexiParameters(), manager=ensemble)
+    rexi = Rexi(eqns, RexiParameters(coefficients=coefficients),
+                manager=ensemble)
     rexi.solve(Uexpl, U_in, tmax)
 
     uexpl, Dexpl = Uexpl.subfunctions
@@ -85,7 +86,10 @@ def run_rexi_sw(tmpdir, ensemble=None):
                                         checkpoint=True)
         check_mesh = pick_up_mesh(check_output, mesh_name, comm=comm)
         check_domain = Domain(check_mesh, tmax, 'BDM', 1)
-        check_eqn = ShallowWaterEquations(check_domain, parameters, fexpr=fexpr)
+        check_parameters = ShallowWaterParameters(check_mesh, H=H, g=g,
+                                                  rotation=CoriolisOptions.fplane,
+                                                  f0=f)
+        check_eqn = ShallowWaterEquations(check_domain, check_parameters)
         check_io = IO(check_domain, output=check_output)
         check_stepper = Timestepper(check_eqn, RK4(check_domain), check_io)
         check_stepper.io.pick_up_from_checkpoint(check_stepper.fields, comm=comm)
@@ -101,23 +105,25 @@ def run_rexi_sw(tmpdir, ensemble=None):
     return uerror, Derror
 
 
-def test_rexi_sw(tmpdir):
+@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+def test_rexi_sw(tmpdir, coefficients):
 
     dirname = str(tmpdir)
 
-    uerror, Derror = run_rexi_sw(dirname)
+    uerror, Derror = run_rexi_sw(dirname, coefficients)
 
-    assert uerror < 1e-14, 'u values in REXI linear shallow water wave test do not match KGO values'
-    assert Derror < 1e-14, 'D values in REXI linear shallow water wave test do not match KGO values'
+    assert uerror < 1e-10, 'u values in REXI linear shallow water wave test do not match KGO values'
+    assert Derror < 1e-10, 'D values in REXI linear shallow water wave test do not match KGO values'
 
 
 @pytest.mark.parallel(nprocs=2)
-def test_parallel_rexi_sw(tmpdir):
+@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+def test_parallel_rexi_sw(tmpdir, coefficients):
 
     dirname = str(tmpdir)
     ensemble = Ensemble(COMM_WORLD, 1)
 
-    uerror, Derror = run_rexi_sw(dirname, ensemble=ensemble)
+    uerror, Derror = run_rexi_sw(dirname, coefficients, ensemble=ensemble)
 
-    assert uerror < 1e-14, 'u values in REXI linear shallow water wave test do not match KGO values'
-    assert Derror < 1e-14, 'D values in REXI linear shallow water wave test do not match KGO values'
+    assert uerror < 1e-10, 'u values in REXI linear shallow water wave test do not match KGO values'
+    assert Derror < 1e-10, 'D values in REXI linear shallow water wave test do not match KGO values'

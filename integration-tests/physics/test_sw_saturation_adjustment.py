@@ -44,13 +44,11 @@ def run_sw_cond_evap(dirname, process, physics_coupling):
 
     # Equation
     parameters = ShallowWaterParameters(mesh, H=H)
-    Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
 
     tracers = [WaterVapour(space='DG'), CloudWater(space='DG')]
 
     eqns = ThermalShallowWaterEquations(
-        domain, parameters, fexpr=fexpr,
+        domain, parameters,
         u_transport_option='vector_advection_form',
         active_tracers=tracers)
 

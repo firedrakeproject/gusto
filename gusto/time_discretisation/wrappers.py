@@ -336,14 +336,14 @@ class SUPGWrapper(Wrapper):
         # -------------------------------------------------------------------- #
 
         # construct tau, if it is not specified
-        dim = domain.mesh.topological_dimension()
+        dim = domain.mesh.topological_dimension
         if self.options.tau is not None:
             # if tau is provided, check that is has the right size
             self.tau = self.options.tau
             assert as_ufl(self.tau).ufl_shape == (dim, dim), "Provided tau has incorrect shape!"
         else:
             # create tuple of default values of size dim
-            default_vals = [self.options.default*self.time_discretisation.dt]*dim
+            default_vals = [self.options.default*float(self.time_discretisation.dt)]*dim
             # check for directions is which the space is discontinuous
             # so that we don't apply supg in that direction
             if is_cg(self.test_space):

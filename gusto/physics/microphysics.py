@@ -173,7 +173,7 @@ class SaturationAdjustment(PhysicsParametrisation):
         self.source = Function(W)
         self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
         self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
-        self.source_interpolate = [interpolate(sat_adj_expr*factor, source)
+        self.source_interpolate = [interpolate(sat_adj_expr*factor, source.function_space())
                                    for source, factor in zip(self.source_int, factors)]
 
         tests = [equation.tests[idx] for idx in V_idxs]
@@ -201,7 +201,7 @@ class SaturationAdjustment(PhysicsParametrisation):
             self.rho_recoverer.project()
         # Evaluate the source
         for interpolator, src in zip(self.source_interpolate, self.source_int):
-            src.assign(assemble(interpolator))
+            assemble(interpolator, tensor=src)
 
         # If a source output is provided, assign the source term to it
         if x_out is not None:
@@ -461,7 +461,7 @@ class Coalescence(PhysicsParametrisation):
                                                         min_value(accu_rate, self.cloud_water / self.dt),
                                                         min_value(accr_rate + accu_rate, self.cloud_water / self.dt))))
 
-        self.source_interpolate = interpolate(rain_expr, self.source_int)
+        self.source_interpolate = interpolate(rain_expr, self.source_int.function_space())
 
         # Add term to equation's residual
         test_cl = equation.tests[self.cloud_idx]
@@ -492,7 +492,7 @@ class Coalescence(PhysicsParametrisation):
         self.rain.assign(x_in.subfunctions[self.rain_idx])
         self.cloud_water.assign(x_in.subfunctions[self.cloud_idx])
 
-        self.source_int.assign(assemble(self.source_interpolate))
+        assemble(self.source_interpolate, tensor=self.source_int)
         # If a source output is provided, assign the source term to it
         if x_out is not None:
             x_out.assign(self.source)
@@ -644,7 +644,7 @@ class EvaporationOfRain(PhysicsParametrisation):
         self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
         self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
         self.source_interpolate = [
-            interpolate(evap_rate * factor, source)
+            interpolate(evap_rate * factor, source.function_space())
             for source, factor in zip(self.source_int, factors)
         ]
 
