@@ -9,7 +9,6 @@ from firedrake import (
     action, interpolate,
 )
 from firedrake.fml import drop, replace_subject, Term
-from firedrake.__future__ import interpolate
 from firedrake.petsc import flatten_parameters
 from pyop2.profiling import timed_stage, timed_function
 from gusto.core import TimeLevelFields, StateFields
