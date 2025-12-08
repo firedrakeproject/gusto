@@ -90,10 +90,13 @@ class PointDataOutput(object):
         self.filename = filename
         self.field_points = field_points
         self.comm = comm
+        self.tolerance = tolerance
 
         self.point_evals = {}
-        for field_name, points in field_points:
-            self.point_evals[field_name] = PointEvaluator(field_creator(field_name).function_space().mesh(), points, tolerance=tolerance)
+        for field_name, update_points in field_points:
+            points = update_points(field_creator)
+            print(points)
+            self.point_evals[field_name] = PointEvaluator(field_creator(field_name).function_space().mesh(), points, tolerance=tolerance, missing_points_behaviour = 'warn')
 
         if not create:
             return
@@ -109,7 +112,7 @@ class PointDataOutput(object):
                 var = dataset.createVariable("time", np.float64, ("time"))
                 var.units = "seconds"
                 # Now create the variable group for each field
-                for field_name, points in field_points:
+                for field_name, _ in field_points:
                     group = dataset.createGroup(field_name)
                     npts, dim = points.shape
                     group.createDimension("points", npts)
@@ -138,7 +141,9 @@ class PointDataOutput(object):
         """
 
         val_list = []
-        for field_name, _ in self.field_points:
+        for field_name, update_points in self.field_points:
+            points = update_points(field_creator)
+            self.point_evals[field_name] = PointEvaluator(field_creator(field_name).function_space().mesh(), points, tolerance=self.tolerance, missing_points_behaviour = 'warn')
             val_list.append((field_name,
                              self.point_evals[field_name].evaluate(
                                  field_creator(field_name))))
@@ -373,7 +378,7 @@ class IO(object):
 
     def setup_dump(self, state_fields, t, pick_up=False):
         """
-        Sets up a series of things used for outputting.
+        Sets up a series of things used for outputting. 
 
         This prepares the model for outputting. First it checks for the
         existence the specified outputting directory, so prevent it being
