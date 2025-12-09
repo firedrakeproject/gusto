@@ -235,8 +235,12 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         # Check if there are any mass-weighted terms:
         if len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0:
-            for field in equation.field_names:
+            if hasattr(self.augmentation, 'field_names'):
+                field_names = self.augmentation.field_names
+            else:
+                field_names = equation.field_names
 
+            for field in field_names:
                 # Check if the mass term for this prognostic is mass-weighted
                 if len(self.residual.label_map((
                     lambda t: t.get(prognostic) == field
@@ -265,6 +269,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                             self.residual = self.residual.label_map(
                                 lambda t: t.get(prognostic) == field and t.has_label(mass_weighted),
                                 map_if_true=lambda t: t.get(mass_weighted))
+
         # -------------------------------------------------------------------- #
         # Set up Wrappers
         # -------------------------------------------------------------------- #
