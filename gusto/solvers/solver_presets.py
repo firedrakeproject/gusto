@@ -37,15 +37,55 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
     def trace_nullsp(T):
             return VectorSpaceBasis(constant=True)
     if isinstance(equation, CompressibleEulerEquations):
+        scpc_params = {'mat_type': 'matfree',
+                        'ksp_type': 'preonly',
+                        'ksp_converged_reason': None,
+                        'ksp_monitor_true_residual': None,
+                        'pc_type': 'python',
+                        'pc_python_type': 'firedrake.SCPC',
+                        'pc_sc_eliminate_fields': '0, 1',
+                        # The reduced operator is not symmetric
+                        'condensed_field': {'ksp_type': 'fgmres',
+                                            'ksp_rtol': 1.0e-8,
+                                            'ksp_atol': 1.0e-8,
+                                            'ksp_max_it': 100,
+                                            'pc_type': 'gamg',
+                                            'pc_gamg_sym_graph': None,
+                                            'mg_levels': {'ksp_type': 'gmres',
+                                                        'ksp_max_it': 5,
+                                                        'pc_type': 'bjacobi',
+                                                        'sub_pc_type': 'ilu'}}}
+        rhobar_params = {'ksp_type': 'cg',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'}
+        pibar_params = {'ksp_type': 'cg',
+                                'pc_type': 'bjacobi',
+                                'sub_pc_type': 'ilu'}
+        thetabacksub_params = {'ksp_type': 'cg',
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'}
         settings =  {'ksp_monitor': None,
                         'ksp_type': 'preonly',
                         'mat_type': 'matfree',
                         'pc_type': 'python',
                         'pc_python_type': 'gusto.CompressibleHybridisedSCPC',
-                        'compressible_hybrid_scpc': scpc_params,
-                        'rhobar_avg_solver': robar_params,
-                        ...
+        }
 
+        if nonlinear:
+            settings.update({
+                'snes_type': 'ksponly',
+                'ksp_type': 'fgmres',
+                'snes_max_it': 50,
+                'snes_monitor': None,
+                'ksp_rtol': 1e-2,
+                'ksp_max_it': 100,
+                'ksp_atol': 1e-2,
+                'snes_rtol': 1e-4,
+                'snes_atol': 1e-6,
+                'mat_type': 'aij',
+                'snes_converged_reason': None,
+                'snes_view': None,
+            })
 
         appctx = {
             'equations': equation,
@@ -75,6 +115,7 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
             },
             'fieldsplit_1': {
                 'ksp_monitor': None,
+                'ksp_monitor_true_residual': None,
                 'ksp_type': 'preonly',
                 'pc_type': 'python',
                 'pc_python_type': 'gusto.AuxiliaryPC',
@@ -214,8 +255,12 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                     }
                 },
                 "fieldsplit_1": {
+                    'ksp_monitor_true_residual': None,
                     "ksp_type": "preonly",
-                    "pc_type": "none"
+                    "pc_type": "python",
+                    "pc_python_type": "firedrake.AssembledPC",
+                    "assembled_pc_type": "bjacobi",
+                    "assembled_sub_pc_type": "ilu",
                 },
             }
 
@@ -286,5 +331,20 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
 
 
             appctx = {'auxform': equation.schur_complement_form(alpha=alpha)}
-
+        
+    #     if nonlinear:
+    #         settings['ksp_type'] = 'preonly'
+    #         settings['snes_type'] = 'newtonls'
+    #         settings['snes_rtol'] = 1e-8
+    #         settings['snes_max_it'] = 50
+    #         settings['snes_monitor'] = None
+    #         settings['ksp_rtol'] = 1e-8
+    #         settings['ksp_max_it'] = 100
+    #         settings['ksp_atol'] = 1e-8
+    #         settings['snes_rtol'] = 1e-4
+    #         settings['snes_atol'] = 1e-6
+    #         settings['snes_converged_reason'] = None
+    #         settings['snes_view'] = None
+    # print(settings)
+    # breakpoint()
     return settings, appctx

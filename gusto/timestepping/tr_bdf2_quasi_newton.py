@@ -10,11 +10,11 @@ from firedrake import (
 from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (transport, diffusion, sponge, incompressible)
-from gusto.solvers import LinearTimesteppingSolver
 from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
-from gusto.timestepping.semi_implicit_quasi_newton import Forcing
+from gusto.timestepping.semi_implicit_quasi_newton import Forcing, SIQNLinearSolver
+from gusto.solvers.solver_presets import HybridisedSolverParameters
 
 
 __all__ = ["TRBDF2QuasiNewton"]
@@ -41,6 +41,11 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                  num_outer_tr=2, num_inner_tr=2,
                  num_outer_bdf=2, num_inner_bdf=2,
                  reference_update_freq=None,
+                 solver_prognostics=None,
+                 tr_solver_parameters=None,
+                 tr_appctx=None,
+                 bdf_solver_parameters=None,
+                 bdf_appctx=None
                  ):
         """
         Args:
@@ -98,6 +103,24 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 time step. Setting it to None turns off the update, and
                 reference profiles will remain at their initial values.
                 Defaults to None.
+            solver_prognostics (list, optional): a list of the names of
+                prognostic variables to include in the solver. Defaults to None,
+                in which case all prognostics that aren't active tracers are
+                included in the solver.
+            tr_solver_parameters (dict, optional): contains the options to
+                be passed to the underlying :class:`LinearVariationalSolver` for the
+                trapezoidal step.
+                Defaults to None.
+            tr_appctx (dict, optional): a dictionary of application context for the
+                underlying :class:`LinearVariationalSolver` for the trapezoidal step.
+                Defaults to None.
+            bdf_solver_parameters (dict, optional): contains the options to
+                be passed to the underlying :class:`LinearVariationalSolver` for the
+                BDF2 step.
+                Defaults to None.
+            bdf_appctx (dict, optional): a dictionary of application context for the
+                underlying :class:`LinearVariationalSolver` for the BDF2 step.
+                Defaults to None.
         """
 
         self.num_outer_tr = num_outer_tr
@@ -111,6 +134,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.gamma = Function(R, val=float(gamma))
         self.gamma2 = Function(R, val=((1 - 2*float(gamma))/(2 - 2*float(gamma))))
         self.gamma3 = Function(R, val=((1-float(self.gamma2))/(2*float(gamma))))
+        self.implicit_terms = [incompressible, sponge]
 
         # Options relating to reference profiles
         self.reference_update_freq = reference_update_freq
@@ -120,6 +144,40 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.alpha_u = Function(R, val=0.5)
         self.implicit_terms = [incompressible, sponge]
         self.spatial_methods = spatial_methods
+
+        # Determine prognostics for solver -------------------------------------
+        self.non_solver_prognostics = []
+        if solver_prognostics is not None:
+            assert type(solver_prognostics) is list, (
+                "solver_prognostics should be a list of prognostic variable "
+                + f"names, and not {type(solver_prognostics)}"
+            )
+            for prognostic_name in solver_prognostics:
+                assert prognostic_name in equation_set.field_names, (
+                    f"Prognostic variable {prognostic_name} not found in "
+                    + "equation set field names"
+                )
+            for field_name in equation_set.field_names:
+                if field_name not in solver_prognostics:
+                    self.non_solver_prognostics.append(field_name)
+        else:
+            # Remove any active tracers by default
+            solver_prognostics = []
+            if equation_set.active_tracers is not None:
+                self.non_solver_prognostics = [
+                    tracer.name for tracer in equation_set.active_tracers
+                ]
+                for field_name in equation_set.field_names:
+                    if field_name not in self.non_solver_prognostics:
+                        solver_prognostics.append(field_name)
+            else:
+                # No active tracers so prognostics are field names
+                solver_prognostics = equation_set.field_names.copy()
+
+        logger.info(
+            'TR-BDF2 Quasi-Newton: Using solver prognostics '
+            + f'{solver_prognostics}'
+        )
 
         if physics_schemes is not None:
             self.final_physics_schemes = physics_schemes
@@ -189,12 +247,34 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.dy = Function(W)
 
         if tr_solver is None:
-            self.tr_solver = LinearTimesteppingSolver(equation_set, self.gamma)
+            if tr_solver_parameters is None:
+                self.tr_solver_parameters, self.tr_appctx = \
+                    HybridisedSolverParameters(equation_set, alpha=self.gamma)
+            else:
+                self.tr_solver_parameters = tr_solver_parameters
+                self.tr_appctx = tr_appctx
+            self.tr_solver = SIQNLinearSolver(
+                equation_set, solver_prognostics, self.implicit_terms,
+                self.gamma,
+                solver_parameters=self.tr_solver_parameters,
+                appctx=self.tr_appctx
+            )
         else:
             self.tr_solver = tr_solver
 
         if bdf_solver is None:
-            self.bdf_solver = LinearTimesteppingSolver(equation_set, self.gamma2)
+            if bdf_solver_parameters is None:
+                self.bdf_solver_parameters, self.bdf_appctx = \
+                    HybridisedSolverParameters(equation_set, alpha=self.gamma2)
+            else:
+                self.bdf_solver_parameters = bdf_solver_parameters
+                self.bdf_appctx = bdf_appctx
+            self.bdf_solver = SIQNLinearSolver(
+                equation_set, solver_prognostics, self.implicit_terms,
+                self.gamma2,
+                solver_parameters=self.bdf_solver_parameters,
+                appctx=self.bdf_appctx
+            )
         else:
             self.bdf_solver = bdf_solver
 

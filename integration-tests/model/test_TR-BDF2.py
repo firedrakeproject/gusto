@@ -87,28 +87,11 @@ def run_TR_BDF2(tmpdir, order):
         ["u", "rho", "theta", "water_vapour", "cloud_water"]
     ]
 
-    # Linear solvers
+    # Timestepper
     gamma = (1-sqrt(2)/2)
-    gamma2 = (1 - 2*float(gamma))/(2 - 2*float(gamma))
-    solver_parameters_tr, appctx_tr = HybridisedSolverParameters(eqns, alpha=gamma)
-    solver_parameters_bdf, appctx_bdf = HybridisedSolverParameters(eqns, alpha=gamma2)
-
-    tr_solver = SIQNLinearSolver(
-        eqns, solver_prognostics=["u", "rho", "theta"], alpha=gamma, implicit_terms=[incompressible, sponge],
-        solver_parameters=solver_parameters_tr,
-        appctx=appctx_tr, enforce_pc_on_rhs=True
-    )
-    bdf_solver = SIQNLinearSolver(
-        eqns, solver_prognostics=["u", "rho", "theta"], alpha=gamma2, implicit_terms=[incompressible, sponge],
-        solver_parameters=solver_parameters_bdf,
-        appctx=appctx_bdf, enforce_pc_on_rhs=True
-    )
-
     stepper = TRBDF2QuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        gamma=gamma,
-        tr_solver=tr_solver,
-        bdf_solver=bdf_solver
+        gamma=gamma
     )
     # ------------------------------------------------------------------------ #
     # Initial conditions

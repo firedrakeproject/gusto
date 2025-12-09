@@ -143,56 +143,54 @@ def moist_convect_williamson_2(
     physics_schemes = [
         (sat_adj, ForwardEuler(domain)), (inst_rain, ForwardEuler(domain))
     ]
-    # solver_parameters = {
-    #     'mat_type': 'matfree',
-    #     'ksp_type': 'preonly',
-    #     "pc_type": "fieldsplit",
-    #     "pc_fieldsplit_type": "additive",
-    #     "pc_fieldsplit_0_fields": "0,1",
-    #     "pc_fieldsplit_1_fields": "2,3,4",
-    #     "fieldsplit_0": {
-    #         'ksp_monitor_true_residual': None,
-    #         'ksp_type': 'preonly',
-    #         'pc_type': 'python',
-    #         'pc_python_type': 'firedrake.HybridizationPC',
-    #         'hybridization': {
-    #             'ksp_type': 'cg',
-    #             'pc_type': 'gamg',
-    #             'ksp_rtol': 1e-8,
-    #             'mg_levels': {
-    #                 'ksp_type': 'chebyshev',
-    #                 'ksp_max_it': 2,
-    #                 'pc_type': 'bjacobi',
-    #                 'sub_pc_type': 'ilu'
-    #             }
-    #         }
-    #     },
-    #     "fieldsplit_1": {
-    #         "ksp_type": "preonly",
-    #         "pc_type": "none"
-    #     },
-    # }
+    solver_parameters = {
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        "pc_type": "fieldsplit",
+        "pc_fieldsplit_type": "additive",
+        "pc_fieldsplit_0_fields": "0,1",
+        "pc_fieldsplit_1_fields": "2,3,4",
+        "fieldsplit_0": {
+            'ksp_monitor_true_residual': None,
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.HybridizationPC',
+            'hybridization': {
+                'ksp_type': 'cg',
+                'pc_type': 'gamg',
+                'ksp_rtol': 1e-8,
+                'mg_levels': {
+                    'ksp_type': 'chebyshev',
+                    'ksp_max_it': 2,
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu'
+                }
+            }
+        },
+        "fieldsplit_1": {
+            "ksp_monitor_true_residual": None,
+            "ksp_type": "preonly",
+            "pc_type": "none"
+        },
+    }
 
     # # Provide callback for the nullspace of the trace system
-    # def trace_nullsp(T):
-    #     return VectorSpaceBasis(constant=True)
-    # appctx = {"trace_nullspace": trace_nullsp}
+    def trace_nullsp(T):
+        return VectorSpaceBasis(constant=True)
+    appctx = {"trace_nullspace": trace_nullsp}
     # solver_parameters, appctx = HybridisedSolverParameters(eqns)
     # linear_solver = LinearTimesteppingSolver(
     #     eqns, alpha=0.5,
     #     reference_dependent=True,
     #     solver_parameters=solver_parameters,
     #     options_prefix="swe_gen", appctx=appctx)
-    # linear_solver = SIQNLinearSolver(
-    #             eqns, ["u", "D"], [incompressible, sponge],
-    #             0.5,
-    #             solver_parameters=solver_parameters,
-    #             appctx=appctx,
-    #         )
+
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transport_schemes=transported_fields,
+        eqns, io,
+        transport_schemes=transported_fields,
         spatial_methods=transport_methods,
-        physics_schemes=physics_schemes
+        physics_schemes=physics_schemes,
+        accelerator=False
     )
 
     # ------------------------------------------------------------------------ #

@@ -87,11 +87,21 @@ def skamarock_klemp_incompressible_bouss(
         DGUpwind(eqns, "u"),
         DGUpwind(eqns, "b", ibp=b_opts.ibp)
     ]
-
-    # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods
-    )
+    solver_opts = "new"
+    if solver_opts == "old":
+        solver = BoussinesqSolver(eqns)
+        # Time stepper
+        stepper = SemiImplicitQuasiNewton(
+            eqns, io, transported_fields, transport_methods,
+            linear_solver=solver
+        )
+    else:
+        #solver_settings, appctx = HybridisedSolverParameters(eqns)
+        #linear_solver = LinearTimesteppingSolver(eqns, alpha=0.5, solver_parameters=solver_settings, options_prefix="boussinesq", appctx=appctx)
+        # Time stepper
+        stepper = SemiImplicitQuasiNewton(
+            eqns, io, transported_fields, transport_methods
+        )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

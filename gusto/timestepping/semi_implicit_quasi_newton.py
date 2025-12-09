@@ -808,13 +808,16 @@ class SIQNLinearSolver(object):
         # Set solver parameters --------------------------------------
         self.solver_parameters = solver_parameters
 
+        self.equation = equation
+        self.solver_prognostics = solver_prognostics
+
         if appctx is not None:
             self.appctx = appctx
         else:
             self.appctx = {}
 
-        # if logger.isEnabledFor(DEBUG):
-        #     self.solver_parameters["ksp_monitor_true_residual"] = None
+        if logger.isEnabledFor(DEBUG):
+            self.solver_parameters["ksp_monitor_true_residual"] = None
 
         dt = equation.domain.dt
         self.reference_dependent = reference_dependent
@@ -896,6 +899,27 @@ class SIQNLinearSolver(object):
         if self.reference_dependent:
             self.solver.invalidate_jacobian()
 
+    def zero_non_prognostics(self, equation, xrhs, field_names, prognostic_names):
+        """
+        Zero rhs term F(x) for non-prognostics.
+
+        This takes x_in and x_out, where                                      \n
+        x_out = x_in + scale*F(x_nl)                                          \n
+        for some field x_nl and sets x_out = x_in for all non-wind prognostics
+
+        Args:
+            equation (:class:`PrognosticEquationSet`): the prognostic
+                equation set to be solved
+            xrhs (:class:`FieldCreator`): the field to be incremented.
+            field_names (str): list of fields names for prognostic fields
+        """
+        for field_name in field_names:
+
+            if field_name not in prognostic_names:
+                logger.debug(f'Semi-Implicit Quasi Newton: Zeroing xrhs for {field_name}')
+                field_index = equation.field_names.index(field_name)
+                xrhs.subfunctions[field_index].assign(0.0)
+
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
         """
@@ -907,9 +931,34 @@ class SIQNLinearSolver(object):
             dy (:class:`Function`): the resulting increment field in the
                 appropriate :class:`MixedFunctionSpace`.
         """
+        from firedrake import PETSc, norm
 
         self.xrhs.assign(xrhs)
-        #self.dy.assign(Constant(0.0))
+        self.zero_non_prognostics(self.equation, self.xrhs,
+                                 self.equation.field_names,
+                                 self.solver_prognostics)
+        self.dy.assign(0.0)
+        # u = self.dy.subfunctions[0]
+        # p = self.dy.subfunctions[1]
+        # b = self.dy.subfunctions[2]
+        # rhs_u = self.xrhs.subfunctions[0]
+        # rhs_p = self.xrhs.subfunctions[1]
+        # rhs_b = self.xrhs.subfunctions[2]
+
+        # PETSc.Sys.Print("u norm before solve: ", norm(u, 'l2'))
+        # PETSc.Sys.Print("p norm before solve: ", norm(p, 'l2'))
+        # PETSc.Sys.Print("b norm before solve: ", norm(b, 'l2'))
+        # PETSc.Sys.Print("rhs_u norm: ", norm(rhs_u, 'l2'))
+        # PETSc.Sys.Print("rhs_p norm: ", norm(rhs_p, 'l2'))
+        # PETSc.Sys.Print("rhs_b norm: ", norm(rhs_b, 'l2'))
 
         self.solver.solve()
+        # PETSc.Sys.Print("u norm after solve: ", norm(u, 'l2'))
+        # PETSc.Sys.Print("p norm after solve: ", norm(p, 'l2'))
+        # PETSc.Sys.Print("b norm after solve: ", norm(b, 'l2'))
+        # PETSc.Sys.Print("rhs_u norm after solve: ", norm(rhs_u, 'l2'))
+        # PETSc.Sys.Print("rhs_p norm after solve: ", norm(rhs_p, 'l2'))
+        # PETSc.Sys.Print("rhs_b norm after solve: ", norm(rhs_b, 'l2'))
+
+
         dy.assign(self.dy)

@@ -479,6 +479,7 @@ class BoussinesqSolver(TimesteppingSolver):
 
     solver_parameters = {
         'ksp_type': 'preonly',
+        'ksp_monitor_true_residual': None,
         'mat_type': 'matfree',
         'pc_type': 'python',
         'pc_python_type': 'firedrake.HybridizationPC',
@@ -535,7 +536,7 @@ class BoussinesqSolver(TimesteppingSolver):
             cs = equation.parameters.cs
             eqn += phi * (p - p_in) * dx + beta_p * phi * cs**2 * div(u) * dx
         else:
-            eqn += beta_p * phi * div(u) * dx
+            eqn += phi * div(u) * dx
 
         if hasattr(self.equations, "mu"):
             eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx
@@ -602,13 +603,30 @@ class BoussinesqSolver(TimesteppingSolver):
             dy (:class:`Function`): the resulting field in the appropriate
                 :class:`MixedFunctionSpace`.
         """
+        from firedrake import PETSc, norm
         self.xrhs.assign(xrhs)
+
+        u = self.up.subfunctions[0]
+        p = self.up.subfunctions[1]
+        #b = self.up.subfunctions[2]
+        rhs_u = self.xrhs.subfunctions[0]
+        rhs_p = self.xrhs.subfunctions[1]
+        #rhs_b = self.xrhs.subfunctions[2]
+
+        PETSc.Sys.Print("u norm before solve: ", norm(u, 'l2'))
+        PETSc.Sys.Print("p norm before solve: ", norm(p, 'l2'))
+        #PETSc.Sys.Print("b norm before solve: ", norm(b, 'l2'))
+        PETSc.Sys.Print("rhs_u norm: ", norm(rhs_u, 'l2'))
+        PETSc.Sys.Print("rhs_p norm: ", norm(rhs_p, 'l2'))
+        #PETSc.Sys.Print("rhs_b norm: ", norm(rhs_b, 'l2'))
 
         with timed_region("Gusto:VelocityPressureSolve"):
             logger.info('Boussinesq linear solver: mixed solve')
             self.up_solver.solve()
 
         u1, p1 = self.up.subfunctions
+        PETSc.Sys.Print("u norm after solve: ", norm(u1, 'l2'))
+        PETSc.Sys.Print("p norm after solve: ", norm(p1, 'l2'))
         u, p, b = dy.subfunctions
         u.assign(u1)
         p.assign(p1)

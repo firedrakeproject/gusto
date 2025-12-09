@@ -772,7 +772,6 @@ class CompressibleHybridisedSCPC(PCBase):
             x.copy(xv)
 
         self.xrhs.assign(self.xstar.riesz_representation())
-        
         # Solve hybridized system
         self.hybridized_solver.solve()
 
