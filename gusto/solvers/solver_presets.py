@@ -96,9 +96,9 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
             appctx['tau_values'] = tau_values
     elif isinstance(equation, BoussinesqEquations):
         settings = {
-            'ksp_monitor_true_residual': None,
-            'ksp_view': ':ksp_view.log',
-            'ksp_error_if_not_converged': None,
+            # 'ksp_monitor_true_residual': None,
+            # 'ksp_view': ':ksp_view.log',
+            # 'ksp_error_if_not_converged': None,
             'mat_type': 'matfree',
             'ksp_type': 'preonly',
             'pc_type': 'fieldsplit',
@@ -114,16 +114,17 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                 'assembled_sub_pc_type': 'ilu',
             },
             'fieldsplit_1': {
-                'ksp_monitor': None,
-                'ksp_monitor_true_residual': None,
                 'ksp_type': 'preonly',
                 'pc_type': 'python',
                 'pc_python_type': 'gusto.AuxiliaryPC',
                 'aux': {
+
                     'mat_type': 'matfree',
                     'pc_type': 'python',
                     'pc_python_type': 'firedrake.HybridizationPC',
                     'hybridization': {
+                        'ksp_monitor': None,
+                        'ksp_monitor_true_residual': None,
                         'ksp_type': 'cg',
                         'pc_type': 'gamg',
                         'ksp_rtol': 1e-8,
@@ -331,6 +332,7 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
 
 
             appctx = {'auxform': equation.schur_complement_form(alpha=alpha)}
+            print("Moist thermal shallow water hybridised solver settings")
         
     #     if nonlinear:
     #         settings['ksp_type'] = 'preonly'

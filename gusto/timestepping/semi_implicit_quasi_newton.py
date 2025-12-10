@@ -22,7 +22,6 @@ from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
 from gusto.solvers.solver_presets import HybridisedSolverParameters
-from gusto.equations.compressible_euler_equations import CompressibleEulerEquations
 
 
 __all__ = ["SemiImplicitQuasiNewton", "Forcing", "SIQNLinearSolver"]
@@ -897,6 +896,7 @@ class SIQNLinearSolver(object):
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
         if self.reference_dependent:
+            self.equation.update_reference_profiles()
             self.solver.invalidate_jacobian()
 
     def zero_non_prognostics(self, equation, xrhs, field_names, prognostic_names):
@@ -931,13 +931,14 @@ class SIQNLinearSolver(object):
             dy (:class:`Function`): the resulting increment field in the
                 appropriate :class:`MixedFunctionSpace`.
         """
-        from firedrake import PETSc, norm
+        from firedrake import PETSc, norm, Constant
 
         self.xrhs.assign(xrhs)
         self.zero_non_prognostics(self.equation, self.xrhs,
                                  self.equation.field_names,
                                  self.solver_prognostics)
         self.dy.assign(0.0)
+        #self.xrhs.subfunctions[1].assign(Constant(0.0))
         # u = self.dy.subfunctions[0]
         # p = self.dy.subfunctions[1]
         # b = self.dy.subfunctions[2]

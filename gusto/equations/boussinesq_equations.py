@@ -197,7 +197,7 @@ class BoussinesqEquations(PrognosticEquationSet):
             # "forcing" step replaces the whole pressure field, rather than
             # merely providing an increment to it.
             linear_div_form = incompressible(
-                subject(prognostic(phi*(p_trial-div(u_trial))*dx, 'p'), self.X))
+                subject(prognostic(phi*(-div(u_trial))*dx, 'p'), self.X))
             divergence_form = incompressible(linearisation(
                 subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
                 linear_div_form))

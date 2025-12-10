@@ -224,6 +224,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         self.residual = residual
 
+    def update_reference_profiles(self):
+
+        pass
+
 
 class LinearShallowWaterEquations(ShallowWaterEquations):
     u"""
@@ -555,27 +559,39 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         Dref, bref = self.X_ref.subfunctions[1:3]
         b_ = -dot(u_, grad(bref))*beta_b
 
-        if self.equivalent_buoyancy:
-            # compute q_v using q_sat to partition q_t into q_v and q_c
-            self.q_sat_func = Function(VD)
-            self.qvbar = Function(VD)
-            qtbar = split(self.X_ref)[3]
+        # if self.equivalent_buoyancy:
+        #     # compute q_v using q_sat to partition q_t into q_v and q_c
+        #     self.q_sat_func = Function(VD)
+        #     self.qvbar = Function(VD)
+        #     qtbar = split(self.X_ref)[3]
 
-            # set up interpolators that use the X_ref values for D and b_e
-            self.q_sat_expr_interpolate = interpolate(
-                self.compute_saturation(self.X_ref), VD)
-            self.q_v_interpolate = interpolate(
-                conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
-                VD)
+        #     # set up interpolators that use the X_ref values for D and b_e
+        #     self.q_sat_expr_interpolate = interpolate(
+        #         self.compute_saturation(self.X_ref), VD)
+        #     self.q_v_interpolate = interpolate(
+        #         conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
+        #         VD)
 
-            # bbar was be_bar and here we correct to become bbar
-            bref += self.parameters.beta2 * self.qvbar
+        #     # bbar was be_bar and here we correct to become bbar
+        #     bref += self.parameters.beta2 * self.qvbar
+
+        seqn = (
+            inner(w_, u_) * dx
+            - beta_u * (D_ - Dref) * div(w_*bref) * dx
+            + beta_u * jump(w_*bref, n) * avg(D_- Dref) * dS
+            - beta_u * 0.5 * Dref * bref * div(w_) * dx
+            - beta_u * 0.5 * Dref * b_ * div(w_) * dx
+            - beta_u * 0.5 * bref * div(w_*(D_ - Dref)) * dx
+            + beta_u * 0.5 * jump((D_-Dref)*w_, n) * avg(bref) * dS
+            + inner(phi_, D_) * dx
+            + beta_d * phi_ * div(Dref*u_) * dx
+        )
 
         seqn = (
             inner(w_, u_) * dx
             - beta_u * D_ * div(w_*bref) * dx
             + beta_u * jump(w_*bref, n) * avg(D_) * dS
-            - beta_u * 0.5 * Dref * bref * div(w_) * dx
+            # - beta_u * 0.5 * Dref * bref * div(w_) * dx
             - beta_u * 0.5 * Dref * b_ * div(w_) * dx
             - beta_u * 0.5 * bref * div(w_*D_) * dx
             + beta_u * 0.5 * jump(D_*w_, n) * avg(bref) * dS
@@ -591,6 +607,31 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         sbcs = [DirichletBC(M_.sub(0), bc.function_arg, bc.sub_domain) for bc in self.bcs['u']]
 
         return seqn, sbcs
+
+    def update_reference_profiles(self):
+        # if self.equivalent_buoyancy:
+        #     VD = self.domain.spaces("DG")
+        #     bref=self.X_ref.subfunctions[2]
+        #     # compute q_v using q_sat to partition q_t into q_v and q_c
+        #     self.q_sat_func = Function(VD)
+        #     self.qvbar = Function(VD)
+        #     qtbar = split(self.X_ref)[3]
+
+        #     # set up interpolators that use the X_ref values for D and b_e
+        #     self.q_sat_expr_interpolate = interpolate(
+        #         self.compute_saturation(self.X_ref), VD)
+        #     self.q_v_interpolate = interpolate(
+        #         conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
+        #         VD)
+
+        #     # bbar was be_bar and here we correct to become bbar
+        #     bref_int = Function(bref.function_space())
+        #     bref_int = self.parameters.beta2 * self.qvbar
+
+        #     bref = self.X_ref.subfunctions[2]
+        #     bref.interpolate(bref_int + bref)
+        pass
+
 
 
 class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
