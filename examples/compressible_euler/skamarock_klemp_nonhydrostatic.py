@@ -23,13 +23,7 @@ from gusto import (
     Domain, IO, OutputParameters, TRBDF2QuasiNewton, SemiImplicitQuasiNewton,
     DGUpwind, logger, EmbeddedDGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
-<<<<<<< HEAD
-    compressible_hydrostatic_balance, RungeKuttaFormulation,
-    SubcyclingOptions
-=======
-    compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
-    hydrostatic_parameters, SubcyclingOptions, SSPRK3
->>>>>>> main
+    compressible_hydrostatic_balance, RungeKuttaFormulation, SubcyclingOptions, SSPRK3
 )
 PETSc.Sys.popErrorHandler()
 
