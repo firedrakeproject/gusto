@@ -120,12 +120,13 @@ class SpongeLayerParameters(EquationParameters):
 class PMLParameters(EquationParameters):
     """Specifies parameters describing a PML damping layer."""
 
-    c_max = 350 # Fastest wave speed in the medium
-    delta_frac = 0.1 # Fraction of domain that is the PML
-    tol = 1e-3 # Tolerance for the PML error
-    gamma0 = 0.0 # Stretching parameter
-    H = None # Height of the domain
-    alpha_fact = 0.05
+    A = 2              # Scaling factor for the PML strength
+    c_max = 350        # Fastest wave speed in the medium
+    delta_frac = 0.1   # Fraction of domain that is the PML
+    tol = 1e-3         # Tolerance for the PML error
+    gamma0 = 0.1       # Stretching parameter
+    H = None           # Height of the domain
+    alpha_fact = 0.05  # Alpha = alpha_fact*sigma0
 
 
 class DiffusionParameters(EquationParameters):
