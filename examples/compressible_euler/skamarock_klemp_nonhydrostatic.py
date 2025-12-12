@@ -70,7 +70,6 @@ def skamarock_klemp_nonhydrostatic(
 
     if timestepper == 'TR-BDF2':
         gamma = (1-sqrt(2)/2)
-        gamma2 = (1 - 2*float(gamma))/(2 - 2*float(gamma))
     else:
         alpha = 0.5
 
