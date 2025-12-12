@@ -14,17 +14,15 @@ This example uses the icosahedral sphere mesh and degree 1 spaces.
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
-    SpatialCoordinate, sin, cos, exp, Function, errornorm, norm,
-    VectorSpaceBasis, COMM_WORLD
+    SpatialCoordinate, sin, cos, exp, Function
 )
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
     ZonalComponent, MeridionalComponent, SteadyStateError, lonlatr_from_xyz,
-    DG1Limiter, InstantRain, ForwardEuler, LinearTimesteppingSolver,
-    RelativeVorticity, SWSaturationAdjustment, WaterVapour, CloudWater, Rain,
-    GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr,
-    HybridisedSolverParameters, SIQNLinearSolver, incompressible, sponge
+    DG1Limiter, InstantRain, ForwardEuler, RelativeVorticity,
+    SWSaturationAdjustment, WaterVapour, CloudWater, Rain,
+    GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr
 )
 
 moist_convect_williamson_2_defaults = {
@@ -143,54 +141,12 @@ def moist_convect_williamson_2(
     physics_schemes = [
         (sat_adj, ForwardEuler(domain)), (inst_rain, ForwardEuler(domain))
     ]
-    solver_parameters = {
-        'mat_type': 'matfree',
-        'ksp_type': 'preonly',
-        "pc_type": "fieldsplit",
-        "pc_fieldsplit_type": "additive",
-        "pc_fieldsplit_0_fields": "0,1",
-        "pc_fieldsplit_1_fields": "2,3,4",
-        "fieldsplit_0": {
-            'ksp_monitor_true_residual': None,
-            'ksp_type': 'preonly',
-            'pc_type': 'python',
-            'pc_python_type': 'firedrake.HybridizationPC',
-            'hybridization': {
-                'ksp_type': 'cg',
-                'pc_type': 'gamg',
-                'ksp_rtol': 1e-8,
-                'mg_levels': {
-                    'ksp_type': 'chebyshev',
-                    'ksp_max_it': 2,
-                    'pc_type': 'bjacobi',
-                    'sub_pc_type': 'ilu'
-                }
-            }
-        },
-        "fieldsplit_1": {
-            "ksp_monitor_true_residual": None,
-            "ksp_type": "preonly",
-            "pc_type": "none"
-        },
-    }
-
-    # # Provide callback for the nullspace of the trace system
-    def trace_nullsp(T):
-        return VectorSpaceBasis(constant=True)
-    appctx = {"trace_nullspace": trace_nullsp}
-    # solver_parameters, appctx = HybridisedSolverParameters(eqns)
-    # linear_solver = LinearTimesteppingSolver(
-    #     eqns, alpha=0.5,
-    #     reference_dependent=True,
-    #     solver_parameters=solver_parameters,
-    #     options_prefix="swe_gen", appctx=appctx)
 
     stepper = SemiImplicitQuasiNewton(
         eqns, io,
         transport_schemes=transported_fields,
         spatial_methods=transport_methods,
-        physics_schemes=physics_schemes,
-        accelerator=False
+        physics_schemes=physics_schemes
     )
 
     # ------------------------------------------------------------------------ #
@@ -200,8 +156,6 @@ def moist_convect_williamson_2(
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
     v0 = stepper.fields("water_vapour")
-
-    D_init = Function(D0.function_space())
 
     uexpr = xyz_vector_from_lonlatr(u_max*cos(phi), 0, 0, (x, y, z))
     g = parameters.g
@@ -230,8 +184,6 @@ def moist_convect_williamson_2(
     D0.interpolate(Dexpr)
     v0.interpolate(vexpr)
 
-    D_init.interpolate(Dexpr)
-
     # Set reference profiles
     Dbar = Function(D0.function_space()).assign(mean_depth)
     stepper.set_reference_profiles([('D', Dbar)])
@@ -241,10 +193,6 @@ def moist_convect_williamson_2(
     # ------------------------------------------------------------------------ #
 
     stepper.run(t=0, tmax=tmax)
-
-    error_D = errornorm(D0, D_init, mesh=mesh)/norm(D_init, mesh=mesh)
-
-    print("Error D:", error_D)
 
 # ---------------------------------------------------------------------------- #
 # MAIN

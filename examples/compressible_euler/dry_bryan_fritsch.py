@@ -15,9 +15,7 @@ from firedrake import (
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     RecoverySpaces, BoundaryMethod, Perturbation, CompressibleParameters,
-    CompressibleEulerEquations,
-    compressible_hydrostatic_balance, HybridisedSolverParameters, SIQNLinearSolver,
-    incompressible, sponge
+    CompressibleEulerEquations, compressible_hydrostatic_balance
 )
 
 dry_bryan_fritsch_defaults = {

@@ -16,8 +16,7 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, SUPGOptions, CourantNumber, Perturbation,
     DiffusionParameters, InteriorPenaltyDiffusion, BackwardEuler,
-    CompressibleParameters, CompressibleEulerEquations, SIQNLinearSolver,
-    HybridisedSolverParameters, incompressible, sponge,
+    CompressibleParameters, CompressibleEulerEquations,
     compressible_hydrostatic_balance
 )
 

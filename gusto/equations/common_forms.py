@@ -17,8 +17,7 @@ __all__ = ["advection_form", "advection_form_1d", "continuity_form",
            "linear_circulation_form",
            "diffusion_form", "diffusion_form_1d",
            "linear_advection_form", "linear_continuity_form",
-           "split_continuity_form", "tracer_conservative_form", "split_hv_advective_form",
-           "replace_linear_vertical_adv_form"]
+           "split_continuity_form", "tracer_conservative_form", "split_hv_advective_form"]
 
 
 def advection_form(test, q, ubar):
@@ -528,60 +527,5 @@ def split_hv_advective_form(equation, field_name):
 
             # Add new terms onto residual
             equation.residual += subject(adv_horiz_term, subj) + subject(adv_vert_term, subj)
-
-    return equation
-
-def replace_linear_vertical_adv_form(equation, field_name):
-    u"""
-    Replaces 3D linear advective term with vertical term.
-    This describes replacing u.∇(qbar) terms with  dqbar/dz,
-    for transporting velocity u and qbar.
-    Args:
-        equation (:class:`PrognosticEquation`): the model's equation.
-    Returns:
-        :class:`PrognosticEquation`: the model's equation.
-    """
-    k = equation.domain.k   # vertical unit vector
-    for t in equation.residual:
-        if (t.get(transport) == TransportEquationType.advective and t.get(prognostic) == field_name and t.has_label(linearisation)):
-            # Get fields and test functions
-            subj = t.get(subject)
-
-            # u is either a prognostic or prescribed field
-            if (hasattr(equation, "field_names")
-               and 'u' in equation.field_names):
-                idx = equation.field_names.index(field_name)
-                W = equation.function_space
-                test = TestFunctions(W)[idx]
-                q = split(subj)[idx]
-                u_idx = equation.field_names.index('u')
-                uadv = split(equation.X)[u_idx]
-            elif 'u' in equation.prescribed_fields._field_names:
-                uadv = equation.prescribed_fields('u')
-                q = subj
-                W = equation.function_space
-                test = TestFunction(W)
-            else:
-                raise ValueError('Cannot get velocity field')
-
-            adv_term = equation.residual.label_map(
-                lambda t: t.get(transport) == TransportEquationType.advective and t.get(prognostic) == field_name,
-                map_if_false=drop).terms[0].form
-            # Add linearisations of new terms if required
-            u_trial = TrialFunctions(W)[u_idx]
-            u_trial_vert = k*inner(u_trial, k)
-            qbar = split(equation.X_ref)[idx]
-            # Add linearisations
-            linear_vert_term = vertical_transport(
-                split_linear_advection_form(test, qbar, u_trial_vert, u_trial)
-            )
-            new_adv_term = linearisation(adv_term, linear_vert_term)
-            # Drop old term
-            equation.residual = equation.residual.label_map(
-                lambda t: t.get(transport) == TransportEquationType.advective and t.get(prognostic) == field_name,
-                map_if_true=drop)
-
-            # Add new terms onto residual
-            equation.residual += subject(new_adv_term, subj)
 
     return equation

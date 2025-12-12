@@ -24,8 +24,7 @@ from gusto import (
     DGUpwind, logger, SUPGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
     compressible_hydrostatic_balance, RungeKuttaFormulation,
-    SubcyclingOptions, incompressible, sponge, SIQNLinearSolver,
-    HybridisedSolverParameters
+    SubcyclingOptions
 )
 PETSc.Sys.popErrorHandler()
 
@@ -138,7 +137,7 @@ def skamarock_klemp_nonhydrostatic(
         DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
     ]
 
-    # Time stepper and linear solver
+    # Time stepper
     if timestepper == 'TR-BDF2':
         if hydrostatic:
             raise ValueError('Hydrostatic equations not implmented for TR-BDF2')

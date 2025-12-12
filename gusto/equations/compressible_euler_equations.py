@@ -2,17 +2,14 @@
 
 from firedrake import (
     sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg,
-    conditional, SpatialCoordinate, split, Constant, as_vector, dot,
-    DirichletBC, MixedFunctionSpace, TrialFunctions, TestFunctions,
-    dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, grad
-
+    conditional, SpatialCoordinate, split, Constant, as_vector, dS_v
 )
 from firedrake.fml import subject, replace_subject, all_terms
 from gusto.core.labels import (
     time_derivative, prognostic, hydrostatic, linearisation,
     pressure_gradient, coriolis, gravity, sponge
 )
-from gusto.equations.thermodynamics import exner_pressure, dexner_drho, dexner_dtheta
+from gusto.equations.thermodynamics import exner_pressure
 from gusto.equations.common_forms import (
     advection_form, continuity_form, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form,
@@ -281,120 +278,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
-
-    def schur_complement_form(self, alpha=0.5, tau_values=None):
-        domain = self.domain
-        dt = domain.dt
-        equations = self
-        n = FacetNormal(self.domain.mesh)
-        cp = self.parameters.cp
-        tau_values = tau_values or {}
-        # Set relaxation parameters. If an alternative has not been given, set
-        # to semi-implicit off-centering factor
-        beta_u = dt*tau_values.get("u", alpha)
-        beta_t = dt*tau_values.get("theta", alpha)
-        beta_r = dt*tau_values.get("rho", alpha)
-        Vu = domain.spaces("HDiv")
-        Vtheta = domain.spaces("theta")
-        Vrho = domain.spaces("DG")
-
-        # Build the reduced function space for u,p
-        M = MixedFunctionSpace((Vu, Vrho))
-        w, phi = TestFunctions(M)
-        u, rho = TrialFunctions(M)
-
-          # Get background fields
-        _, rhobar, thetabar = split(self.X_ref)[0:3]
-        exnerbar = exner_pressure(self.parameters, rhobar, thetabar)
-        exnerbar_rho = dexner_drho(self.parameters, rhobar, thetabar)
-        exnerbar_theta = dexner_dtheta(self.parameters, rhobar, thetabar)
-
-        # Analytical (approximate) elimination of theta
-        k = self.domain.k             # Upward pointing unit vector
-        theta = -dot(k, u)*dot(k, grad(thetabar))*beta_t
-
-        #q22 = - beta_t*beta_u*cp*(dot(k, w)*dot(k, grad(exner))*dot(k, u)*dot(k, grad(thetabar)))*dx
-
-        # The exner prime term (here, bars are for mean and no bars are
-        # for linear perturbations)
-        exner = exnerbar_theta*theta + exnerbar_rho*rho
-
-        # vertical projection
-        def V(u):
-            return k*inner(u, k)
-
-        # hydrostatic projection
-        h_project = lambda u: u - k*inner(u, k)
-
-        # Specify degree for some terms as estimated degree is too large
-        dx_qp = dx(degree=(equations.domain.max_quad_degree))
-        dS_v_qp = dS_v(degree=(equations.domain.max_quad_degree))
-        dS_h_qp = dS_h(degree=(equations.domain.max_quad_degree))
-        ds_v_qp = ds_v(degree=(equations.domain.max_quad_degree))
-        ds_tb_qp = (ds_t(degree=(equations.domain.max_quad_degree))
-                    + ds_b(degree=(equations.domain.max_quad_degree)))
-
-        # Add effect of density of water upon theta, using moisture reference profiles
-        # TODO: Explore if this is the right thing to do for the linear problem
-        if self.active_tracers is not None:
-            mr_t = Constant(0.0)*thetabar
-            for tracer in self.active_tracers:
-                if tracer.chemical == 'H2O':
-                    if tracer.variable_type == TracerVariableType.mixing_ratio:
-                        idx = self.field_names.index(tracer.name)
-                        mr_bar = split(self.X_ref)[idx]
-                        mr_t += mr_bar
-                    else:
-                        raise NotImplementedError('Only mixing ratio tracers are implemented')
-
-            theta_w = theta / (1 + mr_t)
-            thetabar_w = thetabar / (1 + mr_t)
-        else:
-            theta_w = theta
-            thetabar_w = thetabar
-
-        # NOTE: no ds_v integrals since equations are defined on
-        # a periodic (or sphere) base mesh.
-        if any([t.has_label(hydrostatic) for t in self.residual]):
-            u_mass = inner(w, (h_project(u)))*dx
-        else:
-            u_mass = inner(w, (u))*dx
-        
-
-        seqn = (
-            # momentum equation
-            u_mass
-            - beta_u*cp*div(theta_w*V(w))*exnerbar*dx_qp
-            # # following does nothing but is preserved in the comments
-            # # to remind us why (because V(w) is purely vertical).
-            # # + beta*cp*jump(theta_w*V(w), n=n)*exnerbar_avg('+')*dS_v_qp
-            + beta_u*cp*jump(theta_w*V(w), n=n)*avg(exnerbar)*dS_h_qp
-            + beta_u*cp*dot(theta_w*V(w), n)*exnerbar*ds_tb_qp
-            - beta_u*cp*div(thetabar_w*w)*exner*dx_qp
-            # Terms appearing after integrating momentum equation
-            + beta_u*cp*jump(thetabar_w*w, n=n)*avg(exner)*(dS_v_qp + dS_h_qp)
-            + beta_u*cp*dot(thetabar_w*w, n)*exner*(ds_tb_qp + ds_v_qp)
-            # mass continuity equation
-            + (phi*rho - beta_r*inner(grad(phi), u)*rhobar)*dx
-            + beta_r*jump(phi*u, n=n)*avg(rhobar)*(dS_v + dS_h)
-            # term added because u.n=0 is enforced weakly via the traces
-            + beta_r*phi*dot(u, n)*rhobar*(ds_tb + ds_v)
-            #(phi*rho + beta_r*phi*div(rhobar*u))*dx
-        )
-
-        if hasattr(self, "mu"):
-            seqn += beta_u*self.mu*inner(w, k)*inner(u, k)*dx
-
-        if self.parameters.Omega is not None:
-            Omega = as_vector((0, 0, self.parameter.Omega))
-            seqn += beta_u*inner(w, cross(2*Omega, u))*dx
-
-        # Boundary conditions (assumes extruded mesh)
-        # BCs are declared for the plain velocity space. As we need them in
-        # a mixed problem, we replicate the BCs but for subspace of M
-        sbcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.bcs['u']]
-
-        return seqn, sbcs
 
 
 class HydrostaticCompressibleEulerEquations(CompressibleEulerEquations):

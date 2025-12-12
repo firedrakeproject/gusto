@@ -15,7 +15,7 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, DefaultTransport,
     DGUpwind, ForwardEuler, ShallowWaterParameters, NumericalIntegral,
     LinearThermalShallowWaterEquations, GeneralIcosahedralSphereMesh,
-    ZonalComponent, LinearTimesteppingSolver, lonlatr_from_xyz, xyz_vector_from_lonlatr,
+    ZonalComponent, lonlatr_from_xyz, xyz_vector_from_lonlatr,
     RelativeVorticity, MeridionalComponent
 )
 

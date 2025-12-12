@@ -28,8 +28,7 @@ from gusto import (
     Coalescence, SaturationAdjustment, EvaporationOfRain, thermodynamics,
     CompressibleParameters, CompressibleEulerEquations,
     unsaturated_hydrostatic_balance, WaterVapour, CloudWater, Rain,
-    RelativeHumidity, ForwardEuler, MixedFSLimiter, ZeroLimiter,
-    incompressible, sponge, SIQNLinearSolver, HybridisedSolverParameters
+    RelativeHumidity, ForwardEuler, MixedFSLimiter, ZeroLimiter
 )
 
 unsaturated_bubble_defaults = {

@@ -17,7 +17,7 @@ from gusto import (
     TrapeziumRule, SUPGOptions, lonlatr_from_xyz, CompressibleParameters,
     CompressibleEulerEquations, ZonalComponent,
     compressible_hydrostatic_balance, Perturbation, GeneralCubedSphereMesh,
-    SubcyclingOptions, HybridisedSolverParameters, SIQNLinearSolver, incompressible, sponge
+    SubcyclingOptions
 )
 
 dcmip_3_1_gravity_wave_defaults = {
@@ -104,25 +104,6 @@ def dcmip_3_1_gravity_wave(
     transport_methods = [
         DGUpwind(eqns, field) for field in ["u", "rho", "theta"]
     ]
-
-    # # Linear solver
-    # solver_parameters = HybridisedSolverParameters(eqns.name)
-
-    # def trace_nullsp(T):
-    #     return VectorSpaceBasis(constant=True)
-
-
-    # appctx = {
-    #     'equations': eqns,
-    #     'alpha': 0.5,
-    #     'trace_nullspace': trace_nullsp
-    # }
-
-    # linear_solver = SIQNLinearSolver(
-    #     eqns, solver_prognostics=["u", "rho", "theta"], alpha=0.5, implicit_terms=[incompressible, sponge],
-    #     solver_parameters=solver_parameters,
-    #     appctx=appctx, enforce_pc_on_rhs=True
-    # )
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(

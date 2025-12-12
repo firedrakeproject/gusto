@@ -471,6 +471,7 @@ class VerticalHybridizationPC(PCBase):
         viewer.printfASCII("Project the broken hdiv solution into the HDiv space.\n")
         viewer.popASCIITab()
 
+
 class CompressibleHybridisedSCPC(PCBase):
     """
     A bespoke hybridised preconditioner for the compressible Euler equations.
@@ -505,43 +506,52 @@ class CompressibleHybridisedSCPC(PCBase):
     (3) Reconstruct theta
     """
 
-    _prefix="compressible_hybrid_scpc"
+    _prefix = "compressible_hybrid_scpc"
 
     scpc_parameters = {'mat_type': 'matfree',
-                        'ksp_type': 'preonly',
-                        'ksp_converged_reason': None,
-                        'ksp_monitor_true_residual': None,
-                        'pc_type': 'python',
-                        'pc_python_type': 'firedrake.SCPC',
-                        'pc_sc_eliminate_fields': '0, 1',
-                        # The reduced operator is not symmetric
-                        'condensed_field': {'ksp_type': 'fgmres',
-                                            'ksp_rtol': 1.0e-8,
-                                            'ksp_atol': 1.0e-8,
-                                            'ksp_max_it': 100,
-                                            'pc_type': 'gamg',
-                                            'pc_gamg_sym_graph': None,
-                                            'mg_levels': {'ksp_type': 'gmres',
-                                                        'ksp_max_it': 5,
-                                                        'pc_type': 'bjacobi',
-                                                        'sub_pc_type': 'ilu'}}}
+                       'ksp_type': 'preonly',
+                       'ksp_converged_reason': None,
+                       'ksp_monitor_true_residual': None,
+                       'pc_type': 'python',
+                       'pc_python_type': 'firedrake.SCPC',
+                       'pc_sc_eliminate_fields': '0, 1',
+                       # The reduced operator is not symmetric
+                       'condensed_field': {'ksp_type': 'fgmres',
+                                           'ksp_rtol': 1.0e-8,
+                                           'ksp_atol': 1.0e-8,
+                                           'ksp_max_it': 100,
+                                           'pc_type': 'gamg',
+                                           'pc_gamg_sym_graph': None,
+                                           'mg_levels': {'ksp_type': 'gmres',
+                                                         'ksp_max_it': 5,
+                                                         'pc_type': 'bjacobi',
+                                                         'sub_pc_type': 'ilu'}}}
+
+    cg_ilu_parameters = {'ksp_type': 'cg',
+                         'pc_type': 'bjacobi',
+                         'sub_pc_type': 'ilu'}
 
     def initialize(self, pc):
         """
         Set up problem and solver
         """
         from firedrake import (split, LinearVariationalProblem, LinearVariationalSolver,
-                                TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
-                                rhs, FacetNormal, div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b,
-                                ds_tb, inner, dot, grad, Function, cross,
-                                BrokenElement, FunctionSpace, MixedFunctionSpace, as_vector,
-                                Cofunction, Constant)
+                               TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
+                               rhs, FacetNormal, div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b,
+                               ds_tb, inner, dot, grad, Function, cross,
+                               BrokenElement, FunctionSpace, MixedFunctionSpace, as_vector,
+                               Cofunction, Constant)
         from gusto.equations.active_tracers import TracerVariableType
         from gusto.core.labels import hydrostatic
         if pc.getType() != "python":
             raise ValueError("Expecting PC type python")
 
         self._process_context(pc)
+
+        self.hybridised_scpc_parameters = self.scpc_parameters
+        self.rho_avg_solver_parameters = self.cg_ilu_parameters
+        self.theta_solver_parameters = self.cg_ilu_parameters
+        self.exner_avg_solver_parameters = self.cg_ilu_parameters
 
         # Equations and parameters
         equations = self.equations
@@ -566,7 +576,7 @@ class CompressibleHybridisedSCPC(PCBase):
         self.Vtrace = FunctionSpace(self.mesh, "HDiv Trace", degree=(h_deg, v_deg))
 
         # Mixed Function Spaces
-        self.W = equations.function_space # (Vu, Vrho, Vtheta)
+        self.W = equations.function_space
         self.W_hyb = MixedFunctionSpace((self.Vu_broken, self.Vrho, self.Vtrace))
 
         # Define
@@ -591,7 +601,7 @@ class CompressibleHybridisedSCPC(PCBase):
         kappa = equations.parameters.kappa
         R_d = equations.parameters.R_d
         p_0 = equations.parameters.p_0
-        exnerbar =  (rhobar * R_d * thetabar / p_0) ** (kappa / (1 - kappa))
+        exnerbar = (rhobar * R_d * thetabar / p_0) ** (kappa / (1 - kappa))
         exnerbar_rho = (kappa / (1 - kappa)) * (rhobar * R_d * thetabar / p_0) ** (kappa / (1 - kappa)) / rhobar
         exnerbar_theta = (kappa / (1 - kappa)) * (rhobar * R_d * thetabar / p_0) ** (kappa / (1 - kappa)) / thetabar
 
@@ -640,17 +650,12 @@ class CompressibleHybridisedSCPC(PCBase):
             theta_w = theta
             thetabar_w = thetabar
 
-
         _l0 = TrialFunction(self.Vtrace)
         _dl = TestFunction(self.Vtrace)
         a_tr = _dl('+')*_l0('+')*(dS_v_qp + dS_h_qp) + _dl*_l0*ds_v_qp + _dl*_l0*ds_tb_qp
 
         def L_tr(f):
             return _dl('+')*avg(f)*(dS_v_qp + dS_h_qp) + _dl*f*ds_v_qp + _dl*f*ds_tb_qp
-
-        cg_ilu_parameters = {'ksp_type': 'cg',
-                             'pc_type': 'bjacobi',
-                             'sub_pc_type': 'ilu'}
 
         # Project field averages into functions on the trace space
         rhobar_avg = Function(self.Vtrace)
@@ -662,19 +667,19 @@ class CompressibleHybridisedSCPC(PCBase):
                                                  constant_jacobian=True)
 
         self.rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
-                                                      solver_parameters=cg_ilu_parameters,
+                                                      solver_parameters=self.rho_avg_solver_parameters,
                                                       options_prefix=pc.getOptionsPrefix()+'rhobar_avg_solver')
         self.exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
-                                                        solver_parameters=cg_ilu_parameters,
+                                                        solver_parameters=self.exner_avg_solver_parameters,
                                                         options_prefix=pc.getOptionsPrefix()+'exnerbar_avg_solver')
 
-        # # "broken" u, rho, and trace system
-        # # NOTE: no ds_v integrals since equations are defined on
-        # # a periodic (or sphere) base mesh.
-        if  any([t.has_label(hydrostatic) for t in equations.residual]):
+        # "broken" u, rho, and trace system
+        # NOTE: no ds_v integrals since equations are defined on
+        # a periodic (or sphere) base mesh.
+        if any([t.has_label(hydrostatic) for t in equations.residual]):
             u_mass = inner(w, (h_project(u) - u_in))*dx
         else:
-            u_mass = inner(w, (u - u_in ))*dx
+            u_mass = inner(w, (u - u_in))*dx
 
         eqn = (
             # momentum equation
@@ -718,9 +723,9 @@ class CompressibleHybridisedSCPC(PCBase):
         hybridized_prb = LinearVariationalProblem(aeqn, Leqn, self.y_hybrid,
                                                   constant_jacobian=True)
         self.hybridized_solver = LinearVariationalSolver(hybridized_prb,
-                                                    solver_parameters=self.scpc_parameters,
-                                                    options_prefix=pc.getOptionsPrefix()+self._prefix,
-                                                    appctx=appctx)
+                                                         solver_parameters=self.hybridised_scpc_parameters,
+                                                         options_prefix=pc.getOptionsPrefix()+self._prefix,
+                                                         appctx=appctx)
 
         # Project broken u into the HDiv space using facet averaging.
         # Weight function counting the dofs of the HDiv element:
@@ -744,18 +749,14 @@ class CompressibleHybridisedSCPC(PCBase):
 
         theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta,
                                                  constant_jacobian=True)
-        cg_ilu_parameters = {'ksp_type': 'cg',
-                            'pc_type': 'bjacobi',
-                            'sub_pc_type': 'ilu'}
+
         self.theta_solver = LinearVariationalSolver(theta_problem,
-                                                    solver_parameters=cg_ilu_parameters,
+                                                    solver_parameters=self.theta_solver_parameters,
                                                     options_prefix=pc.getOptionsPrefix()+'thetabacksubstitution')
         # Project reference profiles at initialisation
         self.rho_avg_solver.solve()
         self.exner_avg_solver.solve()
         self.hybridized_solver.invalidate_jacobian()
-
-
 
     def apply(self, pc, x, y):
         """
@@ -791,11 +792,9 @@ class CompressibleHybridisedSCPC(PCBase):
         self.theta_solver.solve()
         self.y.subfunctions[2].assign(self.theta)
 
-        
         with self.y.dat.vec_ro as vout:
             # copy into PETSc output vector
             vout.copy(y)
-
 
     def update(self, pc):
         PETSc.Sys.Print("[PC.update] Updating hybridized PC")
@@ -804,7 +803,6 @@ class CompressibleHybridisedSCPC(PCBase):
             self.rho_avg_solver.solve()
             self.exner_avg_solver.solve()
             self.hybridized_solver.invalidate_jacobian()
-
 
     def _process_context(self, pc):
         appctx = self.get_appctx(pc)
@@ -834,7 +832,3 @@ class CompressibleHybridisedSCPC(PCBase):
         """
 
         raise NotImplementedError("The transpose application of the PC is not implemented.")
-
-
-
-

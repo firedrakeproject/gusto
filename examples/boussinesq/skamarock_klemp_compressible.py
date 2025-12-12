@@ -15,8 +15,7 @@ from firedrake import (
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, SUPGOptions, Divergence, Perturbation, CourantNumber,
-    BoussinesqParameters, BoussinesqEquations, BoussinesqSolver, LinearTimesteppingSolver,
-    boussinesq_hydrostatic_balance
+    BoussinesqParameters, BoussinesqEquations, boussinesq_hydrostatic_balance
 )
 
 skamarock_klemp_compressible_bouss_defaults = {

@@ -13,7 +13,7 @@ from gusto.core.labels import (transport, diffusion, sponge, incompressible)
 from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
-from gusto.timestepping.semi_implicit_quasi_newton import Forcing, SIQNLinearSolver
+from gusto.timestepping.semi_implicit_quasi_newton import Forcing, QuasiNewtonLinearSolver
 from gusto.solvers.solver_presets import HybridisedSolverParameters
 
 
@@ -253,7 +253,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             else:
                 self.tr_solver_parameters = tr_solver_parameters
                 self.tr_appctx = tr_appctx
-            self.tr_solver = SIQNLinearSolver(
+            self.tr_solver = QuasiNewtonLinearSolver(
                 equation_set, solver_prognostics, self.implicit_terms,
                 self.gamma,
                 solver_parameters=self.tr_solver_parameters,
@@ -269,7 +269,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             else:
                 self.bdf_solver_parameters = bdf_solver_parameters
                 self.bdf_appctx = bdf_appctx
-            self.bdf_solver = SIQNLinearSolver(
+            self.bdf_solver = QuasiNewtonLinearSolver(
                 equation_set, solver_prognostics, self.implicit_terms,
                 self.gamma2,
                 solver_parameters=self.bdf_solver_parameters,

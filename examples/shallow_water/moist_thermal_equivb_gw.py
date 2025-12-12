@@ -11,8 +11,8 @@ from gusto import (
     Domain, IO, OutputParameters, DGUpwind, ShallowWaterParameters,
     ThermalShallowWaterEquations, lonlatr_from_xyz, MeridionalComponent,
     GeneralIcosahedralSphereMesh, SubcyclingOptions, ZonalComponent,
-    PartitionedCloud, RungeKuttaFormulation, SSPRK3, LinearTimesteppingSolver,
-    SemiImplicitQuasiNewton, xyz_vector_from_lonlatr, ThermalSWSolver
+    PartitionedCloud, RungeKuttaFormulation, SSPRK3,
+    SemiImplicitQuasiNewton, xyz_vector_from_lonlatr
 )
 
 moist_thermal_gw_defaults = {
@@ -61,8 +61,6 @@ def moist_thermal_gw(
     # Equation parameters
     parameters = ShallowWaterParameters(mesh, H=mean_depth, q0=q0,
                                         nu=nu, beta2=beta2)
-    Omega = parameters.Omega
-    fexpr = 2*Omega*xyz[2]/radius
 
     # Equation
     eqns = ThermalShallowWaterEquations(
@@ -97,7 +95,6 @@ def moist_thermal_gw(
         SSPRK3(domain, "q_t", subcycling_options=subcycling_opts),
     ]
 
-    solver = ThermalSWSolver(eqns)
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods, solver_prognostics=["u", "D", "b_e"]
     )

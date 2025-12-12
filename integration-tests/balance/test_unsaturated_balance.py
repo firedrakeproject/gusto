@@ -85,32 +85,12 @@ def setup_unsaturated(dirname, recovered):
                          DGUpwind(eqns, 'water_vapour'),
                          DGUpwind(eqns, 'cloud_water')]
 
-    # Linear solver
-    solver_parameters = HybridisedSolverParameters(eqns.name)
-
-    def trace_nullsp(T):
-        return VectorSpaceBasis(constant=True)
-
-
-    appctx = {
-        'equations': eqns,
-        'alpha': 0.5,
-        'trace_nullspace': trace_nullsp
-    }
-
-    linear_solver = SIQNLinearSolver(
-        eqns, solver_prognostics=["u", "rho", "theta"], alpha=0.5, implicit_terms=[incompressible, sponge],
-        solver_parameters=solver_parameters,
-        appctx=appctx, enforce_pc_on_rhs=True
-    )
-
     # Set up physics
     physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain))]
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       transport_methods,
-                                      linear_solver=linear_solver,
                                       physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #

@@ -34,7 +34,6 @@ def set_up_model_objects(mesh, dt, output, stepper_type, ref_update_freq):
                               SSPRK3(domain, "rho"),
                               SSPRK3(domain, "theta")]
 
-
         # build time stepper
         stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                           transport_methods,

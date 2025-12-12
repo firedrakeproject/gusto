@@ -40,8 +40,6 @@ class BoussinesqEquations(PrognosticEquationSet):
     where k is the vertical unit vector and Ω is the planet's rotation vector.
     """
 
-    name = "BoussinesqEquations"
-
     def __init__(self, domain, parameters,
                  compressible=True,
                  space_names=None,
@@ -197,7 +195,7 @@ class BoussinesqEquations(PrognosticEquationSet):
             # "forcing" step replaces the whole pressure field, rather than
             # merely providing an increment to it.
             linear_div_form = incompressible(
-                subject(prognostic(phi*(-div(u_trial))*dx, 'p'), self.X))
+                subject(prognostic(phi*(p_trial-div(u_trial))*dx, 'p'), self.X))
             divergence_form = incompressible(linearisation(
                 subject(prognostic(phi*(p-div(u))*dx, 'p'), self.X),
                 linear_div_form))
@@ -230,7 +228,6 @@ class BoussinesqEquations(PrognosticEquationSet):
         beta_p = dt*tau_values.get("p", alpha)
         beta_b = dt*tau_values.get("b", alpha)
         Vu = domain.spaces("HDiv")
-        Vb = domain.spaces("theta")
         Vp = domain.spaces("DG")
 
         # Build the reduced function space for u,p

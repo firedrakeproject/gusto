@@ -5,12 +5,10 @@ and GungHo dynamical cores.
 
 from firedrake import (
     Function, Constant, TrialFunctions, DirichletBC, div, assemble,
-    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace, action,
-    inner, TestFunction, dx, split
+    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace, action
 )
 from firedrake.fml import drop, replace_subject, Term
 from firedrake.__future__ import interpolate
-from firedrake.petsc import flatten_parameters
 from pyop2.profiling import timed_stage, timed_function
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (
@@ -24,7 +22,7 @@ from gusto.timestepping.timestepper import BaseTimestepper
 from gusto.solvers.solver_presets import HybridisedSolverParameters
 
 
-__all__ = ["SemiImplicitQuasiNewton", "Forcing", "SIQNLinearSolver"]
+__all__ = ["SemiImplicitQuasiNewton", "Forcing", "QuasiNewtonLinearSolver"]
 
 
 class SemiImplicitQuasiNewton(BaseTimestepper):
@@ -199,7 +197,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             else:
                 self.linear_solver_parameters = linear_solver_parameters
                 self.appctx = appctx
-            self.linear_solver = SIQNLinearSolver(
+            self.linear_solver = QuasiNewtonLinearSolver(
                 equation_set, solver_prognostics, self.implicit_terms,
                 self.alpha, tau_values=tau_values,
                 solver_parameters=self.linear_solver_parameters,
@@ -482,7 +480,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
     def timestep(self):
         """Defines the timestep"""
-        from firedrake import PETSc, norm
         xn = self.x.n
         xnp1 = self.x.np1
         xstar = self.x.star
@@ -768,7 +765,7 @@ class Forcing(object):
                 x_out.subfunctions[field_index].assign(x_in(field_name))
 
 
-class SIQNLinearSolver(object):
+class QuasiNewtonLinearSolver(object):
     """
     Sets up the linear solver for the Semi-Implicit Quasi-Newton timestepper.
 
@@ -930,12 +927,11 @@ class SIQNLinearSolver(object):
             dy (:class:`Function`): the resulting increment field in the
                 appropriate :class:`MixedFunctionSpace`.
         """
-        from firedrake import PETSc, norm
 
         self.xrhs.assign(xrhs)
         self.zero_non_prognostics(self.equation, self.xrhs,
-                                 self.equation.field_names,
-                                 self.solver_prognostics)
+                                  self.equation.field_names,
+                                  self.solver_prognostics)
         self.dy.assign(0.0)
 
         self.solver.solve()

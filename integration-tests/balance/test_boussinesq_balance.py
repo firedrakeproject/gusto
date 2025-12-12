@@ -46,28 +46,9 @@ def setup_balance(dirname):
                          DGUpwind(eqns, 'p'),
                          DGUpwind(eqns, 'b')]
 
-    # Set up linear solver
-    solver_parameters = HybridisedSolverParameters(eqns.name)
-
-    def trace_nullsp(T):
-        return VectorSpaceBasis(constant=True)
-
-
-    appctx = {
-        'auxform': eqns.schur_complement_form(alpha=0.5),
-        "trace_nullspace": trace_nullsp,
-    }
-
-    linear_solver = SIQNLinearSolver(
-        eqns, solver_prognostics=["u", "p", "b"], alpha=0.5, implicit_terms=[incompressible, sponge],
-        solver_parameters=solver_parameters,
-        appctx=appctx
-    )
-
     # build time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                      transport_methods,
-                                      linear_solver=linear_solver)
+                                      transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

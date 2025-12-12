@@ -15,12 +15,11 @@ from firedrake import (
     SpatialCoordinate, exp, pi, cos, Function, Mesh, Constant
 )
 from gusto import (
-    Domain, CompressibleParameters, CompressibleSolver, logger,
+    Domain, CompressibleParameters, logger,
     OutputParameters, IO, SSPRK3, DGUpwind, SemiImplicitQuasiNewton,
     compressible_hydrostatic_balance, SpongeLayerParameters, Exner, ZComponent,
     Perturbation, SUPGOptions, TrapeziumRule, MaxKernel, MinKernel,
-    CompressibleEulerEquations, SubcyclingOptions, RungeKuttaFormulation,
-    HybridisedSolverParameters, SIQNLinearSolver, incompressible, sponge
+    CompressibleEulerEquations, SubcyclingOptions, RungeKuttaFormulation
 )
 
 schaer_mountain_defaults = {
@@ -136,9 +135,10 @@ def schaer_mountain(
     ]
 
     # Time stepper
+    tau_values = {'rho': 1.0, 'theta': 1.0}
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        alpha=alpha, spinup_steps=spinup_steps
+        alpha=alpha, tau_values=tau_values, spinup_steps=spinup_steps
     )
 
     # ------------------------------------------------------------------------ #

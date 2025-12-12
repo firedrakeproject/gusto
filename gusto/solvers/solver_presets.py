@@ -5,13 +5,15 @@ The solvers provided here are used for solving linear problems on mixed
 finite element spaces.
 """
 
-from gusto.equations import CompressibleEulerEquations, BoussinesqEquations, \
-                            ShallowWaterEquations, ShallowWaterEquations_1d
+from gusto.equations import (CompressibleEulerEquations, BoussinesqEquations,
+                             ShallowWaterEquations, ShallowWaterEquations_1d
+                             )
 from firedrake import (
-    VectorSpaceBasis, COMM_WORLD
+    VectorSpaceBasis
 )
 
 __all__ = ["HybridisedSolverParameters"]
+
 
 def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=False):
     """
@@ -34,58 +36,18 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
     appctx : dict
         A dictionary containing the application context for the solver.
     """
-    def trace_nullsp(T):
-            return VectorSpaceBasis(constant=True)
-    if isinstance(equation, CompressibleEulerEquations):
-        scpc_params = {'mat_type': 'matfree',
-                        'ksp_type': 'preonly',
-                        'ksp_converged_reason': None,
-                        'ksp_monitor_true_residual': None,
-                        'pc_type': 'python',
-                        'pc_python_type': 'firedrake.SCPC',
-                        'pc_sc_eliminate_fields': '0, 1',
-                        # The reduced operator is not symmetric
-                        'condensed_field': {'ksp_type': 'fgmres',
-                                            'ksp_rtol': 1.0e-8,
-                                            'ksp_atol': 1.0e-8,
-                                            'ksp_max_it': 100,
-                                            'pc_type': 'gamg',
-                                            'pc_gamg_sym_graph': None,
-                                            'mg_levels': {'ksp_type': 'gmres',
-                                                        'ksp_max_it': 5,
-                                                        'pc_type': 'bjacobi',
-                                                        'sub_pc_type': 'ilu'}}}
-        rhobar_params = {'ksp_type': 'cg',
-                             'pc_type': 'bjacobi',
-                             'sub_pc_type': 'ilu'}
-        pibar_params = {'ksp_type': 'cg',
-                                'pc_type': 'bjacobi',
-                                'sub_pc_type': 'ilu'}
-        thetabacksub_params = {'ksp_type': 'cg',
-                                        'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'}
-        settings =  {'ksp_monitor': None,
-                        'ksp_type': 'preonly',
-                        'mat_type': 'matfree',
-                        'pc_type': 'python',
-                        'pc_python_type': 'gusto.CompressibleHybridisedSCPC',
-        }
 
-        if nonlinear:
-            settings.update({
-                'snes_type': 'ksponly',
-                'ksp_type': 'fgmres',
-                'snes_max_it': 50,
-                'snes_monitor': None,
-                'ksp_rtol': 1e-2,
-                'ksp_max_it': 100,
-                'ksp_atol': 1e-2,
-                'snes_rtol': 1e-4,
-                'snes_atol': 1e-6,
-                'mat_type': 'aij',
-                'snes_converged_reason': None,
-                'snes_view': None,
-            })
+    def trace_nullsp(T):
+        return VectorSpaceBasis(constant=True)
+
+    if isinstance(equation, CompressibleEulerEquations):
+
+        settings = {'ksp_monitor': None,
+                    'ksp_type': 'preonly',
+                    'mat_type': 'matfree',
+                    'pc_type': 'python',
+                    'pc_python_type': 'gusto.CompressibleHybridisedSCPC',
+                    }
 
         appctx = {
             'equations': equation,
@@ -159,9 +121,9 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                 'pc_type': 'python',
                 'pc_python_type': 'firedrake.HybridizationPC',
                 'hybridization': {'ksp_type': 'cg',
-                                'pc_type': 'gamg',
-                                'ksp_rtol': 1e-8,
-                                'mg_levels': {'ksp_type': 'chebyshev',
+                                  'pc_type': 'gamg',
+                                  'ksp_rtol': 1e-8,
+                                  'mg_levels': {'ksp_type': 'chebyshev',
                                                 'ksp_max_it': 2,
                                                 'pc_type': 'bjacobi',
                                                 'sub_pc_type': 'ilu'}}
@@ -226,7 +188,6 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
         elif fields[0:2] == ['u', 'D'] and len(fields) > 2 and fields[2] not in ['b', 'b_e']:
 
             # (u, D, scalars) system - moist convective shallow water
-            print("Moist convective shallow water hybridised solver settings")
 
             # Create scalars list
             scalars = ",".join(str(idx) for idx, name in enumerate(fields) if name not in ['u', 'D'])
@@ -271,7 +232,6 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
         elif (fields[0:3] == ['u', 'D', 'b'] or fields[0:3] == ['u', 'D', 'b_e']) and len(fields) > 3:
             # (u, D, b, scalars) system - moist thermal shallow water
             scalars = ",".join(str(idx) for idx, name in enumerate(fields) if name not in ['u', 'D', 'b', 'b_e'])
-            print(scalars)
             settings = {
                 'ksp_monitor_true_residual': None,
                 'ksp_view': ':ksp_view.log',
@@ -289,8 +249,6 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                     'pc_fieldsplit_1_fields': '0,1',
                     'pc_fieldsplit_0_fields': '2',  # eliminate temperature
                     'fieldsplit_L2': {
-                        'ksp_monitor': None,
-                        'ksp_monitor_true_residual': None,
                         'ksp_type': 'preonly',
                         'pc_type': 'python',
                         'pc_python_type': 'firedrake.AssembledPC',
@@ -327,30 +285,24 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                     },
                 },
                 'fieldsplit_L2': {
-                    'ksp_monitor': None,
-                    'ksp_monitor_true_residual': None,
                     'ksp_type': 'preonly',
                     'pc_type': 'none',
                 },
             }
 
-
             appctx = {'auxform': equation.schur_complement_form(alpha=alpha)}
-            print("Moist thermal shallow water hybridised solver settings")
-        
-    #     if nonlinear:
-    #         settings['ksp_type'] = 'preonly'
-    #         settings['snes_type'] = 'newtonls'
-    #         settings['snes_rtol'] = 1e-8
-    #         settings['snes_max_it'] = 50
-    #         settings['snes_monitor'] = None
-    #         settings['ksp_rtol'] = 1e-8
-    #         settings['ksp_max_it'] = 100
-    #         settings['ksp_atol'] = 1e-8
-    #         settings['snes_rtol'] = 1e-4
-    #         settings['snes_atol'] = 1e-6
-    #         settings['snes_converged_reason'] = None
-    #         settings['snes_view'] = None
-    # print(settings)
-    # breakpoint()
+
+        if nonlinear:
+            settings['ksp_type'] = 'fgmres'
+            settings['snes_type'] = 'newtonls'
+            settings['snes_rtol'] = 1e-8
+            settings['snes_max_it'] = 50
+            settings['snes_monitor'] = None
+            settings['ksp_rtol'] = 1e-8
+            settings['ksp_max_it'] = 100
+            settings['ksp_atol'] = 1e-8
+            settings['snes_rtol'] = 1e-4
+            settings['snes_atol'] = 1e-6
+            settings['snes_converged_reason'] = None
+            settings['snes_view'] = None
     return settings, appctx

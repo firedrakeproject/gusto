@@ -15,9 +15,7 @@ from firedrake import (
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, SUPGOptions, Divergence, Perturbation, CourantNumber,
-    BoussinesqParameters, BoussinesqEquations, BoussinesqSolver,
-    boussinesq_hydrostatic_balance, incompressible, sponge, SIQNLinearSolver,
-    HybridisedSolverParameters, LinearTimesteppingSolver
+    BoussinesqParameters, BoussinesqEquations, boussinesq_hydrostatic_balance
 )
 
 skamarock_klemp_incompressible_bouss_defaults = {
@@ -87,21 +85,11 @@ def skamarock_klemp_incompressible_bouss(
         DGUpwind(eqns, "u"),
         DGUpwind(eqns, "b", ibp=b_opts.ibp)
     ]
-    solver_opts = "new"
-    if solver_opts == "old":
-        solver = BoussinesqSolver(eqns)
-        # Time stepper
-        stepper = SemiImplicitQuasiNewton(
-            eqns, io, transported_fields, transport_methods,
-            linear_solver=solver
-        )
-    else:
-        #solver_settings, appctx = HybridisedSolverParameters(eqns)
-        #linear_solver = LinearTimesteppingSolver(eqns, alpha=0.5, solver_parameters=solver_settings, options_prefix="boussinesq", appctx=appctx)
-        # Time stepper
-        stepper = SemiImplicitQuasiNewton(
-            eqns, io, transported_fields, transport_methods, solver_prognostics=["u", "b"]
-        )
+
+    # Timestepper - pressure p is diagnostic
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods, solver_prognostics=["u", "b"]
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

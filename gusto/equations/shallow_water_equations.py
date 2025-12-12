@@ -571,21 +571,11 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
 
             # bbar was be_bar and here we correct to become bbar
             bref += self.parameters.beta2 * self.qvbar
-        seqn = (
-            inner(w_, u_) * dx
-            - beta_u * D_ * div(w_*bref) * dx
-            + beta_u * jump(w_*bref, n) * avg(D_) * dS
-            - beta_u * 0.5 * Dref * b_ * div(w_) * dx
-            - beta_u * 0.5 * bref * div(w_*D_) * dx
-            + beta_u * 0.5 * jump(D_*w_, n) * avg(bref) * dS
-            + inner(phi_, D_) * dx
-            + beta_d * phi_ * div(Dref*u_) * dx
-        )
+
         seqn = (
             inner(w_, (u_)) * dx
             - beta_u * (D_) * div(w_*bref) * dx
             + beta_u * jump(w_*bref, n) * avg(D_) * dS
-            #- beta_u * 0.5 * Dbar * bbar * div(w) * dx
             - beta_u * 0.5 * Dref * b_ * div(w_) * dx
             - beta_u * 0.5 * bref * div(w_*(D_)) * dx
             + beta_u * 0.5 * jump((D_)*w_, n) * avg(bref) * dS
@@ -603,6 +593,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         return seqn, sbcs
 
     def update_reference_profiles(self):
+        "Update reference profiles for equivalent buoyancy formulation."
         if self.equivalent_buoyancy:
             self.q_sat_func.assign(assemble(self.q_sat_expr_interpolate))
             self.qvbar.assign(assemble(self.q_v_interpolate))
@@ -612,7 +603,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             bbar_func = Function(b.function_space()).interpolate(bbar)
             if bbar_func.dat.data.max() == 0 and bbar_func.dat.data.min() == 0:
                 logger.warning("The reference profile for b in the linear solver is zero. To set a non-zero profile add b to the set_reference_profiles argument.")
-                logger.info(f'Updated equivalent buoyancy reference profile.')
+            logger.info("Updated equivalent buoyancy reference profile.")
 
 
 class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):
@@ -706,8 +697,6 @@ class ShallowWaterEquations_1d(PrognosticEquationSet):
             that encode the metadata for any active tracers to be included
             in the equations. Defaults to None.
     """
-
-    name = "ShallowWaterEquations_1d"
 
     def __init__(self, domain, parameters,
                  space_names=None, linearisation_map=all_terms,
@@ -807,8 +796,6 @@ class LinearShallowWaterEquations_1d(ShallowWaterEquations_1d):
     This is set up the from the underlying :class:`ShallowWaterEquations_1d`,
     which is then linearised.
     """
-
-    name = "LinearShallowWaterEquations_1d"
 
     def __init__(self, domain, parameters,
                  space_names=None, linearisation_map=all_terms,
