@@ -6,14 +6,14 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 """
 
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
-                       FiniteElement, TensorProductElement)
+                       FiniteElement, TensorProductElement, Constant)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
-from gusto.core.kernels import LimitMidpoints, ClipZero
+from gusto.core.kernels import LimitMidpoints, ClipZero, MeanMixingRatioWeights
 
 import numpy as np
 
 __all__ = ["DG1Limiter", "ThetaLimiter", "NoLimiter", "ZeroLimiter",
-           "MixedFSLimiter"]
+           "MixedFSLimiter", "MeanLimiter"]
 
 
 class DG1Limiter(object):
@@ -261,3 +261,91 @@ class MixedFSLimiter(object):
         for field, sublimiter in self.sublimiters.items():
             field = fields.subfunctions[self.field_idxs[field]]
             sublimiter.apply(field)
+
+
+class MeanLimiter(object):
+    """
+    A mass-preserving limiter for mixing ratios that ensures non-negativity
+    by blending the mixing ratio with its associated mean field.
+    The blending factor is given by the DG0 function lamda. The same lamda
+    is used when there are multiple fields, for mass conservation.
+    """
+
+    def __init__(self, spaces):
+        """
+        Args:
+            spaces: The function spaces for the DG1 mixing ratios
+        Raises:
+            ValueError: If the space is not appropriate for the limiter, i.e DG1
+        """
+
+        # The Mean Limiter is currently set up for mixing ratios in DG1.
+        for space in spaces:
+            degree = space.ufl_element().degree()
+            if (space.ufl_element().sobolev_space.name != 'L2'
+                or ((type(degree) is tuple and np.any([deg != 1 for deg in degree]))
+                    and degree != 1)):
+                raise NotImplementedError('MeanLimiter only implemented for mixing'
+                                          + 'ratios in the DG1 space')
+
+        self.space = spaces[0]
+        mesh = self.space.mesh()
+
+        # Create equispaced DG1 space needed for limiting
+        if space.extruded:
+            cell = mesh._base_mesh.ufl_cell().cellname()
+            DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
+            DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
+            DG1_element = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
+        else:
+            cell = mesh.ufl_cell().cellname()
+            DG1_element = FiniteElement("DG", cell, 1, variant="equispaced")
+
+        DG1_equispaced = FunctionSpace(mesh, DG1_element)
+        DG0 = FunctionSpace(mesh, 'DG', 0)
+        DG1 = FunctionSpace(mesh, 'DG', 1)
+
+        self.lamda = Function(DG0)
+        self.mX_field = Function(DG1_equispaced)
+        self.mean_field = Function(DG0)
+        self.mX_new = Function(DG1_equispaced)
+
+        self._lamda_kernel = MeanMixingRatioWeights(DG1_equispaced)
+
+        # Also construct kernels to clip any very small negatives
+        # that arise from numerical error. These are used in the
+        # mean mixing ratio augmentation limit routine.
+        self._clip_DG1_field = ClipZero(DG1)
+        self._clip_means_kernel = ClipZero(DG0)
+
+    def apply(self, mX_fields, mean_fields):
+        """
+        Compute the limiter weights, lambda, and use these
+        to combine the DG1 mixing ratio and DG0 mean field
+        to ensure non-negativity.
+
+        Args:
+            mX_fields (:class:`Function`): the DG1 mixing ratios to limit.
+            mean_fields (:class:`Function`): the DG0 mean field associated with
+            each mX_field.
+         """
+
+        # Remove weights from previous applications
+        self.lamda.interpolate(Constant(0.0))
+
+        for i in range(len(mX_fields)):
+            # Interpolate fields from DG1 to DG1 equispaced
+            self.mX_field.interpolate(mX_fields[i])
+            self.mean_field.interpolate(mean_fields[i])
+
+            # Update the weights based on any negative values
+            self._lamda_kernel.apply(self.lamda, self.mX_field, self.mean_field)
+
+        # Perform blended limiting, with all mixing ratios using
+        # the same lambda field to ensure conservation.
+        for i in range(len(mX_fields)):
+            self.mX_field.interpolate(mX_fields[i])
+            self.mean_field.interpolate(mean_fields[i])
+
+            self.mX_new.interpolate((Constant(1.0) - self.lamda)*self.mX_field + self.lamda*self.mean_field)
+            mX_fields[i].interpolate(self.mX_new)

@@ -20,11 +20,16 @@ from firedrake import (
 )
 import numpy as np
 from gusto import (
-    Domain, IO, OutputParameters, TRBDF2QuasiNewton, SemiImplicitQuasiNewton, SSPRK3,
-    DGUpwind, logger, SUPGOptions, Perturbation, CompressibleParameters,
+    Domain, IO, OutputParameters, TRBDF2QuasiNewton, SemiImplicitQuasiNewton,
+    DGUpwind, logger, EmbeddedDGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
+<<<<<<< HEAD
     compressible_hydrostatic_balance, RungeKuttaFormulation,
     SubcyclingOptions
+=======
+    compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
+    hydrostatic_parameters, SubcyclingOptions, SSPRK3
+>>>>>>> main
 )
 PETSc.Sys.popErrorHandler()
 
@@ -69,6 +74,12 @@ def skamarock_klemp_nonhydrostatic(
 
     element_order = 1
 
+    if timestepper == 'TR-BDF2':
+        gamma = (1-sqrt(2)/2)
+        gamma2 = (1 - 2*float(gamma))/(2 - 2*float(gamma))
+    else:
+        alpha = 0.5
+
     # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
@@ -93,6 +104,11 @@ def skamarock_klemp_nonhydrostatic(
     # Adjust default directory name
     if hydrostatic and dirname == skamarock_klemp_nonhydrostatic_defaults['dirname']:
         dirname = f'hyd_switch_{dirname}'
+    if timestepper == 'TR-BDF2' and (
+        dirname == skamarock_klemp_nonhydrostatic_defaults['dirname']
+        or dirname == f'hyd_switch_{skamarock_klemp_nonhydrostatic_defaults["dirname"]}'
+    ):
+        dirname = f'{dirname}_trbdf2'
 
     # Dumping point data using legacy PointDataOutput is not supported in parallel
     if COMM_WORLD.size == 1:
@@ -115,11 +131,10 @@ def skamarock_klemp_nonhydrostatic(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    theta_opts = SUPGOptions()
-    if timestepper == 'SIQN':
-        subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
-    else:
-        subcycling_options = None
+    # We include subcycling here for test coverage,
+    # it is not necessary to subcycle for this test case!
+    subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
+    theta_opts = EmbeddedDGOptions()
     transported_fields = [
         SSPRK3(domain, "u", subcycling_options=subcycling_options),
         SSPRK3(
@@ -134,23 +149,26 @@ def skamarock_klemp_nonhydrostatic(
     transport_methods = [
         DGUpwind(eqns, "u"),
         DGUpwind(eqns, "rho", advective_then_flux=True),
-        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
+        DGUpwind(eqns, "theta")
     ]
+
+    # Linear solver
+    # The use of advective-then-flux formulation and 2x2 Quasi-Newton iterations
+    # requires tau values to take implicit values for rho and theta
+    tau_values = {'rho': 1.0, 'theta': 1.0}
+    if hydrostatic and timestepper == 'TR-BDF2':
+        raise ValueError('Hydrostatic equations not implmented for TR-BDF2')
 
     # Time stepper
     if timestepper == 'TR-BDF2':
-        if hydrostatic:
-            raise ValueError('Hydrostatic equations not implmented for TR-BDF2')
-        gamma = (1-sqrt(2)/2)
-
         stepper = TRBDF2QuasiNewton(
             eqns, io, transported_fields, transport_methods,
-            gamma=gamma
+            gamma=gamma, tau_values=tau_values
         )
 
     elif timestepper == 'SIQN':
         stepper = SemiImplicitQuasiNewton(
-            eqns, io, transported_fields, transport_methods
+            eqns, io, transported_fields, transport_methods, alpha=alpha, tau_values=tau_values
         )
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -253,7 +271,7 @@ if __name__ == "__main__":
         default=skamarock_klemp_nonhydrostatic_defaults['hydrostatic']
     )
     parser.add_argument(
-        'timestepper',
+        '--timestepper',
         help='Which time stepper to use, takes SIQN or TR-BDF2',
         type=str,
         choices=['SIQN', 'TR-BDF2'],
