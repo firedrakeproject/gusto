@@ -100,7 +100,7 @@ def skamarock_klemp_incompressible_bouss(
         #linear_solver = LinearTimesteppingSolver(eqns, alpha=0.5, solver_parameters=solver_settings, options_prefix="boussinesq", appctx=appctx)
         # Time stepper
         stepper = SemiImplicitQuasiNewton(
-            eqns, io, transported_fields, transport_methods, solver_prognostics=["u", "p", "b"]
+            eqns, io, transported_fields, transport_methods, solver_prognostics=["u", "b"]
         )
 
     # ------------------------------------------------------------------------ #

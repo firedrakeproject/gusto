@@ -96,9 +96,9 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
             appctx['tau_values'] = tau_values
     elif isinstance(equation, BoussinesqEquations):
         settings = {
-            # 'ksp_monitor_true_residual': None,
-            # 'ksp_view': ':ksp_view.log',
-            # 'ksp_error_if_not_converged': None,
+            'ksp_monitor_true_residual': None,
+            'ksp_view': ':ksp_view.log',
+            'ksp_error_if_not_converged': None,
             'mat_type': 'matfree',
             'ksp_type': 'preonly',
             'pc_type': 'fieldsplit',
@@ -114,6 +114,7 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                 'assembled_sub_pc_type': 'ilu',
             },
             'fieldsplit_1': {
+                'ksp_monitor': None,
                 'ksp_type': 'preonly',
                 'pc_type': 'python',
                 'pc_python_type': 'gusto.AuxiliaryPC',
@@ -123,8 +124,6 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                     'pc_type': 'python',
                     'pc_python_type': 'firedrake.HybridizationPC',
                     'hybridization': {
-                        'ksp_monitor': None,
-                        'ksp_monitor_true_residual': None,
                         'ksp_type': 'cg',
                         'pc_type': 'gamg',
                         'ksp_rtol': 1e-8,
@@ -272,6 +271,7 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
         elif (fields[0:3] == ['u', 'D', 'b'] or fields[0:3] == ['u', 'D', 'b_e']) and len(fields) > 3:
             # (u, D, b, scalars) system - moist thermal shallow water
             scalars = ",".join(str(idx) for idx, name in enumerate(fields) if name not in ['u', 'D', 'b', 'b_e'])
+            print(scalars)
             settings = {
                 'ksp_monitor_true_residual': None,
                 'ksp_view': ':ksp_view.log',
@@ -290,6 +290,7 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                     'pc_fieldsplit_0_fields': '2',  # eliminate temperature
                     'fieldsplit_L2': {
                         'ksp_monitor': None,
+                        'ksp_monitor_true_residual': None,
                         'ksp_type': 'preonly',
                         'pc_type': 'python',
                         'pc_python_type': 'firedrake.AssembledPC',
@@ -297,6 +298,7 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                         'assembled_sub_pc_type': 'ilu',
                     },
                     'fieldsplit_1': {
+                        'ksp_monitor_true_residual': None,
                         'ksp_monitor': None,
                         'ksp_type': 'preonly',
                         'pc_type': 'python',
@@ -325,6 +327,8 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
                     },
                 },
                 'fieldsplit_L2': {
+                    'ksp_monitor': None,
+                    'ksp_monitor_true_residual': None,
                     'ksp_type': 'preonly',
                     'pc_type': 'none',
                 },

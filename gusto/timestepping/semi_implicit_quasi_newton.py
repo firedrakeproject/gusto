@@ -6,7 +6,7 @@ and GungHo dynamical cores.
 from firedrake import (
     Function, Constant, TrialFunctions, DirichletBC, div, assemble,
     LinearVariationalProblem, LinearVariationalSolver, FunctionSpace, action,
-    inner, TestFunction, dx
+    inner, TestFunction, dx, split
 )
 from firedrake.fml import drop, replace_subject, Term
 from firedrake.__future__ import interpolate
@@ -870,7 +870,6 @@ class SIQNLinearSolver(object):
             lambda t: t.has_label(time_derivative), map_if_false=drop
         )
 
-
         # Place to put result of solver
         self.dy = Function(W)
 
@@ -931,35 +930,14 @@ class SIQNLinearSolver(object):
             dy (:class:`Function`): the resulting increment field in the
                 appropriate :class:`MixedFunctionSpace`.
         """
-        from firedrake import PETSc, norm, Constant
+        from firedrake import PETSc, norm
 
         self.xrhs.assign(xrhs)
         self.zero_non_prognostics(self.equation, self.xrhs,
                                  self.equation.field_names,
                                  self.solver_prognostics)
         self.dy.assign(0.0)
-        #self.xrhs.subfunctions[1].assign(Constant(0.0))
-        # u = self.dy.subfunctions[0]
-        # p = self.dy.subfunctions[1]
-        # b = self.dy.subfunctions[2]
-        # rhs_u = self.xrhs.subfunctions[0]
-        # rhs_p = self.xrhs.subfunctions[1]
-        # rhs_b = self.xrhs.subfunctions[2]
-
-        # PETSc.Sys.Print("u norm before solve: ", norm(u, 'l2'))
-        # PETSc.Sys.Print("p norm before solve: ", norm(p, 'l2'))
-        # PETSc.Sys.Print("b norm before solve: ", norm(b, 'l2'))
-        # PETSc.Sys.Print("rhs_u norm: ", norm(rhs_u, 'l2'))
-        # PETSc.Sys.Print("rhs_p norm: ", norm(rhs_p, 'l2'))
-        # PETSc.Sys.Print("rhs_b norm: ", norm(rhs_b, 'l2'))
 
         self.solver.solve()
-        # PETSc.Sys.Print("u norm after solve: ", norm(u, 'l2'))
-        # PETSc.Sys.Print("p norm after solve: ", norm(p, 'l2'))
-        # PETSc.Sys.Print("b norm after solve: ", norm(b, 'l2'))
-        # PETSc.Sys.Print("rhs_u norm after solve: ", norm(rhs_u, 'l2'))
-        # PETSc.Sys.Print("rhs_p norm after solve: ", norm(rhs_p, 'l2'))
-        # PETSc.Sys.Print("rhs_b norm after solve: ", norm(rhs_b, 'l2'))
-
 
         dy.assign(self.dy)

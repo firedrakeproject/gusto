@@ -3,7 +3,7 @@
 from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg, DirichletBC,
                        dS, split, conditional, exp, sqrt, Function,
                        SpatialCoordinate, Constant, TrialFunctions, TestFunctions, dot, grad,
-                       interpolate)
+                       interpolate, assemble)
 from firedrake.fml import subject, drop, all_terms
 from gusto.core.labels import (
     linearisation, pressure_gradient, coriolis, prognostic
@@ -18,6 +18,7 @@ from gusto.equations.common_forms import (
     linear_vector_invariant_form, linear_circulation_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
+from gusto.core.logging import logger
 
 
 __all__ = ["ShallowWaterEquations", "LinearShallowWaterEquations",
@@ -223,10 +224,6 @@ class ShallowWaterEquations(PrognosticEquationSet):
             residual += topography_form
 
         self.residual = residual
-
-    def update_reference_profiles(self):
-
-        pass
 
 
 class LinearShallowWaterEquations(ShallowWaterEquations):
@@ -556,46 +553,43 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         u_, D_ = TrialFunctions(M_)
         w_, phi_ = TestFunctions(M_)
 
-        Dref, bref = self.X_ref.subfunctions[1:3]
+        _, Dref, bref = self.X_ref.subfunctions[0:3]
         b_ = -dot(u_, grad(bref))*beta_b
 
-        # if self.equivalent_buoyancy:
-        #     # compute q_v using q_sat to partition q_t into q_v and q_c
-        #     self.q_sat_func = Function(VD)
-        #     self.qvbar = Function(VD)
-        #     qtbar = split(self.X_ref)[3]
+        if self.equivalent_buoyancy:
+            # compute q_v using q_sat to partition q_t into q_v and q_c
+            self.q_sat_func = Function(VD)
+            self.qvbar = Function(VD)
+            qtbar = split(self.X_ref)[3]
 
-        #     # set up interpolators that use the X_ref values for D and b_e
-        #     self.q_sat_expr_interpolate = interpolate(
-        #         self.compute_saturation(self.X_ref), VD)
-        #     self.q_v_interpolate = interpolate(
-        #         conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
-        #         VD)
+            # set up interpolators that use the X_ref values for D and b_e
+            self.q_sat_expr_interpolate = interpolate(
+                self.compute_saturation(self.X_ref), VD)
+            self.q_v_interpolate = interpolate(
+                conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
+                VD)
 
-        #     # bbar was be_bar and here we correct to become bbar
-        #     bref += self.parameters.beta2 * self.qvbar
-
-        seqn = (
-            inner(w_, u_) * dx
-            - beta_u * (D_ - Dref) * div(w_*bref) * dx
-            + beta_u * jump(w_*bref, n) * avg(D_- Dref) * dS
-            - beta_u * 0.5 * Dref * bref * div(w_) * dx
-            - beta_u * 0.5 * Dref * b_ * div(w_) * dx
-            - beta_u * 0.5 * bref * div(w_*(D_ - Dref)) * dx
-            + beta_u * 0.5 * jump((D_-Dref)*w_, n) * avg(bref) * dS
-            + inner(phi_, D_) * dx
-            + beta_d * phi_ * div(Dref*u_) * dx
-        )
-
+            # bbar was be_bar and here we correct to become bbar
+            bref += self.parameters.beta2 * self.qvbar
         seqn = (
             inner(w_, u_) * dx
             - beta_u * D_ * div(w_*bref) * dx
             + beta_u * jump(w_*bref, n) * avg(D_) * dS
-            # - beta_u * 0.5 * Dref * bref * div(w_) * dx
             - beta_u * 0.5 * Dref * b_ * div(w_) * dx
             - beta_u * 0.5 * bref * div(w_*D_) * dx
             + beta_u * 0.5 * jump(D_*w_, n) * avg(bref) * dS
             + inner(phi_, D_) * dx
+            + beta_d * phi_ * div(Dref*u_) * dx
+        )
+        seqn = (
+            inner(w_, (u_)) * dx
+            - beta_u * (D_) * div(w_*bref) * dx
+            + beta_u * jump(w_*bref, n) * avg(D_) * dS
+            #- beta_u * 0.5 * Dbar * bbar * div(w) * dx
+            - beta_u * 0.5 * Dref * b_ * div(w_) * dx
+            - beta_u * 0.5 * bref * div(w_*(D_)) * dx
+            + beta_u * 0.5 * jump((D_)*w_, n) * avg(bref) * dS
+            + inner(phi_, (D_)) * dx
             + beta_d * phi_ * div(Dref*u_) * dx
         )
 
@@ -609,29 +603,16 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         return seqn, sbcs
 
     def update_reference_profiles(self):
-        # if self.equivalent_buoyancy:
-        #     VD = self.domain.spaces("DG")
-        #     bref=self.X_ref.subfunctions[2]
-        #     # compute q_v using q_sat to partition q_t into q_v and q_c
-        #     self.q_sat_func = Function(VD)
-        #     self.qvbar = Function(VD)
-        #     qtbar = split(self.X_ref)[3]
+        if self.equivalent_buoyancy:
+            self.q_sat_func.assign(assemble(self.q_sat_expr_interpolate))
+            self.qvbar.assign(assemble(self.q_v_interpolate))
 
-        #     # set up interpolators that use the X_ref values for D and b_e
-        #     self.q_sat_expr_interpolate = interpolate(
-        #         self.compute_saturation(self.X_ref), VD)
-        #     self.q_v_interpolate = interpolate(
-        #         conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
-        #         VD)
-
-        #     # bbar was be_bar and here we correct to become bbar
-        #     bref_int = Function(bref.function_space())
-        #     bref_int = self.parameters.beta2 * self.qvbar
-
-        #     bref = self.X_ref.subfunctions[2]
-        #     bref.interpolate(bref_int + bref)
-        pass
-
+            bbar = split(self.X_ref)[2]
+            b = self.X.subfunctions[2]
+            bbar_func = Function(b.function_space()).interpolate(bbar)
+            if bbar_func.dat.data.max() == 0 and bbar_func.dat.data.min() == 0:
+                logger.warning("The reference profile for b in the linear solver is zero. To set a non-zero profile add b to the set_reference_profiles argument.")
+                logger.info(f'Updated equivalent buoyancy reference profile.')
 
 
 class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):

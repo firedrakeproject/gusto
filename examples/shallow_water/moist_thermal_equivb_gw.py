@@ -12,7 +12,7 @@ from gusto import (
     ThermalShallowWaterEquations, lonlatr_from_xyz, MeridionalComponent,
     GeneralIcosahedralSphereMesh, SubcyclingOptions, ZonalComponent,
     PartitionedCloud, RungeKuttaFormulation, SSPRK3, LinearTimesteppingSolver,
-    SemiImplicitQuasiNewton, xyz_vector_from_lonlatr,
+    SemiImplicitQuasiNewton, xyz_vector_from_lonlatr, ThermalSWSolver
 )
 
 moist_thermal_gw_defaults = {
@@ -86,71 +86,6 @@ def moist_thermal_gw(
     # ------------------------------------------------------------------------ #
     # Timestepper
     # ------------------------------------------------------------------------ #
-    # params = {
-    #     'ksp_monitor_true_residual': None,
-    #     'ksp_view': ':ksp_view.log',
-    #     'ksp_error_if_not_converged': None,
-    #     'mat_type': 'matfree',
-    #     'ksp_type': 'preonly',
-    #     'pc_type': 'fieldsplit',
-    #     'pc_fieldsplit_type': 'additive',
-    #     'pc_fieldsplit_0_fields': '0,1,2',
-    #     'pc_fieldsplit_1_fields': '3',  # do nothing for scalar field
-    #     'fieldsplit_0': {
-    #         'pc_type': 'fieldsplit',
-    #         'pc_fieldsplit_type': 'schur',
-    #         'pc_fieldsplit_schur_fact_type': 'full',
-    #         'pc_fieldsplit_1_fields': '0,1',
-    #         'pc_fieldsplit_0_fields': '2',  # eliminate temperature
-    #         'fieldsplit_L2': {
-    #             'ksp_monitor': None,
-    #             'ksp_type': 'preonly',
-    #             'pc_type': 'python',
-    #             'pc_python_type': 'firedrake.AssembledPC',
-    #             'assembled_pc_type': 'bjacobi',
-    #             'assembled_sub_pc_type': 'ilu',
-    #         },
-    #         'fieldsplit_1': {
-    #             'ksp_monitor': None,
-    #             'ksp_type': 'preonly',
-    #             'pc_type': 'python',
-    #             'pc_python_type': 'gusto.AuxiliaryPC',
-    #             'aux': {
-    #                 'mat_type': 'matfree',
-    #                 'pc_type': 'python',
-    #                 'pc_python_type': 'firedrake.HybridizationPC',
-    #                 'hybridization': {
-    #                     'ksp_type': 'cg',
-    #                     'pc_type': 'gamg',
-    #                     'ksp_rtol': 1e-8,
-    #                     'mg_levels': {
-    #                         'ksp_type': 'chebyshev',
-    #                         'ksp_max_it': 2,
-    #                         'pc_type': 'bjacobi',
-    #                         'sub_pc_type': 'ilu'
-    #                     },
-    #                     'mg_coarse': {
-    #                         'ksp_type': 'preonly',
-    #                         'pc_type': 'lu',
-    #                         'pc_factor_mat_solver_type': 'mumps',
-    #                     },
-    #                 },
-    #             },
-    #         },
-    #     },
-    #     'fieldsplit_L2': {
-    #         'ksp_type': 'preonly',
-    #         'pc_type': 'none',
-    #     },
-    # }
-
-    # appctx = {'auxform': eqns.schur_complement_form(alpha=0.5)}
-
-    # linear_solver = LinearTimesteppingSolver(
-    #     eqns, alpha=0.5, options_prefix="swe",
-    #     solver_parameters=params, appctx=appctx
-    # )
-
     subcycling_opts = SubcyclingOptions(subcycle_by_courant=0.25)
     transported_fields = [
         SSPRK3(domain, "u", subcycling_options=subcycling_opts),
@@ -161,8 +96,10 @@ def moist_thermal_gw(
         SSPRK3(domain, "b_e", subcycling_options=subcycling_opts),
         SSPRK3(domain, "q_t", subcycling_options=subcycling_opts),
     ]
+
+    solver = ThermalSWSolver(eqns)
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods
+        eqns, io, transported_fields, transport_methods, solver_prognostics=["u", "D", "b_e"]
     )
 
     # ------------------------------------------------------------------------ #
