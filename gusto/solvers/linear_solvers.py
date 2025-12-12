@@ -11,11 +11,10 @@ from firedrake import (
     rhs, FacetNormal, div, dx, jump, avg, dS, dS_v, dS_h, ds_v, ds_t, ds_b,
     ds_tb, inner, action, dot, grad, Function, VectorSpaceBasis, cross,
     BrokenElement, FunctionSpace, MixedFunctionSpace, DirichletBC, as_vector,
-    assemble, conditional
+    assemble, conditional, interpolate
 )
 from firedrake.fml import Term, drop
 from firedrake.petsc import flatten_parameters
-from firedrake.__future__ import interpolate
 from pyop2.profiling import timed_function, timed_region
 
 from gusto.equations.active_tracers import TracerVariableType
