@@ -156,7 +156,7 @@ def skamarock_klemp_nonhydrostatic(
     if timestepper == 'TR-BDF2':
         stepper = TRBDF2QuasiNewton(
             eqns, io, transported_fields, transport_methods,
-            gamma=gamma, tau_values=tau_values
+            gamma=gamma, tau_values_tr=tau_values, tau_values_bdf=tau_values
         )
 
     elif timestepper == 'SIQN':

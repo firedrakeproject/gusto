@@ -38,6 +38,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                  slow_physics_schemes=None,
                  fast_physics_schemes=None,
                  gamma=(1-sqrt(2)/2),
+                 tau_values_tr=None,
+                 tau_values_bdf=None,
                  num_outer_tr=2, num_inner_tr=2,
                  num_outer_bdf=2, num_inner_bdf=2,
                  reference_update_freq=None,
@@ -82,6 +84,14 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 timestep between 0 and 0.5. A value of 0.5 corresponds to a SIQN
                 scheme with alpha = 0.5. Defaults to 1 - sqrt(2)/2, which makes
                 the scheme L-stable.
+            tau_values_tr (dict, optional): a dictionary with keys the names of
+                prognostic variables and values the tau values to use for each
+                variable. Defaults to None, in which case the value of gamma
+                is used.
+            tau_values_bdf (dict, optional): a dictionary with keys the names of
+                prognostic variables and values the tau values to use for each
+                variable. Defaults to None, in which case the value of gamma2
+                is used.
             num_outer_tr (int, optional): number of outer iterations in the
                 trapeziodal step. The outer loop includes transport and any
                 fast physics schemes. Defaults to 2.
@@ -249,13 +259,13 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         if tr_solver is None:
             if tr_solver_parameters is None:
                 self.tr_solver_parameters, self.tr_appctx = \
-                    HybridisedSolverParameters(equation_set, alpha=self.gamma)
+                    HybridisedSolverParameters(equation_set, alpha=self.gamma, tau_values=tau_values_tr)
             else:
                 self.tr_solver_parameters = tr_solver_parameters
                 self.tr_appctx = tr_appctx
             self.tr_solver = QuasiNewtonLinearSolver(
                 equation_set, solver_prognostics, self.implicit_terms,
-                self.gamma,
+                self.gamma, tau_values=tau_values_tr,
                 solver_parameters=self.tr_solver_parameters,
                 appctx=self.tr_appctx
             )
@@ -265,13 +275,13 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         if bdf_solver is None:
             if bdf_solver_parameters is None:
                 self.bdf_solver_parameters, self.bdf_appctx = \
-                    HybridisedSolverParameters(equation_set, alpha=self.gamma2)
+                    HybridisedSolverParameters(equation_set, alpha=self.gamma2, tau_values=tau_values_bdf)
             else:
                 self.bdf_solver_parameters = bdf_solver_parameters
                 self.bdf_appctx = bdf_appctx
             self.bdf_solver = QuasiNewtonLinearSolver(
                 equation_set, solver_prognostics, self.implicit_terms,
-                self.gamma2,
+                self.gamma2, tau_values=tau_values_bdf,
                 solver_parameters=self.bdf_solver_parameters,
                 appctx=self.bdf_appctx
             )
