@@ -8,7 +8,7 @@ from firedrake import (PeriodicRectangleMesh, SpatialCoordinate, as_vector,
                        interpolate, exp, sqrt, conditional)
 
 dt = 500.          # timestep (in seconds) [originally 250]
-tmax = dt # 1730 * dt    # duration of the simulation (in seconds) [4320 * 500 = 25 days]
+tmax = 1730 * dt    # duration of the simulation (in seconds) [4320 * 500 = 25 days]
 # ^ 10 days (technically 10.01157 days, not exact)
 
 # Set up the mesh and choose the refinement level
@@ -93,21 +93,21 @@ eqns = ShallowWaterEquations(domain, parameters)
 # field_creator object contains all the fields
 def update_points(fields):
 
-    D = fields("PotentialVorticity") 
+    D = fields("D") 
    # min_kernel = MinKernel()
     #D_min = min_kernel.apply(D)  # value of D min 
 
     # index which has the min of the np array for D
-    idx = np.argmax(D.dat.data_ro)  
+    idx = np.argmin(D.dat.data_ro)  
     V = D.function_space()
     m = V.mesh() 
     W = VectorFunctionSpace(m, V.ufl_element())
     X = assemble(interpolate(m.coordinates, W))  # puts the mesh coords into the vector function space
 
     min_point = X.dat.data_ro[idx]
-    print(f"min_point = {min_point}")  #  [-57784, 18651534]
+  #  print(f"min_point = {min_point}")  #  [-57784, 18651534]
 
-    # 40,001 so that there is a midpoint at point 20,001 = index 20,000
+    # 1001 so there is a midpoint at index 500
     points_x = np.linspace(-1e7 + round(min_point[0]), 1e7 + round(min_point[0]), 1001)
     points_y = [round(min_point[1])]
 
@@ -116,15 +116,15 @@ def update_points(fields):
     return points #, min_point   - to track the vortex we could store the x_m,y_m values
 
 
-dirname = "jv_up_pv_1dt"
-dumpfreq = 1 #173  # should give 11 outputs
+dirname = "jv_up_D_10days"
+dumpfreq = 173  # should give 11 outputs
 pddumpfreq = dumpfreq 
 
 output = OutputParameters(
     dirname=dirname, dumpfreq=dumpfreq, pddumpfreq=dumpfreq,
     dump_vtus=True, dump_nc=True,
     #point_data=[('PotentialVorticity', points)]  # field name and list of points at which to ouput this field
-    point_data=[('PotentialVorticity', update_points)]  # in the future want to include function that finds the new points too
+    point_data=[('D', update_points)]  # in the future want to include function that finds the new points too
 )
 
 
@@ -245,16 +245,5 @@ stepper.set_reference_profiles([('D', Dbar)])
 
 # Run the timestepper and generate the output.
 stepper.run(t=0, tmax=tmax)
-
-#with CheckpointFile("jovian_vortices101125.h5", 'w') as afile:
- #   afile.save_mesh(mesh)  # optional
-  #  afile.save_function(u0)
-   # afile.save_function(D0)
-
-# how long does it take to move, in days and in computational time
-# how long does it take to get a shield?
-# start without a shield, see how long it takes to gain one (b = 1 initially) [do this first]
-# how much shield does it have after moving 90 degrees away from its ic, and how long does this take (days)
-# plot of radius of centre of vortex against pv (or relative vorticity, pv is conserved?) to observe shield it acquires 
 
 
