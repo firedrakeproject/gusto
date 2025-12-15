@@ -7,7 +7,7 @@ preserve a constant in divergence-free flow).
 from gusto import *
 from firedrake import (
     PeriodicRectangleMesh, cos, sin, SpatialCoordinate,
-    assemble, dx, pi, as_vector, errornorm, Function, div
+    assemble, dx, pi, as_vector, errornorm, Function, div, norm
 )
 import pytest
 
@@ -101,11 +101,11 @@ def test_advective_then_flux(tmpdir, desirable_property):
     rho = stepper.fields("rho")
 
     # Check for divergence-linearity/constancy
-    assert errornorm(rho, rho_true) < 1e-11, \
+    assert errornorm(rho, rho_true) / norm(rho_true) < 1e-14, \
         "advective-then-flux form is not yielding the correct answer"
 
     # Check for conservation
     mass_initial = assemble(rho_true*dx)
     mass_final = assemble(rho*dx)
-    assert abs(mass_final - mass_initial) < 1e-14, \
+    assert abs(mass_final - mass_initial) / mass_initial < 1e-14, \
         "advective-then-flux form is not conservative"
