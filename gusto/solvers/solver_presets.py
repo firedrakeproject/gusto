@@ -21,14 +21,13 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
 
     Parameters
     ----------
-    equation : str
-        The type of equation being solved. Options are "CompressibleEuler", "Boussinesq", "ThermalSW", "ConvectiveSW", "ShallowWater".
-    nonlinear : bool, optional
-        Whether the problem is nonlinear. Default is False.
+    equations (:class:`PrognosticEquation`): the model's equation.
     alpha : float, optional
         The implicitness parameter for the time discretisation. Default is 0.5.
     tau_values : dict, optional
         A dictionary of stabilization parameters for the hybridization. Default is None.
+    nonlinear : bool, optional
+        Whether the problem is nonlinear. Default is False.
     Returns
     -------
     settings : dict
