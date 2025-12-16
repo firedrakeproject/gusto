@@ -69,9 +69,6 @@ class Parallel_RIDC(RIDC):
         self.J = J
         self.step = 1
         self.output_freq = output_freq
-        self.newton_it = 0
-        self.ksp_it = 0
-        self.ksp_max = 0
 
         if self.flush_freq == 0 or (self.flush_freq != 0 and self.output_freq % self.flush_freq != 0):
             logger.warn("Output on all parallel in time ranks will not be the same until end of run!")
@@ -157,9 +154,6 @@ class Parallel_RIDC(RIDC):
                 #             + sum(j=1,M) s_mj*(F+S)(y_j^k)
                 self.solver.solve()
                 self.Unodes1[m+1].assign(self.U_DC)
-                self.newton_it += self.solver.snes.getIterationNumber()
-                self.ksp_it += self.solver.snes.getLinearSolveIterations()
-                self.ksp_max = max(self.ksp_max, self.solver.snes.getLinearSolveIterations())
 
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:
