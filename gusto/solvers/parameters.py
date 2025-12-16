@@ -63,7 +63,7 @@ def mass_parameters(V, spaces=None, ignore_vertical=True):
 
         # For extruded meshes the continuity is recorded
         # separately for the horizontal and vertical directions.
-        if mesh.extruded and spaces is not None:
+        if V.mesh().extruded and spaces is not None:
             if ignore_vertical:
                 continuous = continuous['horizontal']
             else:
