@@ -101,7 +101,7 @@ def test_de_rham_spaces(domain, family):
         + f'{degree}. Found degree {elt.degree()}'
 
     # Check that continuities have been recorded correctly
-    if hasattr(mesh, "_base_mesh"):
+    if mesh.extruded:
         expected_continuity = {
             "H1": {'horizontal': True, 'vertical': True},
             "L2": {'horizontal': False, 'vertical': False},
@@ -139,7 +139,7 @@ def test_dg_equispaced(domain, family):
     assert elt.variant() == "equispaced", '"DG1 equispaced" does not seem to ' \
         + f'be equispaced variant. Found variant {elt.variant()}'
 
-    if hasattr(mesh, "_base_mesh"):
+    if mesh.extruded:
         expected_continuity = {'horizontal': False, 'vertical': False}
     else:
         expected_continuity = False
@@ -161,7 +161,7 @@ def test_dg0(domain, family):
     assert elt.degree() in [0, (0, 0)], '"DG0" space does not seem to be' \
         + f'degree 0. Found degree {elt.degree()}'
 
-    if hasattr(mesh, "_base_mesh"):
+    if mesh.extruded:
         expected_continuity = {'horizontal': False, 'vertical': False}
     else:
         expected_continuity = False
@@ -186,7 +186,7 @@ def test_cg(domain, family):
         (f'"CG" space does not seem to be degree {degree}. '
          + f'Found degree {elt.degree()}')
 
-    if hasattr(mesh, "_base_mesh"):
+    if mesh.extruded:
         expected_continuity = {'horizontal': True, 'vertical': True}
     else:
         expected_continuity = True

@@ -106,7 +106,7 @@ class Domain(object):
         # Figure out if we're on a sphere
         # WARNING: if we ever wanted to run on other domains (e.g. circle, disk
         # or torus) then the identification of domains would no longer be unique
-        if hasattr(mesh, "_base_mesh") and hasattr(mesh._base_mesh, 'geometric_dimension'):
+        if mesh.extruded and hasattr(mesh._base_mesh, 'geometric_dimension'):
             self.on_sphere = (mesh._base_mesh.geometric_dimension == 3 and mesh._base_mesh.topological_dimension == 2)
         else:
             self.on_sphere = (mesh.geometric_dimension == 3 and mesh.topological_dimension == 2)
@@ -118,7 +118,7 @@ class Domain(object):
             R = sqrt(inner(x, x))
             self.k = grad(R)
             if dim == 2:
-                if hasattr(mesh, "_base_mesh"):
+                if mesh.extruded:
                     sphere_degree = mesh._base_mesh.coordinates.function_space().ufl_element().degree()
                 else:
                     if not hasattr(mesh, "_cell_orientations"):
@@ -141,7 +141,7 @@ class Domain(object):
         # -------------------------------------------------------------------- #
 
         if self.on_sphere:
-            spherical_shell_mesh = mesh._base_mesh if hasattr(mesh, "_base_mesh") else mesh
+            spherical_shell_mesh = mesh._base_mesh if mesh.extruded else mesh
             xyz_shell = SpatialCoordinate(spherical_shell_mesh)
             r_shell = sqrt(inner(xyz_shell, xyz_shell))
             CG1 = FunctionSpace(spherical_shell_mesh, "CG", 1)
@@ -163,7 +163,7 @@ class Domain(object):
         self.coords.register_space(self, 'DG1_equispaced')
 
         # Set height above surface (requires coordinates)
-        if hasattr(mesh, "_base_mesh"):
+        if mesh.extruded:
             self.set_height_above_surface()
 
         # -------------------------------------------------------------------- #
@@ -219,7 +219,7 @@ def construct_domain_metadata(mesh, coords, on_sphere):
     metadata = {}
     metadata['extruded'] = mesh.extruded
 
-    if on_sphere and hasattr(mesh, "_base_mesh"):
+    if on_sphere and mesh.extruded:
         metadata['domain_type'] = 'extruded_spherical_shell'
     elif on_sphere:
         metadata['domain_type'] = 'spherical_shell'

@@ -86,7 +86,7 @@ class VorticityTransport(Augmentation):
 
         quad = domain.max_quad_degree
 
-        if hasattr(domain.mesh, "_base_mesh"):
+        if domain.mesh.extruded:
             self.ds = ds_b(degree=quad) + ds_t(degree=quad) + ds_v(degree=quad)
             self.dS = dS_v(degree=quad) + dS_h(degree=quad)
         else:
