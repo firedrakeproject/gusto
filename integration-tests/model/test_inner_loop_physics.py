@@ -87,7 +87,8 @@ def set_up_model_objects(mesh, dt, q0, beta2, nu, physics_type, output):
                                           transport_methods,
                                           linear_solver=moist_solver,
                                           inner_physics_schemes=physics_schemes,
-                                          num_outer=2, num_inner=2)
+                                          num_outer=2, num_inner=2,
+                                          solver_prognostics=eqns.field_names)
 
     return stepper, eqns
 

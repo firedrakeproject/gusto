@@ -824,7 +824,7 @@ class MoistThermalSWSolver(TimesteppingSolver):
 
         # Check that the third field is buoyancy
         if not equation.field_names[2] == 'b':
-            raise NotImplementedError("Field 'b'must exist to use the moist thermal linear solver in the SIQN scheme")
+            raise NotImplementedError("Field 'b' must exist to use the moist thermal linear solver in the SIQN scheme")
         if not equation.field_names[3] == 'water_vapour':
             raise NotImplementedError("Field 'water_vapour' must exist to use the moist thermal linear solver in the SIQN scheme")
         if not equation.field_names[4] == 'cloud_water':
@@ -861,12 +861,11 @@ class MoistThermalSWSolver(TimesteppingSolver):
         eqn = (
             # u equation
             inner(w, (u - u_in)) * dx
-            - beta_u * (D - Dbar) * div(w*bbar) * dx
-            + beta_u * jump(w*bbar, n) * avg(D-Dbar) * dS
-            - beta_u * 0.5 * Dbar * bbar * div(w) * dx
+            - beta_u * D * div(w*bbar) * dx
+            + beta_u * jump(w*bbar, n) * avg(D) * dS
             - beta_u * 0.5 * Dbar * b * div(w) * dx
-            - beta_u * 0.5 * bbar * div(w*(D-Dbar)) * dx
-            + beta_u * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
+            - beta_u * 0.5 * bbar * div(w*D) * dx
+            + beta_u * 0.5 * jump(D*w, n) * avg(bbar) * dS
             # D equation
             + inner(phi, (D - D_in)) * dx
             + beta_d * phi * div(Dbar*u) * dx

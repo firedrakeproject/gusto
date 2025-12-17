@@ -16,7 +16,7 @@ from gusto.core.labels import (
     transport, diffusion, time_derivative, hydrostatic, physics_label, sponge,
     incompressible, linearisation, prognostic
 )
-from gusto.solvers import mass_parameters, MoistThermalSWSolver
+from gusto.solvers import mass_parameters
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
@@ -329,16 +329,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             aux_scheme.setup(aux_eqn)
             self.setup_transporting_velocity(aux_scheme)
 
-        # Set up tracers to copy (those not included in the linear solve)
-        self.tracers_to_copy = []
-        copy_active_tracers = (
-            equation_set.active_tracers is not None
-            and not isinstance(linear_solver, MoistThermalSWSolver)
-        )
-        if copy_active_tracers:
-            for active_tracer in equation_set.active_tracers:
-                self.tracers_to_copy.append(active_tracer.name)
-
         # Set up the predictor last, as it requires the state fields to already
         # be created
         if self.predictor is not None:
@@ -409,11 +399,11 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         time derivative term for that tracer has a linearisation.
 
         Args:
-           x_in:  The input set of fields
-           x_out: The output set of fields
+            x_in:  The input set of fields
+            x_out: The output set of fields
         """
 
-        for name in self.tracers_to_copy:
+        for name in self.non_solver_prognostics:
             x_out(name).assign(x_in(name))
 
     def transport_fields(self, outer, xstar, xp):
