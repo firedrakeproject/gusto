@@ -14,7 +14,7 @@ from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
 from gusto.timestepping.semi_implicit_quasi_newton import Forcing, QuasiNewtonLinearSolver
-from gusto.solvers.solver_presets import HybridisedSolverParameters
+from gusto.solvers.solver_presets import hybridised_solver_parameters
 
 
 __all__ = ["TRBDF2QuasiNewton"]
@@ -259,7 +259,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         if tr_solver is None:
             if tr_solver_parameters is None:
                 self.tr_solver_parameters, self.tr_appctx = \
-                    HybridisedSolverParameters(equation_set, alpha=self.gamma, tau_values=tau_values_tr)
+                    hybridised_solver_parameters(equation_set, alpha=self.gamma, tau_values=tau_values_tr)
             else:
                 self.tr_solver_parameters = tr_solver_parameters
                 self.tr_appctx = tr_appctx
@@ -275,7 +275,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         if bdf_solver is None:
             if bdf_solver_parameters is None:
                 self.bdf_solver_parameters, self.bdf_appctx = \
-                    HybridisedSolverParameters(equation_set, alpha=self.gamma2, tau_values=tau_values_bdf)
+                    hybridised_solver_parameters(equation_set, alpha=self.gamma2, tau_values=tau_values_bdf)
             else:
                 self.bdf_solver_parameters = bdf_solver_parameters
                 self.bdf_appctx = bdf_appctx

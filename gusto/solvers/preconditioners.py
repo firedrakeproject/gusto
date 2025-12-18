@@ -9,74 +9,20 @@ from firedrake.matrix_free.operators import ImplicitMatrixContext
 from gusto.recovery.recovery_kernels import AverageKernel, AverageWeightings
 from pyop2.profiling import timed_region, timed_function
 from functools import partial
-from numpy import arange
 
 
-__all__ = ["VerticalHybridizationPC", "SlateSchurPC", "AuxiliaryPC", "CompressibleHybridisedSCPC"]
+__all__ = ["VerticalHybridizationPC", "AuxiliaryPC", "CompressibleHybridisedSCPC"]
 
 
 class AuxiliaryPC(AuxiliaryOperatorPC):
+    """
+    A preconditioner that allows the passing of an auxiliary form to be solved by
+    a chosen PETSc preconditioner. This is commonly used to pass Schur complement forms
+    to eliminate a variable in a mixed system.
+    """
     def form(self, pc, test, trial):
         a, bcs = self.get_appctx(pc)['auxform']
         return (a(test, trial), bcs)
-
-
-class SlateSchurPC(AuxiliaryOperatorPC):
-    _prefix = "slateschur_"
-
-    def form(self, pc, test, trial):
-        appctx = self.get_appctx(pc)
-
-        aform = appctx['slateschur_form']
-        Va = aform.arguments()[0].function_space()
-        Vlen = len(Va)
-
-        # which fields are in the schur complement?
-        pc_prefix = pc.getOptionsPrefix() + "pc_" + self._prefix
-        fields = PETSc.Options().getIntArray(
-            pc_prefix + 'fields', [Vlen-1])
-        nfields = len(fields)
-
-        if nfields > Vlen - 1:
-            raise ValueError("Must have at least one uneliminated field")
-
-        first_fields = arange(nfields)
-        last_fields = arange(Vlen - nfields, Vlen)
-
-        # eliminate fields not in the schur complement
-        eliminate_first = all(fields == last_fields)
-        eliminate_last = all(fields == first_fields)
-
-        if not any((eliminate_first, eliminate_last)):
-            raise ValueError(
-                "Can only eliminate contiguous fields at the"
-                f" beginning {first_fields} or end {last_fields}"
-                f" of function space, not {fields}")
-
-        a = Tensor(aform)
-        if eliminate_first:
-            n = Vlen - nfields
-            a00 = a.blocks[:n, :n]
-            a10 = a.blocks[n:, :n]
-            a01 = a.blocks[:n, n:]
-            a11 = a.blocks[n:, n:]
-        elif eliminate_last:
-            n = nfields
-            a00 = a.blocks[n:, n:]
-            a10 = a.blocks[:n, n:]
-            a01 = a.blocks[n:, :n]
-            a11 = a.blocks[:n, :n]
-
-        schur_complement = a11 - a10*a00.inv*a01
-
-        return (schur_complement, None)
-
-    def view(self, pc, viewer=None):
-        super().view(pc, viewer)
-        if hasattr(self, "pc"):
-            msg = "PC to approximate Schur complement using Slate.\n"
-            viewer.printfASCII(msg)
-            self.pc.view(viewer)
 
 
 class VerticalHybridizationPC(PCBase):
@@ -504,6 +450,10 @@ class CompressibleHybridisedSCPC(PCBase):
          space using local averaging.
 
     (3) Reconstruct theta
+
+    This method requires special handling as Firedrake's existing hybridization
+    preconditioner assumes a linear pressure gradient term rather than the nonlinear
+    form in the Compressible Euler equations.
     """
 
     _prefix = "compressible_hybrid_scpc"

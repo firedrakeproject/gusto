@@ -19,7 +19,7 @@ from gusto.solvers import mass_parameters
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
-from gusto.solvers.solver_presets import HybridisedSolverParameters
+from gusto.solvers.solver_presets import hybridised_solver_parameters
 from gusto.equations.compressible_euler_equations import CompressibleEulerEquations
 
 
@@ -194,7 +194,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         if linear_solver is None:
             if linear_solver_parameters is None:
                 self.linear_solver_parameters, self.appctx = \
-                    HybridisedSolverParameters(equation_set, alpha=self.alpha, tau_values=tau_values)
+                    hybridised_solver_parameters(equation_set, alpha=self.alpha, tau_values=tau_values)
             else:
                 self.linear_solver_parameters = linear_solver_parameters
                 self.appctx = appctx
