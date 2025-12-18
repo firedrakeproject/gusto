@@ -38,7 +38,9 @@ def HybridisedSolverParameters(equation, alpha=0.5, tau_values=None, nonlinear=F
 
     def trace_nullsp(T):
         return VectorSpaceBasis(constant=True)
-
+# ============================================================================ #
+# Compressible Euler
+# ============================================================================ #
     if isinstance(equation, CompressibleEulerEquations):
 
         settings = {'ksp_monitor': None,
