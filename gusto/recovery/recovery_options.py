@@ -45,7 +45,7 @@ class RecoverySpaces(object):
         # ----------------------------------------------------------------------
 
         # Check if extruded and if so builds theta spaces
-        if hasattr(mesh, "_base_mesh"):
+        if mesh.extruded:
             # check if boundary method is present
             if boundary_method is not None and 'theta' in boundary_method.keys():
                 theta_boundary_method = boundary_method['theta']
