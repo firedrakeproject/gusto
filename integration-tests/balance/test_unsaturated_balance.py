@@ -91,7 +91,7 @@ def setup_unsaturated(dirname, recovered):
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       transport_methods,
-                                      physics_schemes=physics_schemes)
+                                      final_physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

@@ -146,7 +146,7 @@ def moist_convect_williamson_2(
         eqns, io,
         transport_schemes=transported_fields,
         spatial_methods=transport_methods,
-        physics_schemes=physics_schemes
+        final_physics_schemes=physics_schemes
     )
 
     # ------------------------------------------------------------------------ #

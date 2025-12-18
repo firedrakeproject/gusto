@@ -28,7 +28,7 @@ class Domain(object):
     """
     def __init__(self, mesh, dt, family, degree=None,
                  horizontal_degree=None, vertical_degree=None,
-                 rotated_pole=None, max_quad_degree=None):
+                 max_quad_degree=None):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
@@ -44,11 +44,6 @@ class Domain(object):
                 horizontal part of the DG space. Defaults to None.
             vertical_degree (int, optional): the element degree used for the
                 vertical part of the DG space. Defaults to None.
-            rotated_pole (tuple, optional): a tuple of floats (lon, lat) of the
-                location to use as the north pole in a spherical coordinate
-                system. These are expressed in the original coordinate system.
-                The longitude and latitude must be expressed in radians.
-                Defaults to None. This is unused for non-spherical domains.
             max_quad_degree (int, optional): the maximum quadrature degree to
                 use in certain non-linear terms (e.g. when using an expression
                 for the Exner pressure). Defaults to None, in which case this
@@ -156,8 +151,7 @@ class Domain(object):
         # Set up coordinates
         # -------------------------------------------------------------------- #
 
-        self.coords = Coordinates(mesh, on_sphere=self.on_sphere,
-                                  rotated_pole=rotated_pole, radius=radius)
+        self.coords = Coordinates(mesh, on_sphere=self.on_sphere, radius=radius)
         # Set up DG1 equispaced space, used for making metadata
         _ = self.spaces('DG1_equispaced')
         self.coords.register_space(self, 'DG1_equispaced')

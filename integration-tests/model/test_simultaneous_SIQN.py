@@ -131,7 +131,7 @@ def run_simult_SIQN(tmpdir, order):
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        physics_schemes=physics_schemes
+        final_physics_schemes=physics_schemes
     )
 
     # ------------------------------------------------------------------------ #

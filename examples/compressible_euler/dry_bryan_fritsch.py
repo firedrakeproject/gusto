@@ -80,8 +80,7 @@ def dry_bryan_fritsch(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes -- set up options for using recovery wrapper
-    boundary_methods = {'DG': BoundaryMethod.taylor,
-                        'HDiv': BoundaryMethod.taylor}
+    boundary_methods = {'DG': BoundaryMethod.taylor}
 
     recovery_spaces = RecoverySpaces(
         domain, boundary_methods, use_vector_spaces=True
@@ -103,7 +102,8 @@ def dry_bryan_fritsch(
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods
+        eqns, io, transported_fields, transport_methods,
+        tau_values={'rho': 1.0, 'theta': 1.0}
     )
 
     # ------------------------------------------------------------------------ #

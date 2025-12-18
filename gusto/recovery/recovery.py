@@ -10,11 +10,10 @@ from enum import Enum
 
 import ufl
 from firedrake import (BrokenElement, Constant, DirichletBC, FiniteElement,
-                       Function, FunctionSpace, Projector,
+                       Function, FunctionSpace, Projector, dot,
                        SpatialCoordinate, TensorProductElement,
                        VectorFunctionSpace, as_vector, function, interval,
-                       VectorElement, assemble)
-from firedrake.__future__ import interpolate
+                       VectorElement)
 from gusto.recovery import Averager
 from .recovery_kernels import (BoundaryRecoveryExtruded, BoundaryRecoveryHCurl,
                                BoundaryGaussianElimination)
@@ -145,14 +144,13 @@ class BoundaryRecoverer(object):
             V_broken = FunctionSpace(mesh, BrokenElement(V_inout.ufl_element()))
             self.x_DG1_wrong = Function(V_broken)
             self.x_DG1_correct = Function(V_broken)
-            self.interpolate = interpolate(self.x_inout, V_broken)
             self.averager = Averager(self.x_DG1_correct, self.x_inout)
             self.kernel = BoundaryGaussianElimination(V_broken)
 
     def apply(self):
         """Applies the boundary recovery process."""
         if self.method == BoundaryMethod.taylor:
-            self.x_DG1_wrong.assign(assemble(self.interpolate))
+            self.x_DG1_wrong.interpolate(self.x_inout)
             self.kernel.apply(self.x_DG1_wrong, self.x_DG1_correct,
                               self.act_coords, self.eff_coords, self.num_ext)
             self.averager.project()
@@ -196,6 +194,7 @@ class Recoverer(object):
         if not isinstance(x_in, (ufl.core.expr.Expr, function.Function)):
             raise ValueError("Can only recover UFL expression or Functions not '%s'" % type(x_in))
 
+        self.x_in = x_in
         self.x_out = x_out
         V_out = x_out.function_space()
         mesh = V_out.mesh()
@@ -217,17 +216,15 @@ class Recoverer(object):
         # -------------------------------------------------------------------- #
         # Set up interpolation / projection
         # -------------------------------------------------------------------- #
-        x_brok = Function(V_brok)
+        self.x_brok = Function(V_brok)
 
         self.method = method
-        if method == 'interpolate':
-            self.broken_op = lambda: assemble(interpolate(x_in, V_brok), tensor=x_brok)
-        elif method == 'project':
-            self.broken_op = Projector(x_in, x_brok)
-        else:
+        if method == 'project':
+            self.broken_op = Projector(x_in, self.x_brok)
+        elif method != 'interpolate':
             raise ValueError(f'Valid methods are "interpolate" or "project", not {method}')
 
-        self.averager = Averager(x_brok, self.x_out)
+        self.averager = Averager(self.x_brok, self.x_out)
 
         # -------------------------------------------------------------------- #
         # Set up boundary recovery
@@ -264,40 +261,48 @@ class Recoverer(object):
                     CG1 = FunctionSpace(mesh, "CG", 1)
 
                     # now, break the problem down into components
-                    x_out_scalars = []
+                    self.x_out_scalars = []
                     self.boundary_recoverers = []
                     self.interpolate_to_scalars = []
                     self.extra_averagers = []
+                    self.unit_vec = []
                     # the boundary recoverer needs to be done on a scalar fields
                     # so need to extract component and restore it after the boundary recovery is done
                     for i in range(V_out.value_size):
-                        x_out_scalars.append(Function(CG1))
-                        self.interpolate_to_scalars.append(
-                            lambda i=i: assemble(interpolate(self.x_out[i], CG1), tensor=x_out_scalars[i])
-                        )
-                        self.boundary_recoverers.append(BoundaryRecoverer(x_out_scalars[i],
+                        self.unit_vec.append(as_vector(
+                            [Constant(1.0) if j == i else Constant(0.0) for j in range(V_out.value_size)]
+                        ))
+                        self.x_out_scalars.append(Function(CG1))
+                        self.boundary_recoverers.append(BoundaryRecoverer(self.x_out_scalars[i],
                                                                           method=BoundaryMethod.taylor,
                                                                           eff_coords=eff_coords[i]))
-                    self.interpolate_to_vector = interpolate(as_vector(x_out_scalars), V_out)
+                    self.x_out_expr = self.x_out_scalars[0]*self.unit_vec[0]
+                    for i in range(1, V_out.value_size):
+                        self.x_out_expr += self.x_out_scalars[i]*self.unit_vec[i]
 
     def project(self):
         """Perform the whole recovery step."""
 
         # Initial averaging step
-        self.broken_op.project() if self.method == 'project' else self.broken_op()
+        if self.method == 'project':
+            self.broken_op.project()
+        else:
+            self.x_brok.interpolate(self.x_in)
         self.averager.project()
 
         # Boundary recovery
         if self.boundary_method is not None:
             # For vector elements, treat each component separately
             if self.vector_function_space:
-                for (interpolate_to_scalar, boundary_recoverer) \
-                        in zip(self.interpolate_to_scalars, self.boundary_recoverers):
-                    interpolate_to_scalar()
+                # TODO: something about interpolating to scalars and then back
+                # is making the lowest-order bubble tests assymetric!
+                for i, boundary_recoverer in enumerate(self.boundary_recoverers):
+                    self.x_out_scalars[i].interpolate(dot(self.unit_vec[i], self.x_out))
+
                     # Correct at boundaries
                     boundary_recoverer.apply()
                 # Combine the components to obtain the vector field
-                self.x_out.assign(assemble(self.interpolate_to_vector))
+                self.x_out.interpolate(as_vector(self.x_out_expr))
             else:
                 # Extrapolate at boundaries
                 self.boundary_recoverer.apply()
