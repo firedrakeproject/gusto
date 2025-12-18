@@ -294,13 +294,15 @@ class Recoverer(object):
         if self.boundary_method is not None:
             # For vector elements, treat each component separately
             if self.vector_function_space:
+                # TODO: something about interpolating to scalars and then back
+                # is making the lowest-order bubble tests assymetric!
                 for i, boundary_recoverer in enumerate(self.boundary_recoverers):
-                    self.x_out_scalars[i].project(dot(self.unit_vec[i], self.x_out))
+                    self.x_out_scalars[i].interpolate(dot(self.unit_vec[i], self.x_out))
 
                     # Correct at boundaries
                     boundary_recoverer.apply()
                 # Combine the components to obtain the vector field
-                self.x_out.project(as_vector(self.x_out_expr))
+                self.x_out.interpolate(as_vector(self.x_out_expr))
             else:
                 # Extrapolate at boundaries
                 self.boundary_recoverer.apply()
