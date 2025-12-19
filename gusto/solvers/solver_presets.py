@@ -232,7 +232,7 @@ def hybridised_solver_parameters(equation, alpha=0.5, tau_values=None,
             # (u, D, scalars) system - moist convective shallow water
 
             # Create scalars list excluding u and D. Scalars are moisture variables and
-            # are not sovled for in the linear solver.
+            # are not solved for in the linear solver.
             scalars = ",".join(str(idx) for idx, name in enumerate(fields) if name not in ['u', 'D'])
             settings = {
                 'mat_type': 'matfree',
