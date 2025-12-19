@@ -37,7 +37,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     """
 
     def __init__(self, equation_set, io, transport_schemes, spatial_methods,
-                 auxiliary_equations_and_schemes=None, linear_solver=None,
+                 auxiliary_equations_and_schemes=None,
                  diffusion_schemes=None, inner_physics_schemes=None,
                  final_physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
@@ -61,8 +61,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             auxiliary_equations_and_schemes: iterable of ``(equation, scheme)``
                 pairs indicating any additional equations to be solved and the
                 scheme to use to solve them. Defaults to None.
-            linear_solver (:class:`TimesteppingSolver`, optional): the object
-                to use for the linear solve. Defaults to None.
             diffusion_schemes (iter, optional): iterable of pairs of the form
                 ``(field_name, scheme)`` indicating the fields to diffuse, and
                 the :class:`~.TimeDiscretisation` to use. Defaults to None.
@@ -203,21 +201,19 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # BCs, Forcing and Linear Solver ---------------------------------------
         self.bcs = equation_set.bcs
         self.forcing = Forcing(equation_set, self.implicit_terms, self.alpha)
-        if linear_solver is None:
-            if linear_solver_parameters is None:
-                self.linear_solver_parameters, self.appctx = \
-                    hybridised_solver_parameters(equation_set, alpha=self.alpha, tau_values=tau_values)
-            else:
-                self.linear_solver_parameters = linear_solver_parameters
-                self.appctx = appctx
-            self.linear_solver = QuasiNewtonLinearSolver(
-                equation_set, solver_prognostics, self.implicit_terms,
-                self.alpha, tau_values=tau_values,
-                solver_parameters=self.linear_solver_parameters,
-                appctx=self.appctx
-            )
+
+        if linear_solver_parameters is None:
+            self.linear_solver_parameters, self.appctx = \
+                hybridised_solver_parameters(equation_set, alpha=self.alpha, tau_values=tau_values)
         else:
-            self.linear_solver = linear_solver
+            self.linear_solver_parameters = linear_solver_parameters
+            self.appctx = appctx
+        self.linear_solver = QuasiNewtonLinearSolver(
+            equation_set, solver_prognostics, self.implicit_terms,
+            self.alpha, tau_values=tau_values,
+            solver_parameters=self.linear_solver_parameters,
+            appctx=self.appctx
+        )
 
         # Options relating to reference profiles and spin-up -------------------
         self._alpha_original = float(alpha)  # float so as to not upset adjoint
@@ -939,7 +935,7 @@ class QuasiNewtonLinearSolver(object):
             self.equation.update_reference_profiles()
             self.solver.invalidate_jacobian()
 
-            # TODO: Issue X is to address this reference profile update bug (pythonPC update not called)
+            # TODO: Issue #686 is to address this reference profile update bug (pythonPC update not called)
             # this line forces it to update for now
             pc = self.solver.snes.getKSP().getPC()
             if (isinstance(self.equation, CompressibleEulerEquations) and pc.getType() == "python"):
@@ -958,7 +954,7 @@ class QuasiNewtonLinearSolver(object):
         for field_name in field_names:
 
             if field_name not in prognostic_names:
-                logger.debug(f'Semi-Implicit Quasi Newton: Zeroing xrhs for {field_name}')
+                logger.info(f'Semi-Implicit Quasi Newton: Zeroing xrhs for {field_name}')
                 field_index = equation.field_names.index(field_name)
                 xrhs.subfunctions[field_index].assign(0.0)
 

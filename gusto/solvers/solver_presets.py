@@ -1,5 +1,5 @@
 """
-This module provides PETSc dictionaries for nonlinear and linear problems.
+This module provides PETSc dictionaries for linear problems.
 
 The solvers provided here are used for solving linear problems on mixed
 finite element spaces.
@@ -12,11 +12,10 @@ from firedrake import (
     VectorSpaceBasis
 )
 
-__all__ = ["hybridised_solver_parameters"]
+__all__ = ["hybridised_solver_parameters", "monolithic_solver_parameters"]
 
 
-def hybridised_solver_parameters(equation, alpha=0.5, tau_values=None,
-                                 nonlinear=False):
+def hybridised_solver_parameters(equation, alpha=0.5, tau_values=None):
     """
     Returns PETSc solver settings for hybridised solver for mixed finite
     element problems.
@@ -29,8 +28,6 @@ def hybridised_solver_parameters(equation, alpha=0.5, tau_values=None,
     tau_values : dict, optional
         A dictionary of stabilization parameters for the hybridization.
         Default is None.
-    nonlinear : bool, optional
-        Whether the problem is nonlinear. Default is False.
     Returns
     -------
     settings : dict
@@ -339,18 +336,37 @@ def hybridised_solver_parameters(equation, alpha=0.5, tau_values=None,
                       "trace_nullspace": trace_nullsp,
                       }
 
-        if nonlinear:
-            # Nonlinear solver settings.
-            settings['ksp_type'] = 'fgmres'
-            settings['snes_type'] = 'newtonls'
-            settings['snes_rtol'] = 1e-8
-            settings['snes_max_it'] = 50
-            settings['snes_monitor'] = None
-            settings['ksp_rtol'] = 1e-8
-            settings['ksp_max_it'] = 100
-            settings['ksp_atol'] = 1e-8
-            settings['snes_rtol'] = 1e-4
-            settings['snes_atol'] = 1e-6
-            settings['snes_converged_reason'] = None
-            settings['snes_view'] = None
     return settings, appctx
+
+
+def monolithic_solver_parameters():
+    """
+    Returns PETSc solver settings for monolithic solver for mixed finite
+    element problems.
+
+    Returns
+    -------
+    settings : dict
+        A dictionary containing the PETSc solver settings.
+    """
+    settings = {
+        "snes_type": "ksponly",
+        "mat_type": "matfree",
+        "ksp_type": "gmres",
+        "ksp_converged_reason": None,
+        "ksp_atol": 1e-5,
+        "ksp_rtol": 1e-5,
+        "ksp_max_it": 400,
+        "pc_type": "python",
+        "pc_python_type": "firedrake.AssembledPC",
+        "assembled_pc_star_sub_sub_pc_type": "lu",
+        "assembled_pc_type": "python",
+        "assembled_pc_python_type": "firedrake.ASMStarPC",
+        "assembled_pc_star_construct_dim": 0,
+        "assembled_pc_star_sub_sub_pc_factor_mat_ordering_type": "rcm",
+        "assembled_pc_star_sub_sub_pc_factor_reuse_ordering": None,
+        "assembled_pc_star_sub_sub_pc_factor_reuse_fill": None,
+        "assembled_pc_star_sub_sub_pc_factor_fill": 1.2
+    }
+
+    return settings

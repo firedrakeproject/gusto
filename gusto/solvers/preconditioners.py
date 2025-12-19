@@ -452,8 +452,9 @@ class CompressibleHybridisedSCPC(PCBase):
     (3) Reconstruct theta
 
     This method requires special handling as Firedrake's existing hybridization
-    preconditioner assumes a linear pressure gradient term rather than the nonlinear
-    form in the Compressible Euler equations.
+    preconditioner assumes that the pressure gradient term contains variables
+    from the mixed system being solved for. In our case, we first eliminate pressure,
+    then eliminate theta analytically, violating this assumption.
     """
 
     _prefix = "compressible_hybrid_scpc"
@@ -529,13 +530,14 @@ class CompressibleHybridisedSCPC(PCBase):
         self.W = equations.function_space
         self.W_hyb = MixedFunctionSpace((self.Vu_broken, self.Vrho, self.Vtrace))
 
-        # Define
+        # Define Functions and Cofunctions for rhs and solution vectors
         self.xstar = Cofunction(self.W.dual())
         self.xrhs = Function(self.W)
         self.y = Function(self.W)
 
         self.y_hybrid = Function(self.W_hyb)
 
+        # Split input functions
         u_in, rho_in, theta_in = self.xrhs.subfunctions[0:3]
 
         # Get bcs

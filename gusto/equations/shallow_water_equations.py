@@ -436,11 +436,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 + jump(bbar*w, n) * avg(D_trial) * dS
                 + 0.5 * jump(Dbar*w, n) * avg(b_trial) * dS
                 - beta2 * D_trial * div(qvbar*w)*dx
-                - 0.5 * beta2 * qvbar * div(Dbar*w) * dx
                 + beta2 * jump(qvbar*w, n) * avg(D_trial) * dS
-                + 0.5 * beta2 * jump(Dbar*w, n) * avg(qvbar) * dS
-                - 0.5 * bbar * div(Dbar*w) * dx
-                + 0.5 * jump(Dbar*w, n) * avg(bbar) * dS
                 - 0.5 * bbar * div(D_trial*w) * dx
                 + 0.5 * jump(D_trial*w, n) * avg(bbar) * dS
                 - beta2 * 0.5 * qvbar * div(D_trial*w) * dx
@@ -465,8 +461,6 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                                    + jump(bbar*w, n) * avg(D_trial) * dS
                                    - 0.5 * b_trial * div(Dbar*w) * dx
                                    + 0.5 * jump(Dbar*w, n) * avg(b_trial) * dS
-                                   - 0.5 * bbar * div(Dbar*w) * dx
-                                   + 0.5 * jump(Dbar*w, n) * avg(bbar) * dS
                                    - 0.5 * bbar * div(D_trial*w) * dx
                                    + 0.5 * jump(D_trial*w, n) * avg(bbar) * dS,
                                    'u'), self.X))

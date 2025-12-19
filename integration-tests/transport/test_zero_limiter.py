@@ -109,7 +109,7 @@ def setup_zero_limiter(dirname, limiter=False, rain=False):
                           ]
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       transport_methods,
-                                      physics_schemes=physics_schemes)
+                                      final_physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
