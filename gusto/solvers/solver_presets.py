@@ -273,7 +273,7 @@ def hybridised_solver_parameters(equation, alpha=0.5, tau_values=None,
         elif (fields[0:3] == ['u', 'D', 'b'] or fields[0:3] == ['u', 'D', 'b_e']) and len(fields) > 3:
             # (u, D, b, scalars) system - moist thermal shallow water
             # Create scalars list excluding u, D and b/b_e. Scalars are moisture
-            # variables and are not sovled for in the linear solver.
+            # variables and are not solved for in the linear solver.
             scalars = ",".join(str(idx) for idx, name in enumerate(fields) if name not in ['u', 'D', 'b', 'b_e'])
             settings = {
                 'ksp_monitor_true_residual': None,
