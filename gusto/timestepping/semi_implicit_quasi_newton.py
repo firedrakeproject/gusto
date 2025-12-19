@@ -823,7 +823,7 @@ class QuasiNewtonLinearSolver(object):
                  reference_dependent=True, appctx=None):
         """
         Args:
-            equations (:class:`PrognosticEquation`): the model's equation.
+            equation (:class:`PrognosticEquation`): the model's equation.
             solver_prognostics (list): a list of prognostic variable names to
                 include in the linear solver.
             implicit_terms (list): a list of labels for terms that are always
