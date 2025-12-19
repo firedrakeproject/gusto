@@ -7,7 +7,7 @@ physics and the ThermalSWSolver.
 
 from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate, pi, sqrt,
-                       min_value, cos, sin, Constant, exp, Function)
+                       min_value, cos, sin, Constant, exp, Function, dx)
 import numpy as np
 
 
@@ -32,8 +32,36 @@ def set_up_model_objects(mesh, dt, q0, beta2, nu, physics_type, output):
 
     # Equation
     tracers = [WaterVapour(space='DG'), CloudWater(space='DG')]
-    eqns = ThermalShallowWaterEquations(domain, parameters,
-                                        active_tracers=tracers)
+    if physics_type == "final":
+        eqns = ThermalShallowWaterEquations(domain, parameters,
+                                            active_tracers=tracers)
+    elif physics_type == "inner_loop":
+        eqns = ThermalShallowWaterEquations(domain, parameters,
+                                            active_tracers=tracers)
+
+        _, Dbar, bbar, qvbar, _ = eqns.X_ref.subfunctions[::]
+        _, D, b, qv, _ = eqns.X.subfunctions[::]
+        _, _, lamda, tau1, tau2 = eqns.tests[::]
+
+        # Get parameters from equation
+        q0 = eqns.parameters.q0
+        nu = eqns.parameters.nu
+        beta2 = eqns.parameters.beta2
+        g = eqns.parameters.g
+        H = eqns.parameters.H
+        b_ebar = bbar - beta2*qvbar
+        sat_expr = q0*H/(Dbar) * exp(nu*(1 - b_ebar/g))
+        P_expr = (
+            qv - sat_expr*(-D/Dbar - b*nu/g + qv*nu*beta2/g)
+        )
+        bform = subject(prognostic(physics_label(physics_beta * lamda * beta2 * P_expr * dx)), eqns.X)
+        eqns.residual += bform
+
+        qvform = subject(prognostic(physics_label(physics_beta * tau1 * P_expr * dx)), eqns.X)
+        eqns.residual += qvform
+
+        qcform = subject(prognostic(physics_label(-physics_beta * tau2 * P_expr * dx)), eqns.X)
+        eqns.residual += qcform
 
     io = IO(domain, output)
 
@@ -53,10 +81,6 @@ def set_up_model_objects(mesh, dt, q0, beta2, nu, physics_type, output):
                           SSPRK3(domain, "b", limiter=DG1limiter),
                           SSPRK3(domain, "water_vapour", limiter=DG1limiter),
                           SSPRK3(domain, "cloud_water", limiter=DG1limiter)]
-
-    # Linear solvers
-    thermal_solver = ThermalSWSolver(eqns)
-    moist_solver = MoistThermalSWSolver(eqns, physics_beta=physics_beta)
 
     # Physics
     def phys_sat_func(x_in):
@@ -79,16 +103,16 @@ def set_up_model_objects(mesh, dt, q0, beta2, nu, physics_type, output):
     if physics_type == "final":
         stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                           transport_methods,
-                                          linear_solver=thermal_solver,
                                           final_physics_schemes=physics_schemes,
                                           num_outer=2, num_inner=2)
     elif physics_type == "inner_loop":
+        solver_parameters = monolithic_solver_parameters()
         stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                           transport_methods,
-                                          linear_solver=moist_solver,
                                           inner_physics_schemes=physics_schemes,
                                           num_outer=2, num_inner=2,
-                                          solver_prognostics=eqns.field_names)
+                                          solver_prognostics=eqns.field_names,
+                                          linear_solver_parameters=solver_parameters)
 
     return stepper, eqns
 

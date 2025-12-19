@@ -15,7 +15,7 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, DefaultTransport,
     DGUpwind, ForwardEuler, ShallowWaterParameters, NumericalIntegral,
     LinearThermalShallowWaterEquations, GeneralIcosahedralSphereMesh,
-    ZonalComponent, ThermalSWSolver, lonlatr_from_xyz, xyz_vector_from_lonlatr,
+    ZonalComponent, lonlatr_from_xyz, xyz_vector_from_lonlatr,
     RelativeVorticity, MeridionalComponent
 )
 
@@ -81,13 +81,8 @@ def linear_thermal_galewsky_jet(
     transport_schemes = [ForwardEuler(domain, "D")]
     transport_methods = [DefaultTransport(eqns, "D"), DGUpwind(eqns, "b")]
 
-    # Linear solver
-    linear_solver = ThermalSWSolver(eqns)
-
-    # Time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transport_schemes, transport_methods,
-        linear_solver=linear_solver
+        eqns, io, transport_schemes, transport_methods
     )
 
     # ------------------------------------------------------------------------ #

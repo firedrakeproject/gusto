@@ -90,16 +90,12 @@ def setup_saturated(dirname, recovered):
                          DGUpwind(eqns, 'water_vapour'),
                          DGUpwind(eqns, 'cloud_water')]
 
-    # Linear solver
-    linear_solver = CompressibleSolver(eqns)
-
     # Physics schemes
     physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain))]
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       transport_methods,
-                                      linear_solver=linear_solver,
                                       final_physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #

@@ -1,8 +1,8 @@
 """Defines variants of the compressible Euler equations."""
 
 from firedrake import (
-    sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg, dS_v,
-    conditional, SpatialCoordinate, split, Constant, as_vector
+    sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg,
+    conditional, SpatialCoordinate, split, Constant, as_vector, dS_v
 )
 from firedrake.fml import subject, replace_subject, all_terms
 from gusto.core.labels import (
@@ -33,6 +33,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
     planet's rotation vector and c_p is the heat capacity of dry air at constant
     pressure.
     """
+
+    name = "CompressibleEulerEquations"
 
     def __init__(self, domain, parameters, sponge_options=None,
                  extra_terms=None, space_names=None,
