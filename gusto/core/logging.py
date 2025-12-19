@@ -65,9 +65,9 @@ def capture_exceptions(exception_type, exception_value, traceback, logger=logger
 sys.excepthook = capture_exceptions
 
 # Set the log level based on environment variables
-log_level = os.environ.get("GUSTO_LOG_LEVEL", WARNING)
-logfile_level = os.environ.get("GUSTO_FILE_LOG_LEVEL", DEBUG)
-logconsole_level = os.environ.get("GUSTO_CONSOLE_LOG_LEVEL", INFO)
+log_level = os.environ.get("GUSTO_LOG_LEVEL", INFO)
+logfile_level = os.environ.get("GUSTO_FILE_LOG_LEVEL", log_level)
+logconsole_level = os.environ.get("GUSTO_CONSOLE_LOG_LEVEL", log_level)
 log_level_list = [log_level, logfile_level, logconsole_level]
 log_levels = [
     logging.getLevelName(x) if isinstance(x, str)
