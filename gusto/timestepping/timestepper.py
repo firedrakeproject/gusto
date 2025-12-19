@@ -358,6 +358,8 @@ class Timestepper(BaseTimestepper):
         self.setup_equation(self.equation)
         self.scheme.setup(self.equation)
         self.setup_transporting_velocity(self.scheme)
+        if hasattr(self.scheme, 'base'):
+            self.setup_transporting_velocity(self.scheme.base)
         if self.io.output.log_courant:
             self.scheme.courant_max = self.io.courant_max
 
