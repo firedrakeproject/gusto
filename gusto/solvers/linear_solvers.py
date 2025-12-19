@@ -674,12 +674,11 @@ class ThermalSWSolver(TimesteppingSolver):
 
         eqn = (
             inner(w, (u - u_in)) * dx
-            - beta_u * (D - Dbar) * div(w*bbar) * dx
-            + beta_u * jump(w*bbar, n) * avg(D-Dbar) * dS
-            - beta_u * 0.5 * Dbar * bbar * div(w) * dx
+            - beta_u * D * div(w*bbar) * dx
+            + beta_u * jump(w*bbar, n) * avg(D) * dS
             - beta_u * 0.5 * Dbar * b * div(w) * dx
-            - beta_u * 0.5 * bbar * div(w*(D-Dbar)) * dx
-            + beta_u * 0.5 * jump((D-Dbar)*w, n) * avg(bbar) * dS
+            - beta_u * 0.5 * bbar * div(w*D) * dx
+            + beta_u * 0.5 * jump(D*w, n) * avg(bbar) * dS
             + inner(phi, (D - D_in)) * dx
             + beta_d * phi * div(Dbar*u) * dx
         )
