@@ -197,17 +197,17 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             tmax (float): the end time of the run
             pick_up: (bool): specify whether to pick_up from a previous run
         """
-        if self.init_io:
-            # Set up diagnostics, which may set up some fields necessary to pick up
-            self.io.setup_diagnostics(self.fields)
-            self.io.setup_log_courant(self.fields)
-            if self.equation.domain.mesh.extruded:
-                self.io.setup_log_courant(self.fields, component='horizontal')
-                self.io.setup_log_courant(self.fields, component='vertical')
-            if self.transporting_velocity != "prognostic":
-                self.io.setup_log_courant(self.fields, name='transporting_velocity',
-                                          expression=self.transporting_velocity)
+        # Set up diagnostics, which may set up some fields necessary to pick up
+        self.io.setup_diagnostics(self.fields)
+        self.io.setup_log_courant(self.fields)
+        if self.equation.domain.mesh.extruded:
+            self.io.setup_log_courant(self.fields, component='horizontal')
+            self.io.setup_log_courant(self.fields, component='vertical')
+        if self.transporting_velocity != "prognostic":
+            self.io.setup_log_courant(self.fields, name='transporting_velocity',
+                                      expression=self.transporting_velocity)
 
+        if self.init_io:
             # Set up dump, which may also include an initial dump
             with timed_stage("Dump output"):
                 logger.debug('Dumping output to disk')
