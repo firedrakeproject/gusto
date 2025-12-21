@@ -446,9 +446,7 @@ class CourantNumber(DiagnosticField):
         self.cell_flux_form = 2*avg(un*test)*dS_calc + un*test*ds_calc
 
         # Final Courant number expression
-        cell_flux = self.cell_flux.riesz_representation(
-            'l2', solver_options={'function_space': V}
-        )
+        cell_flux = Function(V, val=self.cell_flux.dat)
         self.expr = cell_flux * domain.dt / cell_volume
 
         super().setup(domain, state_fields)
@@ -653,14 +651,10 @@ class ZComponent(VectorComponent):
 
 class SphericalComponent(VectorComponent):
     """Base diagnostic for computing spherical-polar components of fields."""
-    def __init__(self, name, rotated_pole=None, space=None, method='interpolate'):
+    def __init__(self, name, space=None, method='interpolate'):
         """
         Args:
             name (str): name of the field to compute the component of.
-            rotated_pole (tuple of floats, optional): a tuple of floats
-                (lon, lat) of the new pole, in the original coordinate system.
-                The longitude and latitude must be expressed in radians.
-                Defaults to None, corresponding to a pole of (0, pi/2).
             space (:class:`FunctionSpace`, optional): the function space to
                 evaluate the diagnostic field in. Defaults to None, in which
                 case the default space is the domain's DG space.
@@ -668,7 +662,6 @@ class SphericalComponent(VectorComponent):
                 for this diagnostic. Valid options are 'interpolate', 'project',
                 'assign' and 'solve'. Defaults to 'interpolate'.
         """
-        self.rotated_pole = (0.0, pi/2) if rotated_pole is None else rotated_pole
         super().__init__(name=name, space=space, method=method)
 
     def _check_args(self, domain, field):
@@ -707,7 +700,8 @@ class MeridionalComponent(SphericalComponent):
         f = state_fields(self.fname)
         self._check_args(domain, f)
         xyz = SpatialCoordinate(domain.mesh)
-        _, e_lat, _ = rotated_lonlatr_vectors(xyz, self.rotated_pole)
+        pole = (0.0, pi/2)
+        _, e_lat, _ = rotated_lonlatr_vectors(xyz, pole)
         super().setup(domain, state_fields, e_lat)
 
 
@@ -729,7 +723,8 @@ class ZonalComponent(SphericalComponent):
         f = state_fields(self.fname)
         self._check_args(domain, f)
         xyz = SpatialCoordinate(domain.mesh)
-        e_lon, _, _ = rotated_lonlatr_vectors(xyz, self.rotated_pole)
+        pole = (0.0, pi/2)
+        e_lon, _, _ = rotated_lonlatr_vectors(xyz, pole)
         super().setup(domain, state_fields, e_lon)
 
 
@@ -751,7 +746,8 @@ class RadialComponent(SphericalComponent):
         f = state_fields(self.fname)
         self._check_args(domain, f)
         xyz = SpatialCoordinate(domain.mesh)
-        _, _, e_r = rotated_lonlatr_vectors(xyz, self.rotated_pole)
+        pole = (0.0, pi/2)
+        _, _, e_r = rotated_lonlatr_vectors(xyz, pole)
         super().setup(domain, state_fields, e_r)
 
 
