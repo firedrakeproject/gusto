@@ -29,6 +29,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         self.equation = equation
         self.io = io
+        self.init_io = True    # flag so that IO is only set up once
         self.dt = self.equation.domain.dt
         self.t = self.equation.domain.t
         self.reference_profiles_initialised = False
@@ -196,7 +197,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             tmax (float): the end time of the run
             pick_up: (bool): specify whether to pick_up from a previous run
         """
-
         # Set up diagnostics, which may set up some fields necessary to pick up
         self.io.setup_diagnostics(self.fields)
         self.io.setup_log_courant(self.fields)
@@ -206,6 +206,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         if self.transporting_velocity != "prognostic":
             self.io.setup_log_courant(self.fields, name='transporting_velocity',
                                       expression=self.transporting_velocity)
+
+        if self.init_io:
+            # Set up dump, which may also include an initial dump
+            with timed_stage("Dump output"):
+                logger.debug('Dumping output to disk')
+                self.io.setup_dump(self.fields, t, pick_up)
+
+            self.init_io = False
 
         if pick_up:
             # Pick up fields, and return other info to be picked up
@@ -219,11 +227,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
 
         else:
             self.step = 1
-
-        # Set up dump, which may also include an initial dump
-        with timed_stage("Dump output"):
-            logger.debug('Dumping output to disk')
-            self.io.setup_dump(self.fields, t, pick_up)
 
         self.log_field_stats()
 

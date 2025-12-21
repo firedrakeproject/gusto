@@ -372,7 +372,7 @@ class IO(object):
         Sets up a series of things used for outputting.
 
         This prepares the model for outputting. First it checks for the
-        existence the specified outputting directory, so prevent it being
+        existence of the specified output directory to prevent it being
         overwritten unintentionally. It then sets up the output files and the
         checkpointing file.
 
