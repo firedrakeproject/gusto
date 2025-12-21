@@ -25,7 +25,6 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation.
             io (:class:`IO`): the model's object for controlling input/output.
-            init_io (:bool): whether or not to set up the IO
         """
 
         self.equation = equation
