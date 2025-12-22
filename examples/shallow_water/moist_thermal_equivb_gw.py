@@ -160,11 +160,7 @@ def moist_thermal_gw(
         q_v_init.interpolate(q_v_init - (q_sat_expr - q_v_init)/(dq_sat_dq_v_expr - 1.0))
         b_e_init.interpolate(b_init - beta2*q_v_init)
 
-    # Water vapour set to saturation amount
-    vexpr = q0*mean_depth/Dexpr * exp(nu*(1-b_e_init/g))
-
-    # Back out the initial buoyancy using b_e and q_v
-    bexpr = b_e_init + beta2*vexpr
+    bexpr = b_e_init
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)
