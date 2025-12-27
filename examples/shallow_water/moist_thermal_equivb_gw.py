@@ -5,13 +5,13 @@ equations. The initial conditions are saturated and cloudy everywhere.
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
-    SpatialCoordinate, pi, sqrt, min_value, cos, Constant, Function, exp, sin
+    SpatialCoordinate, pi, sqrt, min_value, cos, Constant, Function, exp, sin,
 )
 from gusto import (
     Domain, IO, OutputParameters, DGUpwind, ShallowWaterParameters,
     ThermalShallowWaterEquations, lonlatr_from_xyz, MeridionalComponent,
     GeneralIcosahedralSphereMesh, SubcyclingOptions, ZonalComponent,
-    PartitionedCloud, RungeKuttaFormulation, SSPRK3, ThermalSWSolver,
+    PartitionedCloud, RungeKuttaFormulation, SSPRK3,
     SemiImplicitQuasiNewton, xyz_vector_from_lonlatr
 )
 
@@ -81,12 +81,9 @@ def moist_thermal_gw(
         DGUpwind(eqns, field_name) for field_name in eqns.field_names
     ]
 
-    linear_solver = ThermalSWSolver(eqns)
-
     # ------------------------------------------------------------------------ #
     # Timestepper
     # ------------------------------------------------------------------------ #
-
     subcycling_opts = SubcyclingOptions(subcycle_by_courant=0.25)
     transported_fields = [
         SSPRK3(domain, "u", subcycling_options=subcycling_opts),
@@ -97,9 +94,9 @@ def moist_thermal_gw(
         SSPRK3(domain, "b_e", subcycling_options=subcycling_opts),
         SSPRK3(domain, "q_t", subcycling_options=subcycling_opts),
     ]
+
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver,
+        eqns, io, transported_fields, transport_methods, solver_prognostics=["u", "D", "b_e"]
     )
 
     # ------------------------------------------------------------------------ #

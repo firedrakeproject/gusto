@@ -15,8 +15,7 @@ from firedrake import (
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, SUPGOptions, Divergence, Perturbation, CourantNumber,
-    BoussinesqParameters, BoussinesqEquations, BoussinesqSolver,
-    boussinesq_hydrostatic_balance
+    BoussinesqParameters, BoussinesqEquations, boussinesq_hydrostatic_balance
 )
 
 skamarock_klemp_compressible_bouss_defaults = {
@@ -90,13 +89,9 @@ def skamarock_klemp_compressible_bouss(
         DGUpwind(eqns, "b", ibp=b_opts.ibp)
     ]
 
-    # Linear solver
-    linear_solver = BoussinesqSolver(eqns)
-
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
+        eqns, io, transported_fields, transport_methods
     )
 
     # ------------------------------------------------------------------------ #

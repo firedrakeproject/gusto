@@ -16,7 +16,7 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, SUPGOptions, CourantNumber, Perturbation,
     DiffusionParameters, InteriorPenaltyDiffusion, BackwardEuler,
-    CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
+    CompressibleParameters, CompressibleEulerEquations,
     compressible_hydrostatic_balance
 )
 
@@ -101,9 +101,6 @@ def straka_bubble(
         DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
     ]
 
-    # Linear solver
-    linear_solver = CompressibleSolver(eqns)
-
     # Diffusion schemes
     diffusion_schemes = [
         BackwardEuler(domain, "u"),
@@ -118,7 +115,7 @@ def straka_bubble(
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields,
         spatial_methods=transport_methods+diffusion_methods,
-        linear_solver=linear_solver, diffusion_schemes=diffusion_schemes
+        diffusion_schemes=diffusion_schemes
     )
 
     # ------------------------------------------------------------------------ #

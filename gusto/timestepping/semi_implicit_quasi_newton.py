@@ -9,7 +9,6 @@ from firedrake import (
 )
 from firedrake.fml import drop, replace_subject, Term
 from firedrake.__future__ import interpolate
-from firedrake.petsc import flatten_parameters
 from pyop2.profiling import timed_stage, timed_function
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (
@@ -20,9 +19,11 @@ from gusto.solvers import mass_parameters
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
+from gusto.solvers.solver_presets import hybridised_solver_parameters
+from gusto.equations.compressible_euler_equations import CompressibleEulerEquations
 
 
-__all__ = ["SemiImplicitQuasiNewton", "Forcing"]
+__all__ = ["SemiImplicitQuasiNewton", "Forcing", "QuasiNewtonLinearSolver"]
 
 
 class SemiImplicitQuasiNewton(BaseTimestepper):
@@ -36,7 +37,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     """
 
     def __init__(self, equation_set, io, transport_schemes, spatial_methods,
-                 auxiliary_equations_and_schemes=None, linear_solver=None,
+                 auxiliary_equations_and_schemes=None,
                  diffusion_schemes=None, inner_physics_schemes=None,
                  final_physics_schemes=None,
                  slow_physics_schemes=None, fast_physics_schemes=None,
@@ -46,7 +47,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  predictor=None, reference_update_freq=None,
                  spinup_steps=0, solver_prognostics=None,
                  linear_solver_parameters=None,
-                 overwrite_linear_solver_parameters=False):
+                 appctx=None):
         """
         Args:
             equation_set (:class:`PrognosticEquationSet`): the prognostic
@@ -60,8 +61,6 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             auxiliary_equations_and_schemes: iterable of ``(equation, scheme)``
                 pairs indicating any additional equations to be solved and the
                 scheme to use to solve them. Defaults to None.
-            linear_solver (:class:`TimesteppingSolver`, optional): the object
-                to use for the linear solve. Defaults to None.
             diffusion_schemes (iter, optional): iterable of pairs of the form
                 ``(field_name, scheme)`` indicating the fields to diffuse, and
                 the :class:`~.TimeDiscretisation` to use. Defaults to None.
@@ -135,10 +134,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             linear_solver_parameters (dict, optional): contains the options to
                 be passed to the underlying :class:`LinearVariationalSolver`.
                 Defaults to None.
-            overwrite_solver_parameters (bool, optional): if True use only the
-                `solver_parameters` that have been passed in. If False then
-                update the default parameters with the `solver_parameters`
-                passed in. Defaults to False.
+            appctx (dict, optional): a dictionary of application context for the
+                underlying :class:`LinearVariationalSolver`.
+                Defaults to None.
         """
 
         # Basic parts of the SIQN structure ------------------------------------
@@ -203,15 +201,19 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # BCs, Forcing and Linear Solver ---------------------------------------
         self.bcs = equation_set.bcs
         self.forcing = Forcing(equation_set, self.implicit_terms, self.alpha)
-        if linear_solver is None:
-            self.linear_solver = SIQNLinearSolver(
-                equation_set, solver_prognostics, self.implicit_terms,
-                self.alpha, tau_values=tau_values,
-                solver_parameters=linear_solver_parameters,
-                overwrite_solver_parameters=overwrite_linear_solver_parameters
-            )
+
+        if linear_solver_parameters is None:
+            self.linear_solver_parameters, self.appctx = \
+                hybridised_solver_parameters(equation_set, alpha=self.alpha, tau_values=tau_values)
         else:
-            self.linear_solver = linear_solver
+            self.linear_solver_parameters = linear_solver_parameters
+            self.appctx = appctx
+        self.linear_solver = QuasiNewtonLinearSolver(
+            equation_set, solver_prognostics, self.implicit_terms,
+            self.alpha, tau_values=tau_values,
+            solver_parameters=self.linear_solver_parameters,
+            appctx=self.appctx
+        )
 
         # Options relating to reference profiles and spin-up -------------------
         self._alpha_original = float(alpha)  # float so as to not upset adjoint
@@ -803,7 +805,7 @@ class Forcing(object):
                 x_out.subfunctions[field_index].assign(x_in(field_name))
 
 
-class SIQNLinearSolver(object):
+class QuasiNewtonLinearSolver(object):
     """
     Sets up the linear solver for the Semi-Implicit Quasi-Newton timestepper.
 
@@ -812,26 +814,12 @@ class SIQNLinearSolver(object):
     Quasi-Newton problem.
     """
 
-    solver_parameters = {
-        'ksp_type': 'preonly',
-        'mat_type': 'matfree',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.HybridizationPC',
-        'hybridization': {'ksp_type': 'cg',
-                          'pc_type': 'gamg',
-                          'ksp_rtol': 1e-8,
-                          'mg_levels': {'ksp_type': 'chebyshev',
-                                        'ksp_max_it': 2,
-                                        'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'}}
-    }
-
     def __init__(self, equation, solver_prognostics, implicit_terms,
-                 alpha, tau_values=None, solver_parameters=None,
-                 overwrite_solver_parameters=False, reference_dependent=True):
+                 alpha, solver_parameters, tau_values=None,
+                 reference_dependent=True, appctx=None):
         """
         Args:
-            equations (:class:`PrognosticEquation`): the model's equation.
+            equation (:class:`PrognosticEquation`): the model's equation.
             solver_prognostics (list): a list of prognostic variable names to
                 include in the linear solver.
             implicit_terms (list): a list of labels for terms that are always
@@ -850,15 +838,19 @@ class SIQNLinearSolver(object):
                 passed in. Defaults to False.
             reference_dependent: this indicates that the solver Jacobian should
                 be rebuilt if the reference profiles have been updated.
+            appctx: appctx for the  underlying :class:`LinearVariationalSolver`.
         """
 
-        # Update or set solver parameters --------------------------------------
-        if solver_parameters is not None:
-            if not overwrite_solver_parameters:
-                p = flatten_parameters(self.solver_parameters)
-                p.update(flatten_parameters(solver_parameters))
-                solver_parameters = p
-            self.solver_parameters = solver_parameters
+        # Set solver parameters --------------------------------------
+        self.solver_parameters = solver_parameters
+
+        self.equation = equation
+        self.solver_prognostics = solver_prognostics
+
+        if appctx is not None:
+            self.appctx = appctx
+        else:
+            self.appctx = {}
 
         if logger.isEnabledFor(DEBUG):
             self.solver_parameters["ksp_monitor_true_residual"] = None
@@ -924,11 +916,11 @@ class SIQNLinearSolver(object):
             for bc in equation.bcs['u']
         ]
         problem = LinearVariationalProblem(
-            aeqn.form, action(Leqn.form, self.xrhs), self.dy, bcs=bcs,
-            constant_jacobian=True)
+            aeqn.form, action(Leqn.form, self.xrhs), self.dy, bcs=bcs, constant_jacobian=True
+        )
 
         self.solver = LinearVariationalSolver(
-            problem, solver_parameters=self.solver_parameters,
+            problem, appctx=self.appctx, solver_parameters=self.solver_parameters,
             options_prefix='linear_solver'
         )
 
@@ -940,7 +932,31 @@ class SIQNLinearSolver(object):
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
         if self.reference_dependent:
+            self.equation.update_reference_profiles()
             self.solver.invalidate_jacobian()
+
+            # TODO: Issue #686 is to address this reference profile update bug (pythonPC update not called)
+            # this line forces it to update for now
+            pc = self.solver.snes.getKSP().getPC()
+            if (isinstance(self.equation, CompressibleEulerEquations) and pc.getType() == "python"):
+                pc.getPythonContext().update(pc)
+
+    def zero_non_prognostics(self, equation, xrhs, field_names, prognostic_names):
+        """
+        Zero rhs term F(x) for non-prognostics.
+
+        Args:
+            equation (:class:`PrognosticEquationSet`): the prognostic
+                equation set to be solved
+            xrhs (:class:`FieldCreator`): the field to be incremented.
+            field_names (str): list of fields names for prognostic fields
+        """
+        for field_name in field_names:
+
+            if field_name not in prognostic_names:
+                logger.info(f'Semi-Implicit Quasi Newton: Zeroing xrhs for {field_name}')
+                field_index = equation.field_names.index(field_name)
+                xrhs.subfunctions[field_index].assign(0.0)
 
     @timed_function("Gusto:LinearSolve")
     def solve(self, xrhs, dy):
@@ -953,6 +969,13 @@ class SIQNLinearSolver(object):
             dy (:class:`Function`): the resulting increment field in the
                 appropriate :class:`MixedFunctionSpace`.
         """
+
         self.xrhs.assign(xrhs)
+        self.zero_non_prognostics(self.equation, self.xrhs,
+                                  self.equation.field_names,
+                                  self.solver_prognostics)
+        self.dy.assign(0.0)
+
         self.solver.solve()
+
         dy.assign(self.dy)
