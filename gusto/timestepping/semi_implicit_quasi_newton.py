@@ -926,7 +926,6 @@ class QuasiNewtonLinearSolver(object):
         if logger.isEnabledFor(DEBUG):
             self.solver.snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
 
-
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
         if self.reference_dependent:

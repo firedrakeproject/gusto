@@ -231,6 +231,8 @@ def moist_thermal_gw(
 
     if equivb:
         bexpr = b_e_init
+    # NB: to directly compare with equivalent buoyancy case, at this point
+    # we would set bexpr = b_e_init + beta2*vexpr for the non-equivalent case
 
     # Cloud is the rest of total liquid that isn't vapour
     cexpr = Constant(q_t) - vexpr
