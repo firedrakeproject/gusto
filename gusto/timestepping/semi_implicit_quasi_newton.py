@@ -951,7 +951,7 @@ class QuasiNewtonLinearSolver(object):
         for field_name in field_names:
 
             if field_name not in prognostic_names:
-                logger.debug(f'Semi-Implicit Quasi Newton: Zeroing xrhs for {field_name}')
+                logger.info(f'Semi-Implicit Quasi Newton: Zeroing xrhs for {field_name}')
                 field_index = equation.field_names.index(field_name)
                 xrhs.subfunctions[field_index].assign(0.0)
 
