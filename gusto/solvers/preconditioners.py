@@ -7,6 +7,7 @@ from firedrake import (dot, jump, dS_h, ds_b, ds_t, ds,
 from firedrake.preconditioners import PCBase
 from firedrake.matrix_free.operators import ImplicitMatrixContext
 from gusto.recovery.recovery_kernels import AverageKernel, AverageWeightings
+from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from pyop2.profiling import timed_region, timed_function
 from functools import partial
 
@@ -459,39 +460,47 @@ class CompressibleHybridisedSCPC(PCBase):
 
     _prefix = "compressible_hybrid_scpc"
 
-    scpc_parameters = {'mat_type': 'matfree',
-                       'ksp_type': 'preonly',
-                       'ksp_converged_reason': None,
-                       'ksp_monitor_true_residual': None,
-                       'pc_type': 'python',
-                       'pc_python_type': 'firedrake.SCPC',
-                       'pc_sc_eliminate_fields': '0, 1',
-                       # The reduced operator is not symmetric
-                       'condensed_field': {'ksp_type': 'fgmres',
-                                           'ksp_rtol': 1.0e-8,
-                                           'ksp_atol': 1.0e-8,
-                                           'ksp_max_it': 100,
-                                           'pc_type': 'gamg',
-                                           'pc_gamg_sym_graph': None,
-                                           'mg_levels': {'ksp_type': 'gmres',
-                                                         'ksp_max_it': 5,
-                                                         'pc_type': 'bjacobi',
-                                                         'sub_pc_type': 'ilu'}}}
+    scpc_parameters = {
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.SCPC',
+        'pc_sc_eliminate_fields': '0, 1',
+        # The reduced operator is not symmetric
+        'condensed_field': {
+            'ksp_type': 'fgmres',
+            'ksp_rtol': 1.0e-8,
+            'ksp_atol': 1.0e-8,
+            'ksp_max_it': 100,
+            'pc_type': 'gamg',
+            'pc_gamg_sym_graph': None,
+            'mg_levels': {
+                'ksp_type': 'gmres',
+                'ksp_max_it': 5,
+                'pc_type': 'bjacobi',
+                'sub_pc_type': 'ilu'
+            }
+        }
+    }
 
-    cg_ilu_parameters = {'ksp_type': 'cg',
-                         'pc_type': 'bjacobi',
-                         'sub_pc_type': 'ilu'}
+    cg_ilu_parameters = {
+        'ksp_type': 'cg',
+        'pc_type': 'bjacobi',
+        'sub_pc_type': 'ilu'
+    }
 
     def initialize(self, pc):
         """
         Set up problem and solver
         """
-        from firedrake import (split, LinearVariationalProblem, LinearVariationalSolver,
-                               TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
-                               rhs, FacetNormal, div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b,
-                               ds_tb, inner, dot, grad, Function, cross,
-                               BrokenElement, FunctionSpace, MixedFunctionSpace, as_vector,
-                               Cofunction, Constant)
+        from firedrake import (
+            split, LinearVariationalProblem, LinearVariationalSolver,
+            TestFunctions, TrialFunctions, TestFunction, TrialFunction, lhs,
+            rhs, FacetNormal, div, dx, jump, avg, dS_v, dS_h, ds_v, ds_t, ds_b,
+            ds_tb, inner, dot, grad, Function, cross,
+            BrokenElement, FunctionSpace, MixedFunctionSpace, as_vector,
+            Cofunction, Constant
+        )
         from gusto.equations.active_tracers import TracerVariableType
         from gusto.core.labels import hydrostatic
         if pc.getType() != "python":
@@ -503,6 +512,10 @@ class CompressibleHybridisedSCPC(PCBase):
         self.rho_avg_solver_parameters = self.cg_ilu_parameters
         self.theta_solver_parameters = self.cg_ilu_parameters
         self.exner_avg_solver_parameters = self.cg_ilu_parameters
+
+        if logger.isEnabledFor(DEBUG):
+            self.hybridised_scpc_parameters['ksp_monitor_true_residual'] = None
+            self.hybridised_scpc_parameters['ksp_converged_reason'] = None
 
         # Equations and parameters
         equations = self.equations
@@ -618,12 +631,14 @@ class CompressibleHybridisedSCPC(PCBase):
         exner_avg_prb = LinearVariationalProblem(a_tr, L_tr(exnerbar), exnerbar_avg,
                                                  constant_jacobian=True)
 
-        self.rho_avg_solver = LinearVariationalSolver(rho_avg_prb,
-                                                      solver_parameters=self.rho_avg_solver_parameters,
-                                                      options_prefix=pc.getOptionsPrefix()+'rhobar_avg_solver')
-        self.exner_avg_solver = LinearVariationalSolver(exner_avg_prb,
-                                                        solver_parameters=self.exner_avg_solver_parameters,
-                                                        options_prefix=pc.getOptionsPrefix()+'exnerbar_avg_solver')
+        self.rho_avg_solver = LinearVariationalSolver(
+            rho_avg_prb, solver_parameters=self.rho_avg_solver_parameters,
+            options_prefix=pc.getOptionsPrefix()+'rhobar_avg_solver'
+        )
+        self.exner_avg_solver = LinearVariationalSolver(
+            exner_avg_prb, solver_parameters=self.exner_avg_solver_parameters,
+            options_prefix=pc.getOptionsPrefix()+'exnerbar_avg_solver'
+        )
 
         # "broken" u, rho, and trace system
         # NOTE: no ds_v integrals since equations are defined on
@@ -672,12 +687,18 @@ class CompressibleHybridisedSCPC(PCBase):
 
         appctx = {'slateschur_form': aeqn}
 
-        hybridized_prb = LinearVariationalProblem(aeqn, Leqn, self.y_hybrid,
-                                                  constant_jacobian=True)
-        self.hybridized_solver = LinearVariationalSolver(hybridized_prb,
-                                                         solver_parameters=self.hybridised_scpc_parameters,
-                                                         options_prefix=pc.getOptionsPrefix()+self._prefix,
-                                                         appctx=appctx)
+        hybridized_prb = LinearVariationalProblem(
+            aeqn, Leqn, self.y_hybrid, constant_jacobian=True
+        )
+        self.hybridized_solver = LinearVariationalSolver(
+            hybridized_prb, solver_parameters=self.hybridised_scpc_parameters,
+            options_prefix=pc.getOptionsPrefix()+self._prefix, appctx=appctx
+        )
+
+        if logger.isEnabledFor(DEBUG):
+            self.hybridized_solver.snes.ksp.setMonitor(
+                logging_ksp_monitor_true_residual
+            )
 
         # Project broken u into the HDiv space using facet averaging.
         # Weight function counting the dofs of the HDiv element:
@@ -699,12 +720,20 @@ class CompressibleHybridisedSCPC(PCBase):
         theta_eqn = gamma*(theta - theta_in
                            + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta_t)*dx
 
-        theta_problem = LinearVariationalProblem(lhs(theta_eqn), rhs(theta_eqn), self.theta,
-                                                 constant_jacobian=True)
+        theta_problem = LinearVariationalProblem(
+            lhs(theta_eqn), rhs(theta_eqn), self.theta, constant_jacobian=True
+        )
 
-        self.theta_solver = LinearVariationalSolver(theta_problem,
-                                                    solver_parameters=self.theta_solver_parameters,
-                                                    options_prefix=pc.getOptionsPrefix()+'thetabacksubstitution')
+        self.theta_solver = LinearVariationalSolver(
+            theta_problem, solver_parameters=self.theta_solver_parameters,
+            options_prefix=pc.getOptionsPrefix()+'thetabacksubstitution'
+        )
+
+        if logger.isEnabledFor(DEBUG):
+            self.theta_solver.snes.ksp.setMonitor(
+                logging_ksp_monitor_true_residual
+            )
+
         # Project reference profiles at initialisation
         self.rho_avg_solver.solve()
         self.exner_avg_solver.solve()
