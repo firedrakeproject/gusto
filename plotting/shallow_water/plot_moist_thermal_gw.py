@@ -16,34 +16,35 @@ from tomplot import (
 # ---------------------------------------------------------------------------- #
 # When copying this example these paths need editing, which will usually involve
 # removing the abspath part to set directory paths relative to this file
-
-results_file_name = f'{abspath(dirname(__file__))}/../../results/moist_thermal_equivb_gw/field_output.nc'
-plot_stem = f'{abspath(dirname(__file__))}/../../figures/shallow_water/moist_thermal_equivb_gw'
-
+results_file_name = f'{abspath(dirname(__file__))}/../../results/moist_thermal_gw/field_output.nc'
+plot_stem = f'{abspath(dirname(__file__))}/../../figures/shallow_water/moist_thermal_gw'
 beta2 = 9.80616*10
 
 # ---------------------------------------------------------------------------- #
 # Initial plot details
 # ---------------------------------------------------------------------------- #
-init_field_names = ['u', 'D', 'PartitionedCloud', 'b_e']
+init_field_names = ['u', 'D', 'cloud_water', 'b_e']
 init_colour_schemes = ['Oranges', 'YlGnBu', 'cividis', 'PuRd_r']
 init_field_labels = [r'$|u|$ (m s$^{-1}$)', r'$D$ (m)',
                      r'$q_{cl}$ (kg kg$^{-1})$', r'$b_e$ (m s$^{-2}$)']
 init_contours_to_remove = [None, None, None, None]
 init_contours = [np.linspace(0.0, 20.0, 9),
-                 np.linspace(4800.0, 8000.0, 19),
-                 np.linspace(0.01, 0.02, 11),
-                 np.linspace(9, 10, 15)]
+                 np.linspace(1800.0, 4800.0, 15),
+                 np.linspace(0.002, 0.02, 10),
+                 np.linspace(7.0, 8.5, 16)]
 
 # ---------------------------------------------------------------------------- #
 # Final plot details
 # ---------------------------------------------------------------------------- #
-final_field_names = ['PartitionedCloud', 'b_e']
-final_colour_schemes = ['cividis', 'PuRd_r']
-final_field_labels = [r'$q_{cl}$ (kg kg$^{-1}$)', r'$b_e$ (m s$^{-2}$)']
-final_contours_to_remove = [None, None]
-final_contours = [np.linspace(0.01, 0.02, 11),
-                  np.linspace(9, 10, 15)]
+final_field_names = ['D', 'cloud_water', 'b_e']
+final_colour_schemes = ['YlGnBu', 'cividis', 'PuRd_r']
+final_field_labels = [r'$D$ (m)', r'$q_{cl}$ (kg kg$^{-1}$)', r'$b_e$ (m s$^{-2}$)']
+final_contours_to_remove = [None, None, None]
+final_contours = [
+    np.linspace(1800.0, 4800.0, 15),
+    np.linspace(0.002, 0.02, 10),
+    np.linspace(7.0, 8.5, 16)
+]
 
 # ---------------------------------------------------------------------------- #
 # General options
@@ -52,7 +53,7 @@ contour_method = 'tricontour'
 xlims = [-180, 180]
 ylims = [-90, 90]
 minmax_format = {
-    'PartitionedCloud': '.1e',
+    'cloud_water': '.1e',
     'b_e': '.2f',
     'u': '.1f',
     'D': '.0f'
@@ -79,6 +80,12 @@ for i, (ax, field_name, colour_scheme, field_label, contour_to_remove, contours)
         meridional_data = extract_gusto_field(data_file, 'u_meridional', time_idx=time_idx)
         field_data = np.sqrt(zonal_data**2 + meridional_data**2)
         coords_X, coords_Y = extract_gusto_coords(data_file, 'u_zonal')
+
+    elif field_name == 'b_e' and 'b_e' not in data_file.variables.keys():
+        b_data = extract_gusto_field(data_file, 'b', time_idx=time_idx)
+        qv_data = extract_gusto_field(data_file, 'water_vapour', time_idx=time_idx)
+        coords_X, coords_Y = extract_gusto_coords(data_file, 'b')
+        field_data = b_data - beta2*qv_data
 
     else:
         field_data = extract_gusto_field(data_file, field_name, time_idx=time_idx)
@@ -141,7 +148,7 @@ plt.close()
 # ---------------------------------------------------------------------------- #
 # FINAL PLOTTING
 # ---------------------------------------------------------------------------- #
-fig, axarray = plt.subplots(1, 2, figsize=(16, 8), sharex='all', sharey='all')
+fig, axarray = plt.subplots(1, 3, figsize=(21, 6), sharex='all', sharey='all')
 time_idx = -1
 
 for i, (ax, field_name, colour_scheme, field_label, contour_to_remove, contours) in \
@@ -149,8 +156,16 @@ for i, (ax, field_name, colour_scheme, field_label, contour_to_remove, contours)
         axarray, final_field_names, final_colour_schemes,
         final_field_labels, final_contours_to_remove, final_contours)):
 
-    field_data = extract_gusto_field(data_file, field_name, time_idx=time_idx)
-    coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
+    # Data extraction ----------------------------------------------------------
+    if field_name == 'b_e' and 'b_e' not in data_file.variables.keys():
+        b_data = extract_gusto_field(data_file, 'b', time_idx=time_idx)
+        qv_data = extract_gusto_field(data_file, 'water_vapour', time_idx=time_idx)
+        coords_X, coords_Y = extract_gusto_coords(data_file, 'b')
+        field_data = b_data - beta2*qv_data
+
+    else:
+        field_data = extract_gusto_field(data_file, field_name, time_idx=time_idx)
+        coords_X, coords_Y = extract_gusto_coords(data_file, field_name)
 
     time = data_file['time'][time_idx] / (24.*60.*60.)
 
