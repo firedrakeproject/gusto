@@ -145,7 +145,7 @@ def moist_convect_williamson_2(
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transport_schemes=transported_fields,
         spatial_methods=transport_methods, linear_solver=linear_solver,
-        physics_schemes=physics_schemes
+        final_physics_schemes=physics_schemes
     )
 
     # ------------------------------------------------------------------------ #
