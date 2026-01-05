@@ -826,8 +826,11 @@ class IO(object):
                 # we instead save string metadata as char arrays of fixed length.
                 if isinstance(output_value, str):
                     nc_field_file.createVariable(metadata_key, 'S1', ('dim_one', 'dim_string'))
-                    output_char_array = np.array([output_value], dtype='S256')
-                    nc_field_file[metadata_key][:] = stringtochar(output_char_array)
+                    nc_field_file[metadata_key]._Encoding = 'UTF-8'  # tell netCDF4 this char var is UTF-8 text
+                    N = nc_field_file.dimensions['dim_string'].size
+                    max_chars = max(1, N // 4)  # max number of characters that can be stored
+                    output_char_array = np.array([output_value], dtype=f"U{max_chars}")
+                    nc_field_file[metadata_key][:] = stringtochar(output_char_array, encoding='utf-8')
                 else:
                     nc_field_file.createVariable(metadata_key, type(output_value), ('dim_one',))
                     nc_field_file[metadata_key][0] = output_value
