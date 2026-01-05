@@ -356,7 +356,7 @@ def hybridised_solver_parameters(equation, alpha=0.5, tau_values=None):
     if logger.isEnabledFor(DEBUG):
         settings["ksp_monitor_true_residual"] = None
         # TODO: the following output is not picked up by the Gusto logger
-        fieldsplit_keys = [f'fieldsplit_{i}' for i in ['0', '1', 'L2']]
+        fieldsplit_keys = [f'fieldsplit_{i}' for i in ['0', '1', 'L2', 'theta']]
         for key in fieldsplit_keys:
             if key in settings:
                 settings[key]['ksp_monitor_true_residual'] = None
