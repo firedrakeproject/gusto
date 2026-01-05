@@ -12,7 +12,7 @@ from gusto import (Domain, IO, PrescribedTransport, AdvectionEquation,
                    ZComponent, MeridionalComponent, ZonalComponent,
                    RadialComponent, DGUpwind)
 from mpi4py import MPI
-from netCDF4 import Dataset, chartostring
+from netCDF4 import Dataset
 import pytest
 from pytest_mpi import parallel_assert
 import numpy as np
@@ -182,8 +182,5 @@ def test_nc_outputting(geometry, domain_and_mesh_details):
                     decoded = b''.join(arr.view('S1').tolist()).decode('utf-8').rstrip('\x00')
 
                 return decoded == output_value
-
-
-
 
         parallel_assert(assertion, participating=output_data is not None, msg=error_message)
