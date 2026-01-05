@@ -852,9 +852,6 @@ class QuasiNewtonLinearSolver(object):
         else:
             self.appctx = {}
 
-        if logger.isEnabledFor(DEBUG):
-            self.solver_parameters["ksp_monitor_true_residual"] = None
-
         dt = equation.domain.dt
         self.reference_dependent = reference_dependent
         self.alpha = Constant(alpha)
@@ -916,18 +913,18 @@ class QuasiNewtonLinearSolver(object):
             for bc in equation.bcs['u']
         ]
         problem = LinearVariationalProblem(
-            aeqn.form, action(Leqn.form, self.xrhs), self.dy, bcs=bcs, constant_jacobian=True
+            aeqn.form, action(Leqn.form, self.xrhs), self.dy, bcs=bcs,
+            constant_jacobian=True
         )
 
         self.solver = LinearVariationalSolver(
-            problem, appctx=self.appctx, solver_parameters=self.solver_parameters,
+            problem, appctx=self.appctx,
+            solver_parameters=self.solver_parameters,
             options_prefix='linear_solver'
         )
 
-    @staticmethod
-    def log_ksp_residuals(ksp):
         if logger.isEnabledFor(DEBUG):
-            ksp.setMonitor(logging_ksp_monitor_true_residual)
+            self.solver.snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
 
     @timed_function("Gusto:UpdateReferenceProfiles")
     def update_reference_profiles(self):
@@ -954,7 +951,7 @@ class QuasiNewtonLinearSolver(object):
         for field_name in field_names:
 
             if field_name not in prognostic_names:
-                logger.info(f'Semi-Implicit Quasi Newton: Zeroing xrhs for {field_name}')
+                logger.debug(f'Semi-Implicit Quasi Newton: Zeroing xrhs for {field_name}')
                 field_index = equation.field_names.index(field_name)
                 xrhs.subfunctions[field_index].assign(0.0)
 

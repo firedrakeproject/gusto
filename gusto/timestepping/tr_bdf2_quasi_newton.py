@@ -379,7 +379,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             if float(self.t) + self.reference_update_freq > self.last_ref_update_time:
                 self.equation.X_ref.assign(self.x.n(self.field_name))
                 self.last_ref_update_time = float(self.t)
-                self.linear_solver.update_reference_profiles()
+                self.tr_solver.update_reference_profiles()
+                self.bdf_solver.update_reference_profiles()
 
         elif self.to_update_ref_profile:
             self.tr_solver.update_reference_profiles()
