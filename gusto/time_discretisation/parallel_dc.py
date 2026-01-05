@@ -26,7 +26,7 @@ class Parallel_RIDC(RIDC):
 
     def __init__(self, base_scheme, domain, M, K, J, output_freq, flush_freq=None, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, communicator=None):
+                 limiter=None, communicator=None):
         """
         Initialise RIDC object
         Args:
@@ -47,13 +47,12 @@ class Parallel_RIDC(RIDC):
                 pass to the underlying nonlinear solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
                 the evolving field to enforce monotonicity. Defaults to None.
-            options (:class:`AdvectionOptions`, optional): an object containing
             communicator (MPI communicator, optional): communicator for parallel execution. Defaults to None.
         """
 
         super(Parallel_RIDC, self).__init__(base_scheme, domain, M, K, field_name,
                                             linear_solver_parameters, nonlinear_solver_parameters,
-                                            limiter, options, reduced=True)
+                                            limiter, reduced=True)
         self.comm = communicator
         self.TAG_EXCHANGE_FIELD = 11  # Tag for sending nodal fields (Firedrake Functions)
         self.TAG_EXCHANGE_SOURCE = self.TAG_EXCHANGE_FIELD + J  # Tag for sending nodal source fields (Firedrake Functions)
@@ -250,8 +249,6 @@ class Parallel_SDC(SDC):
                 BE, LU, TRAP, EXACT, PIC, OPT, WEIRD, MIN-SR-NS, MIN-SR-S
             qdelta_exp (str): Explicit Qdelta matrix to be used. Options are
                 FE, EXACT, PIC
-            formulation (str, optional): Whether to use node-to-node or zero-to-node
-                formulation. Options are N2N and Z2N. Defaults to N2N
             field_name (str, optional): name of the field to be evolved.
                 Defaults to None.
             linear_solver_parameters (dict, optional): dictionary of parameters to
@@ -262,10 +259,6 @@ class Parallel_SDC(SDC):
                 quadrature value. Defaults to True
             limiter (:class:`Limiter` object, optional): a limiter to apply to
                 the evolving field to enforce monotonicity. Defaults to None.
-            options (:class:`AdvectionOptions`, optional): an object containing
-                options to either be passed to the spatial discretisation, or
-                to control the "wrapper" methods, such as Embedded DG or a
-                recovery method. Defaults to None.
             initial_guess (str, optional): Initial guess to be base timestepper, or copy
             communicator (MPI communicator, optional): communicator for parallel execution. Defaults to None.
         """
@@ -273,7 +266,7 @@ class Parallel_SDC(SDC):
                          formulation="Z2N", field_name=field_name,
                          linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters,
                          final_update=final_update,
-                         limiter=limiter, options=options, initial_guess=initial_guess)
+                         limiter=limiter, initial_guess=initial_guess)
         self.comm = communicator
 
         # Checks for parallel SDC

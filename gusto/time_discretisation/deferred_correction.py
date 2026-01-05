@@ -95,7 +95,7 @@ class SDC(object, metaclass=ABCMeta):
     def __init__(self, base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                  formulation="N2N", field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
-                 limiter=None, options=None, initial_guess="base"):
+                 limiter=None, initial_guess="base"):
         """
         Initialise SDC object
         Args:
@@ -125,10 +125,6 @@ class SDC(object, metaclass=ABCMeta):
                 quadrature value. Defaults to True
             limiter (:class:`Limiter` object, optional): a limiter to apply to
                 the evolving field to enforce monotonicity. Defaults to None.
-            options (:class:`AdvectionOptions`, optional): an object containing
-                options to either be passed to the spatial discretisation, or
-                to control the "wrapper" methods, such as Embedded DG or a
-                recovery method. Defaults to None.
             initial_guess (str, optional): Initial guess to be base timestepper, or copy
         """
         # Check the configuration options
@@ -549,7 +545,7 @@ class RIDC(object, metaclass=ABCMeta):
 
     def __init__(self, base_scheme, domain, M, K, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, reduced=True):
+                 limiter=None, reduced=True):
         """
         Initialise RIDC object
         Args:
@@ -567,7 +563,6 @@ class RIDC(object, metaclass=ABCMeta):
                 pass to the underlying nonlinear solver. Defaults to None.
             limiter (:class:`Limiter` object, optional): a limiter to apply to
                 the evolving field to enforce monotonicity. Defaults to None.
-            options (:class:`AdvectionOptions`, optional): an object containing
             reduced (bool, optional): whether to use reduced stencils for RIDC. Defaults to True.
         """
         self.base = base_scheme
