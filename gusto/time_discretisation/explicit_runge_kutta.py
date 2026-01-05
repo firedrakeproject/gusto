@@ -321,7 +321,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
         if self.rk_formulation == RungeKuttaFormulation.increment:
             self.x1.assign(x0)
-
             for i in range(stage):
                 self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
             for evaluate in self.evaluate_source:
@@ -340,8 +339,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 self.x1.assign(x0)
                 for i in range(self.nStages):
                     self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage, i]*self.k[i])
-                self.x1.assign(self.x1)
-
                 if self.limiter is not None:
                     self.limiter.apply(self.x1)
 
