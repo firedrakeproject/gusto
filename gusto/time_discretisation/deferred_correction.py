@@ -568,7 +568,7 @@ class RIDC(object, metaclass=ABCMeta):
             limiter (:class:`Limiter` object, optional): a limiter to apply to
                 the evolving field to enforce monotonicity. Defaults to None.
             options (:class:`AdvectionOptions`, optional): an object containing
-            reduced (bool, optional): whether to use reduced or full stencils for RIDC.
+            reduced (bool, optional): whether to use reduced stencils for RIDC. Defaults to True.
         """
         self.base = base_scheme
         self.field_name = field_name
