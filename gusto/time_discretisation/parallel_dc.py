@@ -168,7 +168,7 @@ class Parallel_RIDC(RIDC):
                     self.comm.send(self.source_Ukp1[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
 
             for m in range(self.kval, self.M):
-                # Recieve the guess we need to correct and evaluate the rhs
+                # Receive the guess we need to correct and evaluate the rhs
                 self.comm.recv(self.Unodes[m+1], source=self.kval-1, tag=self.TAG_EXCHANGE_FIELD + self.step)
                 self.comm.recv(self.source_Uk[m+1], source=self.kval-1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
                 self.Uin.assign(self.Unodes[m+1])
