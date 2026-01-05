@@ -100,7 +100,7 @@ def setup_saturated(dirname, recovered):
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       transport_methods,
                                       linear_solver=linear_solver,
-                                      physics_schemes=physics_schemes)
+                                      final_physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
