@@ -93,6 +93,15 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.butcher_exp = butcher_exp
         self.nStages = int(np.shape(self.butcher_imp)[1])
 
+        # Some butcher tableaus have zero first stage, if so, we don't need to do an
+        # initial solve and can copy across x_in to x_s[0]
+        self.zero_first_stage = True
+        self.solver_start_stage = 1
+        for value in self.butcher_imp[0]:
+            if value != 0.0:
+                self.zero_first_stage = False
+                self.solver_start_stage = 0
+
         # Set default linear and nonlinear solver options if none passed in
         if linear_solver_parameters is None:
             self.linear_solver_parameters = {'snes_type': 'ksponly',
@@ -231,7 +240,7 @@ class IMEXRungeKutta(TimeDiscretisation):
     def solvers(self):
         """Set up a list of solvers for each problem at a stage."""
         solvers = []
-        for stage in range(self.nStages):
+        for stage in range(self.solver_start_stage, self.nStages):
             # setup solver using residual defined in derived class
             problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
@@ -251,15 +260,16 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.x1.assign(x_in)
         self.x_out.assign(x_in)
         solver_list = self.solvers
+        self.xs[0].assign(x_in)
 
-        for stage in range(self.nStages):
-            self.solver = solver_list[stage]
+        for stage in range(self.solver_start_stage, self.nStages):
+
+            self.solver = solver_list[stage-self.solver_start_stage]
             # Set initial solver guess
-            if (stage > 0):
-                self.x_out.assign(self.xs[stage-1])
-                # Evaluate source terms
-                for evaluate in self.evaluate_source:
-                    evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
+            self.x_out.assign(self.xs[stage-1])
+            # Evaluate source terms
+            for evaluate in self.evaluate_source:
+                evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
             self.solver.solve()
 
             # Apply limiter

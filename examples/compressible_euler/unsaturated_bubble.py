@@ -102,8 +102,7 @@ def unsaturated_bubble(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes -- specify options for using recovery wrapper
-    boundary_methods = {'DG': BoundaryMethod.taylor,
-                        'HDiv': BoundaryMethod.taylor}
+    boundary_methods = {'DG': BoundaryMethod.taylor}
 
     recovery_spaces = RecoverySpaces(domain, boundary_method=boundary_methods, use_vector_spaces=True)
 
@@ -129,7 +128,7 @@ def unsaturated_bubble(
     ]
 
     # Linear solver
-    linear_solver = CompressibleSolver(eqns)
+    linear_solver = CompressibleSolver(eqns, tau_values={'rho': 1.0, 'theta': 1.0})
 
     # Physics schemes
     Vt = domain.spaces('theta')
@@ -148,7 +147,7 @@ def unsaturated_bubble(
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, physics_schemes=physics_schemes
+        linear_solver=linear_solver, final_physics_schemes=physics_schemes
     )
 
     # ------------------------------------------------------------------------ #

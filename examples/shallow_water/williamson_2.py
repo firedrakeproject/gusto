@@ -8,14 +8,14 @@ The example here uses the icosahedral sphere mesh and degree 1 spaces.
 """
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from firedrake import SpatialCoordinate, sin, cos, pi, Function
+from firedrake import SpatialCoordinate, sin, cos, pi, Function, Constant
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
     RelativeVorticity, PotentialVorticity, SteadyStateError,
     ShallowWaterKineticEnergy, ShallowWaterPotentialEnergy,
-    ShallowWaterPotentialEnstrophy, rotated_lonlatr_coords,
-    ZonalComponent, MeridionalComponent, rotated_lonlatr_vectors,
+    ShallowWaterPotentialEnstrophy, lonlatr_from_xyz,
+    ZonalComponent, MeridionalComponent, xyz_vector_from_lonlatr,
     GeneralIcosahedralSphereMesh, SubcyclingOptions
 )
 
@@ -42,7 +42,6 @@ def williamson_2(
 
     radius = 6371220.                  # planetary radius (m)
     mean_depth = 5960.                 # reference depth (m)
-    rotate_pole_to = (0.0, pi/3)       # location of North pole of mesh
     u_max = 2*pi*radius/(12*24*60*60)  # Max amplitude of the zonal wind (m/s)
 
     # ------------------------------------------------------------------------ #
@@ -58,14 +57,16 @@ def williamson_2(
 
     # Domain
     mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
-    domain = Domain(mesh, dt, 'BDM', element_order, rotated_pole=rotate_pole_to)
+    domain = Domain(mesh, dt, 'BDM', element_order)
     xyz = SpatialCoordinate(mesh)
 
     # Equation
     parameters = ShallowWaterParameters(mesh, H=mean_depth)
     Omega = parameters.Omega
-    _, lat, _ = rotated_lonlatr_coords(xyz, rotate_pole_to)
-    e_lon, _, _ = rotated_lonlatr_vectors(xyz, rotate_pole_to)
+    _, lat, _ = lonlatr_from_xyz(xyz[0], xyz[1], xyz[2])
+    e_lon = xyz_vector_from_lonlatr(
+        Constant(1.0), Constant(0.0), Constant(0.0), xyz
+    )
 
     eqns = ShallowWaterEquations(
         domain, parameters, u_transport_option=u_eqn_type)
@@ -81,8 +82,8 @@ def williamson_2(
         ShallowWaterPotentialEnergy(parameters),
         ShallowWaterPotentialEnstrophy(),
         SteadyStateError('u'), SteadyStateError('D'),
-        MeridionalComponent('u', rotate_pole_to),
-        ZonalComponent('u', rotate_pole_to)
+        MeridionalComponent('u'),
+        ZonalComponent('u')
     ]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
