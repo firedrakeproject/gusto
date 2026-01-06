@@ -45,11 +45,11 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
     # Create list of scalar variables that are not solved for by the linear
     # solver -- i.e. the list of variables excluding the "solver prognostics".
     # For example, these could be moisture variables
-    scalars = ",".join(
+    tracers = ",".join(
         str(idx) for idx, name in enumerate(equation.field_names)
         if name not in solver_prognostics
     )
-    num_scalars = len(equation.field_names) - len(solver_prognostics)
+    num_tracers = len(equation.field_names) - len(solver_prognostics)
     is_shallow_water = isinstance(equation, (
         ShallowWaterEquations, ShallowWaterEquations_1d
     ))
@@ -149,16 +149,16 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
     # Moist Thermal Shallow Water
     # ======================================================================== #
 
-    elif isinstance(equation, ThermalShallowWaterEquations) and num_scalars > 0:
-        # (u, D, b, scalars) system - moist thermal shallow water
+    elif isinstance(equation, ThermalShallowWaterEquations) and num_tracers > 0:
+        # (u, D, b, tracers) system - moist thermal shallow water
         settings = {
             'ksp_error_if_not_converged': None,
             'mat_type': 'matfree',
             'ksp_type': 'preonly',
             'pc_type': 'fieldsplit',
-            'pc_fieldsplit_type': 'additive',  # additive fieldsplit to separate scalars
+            'pc_fieldsplit_type': 'additive',  # additive fieldsplit to separate tracers
             'pc_fieldsplit_0_fields': '0,1,2',  # (u, D, b/b_e) system
-            'pc_fieldsplit_1_fields': scalars,  # do nothing for scalar field
+            'pc_fieldsplit_1_fields': tracers,  # do nothing for scalar field
             'fieldsplit_0': {  # (u, D, b/b_e) solve with Schur complement elimination of b/b_e
                 'pc_type': 'fieldsplit',
                 'pc_fieldsplit_type': 'schur',
@@ -276,16 +276,16 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
     # Moist Shallow Water (non-thermal)
     # ======================================================================== #
 
-    elif is_shallow_water and num_scalars > 0:
-        # (u, D, scalars) system - moist convective shallow water
+    elif is_shallow_water and num_tracers > 0:
+        # (u, D, tracers) system - moist convective shallow water
         settings = {
             'mat_type': 'matfree',
             'ksp_type': 'preonly',
             "pc_type": "fieldsplit",
             "pc_fieldsplit_type": "additive",  # additive fieldsplit is used
-                                               # to separate scalars
+                                               # to separate tracers
             "pc_fieldsplit_0_fields": "0,1",  # (u, D) system to be hybridized
-            "pc_fieldsplit_1_fields": scalars,  # do nothing for scalar fields
+            "pc_fieldsplit_1_fields": tracers,  # do nothing for scalar fields
             "fieldsplit_0": {
                 'ksp_type': 'preonly',
                 'pc_type': 'python',
@@ -315,7 +315,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
     # Shallow Water (standard)
     # ======================================================================== #
 
-    elif is_shallow_water and num_scalars == 0:
+    elif is_shallow_water and num_tracers == 0:
         # (u, D) system - dry shallow water
         # No elimination via Schur complement, just hybridization of the
         # full system.
