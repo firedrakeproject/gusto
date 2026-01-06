@@ -41,6 +41,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                  xi3_physics_schemes=None,
                  tr_fast_physics_schemes=None,
                  bdf_fast_physics_schemes=None,
+                 bdf_m_fast_physics_schemes=None,
+                 bdf_n_fast_physics_schemes=None,
                  middle_physics_schemes=None,
                  final_physics_schemes=None,
                  scaled_final_physics_schemes=None,
@@ -134,6 +136,11 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         else:
             self.tr_slow_physics_schemes = []
 
+        if tr_fast_physics_schemes is not None:
+            self.tr_fast_physics_schemes = tr_fast_physics_schemes
+        else:
+            self.tr_fast_physics_schemes = []
+
         if xi1_physics_schemes is not None:
             self.xi1_physics_schemes = xi1_physics_schemes
         else:
@@ -164,6 +171,16 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         else:
             self.bdf_mid_physics_schemes = []
 
+        if bdf_n_fast_physics_schemes is not None:
+            self.bdf_n_fast_physics_schemes = bdf_n_fast_physics_schemes
+        else:
+            self.bdf_n_fast_physics_schemes = [] 
+
+        if bdf_m_fast_physics_schemes is not None:
+            self.bdf_m_fast_physics_schemes = bdf_m_fast_physics_schemes
+        else:
+            self.bdf_m_fast_physics_schemes = [] 
+
         if bdf_fast_physics_schemes is not None:
             self.bdf_fast_physics_schemes = bdf_fast_physics_schemes
         else:
@@ -179,27 +196,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         else:
             self.scaled_final_physics_schemes = []
 
-        # if tr_fast_physics_schemes is not None:
-        #    self.tr_fast_physics_schemes = tr_fast_physics_schemes
-        #    raise NotImplementedError(
-        #        "Fast physics schemes are not yet implemented for the TR-BDF "
-        #        "timestepper. This is because the time discretisations used by the "
-        #        "physics schemes need to take into account the appropriate gamma "
-        #        "factors for their timestep."
-        #    )
-        # else:
-        #    self.tr_fast_physics_schemes = []
-        # if bdf_fast_physics_schemes is not None:
-        #    self.bdf_fast_physics_schemes = bdf_fast_physics_schemes
-        #    raise NotImplementedError(
-        #        "Fast physics schemes are not yet implemented for the TR-BDF "
-        #        "timestepper. This is because the time discretisations used by the "
-        #        "physics schemes need to take into account the appropriate gamma "
-        #        "factors for their timestep."
-        #    )
-        # else:
-        #    self.bdf_fast_physics_schemes = []
-
         self.all_physics_schemes = (self.tr_slow_physics_schemes
                                     + self.middle_physics_schemes
                                     + self.bdf_slow_physics_schemes
@@ -207,11 +203,14 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                                     + self.xi1_physics_schemes
                                     + self.xi2_physics_schemes
                                     + self.xi3_physics_schemes
-                                    # + self.tr_fast_physics_schemes
+                                    + self.tr_fast_physics_schemes
                                     + self.bdf_fast_physics_schemes
+                                    + self.bdf_n_fast_physics_schemes
+                                    + self.bdf_m_fast_physics_schemes
                                     + self.final_physics_schemes
                                     + self.scaled_final_physics_schemes
                                     )
+        
         print(f'Checking length of physics schemes')
         for parametrisation, scheme in self.all_physics_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
@@ -293,9 +292,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         """Sets up time levels"""
         self.x = TimeLevelFields(self.equation, 1)
         self.x.add_fields(self.equation, levels=(
-            "star", "p", 'after_middle', "tr_after_slow", "after_xi1", "bdf_after_slow", 
-            "after_xi2", "after_xi3", "bdf_after_mid", "tr_after_fast", "bdf_after_fast", 
-            "m", "pm", "after_bdf_fast"
+            "star", "p", 'after_middle', "tr_after_slow","tr_after_fast", "after_xi1", 
+            "bdf_after_slow", "after_xi2", "after_xi3", "bdf_after_mid", "tr_after_fast", 
+            "bdf_after_fast", "m", "pm", "bdf_after_m_fast", "bdf_after_n_fast"
             )
             )
         # Only the prescribed fields of the main equation need passing to StateFields
@@ -335,6 +334,17 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             scheme.setup(self.equation, apply_bcs, parametrisation.label,
                          dt_scale=dt_scale)
             logger.info(f'TR-BDF2 TR slow physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
+        
+        # TR fast physics
+        for parametrisation, scheme in self.tr_fast_physics_schemes:
+            print(f'TR fast physics length check')
+            apply_bcs = True
+            dt_scale = 2.0*self.gamma
+            scale_proxy = 2.0*g1
+            logger.info(f'TR-BDF2 TR fast physics: dt scaling is {scale_proxy}')
+            scheme.setup(self.equation, apply_bcs, parametrisation.label,
+                         dt_scale=dt_scale)
+            logger.info(f'TR-BDF2 TR fast physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
 
         # Xi1 physics
         for parametrisation, scheme in self.xi1_physics_schemes:
@@ -347,7 +357,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                          dt_scale=dt_scale)
             logger.info(f'TR-BDF2 Xi1 physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
         # Middle step phsyics
-
         for parametrisation, scheme in self.middle_physics_schemes:
             print(f'Mid physics length check')
             apply_bcs = True
@@ -410,9 +419,28 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             print(f'BDF mid physics length check')
             dt_scale = 1.0
             logger.info(f'TR-BDF2 BDF mid physics: dt scaling set to {dt_scale}')
-            scheme.setup(self.equation, apply_bcs, parametrisation.label)
+            scheme.setup(self.equation, apply_bcs, parametrisation.label, dt_scale=dt_scale)
             logger.info(f'TR-BDF2 BDF mid physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
-        
+
+        # BDF n fast physics
+        for parametrisation, scheme in self.bdf_n_fast_physics_schemes:
+            apply_bcs = True
+            print(f'BDF n physics length check')
+            dt_scale = 1.0
+            logger.info(f'BDF n physics: dt scaling set to {dt_scale}')
+            scheme.setup(self.equation, apply_bcs, parametrisation.label, dt_scale=dt_scale)
+            logger.info(f'BDF n physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
+
+        # BDF m fast physics
+        for parametrisation, scheme in self.bdf_m_fast_physics_schemes:
+            apply_bcs = True
+            print(f'BDF n physics length check')
+            dt_scale = 1 - 2*self.gamma
+            scale_proxy = 1 - 2*g1
+            logger.info(f'TR-BDF2 Xi3 physics: dt scaling is {scale_proxy}')
+            scheme.setup(self.equation, apply_bcs, parametrisation.label, dt_scale=dt_scale)
+            logger.info(f'BDF n physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
+
         # Fast physics bdf implicit 
         for parametrisation, scheme in self.bdf_fast_physics_schemes:
             apply_bcs = True
@@ -507,10 +535,11 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         x_after_middle = self.x.after_middle
         x_after_tr_fast = self.x.tr_after_fast
         x_after_bdf_fast = self.x.bdf_after_fast
+        x_after_bdf_n_fast = self.x.bdf_after_n_fast
+        x_after_bdf_m_fast = self.x.bdf_after_m_fast
         x_after_xi1 = self.x.after_xi1
         x_after_xi2 = self.x.after_xi2
         x_after_xi3 = self.x.after_xi3
-        x_after_bdf_fast = self.x.after_bdf_fast
         xrhs = self.xrhs
         xrhs_phys = self.xrhs_phys
         dy = self.dy
@@ -562,11 +591,11 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
             # TR Fast physics -----------------------------------------------------
             x_after_tr_fast(fname).assign(xp(fname))
-            #  if len(self.tr_fast_physics_schemes) > 0:
-            #      with timed_stage("Fast physics"):
-            #          logger.info(f'TR-BDF2 Quasi Newton: TR Fast physics {outer}')
-            #          for _, scheme in self.fast_physics_schemes:
-            #              scheme.apply(x_after_tr_fast(scheme.field_name), x_after_tr_fast(scheme.field_name))
+            if len(self.tr_fast_physics_schemes) > 0:
+                with timed_stage("Fast physics"):
+                    logger.info(f'TR-BDF2 Quasi Newton: TR Fast physics {outer}')
+                    for _, scheme in self.fast_physics_schemes:
+                        scheme.apply(x_after_tr_fast(scheme.field_name), x_after_tr_fast(scheme.field_name))
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
             xrhs_phys.assign(x_after_tr_fast(fname) - xp(fname))
@@ -631,7 +660,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 for _, scheme in self.bdf_mid_physics_schemes:
                     logger.info('TR-BDF2 Quasi Newton: BDF mid physics')
                     scheme.apply(x_after_bdf_mid(scheme.field_name), x_after_bdf_mid(scheme.field_name))
-                    
+
         # Xi3 Physics 
         x_after_xi3(fname).assign(x_after_middle(fname))
         if len(self.xi3_physics_schemes) > 0:
@@ -663,8 +692,24 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                                     message=f'BDF n: transporting velocity, outer iteration {outer}')
                 self.transport_fields(f'BDF n:{outer}', x_after_bdf_slow, xp)
 
+            # BDF fast n physics -----------------------------------------------------
+            x_after_bdf_n_fast(fname).assign(xp(fname))
+            if len(self.bdf_n_fast_physics_schemes) > 0:
+                with timed_stage("BDF n physics"):
+                    logger.info(f'TR-BDF2 Quasi Newton: BDF n physics {outer}')
+                    for _, scheme in self.bdf_n_fast_physics_schemes:
+                        scheme.apply(x_after_bdf_n_fast(scheme.field_name), x_after_bdf_n_fast(scheme.field_name))
+
+            # BDF fast m physics -----------------------------------------------------
+            x_after_bdf_m_fast(fname).assign(xpm(fname))
+            if len(self.bdf_m_fast_physics_schemes) > 0:
+                with timed_stage("BDF m physics"):
+                    logger.info(f'TR-BDF2 Quasi Newton: BDF m physics {outer}')
+                    for _, scheme in self.bdf_m_fast_physics_schemes:
+                        scheme.apply(x_after_bdf_fast(scheme.field_name), x_after_bdf_fast(scheme.field_name))
+
             # Combine transported fields into a single variable
-            xp(fname).assign((1 - self.gamma3)*xp(fname) + self.gamma3*xpm(fname))
+            xp(fname).assign((1 - self.gamma3)*x_after_bdf_n_fast(fname) + self.gamma3*x_after_bdf_m_fast(fname))
 
             # BDF Fast physics -----------------------------------------------------
             x_after_bdf_fast(fname).assign(xp(fname))
@@ -717,12 +762,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 logger.info('TR-BDF2 Quasi Newton: Final physics')
                 for _, scheme in self.final_physics_schemes:
                     scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
-
-        #   if self.t.dat.data[0]%3600 == 0:
-        #       print(f'PLotting depth fields after physcs')
-        #       save_dir = '/home/d-witt/firedrake/src/gusto/examples/shallow_water/TR-BDF2-physics-debug/debug_plots'
-        #       Williamson2PhysicsComparison(physics_debug, xnp1, self.equation, field_names=['water_vapour', 'D'], save=f'{save_dir}/TR_BDF2_t={self.t.dat.data[0]}')
-        #       Williamson2PhysicsComparison(physics_debug, xnp1, self.equation, field_names=['rain', 'cloud_water'], save=f'{save_dir}/Physics_TR_BDF2_t={self.t.dat.data[0]}')
 
         logger.debug("Leaving TR-BDF2 Quasi-Newton timestep method")
 
