@@ -36,6 +36,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                  tr_slow_physics_schemes=None,
                  bdf_slow_physics_schemes=None,
                  bdf_mid_physics_schemes=None,
+                 xi1_physics_schemes=None,
+                 xi2_physics_schemes=None,
+                 xi3_physics_schemes=None,
                  tr_fast_physics_schemes=None,
                  bdf_fast_physics_schemes=None,
                  middle_physics_schemes=None,
@@ -131,6 +134,21 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         else:
             self.tr_slow_physics_schemes = []
 
+        if xi1_physics_schemes is not None:
+            self.xi1_physics_schemes = xi1_physics_schemes
+        else:
+            self.xi1_physics_schemes = []
+
+        if xi2_physics_schemes is not None:
+            self.xi2_physics_schemes = xi2_physics_schemes
+        else:
+            self.xi2_physics_schemes = []
+
+        if xi3_physics_schemes is not None:
+            self.xi3_physics_schemes = xi3_physics_schemes
+        else:
+            self.xi3_physics_schemes = []
+
         if middle_physics_schemes is not None:
             self.middle_physics_schemes = middle_physics_schemes
         else:
@@ -181,13 +199,15 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                                     + self.middle_physics_schemes
                                     + self.bdf_slow_physics_schemes
                                     + self.bdf_mid_physics_schemes
+                                    + self.xi1_physics_schemes
+                                    + self.xi2_physics_schemes
+                                    + self.xi3_physics_schemes
                                     # + self.tr_fast_physics_schemes
                                     # + self.bdf_fast_physics_schemes
                                     + self.final_physics_schemes
                                     + self.scaled_final_physics_schemes
                                     )
         print(f'Checking length of physics schemes')
-        breakpoint()
         for parametrisation, scheme in self.all_physics_schemes:
             assert scheme.nlevels == 1, "multilevel schemes not supported as part of this timestepping loop"
             if hasattr(parametrisation, "explicit_only") and parametrisation.explicit_only:
@@ -267,7 +287,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
     def setup_fields(self):
         """Sets up time levels"""
         self.x = TimeLevelFields(self.equation, 1)
-        self.x.add_fields(self.equation, levels=("star", "p", 'after_middle', "tr_after_slow", "bdf_after_slow", "bdf_after_mid", "tr_after_fast", "bdf_after_fast", "m", "pm"))
+        self.x.add_fields(self.equation, levels=("star", "p", 'after_middle', "tr_after_slow", "after_xi1", "bdf_after_slow", "after_xi2", "after_xi3", "bdf_after_mid", "tr_after_fast", "bdf_after_fast", "m", "pm"))
         # Only the prescribed fields of the main equation need passing to StateFields
         self.fields = StateFields(self.x, self.equation.prescribed_fields,
                                   *self.io.output.dumplist)
@@ -298,7 +318,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         # TR slow physics
         for parametrisation, scheme in self.tr_slow_physics_schemes:
             print(f'TR slow physics length check')
-            breakpoint()
             apply_bcs = True
             dt_scale = 2.0*self.gamma
             scale_proxy = 2.0*g1
@@ -307,10 +326,20 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                          dt_scale=dt_scale)
             logger.info(f'TR-BDF2 TR slow physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
 
+        # Xi1 physics
+        for parametrisation, scheme in self.xi1_physics_schemes:
+            print(f'Xi1 physics length check')
+            apply_bcs = True
+            dt_scale = 2.0*self.gamma
+            scale_proxy = 2.0*g1
+            logger.info(f'TR-BDF2 Xi1 physics: dt scaling is {scale_proxy}')
+            scheme.setup(self.equation, apply_bcs, parametrisation.label,
+                         dt_scale=dt_scale)
+            logger.info(f'TR-BDF2 Xi1 physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
         # Middle step phsyics
+
         for parametrisation, scheme in self.middle_physics_schemes:
             print(f'Mid physics length check')
-            breakpoint()
             apply_bcs = True
             dt_scale = 2.0*self.gamma
             scale_proxy = 2.0*g1
@@ -323,7 +352,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         for parametrisation, scheme in self.bdf_slow_physics_schemes:
             apply_bcs = True
             print(f'BDF slow physics length check')
-            breakpoint()
             if len(self.tr_slow_physics_schemes) > 0:
                 dt_scale = (1.0 - 2.0*self.gamma*self.gamma3)/(1.0 - self.gamma3)
                 scale_proxy = (1.0 - 2.0*g2*g3)/(1.0 - g3)
@@ -337,11 +365,39 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             scheme.setup(self.equation, apply_bcs, parametrisation.label, dt_scale=dt_scale)
             logger.info(f'TR-BDF2 BDF slow physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
 
+        
+        # Xi2 physics
+        for parametrisation, scheme in self.xi2_physics_schemes:
+            print(f'Xi2 physics length check')
+            apply_bcs = True
+            dt_scale = 2.0*self.gamma
+            scale_proxy = 2.0*g1
+            logger.info(f'TR-BDF2 Xi2 physics: dt scaling is {scale_proxy}')
+            scheme.setup(self.equation, apply_bcs, parametrisation.label,
+                         dt_scale=dt_scale)
+            logger.info(f'TR-BDF2 Xi2 physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
+        
+        # Xi3 physics
+        for parametrisation, scheme in self.xi3_physics_schemes:
+            print(f'Xi3 physics length check')
+            apply_bcs = True
+            if len(self.xi3_physics_schemes) > 0:
+                dt_scale = (1 - 2*self.gamma)
+                scale_proxy = 1 - 2*g1
+            else:
+                dt_scale = (1 - 2.0*self.gamma) / self.gamma3
+                scale_proxy = (1 - 2.0*g1) / g3
+
+            logger.info(f'TR-BDF2 Xi3 physics: dt scaling is {scale_proxy}')
+            scheme.setup(self.equation, apply_bcs, parametrisation.label,
+                         dt_scale=dt_scale)
+            logger.info(f'TR-BDF2 Xi3 physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
+
+
         # BDF mid step physics
         for parametrisation, scheme in self.bdf_mid_physics_schemes:
             apply_bcs = True
             print(f'BDF mid physics length check')
-            breakpoint()
             dt_scale = 1.0
             logger.info(f'TR-BDF2 BDF mid physics: dt scaling set to {dt_scale}')
             scheme.setup(self.equation, apply_bcs, parametrisation.label)
@@ -351,7 +407,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         for parametrisation, scheme in self.scaled_final_physics_schemes:
             apply_bcs = True
             print(f'Scaled final physics length check')
-            breakpoint()
             dt_scale = 1.0 - 2.0*self.gamma*self.gamma3
             scale_proxy = 1.0 - 2.0*g1*g3
             logger.info(f'Scaled final physics: dt scaling set to {scale_proxy}')
@@ -363,7 +418,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         for parametrisation, scheme in self.final_physics_schemes:
             apply_bcs = True
             print(f'Scaled final physics length check')
-            breakpoint()
             dt_scale = 1.0
             logger.info(f'Final physics: dt scaling set to {dt_scale}')
             scheme.setup(self.equation, apply_bcs, parametrisation.label)
@@ -432,6 +486,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         x_after_middle = self.x.after_middle
         x_after_tr_fast = self.x.tr_after_fast
         x_after_bdf_fast = self.x.bdf_after_fast
+        x_after_xi1 = self.x.after_xi1
+        x_after_xi2 = self.x.after_xi2
+        x_after_xi3 = self.x.after_xi3
         xrhs = self.xrhs
         xrhs_phys = self.xrhs_phys
         dy = self.dy
@@ -452,12 +509,19 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 logger.info('TR-BDF2 Quasi Newton: TR Slow physics')
                 for _, scheme in self.tr_slow_physics_schemes:
                     scheme.apply(x_after_tr_slow(scheme.field_name), x_after_tr_slow(scheme.field_name))
+        
+        x_after_xi1(fname).assign(x_after_tr_slow(fname))
+        if len(self.xi1_physics_schemes) > 0:
+            with timed_stage("Xi1 physics"):
+                logger.info('TR-BDF2 Quasi Newton: Xi1 physics')
+                for _, scheme in self.xi1_physics_schemes:
+                    scheme.apply(x_after_xi1(scheme.field_name), x_after_xi1(scheme.field_name))
 
         # Explicit forcing -----------------------------------------------------
         with timed_stage("Apply forcing terms"):
             logger.info('TR-BDF2 Quasi Newton: TR Explicit forcing')
             # Put explicit forcing into xstar
-            self.tr_forcing.apply(x_after_tr_slow, xn, xstar(fname), "explicit")
+            self.tr_forcing.apply(x_after_xi1, xn, xstar(fname), "explicit")
 
         # set xp here so that variables that are not transported have
         # the correct values
@@ -491,9 +555,10 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'TR-BDF2 Quasi Newton: TR Implicit forcing {(outer, inner)}')
                     self.tr_forcing.apply(xp, xm, xrhs, "implicit")
+                    xrhs += xrhs_phys
                     if inner > 0:
                         # Zero implicit forcing to accelerate solver convergence
-                        self.tr_forcing.zero_forcing_terms(self.equation, xm, xrhs, self.equation.field_names)
+                        self.tr_forcing.zero_non_wind_terms(self.equation, xm, xrhs, self.equation.field_names)
 
                 xrhs -= xm(fname)
                 xrhs += xrhs_phys
@@ -529,19 +594,33 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 logger.info('TR-BDF2 Quasi Newton: BDF slow physics')
                 for _, scheme in self.bdf_slow_physics_schemes:
                     scheme.apply(x_after_bdf_slow(scheme.field_name), x_after_bdf_slow(scheme.field_name))
+        # Xi2 Physics 
+        x_after_xi2(fname).assign(x_after_bdf_slow(fname))
+        if len(self.xi2_physics_schemes) > 0:
+            with timed_stage("Xi2 physics"):
+                logger.info('TR-BDF2 Quasi Newton: Xi2 physics')
+                for _, scheme in self.xi2_physics_schemes:
+                    scheme.apply(x_after_xi2(scheme.field_name), x_after_xi2(scheme.field_name))
 
         # BDF mid physics -----------------------------------------------------
         x_after_bdf_mid(fname).assign(x_after_middle(fname))
         if len(self.bdf_mid_physics_schemes) > 0:
             with timed_stage("Bdf mid physics"):
-                logger.info('TR-BDF2 Quasi Newton: BDF mid physics')
                 for _, scheme in self.bdf_mid_physics_schemes:
+                    logger.info('TR-BDF2 Quasi Newton: BDF mid physics')
                     scheme.apply(x_after_bdf_mid(scheme.field_name), x_after_bdf_mid(scheme.field_name))
+        # Xi3 Physics 
+        x_after_xi3(fname).assign(x_after_middle(fname))
+        if len(self.xi3_physics_schemes) > 0:
+            with timed_stage("Xi3 physics"):
+                logger.info('TR-BDF2 Quasi Newton: Xi3 physics')
+                for _, scheme in self.xi3_physics_schemes:
+                    scheme.apply(x_after_xi3(scheme.field_name), xn(scheme.field_name))
 
         # set xp and xpm here so that variables that are not transported have
         # the correct values
-        xp(fname).assign(x_after_bdf_slow(fname))
-        xpm(fname).assign(x_after_bdf_mid(fname))
+        xp(fname).assign(x_after_xi2(fname))
+        xpm(fname).assign(x_after_xi3(fname))
         xnp1(fname).assign(xn(fname))  # First guess doesn't seem to make much difference
 
         # OUTER ----------------------------------------------------------------
@@ -579,9 +658,10 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'TR-BDF2 Quasi Newton: BDF Implicit forcing {(outer, inner)}')
                     self.bdf_forcing.apply(xp, xnp1, xrhs, "implicit")
+                    xrhs += xrhs_phys
                     if inner > 0:
                         # Zero implicit forcing to accelerate solver convergence
-                        self.bdf_forcing.zero_forcing_terms(self.equation, xnp1, xrhs, self.equation.field_names)
+                        self.bdf_forcing.zero_non_wind_terms(self.equation, xnp1, xrhs, self.equation.field_names)
 
                 xrhs -= xnp1(fname)
                 xrhs += xrhs_phys

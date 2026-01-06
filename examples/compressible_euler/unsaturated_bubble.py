@@ -171,7 +171,7 @@ def unsaturated_bubble(
     physics_boundary_method = BoundaryMethod.extruded
 
     # Define constant theta_e and water_t
-    exner_surf = (psurf / eqns.parameters.p_0) ** eqns.parameters.kappa
+    exner_surf = (float(psurf) / float(eqns.parameters.p_0)) ** float(eqns.parameters.kappa)
     theta_surf = thermodynamics.theta(eqns.parameters, Tsurf, psurf)
     theta_d = Function(Vt).interpolate(theta_surf * exp(S*z))
     rel_hum = Function(Vt).assign(rel_hum_background)
@@ -265,7 +265,7 @@ def unsaturated_bubble(
             )
 
     # Set wind, cloud and rain to be zero
-    zero = Constant(0.0, domain=mesh)
+    zero = Constant(0.0)
     u0.project(as_vector([zero, zero]))
     water_c0.interpolate(zero)
     water_r0.interpolate(zero)

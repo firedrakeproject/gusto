@@ -1,31 +1,28 @@
-name: Build Gusto
-
 on:
-  # Push to main or PR
-  push:
-    branches:
-      - main
-  pull_request:
-  schedule:
-    # * is a special character in YAML so you have to quote this string
-    # Scheduled build at 0330 UTC on Monday mornings to detect bitrot.
-    - cron:  '30 3 * * 1'
+  workflow_call:
+    inputs:
+      source_ref:
+        description: The Git ref to checkout
+        type: string
+        required: true
+      firedrake_docker_version:
+        description: The Firedrake Docker version to use ('dev-main' or 'dev-release')
+        type: string
+        required: true
 
+# Cancel jobs running if new commits are pushed
 concurrency:
-  # Cancels jobs running if new commits are pushed
   group: >
     ${{ github.workflow }}-
     ${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: "Build Gusto"
-    # The type of runner that the job will run on
+  test:
+    name: Test Gusto
     runs-on: [self-hosted, Linux]
-    # The docker container to use.
     container:
-      image: firedrakeproject/firedrake-vanilla-default:latest
+      image: firedrakeproject/firedrake-vanilla-default:${{ inputs.firedrake_docker_version }}
     env:
       # Make Gusto output logging information, this will *not* be printed to
       # the terminal because pytest will capture it. Instead it is written to
@@ -48,11 +45,12 @@ jobs:
           find . -delete
           firedrake-clean
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Download Gusto into a subdirectory not called 'gusto' to make sure
           # that the package installs correctly. Otherwise 'import gusto' may
           # work even if the installation failed because it is a subdirectory.
+          ref: ${{ inputs.source_ref }}
           path: gusto-repo
 
       - name: Create virtual environment
@@ -89,6 +87,8 @@ jobs:
           pip install --no-binary netCDF4 --no-build-isolation netCDF4
 
       - name: Run tests (nprocs = 1)
+        # Run even if earlier tests failed
+        if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
           : # Use pytest-xdist here so we can have a single collated output (not possible
@@ -97,7 +97,6 @@ jobs:
         timeout-minutes: 60
 
       - name: Run tests (nprocs = 2)
-        # Run even if earlier tests failed
         if: success() || steps.install-two.conclusion == 'success'
         run: |
           . venv-gusto/bin/activate
@@ -122,7 +121,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success() || steps.install-two.conclusion == 'success'
         with:
-          name: pytest-logs
+          name: pytest-logs-${{ inputs.firedrake_docker_version }}
           path: pytest_*.log
           retention-days: 5
 
@@ -130,7 +129,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success() || steps.install-two.conclusion == 'success'
         with:
-          name: gusto-logs
+          name: gusto-logs-${{ inputs.firedrake_docker_version }}
           path: gusto*.log
           retention-days: 5
 

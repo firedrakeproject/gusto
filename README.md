@@ -44,6 +44,14 @@ Gusto can produce output in two formats:
 - VTU files, which can be viewed with the [Paraview](https://www.paraview.org/) software
 - netCDF files, which has data that can be plotted using standard python packages such as matplotlib. We suggest using the [tomplot](https://github.com/tommbendall/tomplot) Python library, which contains several routines to simplify the plotting of Gusto output.
 
+## Working Practices
+
+Gusto's default development happens on the `main` branch, which is fixed to the latest release of Firedrake.
+We also maintain a `future` branch which builds from the head of Firedrake's `main` branch.
+Contributions to Gusto's `main` branch must pass our Continuous Integration tests.
+
+We also use some tests with "KGOs" (Known Good Output), which are used to detect changes in science. These can be regenerated using the `integration-tests/data/update_kgos.py` script.
+
 ## Website
 
 For more information, please see our [website](https://www.firedrakeproject.org/gusto/), and please do get in touch via the Gusto channel on the Firedrake project [Slack workspace](https://firedrakeproject.slack.com/).

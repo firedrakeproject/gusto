@@ -538,12 +538,13 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                 with timed_stage("Apply forcing terms"):
                     logger.info(f'Semi-implicit Quasi Newton: Implicit forcing {(outer, inner)}')
                     self.forcing.apply(xp, xnp1, xrhs, "implicit")
+                    xrhs += xrhs_phys
+
                     if (inner > 0 and self.accelerator):
                         # Zero implicit forcing to accelerate solver convergence
-                        self.forcing.zero_forcing_terms(self.equation, xnp1, xrhs, self.equation.field_names)
+                        self.forcing.zero_non_wind_terms(self.equation, xnp1, xrhs, self.equation.field_names)
 
                 xrhs -= xnp1(self.field_name)
-                xrhs += xrhs_phys
 
                 # Linear solve -------------------------------------------------
                 with timed_stage("Implicit solve"):
@@ -738,7 +739,7 @@ class Forcing(object):
         x_out.assign(x_in(self.field_name))
         x_out += self.xF
 
-    def zero_forcing_terms(self, equation, x_in, x_out, field_names):
+    def zero_non_wind_terms(self, equation, x_in, x_out, field_names):
         """
         Zero forcing term F(x) for non-wind prognostics.
 

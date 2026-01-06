@@ -1,4 +1,4 @@
-u"""
+"""
 Objects for discretising time derivatives.
 
 Time discretisation objects discretise ∂y/∂t = F(y), for variable y, time t and
@@ -88,10 +88,10 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.domain = domain
         self.field_name = field_name
         self.equation = None
-        R = FunctionSpace(domain.mesh, "R", 0)
-        self.dt = Function(R, val=0.0)
+        self.R = FunctionSpace(domain.mesh, "R", 0)
+        self.dt = Function(self.R, val=0.0)
         self.dt.assign(domain.dt)
-        self.original_dt = Function(R, val=0.0)
+        self.original_dt = Function(self.R, val=0.0)
         self.original_dt.assign(self.dt)
         self.options = options
         self.limiter = limiter
@@ -156,8 +156,9 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.residual = equation.residual
 
         if dt_scale is not None:
-            self.dt = (self.dt *  dt_scale).evaluate
-            self.original_dt = self.original_dt * dt_scale
+            dt_scale_func = Function(self.R).assign(dt_scale)
+            self.dt.assign(self.dt * dt_scale_func)
+            self.original_dt.assign(self.original_dt * dt_scale_func)
 
         if self.field_name is not None and hasattr(equation, "field_names"):
             if isinstance(self.field_name, list):
@@ -234,8 +235,12 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         # Check if there are any mass-weighted terms:
         if len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0:
-            for field in equation.field_names:
+            if hasattr(self.augmentation, 'field_names'):
+                field_names = self.augmentation.field_names
+            else:
+                field_names = equation.field_names
 
+            for field in field_names:
                 # Check if the mass term for this prognostic is mass-weighted
                 if len(self.residual.label_map((
                     lambda t: t.get(prognostic) == field
@@ -264,6 +269,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                             self.residual = self.residual.label_map(
                                 lambda t: t.get(prognostic) == field and t.has_label(mass_weighted),
                                 map_if_true=lambda t: t.get(mass_weighted))
+
         # -------------------------------------------------------------------- #
         # Set up Wrappers
         # -------------------------------------------------------------------- #
@@ -418,7 +424,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             max_subcycles = self.subcycling_options.max_subcycles
 
             # Set number of subcycles
-            self.ncycles = math.ceil(float(self.courant_max)/subcycle_by_courant)
+            self.ncycles = max(1, math.ceil(float(self.courant_max)/subcycle_by_courant))
 
             # Cap number of subcycles
             if max_subcycles is not None:

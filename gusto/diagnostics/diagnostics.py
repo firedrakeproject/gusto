@@ -446,9 +446,7 @@ class CourantNumber(DiagnosticField):
         self.cell_flux_form = 2*avg(un*test)*dS_calc + un*test*ds_calc
 
         # Final Courant number expression
-        cell_flux = self.cell_flux.riesz_representation(
-            'l2', solver_options={'function_space': V}
-        )
+        cell_flux = Function(V, val=self.cell_flux.dat)
         self.expr = cell_flux * domain.dt / cell_volume
 
         super().setup(domain, state_fields)
@@ -1035,10 +1033,10 @@ class TracerDensity(DiagnosticField):
             if domain.spaces.extruded_mesh:
                 # Extract the base horizontal and vertical elements
                 # for the mixing ratio and density.
-                m_X_horiz = m_X_space.ufl_element().sub_elements[0]
-                m_X_vert = m_X_space.ufl_element().sub_elements[1]
-                rho_d_horiz = rho_d_space.ufl_element().sub_elements[0]
-                rho_d_vert = rho_d_space.ufl_element().sub_elements[1]
+                m_X_horiz = m_X_space.ufl_element().factor_elements[0]
+                m_X_vert = m_X_space.ufl_element().factor_elements[1]
+                rho_d_horiz = rho_d_space.ufl_element().factor_elements[0]
+                rho_d_vert = rho_d_space.ufl_element().factor_elements[1]
 
                 horiz_degree = m_X_horiz.degree() + rho_d_horiz.degree()
                 vert_degree = m_X_vert.degree() + rho_d_vert.degree()
