@@ -428,9 +428,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             apply_bcs = True
             print(f'BDF n physics length check')
             dt_scale = 1.0
-            logger.info(f'BDF n physics: dt scaling set to {dt_scale}')
+            logger.info(f'BDF n fast physics: dt scaling set to {dt_scale}')
             scheme.setup(self.equation, apply_bcs, parametrisation.label, dt_scale=dt_scale)
-            logger.info(f'BDF n physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
+            logger.info(f'BDF n fast physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
 
         # BDF m fast physics
         for parametrisation, scheme in self.bdf_m_fast_physics_schemes:
@@ -438,9 +438,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             print(f'BDF n physics length check')
             dt_scale = 1 - 2*self.gamma
             scale_proxy = 1 - 2*g1
-            logger.info(f'TR-BDF2 Xi3 physics: dt scaling is {scale_proxy}')
+            logger.info(f'BDF m fast physics: dt scaling is {scale_proxy}')
             scheme.setup(self.equation, apply_bcs, parametrisation.label, dt_scale=dt_scale)
-            logger.info(f'BDF n physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
+            logger.info(f'BDF m fast physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
 
         # Fast physics bdf implicit 
         for parametrisation, scheme in self.bdf_fast_physics_schemes:
@@ -595,7 +595,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             if len(self.tr_fast_physics_schemes) > 0:
                 with timed_stage("Fast physics"):
                     logger.info(f'TR-BDF2 Quasi Newton: TR Fast physics {outer}')
-                    for _, scheme in self.fast_physics_schemes:
+                    for _, scheme in self.tr_fast_physics_schemes:
                         scheme.apply(x_after_tr_fast(scheme.field_name), x_after_tr_fast(scheme.field_name))
 
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
