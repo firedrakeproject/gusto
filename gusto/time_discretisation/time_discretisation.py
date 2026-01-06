@@ -10,7 +10,7 @@ import math
 
 from firedrake import (Function, TestFunction, TestFunctions, DirichletBC,
                        NonlinearVariationalProblem, NonlinearVariationalSolver,
-                       FunctionSpace)
+                       FunctionSpace, dot)
 from firedrake.fml import (replace_subject, replace_test_function, Term,
                            all_terms, drop)
 from firedrake.formmanipulation import split_form
@@ -156,7 +156,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.residual = equation.residual
 
         if dt_scale is not None:
-            self.dt = self.dt * dt_scale
+            self.dt = (self.dt *  dt_scale).evaluate
             self.original_dt = self.original_dt * dt_scale
 
         if self.field_name is not None and hasattr(equation, "field_names"):
