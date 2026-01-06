@@ -15,7 +15,7 @@ from firedrake import VectorSpaceBasis
 __all__ = ["hybridised_solver_parameters", "monolithic_solver_parameters"]
 
 
-def hybridised_solver_parameters(equation, alpha=0.5, tau_values=None):
+def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_values=None):
     """
     Returns PETSc solver settings for hybridised solver for mixed finite
     element problems.
@@ -42,16 +42,14 @@ def hybridised_solver_parameters(equation, alpha=0.5, tau_values=None):
 
     # Prepare some generic variables to help with logic below ------------------
 
-    # Create list of "tracer" variables that are not solved for by the linear
+    # Create list of scalar variables that are not solved for by the linear
     # solver -- i.e. the list of variables excluding the "solver prognostics".
     # For example, these could be moisture variables
-    # TODO: this logic should directly use the list of "solver_prognostics"
-    num_tracers = len(equation.active_tracers)
-    tracer_names = [tracer.name for tracer in equation.active_tracers]
     scalars = ",".join(
         str(idx) for idx, name in enumerate(equation.field_names)
-        if name in tracer_names
+        if name not in solver_prognostics
     )
+    num_scalars = len(equation.field_names) - len(solver_prognostics)
     is_shallow_water = isinstance(equation, (
         ShallowWaterEquations, ShallowWaterEquations_1d
     ))
@@ -151,7 +149,7 @@ def hybridised_solver_parameters(equation, alpha=0.5, tau_values=None):
     # Moist Thermal Shallow Water
     # ======================================================================== #
 
-    elif isinstance(equation, ThermalShallowWaterEquations) and num_tracers > 0:
+    elif isinstance(equation, ThermalShallowWaterEquations) and num_scalars > 0:
         # (u, D, b, scalars) system - moist thermal shallow water
         settings = {
             'ksp_error_if_not_converged': None,
@@ -278,7 +276,7 @@ def hybridised_solver_parameters(equation, alpha=0.5, tau_values=None):
     # Moist Shallow Water (non-thermal)
     # ======================================================================== #
 
-    elif is_shallow_water and num_tracers > 0:
+    elif is_shallow_water and num_scalars > 0:
         # (u, D, scalars) system - moist convective shallow water
         settings = {
             'mat_type': 'matfree',
@@ -317,7 +315,7 @@ def hybridised_solver_parameters(equation, alpha=0.5, tau_values=None):
     # Shallow Water (standard)
     # ======================================================================== #
 
-    elif is_shallow_water and num_tracers == 0:
+    elif is_shallow_water and num_scalars == 0:
         # (u, D) system - dry shallow water
         # No elimination via Schur complement, just hybridization of the
         # full system.

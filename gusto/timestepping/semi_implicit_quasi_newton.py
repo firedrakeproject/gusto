@@ -204,7 +204,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         if linear_solver_parameters is None:
             self.linear_solver_parameters, self.appctx = \
-                hybridised_solver_parameters(equation_set, alpha=self.alpha, tau_values=tau_values)
+                hybridised_solver_parameters(
+                    equation_set,
+                    solver_prognostics,
+                    alpha=self.alpha,
+                    tau_values=tau_values
+                )
         else:
             self.linear_solver_parameters = linear_solver_parameters
             self.appctx = appctx
