@@ -41,8 +41,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                  xi3_physics_schemes=None,
                  tr_fast_physics_schemes=None,
                  bdf_fast_physics_schemes=None,
-                 bdf_m_fast_physics_schemes=None,
                  bdf_n_fast_physics_schemes=None,
+                 bdf_m_fast_physics_schemes=None,
                  middle_physics_schemes=None,
                  final_physics_schemes=None,
                  scaled_final_physics_schemes=None,
@@ -293,10 +293,11 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.x = TimeLevelFields(self.equation, 1)
         self.x.add_fields(self.equation, levels=(
             "star", "p", 'after_middle', "tr_after_slow","tr_after_fast", "after_xi1", 
-            "bdf_after_slow", "after_xi2", "after_xi3", "bdf_after_mid", "tr_after_fast", 
+            "bdf_after_slow", "after_xi2", "after_xi3", "bdf_after_mid", 
             "bdf_after_fast", "m", "pm", "bdf_after_m_fast", "bdf_after_n_fast"
             )
-            )
+        )
+
         # Only the prescribed fields of the main equation need passing to StateFields
         self.fields = StateFields(self.x, self.equation.prescribed_fields,
                                   *self.io.output.dumplist)
