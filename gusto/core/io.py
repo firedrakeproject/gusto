@@ -390,9 +390,10 @@ class IO(object):
         raise_parallel_exception = 0
         error = None
 
-        if any([self.output.dump_vtus, self.output.dump_nc,
+        setup_dir = any([self.output.dump_vtus, self.output.dump_nc,
                 self.output.dumplist_latlon, self.output.dump_diagnostics,
-                self.output.point_data, self.output.checkpoint and not pick_up]):
+                self.output.point_data, self.output.checkpoint]) and not pick_up
+        if setup_dir:
             # setup output directory and check that it does not already exist
             self.dumpdir = path.join("results", self.output.dirname)
             running_tests = '--running-tests' in sys.argv or "pytest" in self.output.dirname
