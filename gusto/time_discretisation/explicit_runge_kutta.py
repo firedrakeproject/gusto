@@ -282,7 +282,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             )
 
             # Set up all-but-last RHS
-            if self.idx is not None:
+            if self.idx is not None and self.wrapper is None:
                 # If original function is in mixed function space, then ensure
                 # correct test function in the all-but-last form
                 r_all_but_last = self.residual.label_map(
