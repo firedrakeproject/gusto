@@ -52,19 +52,17 @@ def run_boussinesq(tmpdir, compressible):
         transport_methods = [DGUpwind(eqn, "u"),
                              DGUpwind(eqn, "p"),
                              DGUpwind(eqn, "b", ibp=b_opts.ibp)]
+        solver_prognostics = ['u', 'p', 'b']
     else:
         transported_fields = [TrapeziumRule(domain, "u"),
                               SSPRK3(domain, "b", options=b_opts)]
         transport_methods = [DGUpwind(eqn, "u"),
                              DGUpwind(eqn, "b", ibp=b_opts.ibp)]
-
-    # Linear solver
-    linear_solver = BoussinesqSolver(eqn)
+        solver_prognostics = ['u', 'b']
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(eqn, io, transported_fields,
-                                      transport_methods,
-                                      linear_solver=linear_solver)
+                                      transport_methods, solver_prognostics=solver_prognostics)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

@@ -13,13 +13,15 @@ This example uses the icosahedral sphere mesh and degree 1 spaces.
 """
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from firedrake import SpatialCoordinate, sin, cos, exp, Function
+from firedrake import (
+    SpatialCoordinate, sin, cos, exp, Function
+)
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
     ZonalComponent, MeridionalComponent, SteadyStateError, lonlatr_from_xyz,
-    DG1Limiter, InstantRain, MoistConvectiveSWSolver, ForwardEuler,
-    RelativeVorticity, SWSaturationAdjustment, WaterVapour, CloudWater, Rain,
+    DG1Limiter, InstantRain, ForwardEuler, RelativeVorticity,
+    SWSaturationAdjustment, WaterVapour, CloudWater, Rain,
     GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr
 )
 
@@ -125,8 +127,6 @@ def moist_convect_williamson_2(
         SSPRK3(domain, "rain", limiter=limiter)
     ]
 
-    linear_solver = MoistConvectiveSWSolver(eqns)
-
     # Physics schemes
     sat_adj = SWSaturationAdjustment(
         eqns, sat_func, time_varying_saturation=True,
@@ -143,8 +143,9 @@ def moist_convect_williamson_2(
     ]
 
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transport_schemes=transported_fields,
-        spatial_methods=transport_methods, linear_solver=linear_solver,
+        eqns, io,
+        transport_schemes=transported_fields,
+        spatial_methods=transport_methods,
         final_physics_schemes=physics_schemes
     )
 
