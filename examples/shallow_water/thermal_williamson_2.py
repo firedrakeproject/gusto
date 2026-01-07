@@ -17,9 +17,8 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ThermalShallowWaterEquations,
     RelativeVorticity, PotentialVorticity, SteadyStateError,
-    ZonalComponent, MeridionalComponent, ThermalSWSolver,
-    xyz_vector_from_lonlatr, lonlatr_from_xyz, GeneralIcosahedralSphereMesh,
-    SubcyclingOptions
+    ZonalComponent, MeridionalComponent, xyz_vector_from_lonlatr,
+    lonlatr_from_xyz, GeneralIcosahedralSphereMesh, SubcyclingOptions
 )
 
 thermal_williamson_2_defaults = {
@@ -69,10 +68,8 @@ def thermal_williamson_2(
 
     # Equations
     params = ShallowWaterParameters(mesh, H=mean_depth, g=g)
-    Omega = params.Omega
-    fexpr = 2*Omega*z/radius
     eqns = ThermalShallowWaterEquations(
-        domain, params, fexpr=fexpr, u_transport_option=u_eqn_type
+        domain, params, u_transport_option=u_eqn_type
     )
 
     # IO
@@ -101,13 +98,9 @@ def thermal_williamson_2(
         DGUpwind(eqns, "b")
     ]
 
-    # Linear solver
-    linear_solver = ThermalSWSolver(eqns)
-
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
+        eqns, io, transported_fields, transport_methods
     )
 
     # ------------------------------------------------------------------------ #
@@ -117,6 +110,7 @@ def thermal_williamson_2(
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
     b0 = stepper.fields("b")
+    Omega = params.Omega
 
     _, phi, _ = lonlatr_from_xyz(x, y, z)
 

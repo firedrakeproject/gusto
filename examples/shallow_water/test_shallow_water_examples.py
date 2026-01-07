@@ -10,21 +10,40 @@ def make_dirname(test_name):
         return f'pytest_{test_name}'
 
 
-def test_linear_williamson_2():
+def test_linear_williamson_2_siqn():
     from linear_williamson_2 import linear_williamson_2
     test_name = 'linear_williamson_2'
     linear_williamson_2(
         ncells_per_edge=4,
         dt=1800.,
         tmax=18000.,
+        siqn=True,
         dumpfreq=10,
         dirname=make_dirname(test_name)
     )
 
 
 @pytest.mark.parallel(nprocs=2)
-def test_linear_williamson_2_parallel():
-    test_linear_williamson_2()
+def test_linear_williamson_2_siqn_parallel():
+    test_linear_williamson_2_siqn()
+
+
+def test_linear_williamson_2_trap():
+    from linear_williamson_2 import linear_williamson_2
+    test_name = 'linear_williamson_2'
+    linear_williamson_2(
+        ncells_per_edge=4,
+        dt=1800.,
+        tmax=18000.,
+        siqn=False,
+        dumpfreq=10,
+        dirname=make_dirname(test_name)
+    )
+
+
+@pytest.mark.parallel(nprocs=2)
+def test_linear_williamson_2_trap_parallel():
+    test_linear_williamson_2_trap()
 
 
 def test_moist_convective_williamson_2():
@@ -146,18 +165,37 @@ def test_linear_thermal_galewsky_jet_parallel():
     test_linear_thermal_galewsky_jet()
 
 
-def test_moist_thermal_eqiuvb_gw():
-    from moist_thermal_equivb_gw import moist_thermal_gw
+def test_moist_thermal_gw_equivb():
+    from moist_thermal_gw import moist_thermal_gw
+    test_name = 'moist_thermal_gw_equivb'
+    moist_thermal_gw(
+        ncells_per_edge=4,
+        dt=1800.,
+        tmax=18000.,
+        dumpfreq=10,
+        dirname=make_dirname(test_name),
+        equivb=True
+    )
+
+
+@pytest.mark.parallel(nprocs=4)
+def moist_thermal_gw_equivb_parallel():
+    test_moist_thermal_gw_equivb()
+
+
+def test_moist_thermal_gw():
+    from moist_thermal_gw import moist_thermal_gw
     test_name = 'moist_thermal_gw'
     moist_thermal_gw(
         ncells_per_edge=4,
         dt=1800.,
         tmax=18000.,
         dumpfreq=10,
-        dirname=make_dirname(test_name)
+        dirname=make_dirname(test_name),
+        equivb=False
     )
 
 
 @pytest.mark.parallel(nprocs=4)
-def moist_thermal_eqiuvb_gw_parallel():
-    test_moist_thermal_eqiuvb_gw()
+def moist_thermal_gw_parallel():
+    test_moist_thermal_gw()

@@ -37,11 +37,8 @@ def test_shallow_water(tmpdir):
     mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=2)
     x = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, 'BDM', 1)
-    parameters = ShallowWaterParameters(mesh, H=H)
 
     # Equation
-    Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
     lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
     R0 = pi/9.
     R0sq = R0**2
@@ -52,7 +49,8 @@ def test_shallow_water(tmpdir):
     rsq = min_value(R0sq, lsq+thsq)
     r = sqrt(rsq)
     bexpr = 2000 * (1 - r/R0)
-    eqn = ShallowWaterEquations(domain, parameters, fexpr=fexpr, topog_expr=bexpr)
+    parameters = ShallowWaterParameters(mesh, H=H, topog_expr=bexpr)
+    eqn = ShallowWaterEquations(domain, parameters)
 
     # I/O
     output = OutputParameters(dirname=str(tmpdir), log_courant=False)
@@ -72,6 +70,7 @@ def test_shallow_water(tmpdir):
     u_max = 20.   # Maximum amplitude of the zonal wind (m/s)
     uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
     g = parameters.g
+    Omega = parameters.Omega
     Rsq = R**2
     Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
 

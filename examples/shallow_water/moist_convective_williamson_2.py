@@ -13,13 +13,15 @@ This example uses the icosahedral sphere mesh and degree 1 spaces.
 """
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from firedrake import SpatialCoordinate, sin, cos, exp, Function
+from firedrake import (
+    SpatialCoordinate, sin, cos, exp, Function
+)
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, ShallowWaterParameters, ShallowWaterEquations,
     ZonalComponent, MeridionalComponent, SteadyStateError, lonlatr_from_xyz,
-    DG1Limiter, InstantRain, MoistConvectiveSWSolver, ForwardEuler,
-    RelativeVorticity, SWSaturationAdjustment, WaterVapour, CloudWater, Rain,
+    DG1Limiter, InstantRain, ForwardEuler, RelativeVorticity,
+    SWSaturationAdjustment, WaterVapour, CloudWater, Rain,
     GeneralIcosahedralSphereMesh, xyz_vector_from_lonlatr
 )
 
@@ -77,15 +79,13 @@ def moist_convect_williamson_2(
 
     # Equations
     parameters = ShallowWaterParameters(mesh, H=mean_depth, g=g)
-    Omega = parameters.Omega
-    fexpr = 2*Omega*z/radius
 
     tracers = [
         WaterVapour(space='DG'), CloudWater(space='DG'), Rain(space='DG')
     ]
 
     eqns = ShallowWaterEquations(
-        domain, parameters, fexpr=fexpr, u_transport_option=u_eqn_type,
+        domain, parameters, u_transport_option=u_eqn_type,
         active_tracers=tracers
     )
 
@@ -127,8 +127,6 @@ def moist_convect_williamson_2(
         SSPRK3(domain, "rain", limiter=limiter)
     ]
 
-    linear_solver = MoistConvectiveSWSolver(eqns)
-
     # Physics schemes
     sat_adj = SWSaturationAdjustment(
         eqns, sat_func, time_varying_saturation=True,
@@ -145,9 +143,10 @@ def moist_convect_williamson_2(
     ]
 
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transport_schemes=transported_fields,
-        spatial_methods=transport_methods, linear_solver=linear_solver,
-        physics_schemes=physics_schemes
+        eqns, io,
+        transport_schemes=transported_fields,
+        spatial_methods=transport_methods,
+        final_physics_schemes=physics_schemes
     )
 
     # ------------------------------------------------------------------------ #
@@ -160,6 +159,7 @@ def moist_convect_williamson_2(
 
     uexpr = xyz_vector_from_lonlatr(u_max*cos(phi), 0, 0, (x, y, z))
     g = parameters.g
+    Omega = parameters.Omega
     w = Omega*radius*u_max + (u_max**2)/2
     sigma = 0
 

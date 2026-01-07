@@ -1,15 +1,17 @@
 """Defines the Boussinesq equations."""
 
-from firedrake import inner, dx, div, cross, split, as_vector
-from firedrake.fml import subject
+from firedrake import (
+    inner, dx, div, cross, split, as_vector, TestFunctions, TrialFunctions, dot, grad, DirichletBC)
+from firedrake.fml import subject, all_terms
 from gusto.core.labels import (
-    time_derivative, transport, prognostic, linearisation,
+    prognostic, linearisation,
     pressure_gradient, coriolis, divergence, gravity, incompressible
 )
 from gusto.equations.common_forms import (
     advection_form, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form,
-    linear_advection_form
+    linear_advection_form, linear_circulation_form,
+    linear_vector_invariant_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
 
@@ -24,15 +26,15 @@ class BoussinesqEquations(PrognosticEquationSet):
     to compressible.
 
     The compressible form of the equations is
-    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
-    ∂p/∂t + cs**2 ∇.u = p,                                                    \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p - b*k = 0,                                     \n
+    ∂p/∂t + (u.∇)p + cs**2 ∇.u = 0,                                           \n
     ∂b/∂t + (u.∇)b = 0,                                                       \n
     where k is the vertical unit vector, Ω is the planet's rotation vector
     and cs is the sound speed.
 
     For the incompressible form of the equations, the pressure features as
     a Lagrange multiplier to enforce incompressibility. The equations are     \n
-    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p - b*k = 0,                                     \n
     ∇.u = p,                                                                  \n
     ∂b/∂t + (u.∇)b = 0,                                                       \n
     where k is the vertical unit vector and Ω is the planet's rotation vector.
@@ -41,7 +43,7 @@ class BoussinesqEquations(PrognosticEquationSet):
     def __init__(self, domain, parameters,
                  compressible=True,
                  space_names=None,
-                 linearisation_map='default',
+                 linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
@@ -59,9 +61,8 @@ class BoussinesqEquations(PrognosticEquationSet):
                 in which case the spaces are taken from the de Rham complex.
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
-                then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes time derivatives and
-                scalar transport terms.
+                then no terms are linearised. Defaults to the FML `all_terms`
+                function.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -89,16 +90,6 @@ class BoussinesqEquations(PrognosticEquationSet):
         if active_tracers is None:
             active_tracers = []
 
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives, scalar transport,
-            # pressure gradient, gravity and divergence terms
-            # Don't include active tracers
-            linearisation_map = lambda t: \
-                t.get(prognostic) in ['u', 'p', 'b'] \
-                and (any(t.has_label(time_derivative, pressure_gradient,
-                                     divergence, gravity))
-                     or (t.get(prognostic) not in ['u', 'p'] and t.has_label(transport)))
-
         super().__init__(field_names, domain, space_names,
                          linearisation_map=linearisation_map,
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
@@ -109,8 +100,8 @@ class BoussinesqEquations(PrognosticEquationSet):
 
         w, phi, gamma = self.tests[0:3]
         u, p, b = split(self.X)
-        u_trial, p_trial, _ = split(self.trials)
-        _, p_bar, b_bar = split(self.X_ref)
+        u_trial, p_trial, b_trial = split(self.trials)[0:3]
+        u_bar, p_bar, b_bar = split(self.X_ref)[0:3]
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -122,28 +113,51 @@ class BoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Velocity transport term -- depends on formulation
         if u_transport_option == "vector_invariant_form":
-            u_adv = prognostic(vector_invariant_form(domain, w, u, u), 'u')
+            u_adv = prognostic(vector_invariant_form(self.domain, w, u, u), 'u')
+            # Manually add linearisation, as linearisation cannot handle the
+            # perp function on the plane / vertical slice
+            if self.linearisation_map(u_adv.terms[0]):
+                linear_u_adv = linear_vector_invariant_form(self.domain, w, u_trial, u_bar)
+                u_adv = linearisation(u_adv, linear_u_adv)
+
+        elif u_transport_option == "circulation_form":
+            # This is different to vector invariant form as the K.E. form
+            # doesn't have a variable marked as "transporting velocity"
+            ke_form = prognostic(kinetic_energy_form(w, u, u), 'u')
+            circ_form = prognostic(advection_equation_circulation_form(self.domain, w, u, u), 'u')
+            # Manually add linearisation, as linearisation cannot handle the
+            # perp function on the plane / vertical slice
+            if self.linearisation_map(circ_form.terms[0]):
+                linear_circ_form = linear_circulation_form(self.domain, w, u_trial, u_bar)
+                circ_form = linearisation(circ_form, linear_circ_form)
+            u_adv = circ_form + ke_form
+
         elif u_transport_option == "vector_advection_form":
             u_adv = prognostic(advection_form(w, u, u), 'u')
-        elif u_transport_option == "circulation_form":
-            ke_form = prognostic(kinetic_energy_form(w, u, u), 'u')
-            u_adv = prognostic(advection_equation_circulation_form(domain, w, u, u), 'u') + ke_form
+
         else:
-            raise ValueError("Invalid u_transport_option: %s" % u_transport_option)
+            raise ValueError("Invalid u_transport_option: %s" % self.u_transport_option)
 
         # Buoyancy transport
         b_adv = prognostic(advection_form(gamma, b, u), 'b')
+
+        # TODO #651: we should remove this hand-coded linearisation
+        # currently REXI can't handle generated transport linearisations
         if self.linearisation_map(b_adv.terms[0]):
-            linear_b_adv = linear_advection_form(gamma, b_bar, u_trial)
+            linear_b_adv = linear_advection_form(gamma, b_trial, u_trial, b_bar, u_bar)
             b_adv = linearisation(b_adv, linear_b_adv)
 
         if compressible:
             # Pressure transport
             p_adv = prognostic(advection_form(phi, p, u), 'p')
+
+            # TODO #651: we should remove this hand-coded linearisation
+            # currently REXI can't handle generated transport linearisations
             if self.linearisation_map(p_adv.terms[0]):
-                linear_p_adv = linear_advection_form(phi, p_bar, u_trial)
+                linear_p_adv = linear_advection_form(phi, p_trial, u_trial, p_bar, u_bar)
                 p_adv = linearisation(p_adv, linear_p_adv)
             adv_form = subject(u_adv + p_adv + b_adv, self.X)
+
         else:
             adv_form = subject(u_adv + b_adv, self.X)
 
@@ -193,16 +207,70 @@ class BoussinesqEquations(PrognosticEquationSet):
         # Extra Terms (Coriolis)
         # -------------------------------------------------------------------- #
         if self.parameters.Omega is not None:
-            # TODO: add linearisation
             Omega = as_vector((0, 0, self.parameters.Omega))
             coriolis_form = coriolis(subject(prognostic(
                 inner(w, cross(2*Omega, u))*dx, 'u'), self.X))
             residual += coriolis_form
+
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
         # Add linearisations to equations
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
+
+    def schur_complement_form(self, alpha=0.5, tau_values=None):
+        domain = self.domain
+        dt = domain.dt
+        tau_values = tau_values or {}
+        # Set relaxation parameters. If an alternative has not been given, set
+        # to semi-implicit off-centering factor
+        beta_u = dt*tau_values.get("u", alpha)
+        beta_p = dt*tau_values.get("p", alpha)
+        beta_b = dt*tau_values.get("b", alpha)
+        Vu = domain.spaces("HDiv")
+        Vp = domain.spaces("DG")
+
+        # Build the reduced function space for u,p
+        M = Vu*Vp
+        w, phi = TestFunctions(M)
+        u, p = TrialFunctions(M)
+
+        # Get background fields
+        bbar = split(self.X_ref)[2]
+
+        # Analytical (approximate) elimination of theta
+        k = self.domain.k             # Upward pointing unit vector
+        b = -dot(k, u)*dot(k, grad(bbar))*beta_b
+
+        # vertical projection
+        def V(u):
+            return k*inner(u, k)
+
+        seqn = (
+            inner(w, u)*dx
+            - beta_u*div(w)*p*dx
+            - beta_u*inner(w, k)*b*dx
+        )
+
+        if self.compressible:
+            cs = self.parameters.cs
+            seqn += phi * p * dx + beta_p * phi * cs**2 * div(u) * dx
+        else:
+            seqn += phi * div(u) * dx
+
+        if hasattr(self, "mu"):
+            seqn += dt*self.mu*inner(w, k)*inner(u, k)*dx
+
+        if self.parameters.Omega is not None:
+            Omega = as_vector((0, 0, self.parameter.Omega))
+            seqn += inner(w, cross(2*Omega, u))*dx
+
+        # Boundary conditions (assumes extruded mesh)
+        # BCs are declared for the plain velocity space. As we need them in
+        # a mixed problem, we replicate the BCs but for subspace of M
+        sbcs = [DirichletBC(M.sub(0), bc.function_arg, bc.sub_domain) for bc in self.bcs['u']]
+
+        return seqn, sbcs
 
 
 class LinearBoussinesqEquations(BoussinesqEquations):
@@ -213,15 +281,15 @@ class LinearBoussinesqEquations(BoussinesqEquations):
     to compressible.
 
     The compressible form of the equations is
-    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
-    ∂p/∂t + cs**2 ∇.u = p,                                                    \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p - b*k = 0,                                     \n
+    ∂p/∂t + (u.∇)p + cs**2 ∇.u = 0,                                           \n
     ∂b/∂t + (u.∇)b = 0,                                                       \n
     where k is the vertical unit vector, Ω is the planet's rotation vector
     and cs is the sound speed.
 
     For the incompressible form of the equations, the pressure features as
     a Lagrange multiplier to enforce incompressibility. The equations are     \n
-    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p + b*k = 0,                                     \n
+    ∂u/∂t + (u.∇)u + 2Ω×u + ∇p - b*k = 0,                                     \n
     ∇.u = p,                                                                  \n
     ∂b/∂t + (u.∇)b = 0,                                                       \n
     where k is the vertical unit vector and Ω is the planet's rotation vector.
@@ -230,7 +298,7 @@ class LinearBoussinesqEquations(BoussinesqEquations):
     def __init__(self, domain, parameters,
                  compressible=True,
                  space_names=None,
-                 linearisation_map='default',
+                 linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
                  no_normal_flow_bc_ids=None,
                  active_tracers=None):
@@ -249,8 +317,8 @@ class LinearBoussinesqEquations(BoussinesqEquations):
             linearisation_map (func, optional): a function specifying which
                 terms in the equation set to linearise. If None is specified
                 then no terms are linearised. Defaults to the string 'default',
-                in which case the linearisation includes time derivatives and
-                scalar transport terms.
+                in which case the linearisation drops terms for any active
+                tracers.
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form' and
@@ -267,13 +335,6 @@ class LinearBoussinesqEquations(BoussinesqEquations):
             NotImplementedError: active tracers are not implemented.
         """
 
-        if linearisation_map == 'default':
-            # Default linearisation is time derivatives, pressure gradient,
-            # Coriolis and transport term from depth equation
-            linearisation_map = lambda t: \
-                (any(t.has_label(time_derivative, pressure_gradient, coriolis,
-                                 gravity, divergence, incompressible))
-                 or (t.get(prognostic) in ['p', 'b'] and t.has_label(transport)))
         super().__init__(domain=domain,
                          parameters=parameters,
                          compressible=compressible,

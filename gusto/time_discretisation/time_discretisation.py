@@ -17,11 +17,14 @@ from firedrake.formmanipulation import split_form
 from firedrake.utils import cached_property
 
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
-from gusto.core.labels import (time_derivative, prognostic, physics_label,
-                               mass_weighted, nonlinear_time_derivative)
+from gusto.core.labels import (
+    time_derivative, prognostic, physics_label, mass_weighted,
+    nonlinear_time_derivative, all_but_last
+)
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
 from gusto.solvers import mass_parameters
+
 
 __all__ = ["TimeDiscretisation", "ExplicitTimeDiscretisation", "BackwardEuler",
            "ThetaMethod", "TrapeziumRule", "TR_BDF2"]
@@ -230,8 +233,12 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         # Check if there are any mass-weighted terms:
         if len(self.residual.label_map(lambda t: t.has_label(mass_weighted), map_if_false=drop)) > 0:
-            for field in equation.field_names:
+            if hasattr(self.augmentation, 'field_names'):
+                field_names = self.augmentation.field_names
+            else:
+                field_names = equation.field_names
 
+            for field in field_names:
                 # Check if the mass term for this prognostic is mass-weighted
                 if len(self.residual.label_map((
                     lambda t: t.get(prognostic) == field
@@ -260,6 +267,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                             self.residual = self.residual.label_map(
                                 lambda t: t.get(prognostic) == field and t.has_label(mass_weighted),
                                 map_if_true=lambda t: t.get(mass_weighted))
+
         # -------------------------------------------------------------------- #
         # Set up Wrappers
         # -------------------------------------------------------------------- #
@@ -326,6 +334,21 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     self.residual = self.residual.label_map(
                         all_terms,
                         map_if_true=replace_test_function(new_test))
+
+                    # TODO: roll this out to other wrappers
+                    # Replace test function in any all_but_last label
+                    def replace_test_all_but_last(t):
+                        old_abl_form = t.get(all_but_last)
+                        new_abl_form = old_abl_form.label_map(
+                            all_terms,
+                            replace_test_function(new_test, old_idx=self.idx)
+                        )
+                        return all_but_last(t, new_abl_form)
+
+                    self.residual = self.residual.label_map(
+                        lambda t: t.has_label(all_but_last),
+                        map_if_true=replace_test_all_but_last
+                    )
 
                     self.residual = self.wrapper.label_terms(self.residual)
                 if self.solver_parameters is None:
@@ -414,7 +437,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             max_subcycles = self.subcycling_options.max_subcycles
 
             # Set number of subcycles
-            self.ncycles = math.ceil(float(self.courant_max)/subcycle_by_courant)
+            self.ncycles = max(1, math.ceil(float(self.courant_max)/subcycle_by_courant))
 
             # Cap number of subcycles
             if max_subcycles is not None:

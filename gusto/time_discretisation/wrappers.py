@@ -344,7 +344,7 @@ class SUPGWrapper(Wrapper):
             assert as_ufl(self.tau).ufl_shape == (dim, dim), "Provided tau has incorrect shape!"
         else:
             # create tuple of default values of size dim
-            default_vals = [self.options.default*self.time_discretisation.dt]*dim
+            default_vals = [self.options.default*float(self.time_discretisation.dt)]*dim
             # check for directions is which the space is discontinuous
             # so that we don't apply supg in that direction
             if is_cg(self.test_space):

@@ -23,10 +23,10 @@ def run_sw_fplane(tmpdir):
     # Equation
     H = 2
     g = 50
-    parameters = ShallowWaterParameters(mesh, H=H, g=g)
     f0 = 10
-    fexpr = Constant(f0)
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=fexpr)
+    parameters = ShallowWaterParameters(mesh, rotation=CoriolisOptions.fplane,
+                                        f0=f0, H=H, g=g)
+    eqns = ShallowWaterEquations(domain, parameters)
 
     # I/O
     output = OutputParameters(
@@ -114,8 +114,10 @@ def run_sw_fplane(tmpdir):
                                     checkpoint=True)
     check_mesh = pick_up_mesh(check_output, mesh_name)
     check_domain = Domain(check_mesh, dt, 'RTCF', 1)
-    check_parameters = ShallowWaterParameters(check_mesh, H=H, g=g)
-    check_eqn = ShallowWaterEquations(check_domain, check_parameters, fexpr=fexpr)
+    check_parameters = ShallowWaterParameters(check_mesh,
+                                              rotation=CoriolisOptions.fplane,
+                                              f0=f0, H=H, g=g)
+    check_eqn = ShallowWaterEquations(check_domain, check_parameters)
     check_io = IO(check_domain, output=check_output)
     check_stepper = SemiImplicitQuasiNewton(check_eqn, check_io, [], [])
     check_stepper.io.pick_up_from_checkpoint(check_stepper.fields)
