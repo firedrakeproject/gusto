@@ -125,16 +125,13 @@ def run_simult_SIQN(tmpdir, order):
         ["u", "rho", "theta", "water_vapour", "cloud_water"]
     ]
 
-    # Linear solver
-    linear_solver = CompressibleSolver(eqns)
-
     # Physics schemes (condensation/evaporation)
     physics_schemes = [(SaturationAdjustment(eqns), ForwardEuler(domain))]
 
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, final_physics_schemes=physics_schemes
+        final_physics_schemes=physics_schemes
     )
 
     # ------------------------------------------------------------------------ #

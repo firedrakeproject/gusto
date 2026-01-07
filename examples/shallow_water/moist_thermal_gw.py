@@ -11,15 +11,15 @@ This example is implemented in two versions:
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
-    SpatialCoordinate, pi, sqrt, min_value, cos, Constant, Function, exp, sin
+    SpatialCoordinate, pi, sqrt, min_value, cos, Constant, Function, exp, sin,
 )
 from gusto import (
     Domain, IO, OutputParameters, DGUpwind, ShallowWaterParameters,
     ThermalShallowWaterEquations, lonlatr_from_xyz, SubcyclingOptions,
-    RungeKuttaFormulation, SSPRK3, ThermalSWSolver, MeridionalComponent,
+    RungeKuttaFormulation, SSPRK3, MeridionalComponent,
     SemiImplicitQuasiNewton, ForwardEuler, WaterVapour, CloudWater,
     xyz_vector_from_lonlatr, SWSaturationAdjustment, ZonalComponent,
-    GeneralIcosahedralSphereMesh, MoistThermalSWSolver, PartitionedCloud
+    GeneralIcosahedralSphereMesh, PartitionedCloud, monolithic_solver_parameters
 )
 
 moist_thermal_gw_defaults = {
@@ -125,10 +125,12 @@ def moist_thermal_gw(
 
     if equivb:
         tau_values = {'D': 1.0, 'b': 1.0}
-        linear_solver = ThermalSWSolver(eqns, tau_values=tau_values)
+        solver_parameters = None
+        solver_prognostics = ['u', 'D', 'b_e']
     else:
         tau_values = {'D': 1.0, 'b': 1.0, 'water_vapour': 1.0, 'cloud_water': 1.0}
-        linear_solver = MoistThermalSWSolver(eqns, beta2, tau_values=tau_values)
+        solver_parameters = monolithic_solver_parameters()
+        solver_prognostics = eqns.field_names
 
     if equivb:
         physics_schemes = None
@@ -153,12 +155,11 @@ def moist_thermal_gw(
     # Timestepper
     # ------------------------------------------------------------------------ #
 
-    solver_prognostics = eqns.field_names
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, inner_physics_schemes=physics_schemes,
+        tau_values=tau_values, inner_physics_schemes=physics_schemes,
         num_outer=2, num_inner=2, solver_prognostics=solver_prognostics,
-        reference_update_freq=10800.
+        linear_solver_parameters=solver_parameters, reference_update_freq=10800.
     )
 
     # ------------------------------------------------------------------------ #
