@@ -18,14 +18,14 @@ from tomplot import (
     extract_gusto_coords, extract_gusto_field, regrid_horizontal_slice
 )
 
-test_name = 'williamson_2'
+test_name = 'williamson_2_imex_euler'
 
 # ---------------------------------------------------------------------------- #
 # Directory for results and plots
 # ---------------------------------------------------------------------------- #
 # When copying this example these paths need editing, which will usually involve
 # removing the abspath part to set directory paths relative to this file
-results_file_name = f'{abspath(dirname(__file__))}/../../results/{test_name}/field_output.nc'
+results_file_name = f'{abspath(dirname(__file__))}/../../examples/shallow_water/results/{test_name}/field_output.nc'
 plot_stem = f'{abspath(dirname(__file__))}/../../figures/{test_name}'
 
 # ---------------------------------------------------------------------------- #

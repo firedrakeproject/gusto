@@ -1,7 +1,7 @@
 """Implementations of IMEX Runge-Kutta time discretisations."""
 
 from firedrake import (Function, Constant, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver)
+                       NonlinearVariationalSolver, ufl_expr)
 from firedrake.fml import replace_subject, all_terms, drop
 from firedrake.utils import cached_property
 from gusto.core.labels import time_derivative, implicit, explicit, source_label
@@ -61,7 +61,7 @@ class IMEXRungeKutta(TimeDiscretisation):
 
     def __init__(self, domain, butcher_imp, butcher_exp, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None):
+                 limiter=None, options=None, augmentation=None, appctx=None, Jform=None, u=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -92,7 +92,10 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.butcher_imp = butcher_imp
         self.butcher_exp = butcher_exp
         self.nStages = int(np.shape(self.butcher_imp)[1])
+        self.appctx = appctx
 
+        self.Jform = Jform
+        self.u = u
         # Some butcher tableaus have zero first stage, if so, we don't need to do an
         # initial solve and can copy across x_in to x_s[0]
         self.zero_first_stage = True
@@ -241,10 +244,11 @@ class IMEXRungeKutta(TimeDiscretisation):
         """Set up a list of solvers for each problem at a stage."""
         solvers = []
         for stage in range(self.solver_start_stage, self.nStages):
+            J = ufl_expr.derivative(self.Jform, self.u)
             # setup solver using residual defined in derived class
-            problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
+            problem = NonlinearVariationalProblem(self.res(stage), self.x_out, J = J, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
-            solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
+            solvers.append(NonlinearVariationalSolver(problem, appctx=self.appctx, solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
         return solvers
 
     @cached_property
@@ -301,7 +305,8 @@ class IMEX_Euler(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None):
+                 limiter=None, options=None, augmentation=None, appctx=None, Jform=None,
+                 u=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -327,7 +332,8 @@ class IMEX_Euler(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options, augmentation=augmentation)
+                         limiter=limiter, options=options, augmentation=augmentation,
+                         appctx=appctx, Jform=Jform, u=u)
 
 
 class IMEX_ARS3(IMEXRungeKutta):
@@ -348,7 +354,7 @@ class IMEX_ARS3(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None):
+                 limiter=None, options=None, augmentation=None, appctx=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -376,7 +382,8 @@ class IMEX_ARS3(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options, augmentation=augmentation)
+                         limiter=limiter, options=options, augmentation=augmentation,
+                         appctx=appctx)
 
 
 class IMEX_ARK2(IMEXRungeKutta):
@@ -397,7 +404,7 @@ class IMEX_ARK2(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None):
+                 limiter=None, options=None, augmentation=None, appctx=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -426,7 +433,8 @@ class IMEX_ARK2(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options, augmentation=augmentation)
+                         limiter=limiter, options=options, augmentation=augmentation,
+                         appctx=appctx)
 
 
 class IMEX_SSP3(IMEXRungeKutta):
@@ -445,7 +453,7 @@ class IMEX_SSP3(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None):
+                 limiter=None, options=None, augmentation=None, appctx=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -472,7 +480,8 @@ class IMEX_SSP3(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options, augmentation=augmentation)
+                         limiter=limiter, options=options, augmentation=augmentation,
+                         appctx=appctx)
 
 
 class IMEX_Trap2(IMEXRungeKutta):
@@ -491,7 +500,8 @@ class IMEX_Trap2(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None):
+                 limiter=None, options=None, augmentation=None,
+                 appctx=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -518,4 +528,5 @@ class IMEX_Trap2(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options, augmentation=augmentation)
+                         limiter=limiter, options=options, augmentation=augmentation,
+                         appctx=appctx)

@@ -3,7 +3,7 @@
 from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg, DirichletBC,
                        dS, split, conditional, exp, sqrt, Function,
                        SpatialCoordinate, Constant, TrialFunctions, TestFunctions, dot, grad,
-                       interpolate, assemble)
+                       interpolate, assemble, TrialFunction)
 from firedrake.fml import subject, drop, all_terms
 from gusto.core.labels import (
     linearisation, pressure_gradient, coriolis, prognostic
@@ -585,6 +585,65 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         sbcs = [DirichletBC(M_.sub(0), bc.function_arg, bc.sub_domain) for bc in self.bcs['u']]
 
         return seqn, sbcs
+    
+    def linear_form(self, alpha=0.5, tau_values=None):
+        # Approximate elimination of b
+        domain = self.domain
+        dt = domain.dt
+        tau_values = tau_values or {}
+        beta_u = dt*tau_values.get("u", alpha)
+        beta_d = dt*tau_values.get("D", alpha)
+        beta_b = dt*tau_values.get("b", alpha)
+
+        n = FacetNormal(domain.mesh)
+        Vu = domain.spaces("HDiv")
+        VD = domain.spaces("DG")
+        M_ = self.function_space
+        u = TrialFunction(M_)
+        u_, D_, b_ = split(u)
+        w_, phi_, gamma_ = TestFunctions(M_)
+
+        _, Dref, bref = self.X_ref.subfunctions[0:3]
+
+        if self.equivalent_buoyancy:
+            # compute q_v using q_sat to partition q_t into q_v and q_c
+            self.q_sat_func = Function(VD)
+            self.qvbar = Function(VD)
+            qtbar = split(self.X_ref)[3]
+
+            # set up interpolators that use the X_ref values for D and b_e
+            self.q_sat_expr_interpolate = interpolate(
+                self.compute_saturation(self.X_ref), VD)
+            self.q_v_interpolate = interpolate(
+                conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
+                VD)
+
+            # bbar was be_bar and here we correct to become bbar
+            bref += self.parameters.beta2 * self.qvbar
+
+        eqn = (
+            inner(w_, (u_)) * dx
+            - beta_u * (D_) * div(w_*bref) * dx
+            + beta_u * jump(w_*bref, n) * avg(D_) * dS
+            - beta_u * 0.5 * Dref * b_ * div(w_) * dx
+            - beta_u * 0.5 * bref * div(w_*(D_)) * dx
+            + beta_u * 0.5 * jump((D_)*w_, n) * avg(bref) * dS
+            + inner(phi_, (D_)) * dx
+            + beta_d * phi_ * div(Dref*u_) * dx
+            + inner(gamma_, (b_)) * dx
+            + gamma_*dot(u_, grad(bref))*beta_b*dx
+
+        )
+
+        if 'coriolis' in self.prescribed_fields._field_names:
+            f = self.prescribed_fields('coriolis')
+            eqn += beta_u * f * inner(w_, domain.perp(u_)) * dx
+
+        # Boundary conditions
+        bcs = [DirichletBC(M_.sub(0), bc.function_arg, bc.sub_domain) for bc in self.bcs['u']]
+
+        return eqn, bcs, u
+
 
     def update_reference_profiles(self):
         "Update reference profiles for equivalent buoyancy formulation."

@@ -18,6 +18,7 @@ from gusto import (
     ZonalComponent, MeridionalComponent, xyz_vector_from_lonlatr,
     GeneralIcosahedralSphereMesh, SubcyclingOptions
 )
+import time
 
 williamson_2_defaults = {
     'ncells_per_edge': 16,     # number of cells per icosahedron edge
@@ -125,6 +126,10 @@ def williamson_2(
     # ------------------------------------------------------------------------ #
 
     stepper.run(t=0, tmax=tmax)
+    start_time = time.time()
+    stepper.run(t=0, tmax=tmax)
+    end_time = time.time()
+    print(f"Simulation run time: {end_time - start_time} seconds")
 
 # ---------------------------------------------------------------------------- #
 # MAIN

@@ -15,7 +15,7 @@ from firedrake import VectorSpaceBasis
 __all__ = ["hybridised_solver_parameters", "monolithic_solver_parameters"]
 
 
-def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_values=None):
+def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_values=None, nonlinear=False):
     """
     Returns PETSc solver settings for hybridised solver for mixed finite
     element problems.
@@ -28,6 +28,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
     tau_values : dict, optional
         A dictionary of stabilization parameters for the hybridization.
         Default is None.
+    nonlinear : bool, optional
+        Whether the solver is for a nonlinear problem. Default is False.
     Returns
     -------
     settings : dict
@@ -322,6 +324,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         settings = {
             'ksp_type': 'preonly',
             'mat_type': 'matfree',
+            ''
             'pc_type': 'python',
             'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
             'hybridization': {                              # hybridization PC
@@ -358,6 +361,24 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         for key in fieldsplit_keys:
             if key in settings:
                 settings[key]['ksp_monitor_true_residual'] = None
+
+    if nonlinear:
+       settings = {
+           'snes_type': 'newtonls',
+           'snes_max_it': 50,
+           'snes_atol': 1e-8,
+           'snes_rtol': 1e-8,
+           'snes_converged_reason': None,
+       } | settings
+
+       settings['ksp_type'] = 'gmres'
+       settings['ksp_max_it'] = 100
+       settings['ksp_rtol'] = 1e-8
+       settings['ksp_atol'] = 1e-8
+       settings['ksp_monitor_true_residual'] = None
+       settings['snes_monitor'] = None
+
+       print(settings)
 
     return settings, appctx
 
