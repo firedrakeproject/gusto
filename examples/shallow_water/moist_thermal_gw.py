@@ -98,19 +98,10 @@ def moist_thermal_gw(
         _, _, lamda, tau1, tau2 = eqns.tests[::]
 
         P_expr = qv - sat_func(eqns.X_ref)*(-D/Dbar - b*nu/g + qv*nu*beta2/g)
-        # phys_form = physics_beta * (
-        #     lamda * beta2 * P_expr + tau1 * P_expr - tau2 * P_expr
-        # ) * dx
-        # eqns.residual += subject(prognostic(physics_label(phys_form)), eqns.X)
-        bform = physics_beta * lamda * beta2 * P_expr * dx
-        qvform = physics_beta * tau1 * P_expr * dx
-        qcform = -physics_beta * tau2 * P_expr * dx
-        eqns.residual += (
-            subject(prognostic(physics_label(bform)), eqns.X)
-            + subject(prognostic(physics_label(qvform)), eqns.X)
-            + subject(prognostic(physics_label(qcform)), eqns.X)
-        )
-
+        phys_form = physics_beta * (
+            lamda * beta2 * P_expr + tau1 * P_expr - tau2 * P_expr
+        ) * dx
+        eqns.residual += subject(prognostic(physics_label(phys_form)), eqns.X)
 
     # IO
     if dirname == moist_thermal_gw_defaults['dirname'] and equivb:
