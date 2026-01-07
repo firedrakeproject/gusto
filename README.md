@@ -50,6 +50,11 @@ Gusto's default development happens on the `main` branch, which is fixed to the 
 We also maintain a `future` branch which builds from the head of Firedrake's `main` branch.
 Contributions to Gusto's `main` branch must pass our Continuous Integration tests.
 
+The relationship between `future` and `main` is as follows:
+- whenever there is a new release of Firedrake, `future` should be merged into `main` *and* `main` should be merged into `future` so that the two are in-sync
+- otherwise, `future` should not be merged into `main`
+- we *may* choose to merge `main` into `future` out-of-cycle of Firedrake releases, which might be desirable after we fix bugs or make significant API changes
+
 We also use some tests with "KGOs" (Known Good Output), which are used to detect changes in science. These can be regenerated using the `integration-tests/data/update_kgos.py` script.
 
 ## Website
