@@ -23,6 +23,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
     Parameters
     ----------
     equation (:class:`PrognosticEquation`): the model's equation.
+    solver_prognostics : list
+        A list of the names of prognostic variables to include in the solver.
     alpha : float, optional
         The implicitness parameter for the time discretisation. Default is 0.5.
     tau_values : dict, optional
