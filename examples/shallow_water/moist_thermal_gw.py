@@ -12,7 +12,7 @@ This example is implemented in two versions:
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
     SpatialCoordinate, pi, sqrt, min_value, cos, Constant, Function, exp, sin,
-    dx
+    dx, split
 )
 from gusto import (
     Domain, IO, OutputParameters, DGUpwind, ShallowWaterParameters,
@@ -93,15 +93,28 @@ def moist_thermal_gw(
             return sat
 
         # Extract fields from equations
-        _, Dbar, _, _, _ = eqns.X_ref.subfunctions[::]
-        _, D, b, qv, _ = eqns.X.subfunctions[::]
-        _, _, lamda, tau1, tau2 = eqns.tests[::]
+        _, Dbar, _, _, _ = split(eqns.X_ref)
+        _, D, b, qv, _ = split(eqns.X)
+        _, _, lamda, tau1, tau2 = eqns.tests
 
         P_expr = qv - sat_func(eqns.X_ref)*(-D/Dbar - b*nu/g + qv*nu*beta2/g)
-        phys_form = physics_beta * (
-            lamda * beta2 * P_expr + tau1 * P_expr - tau2 * P_expr
-        ) * dx
-        eqns.residual += subject(prognostic(physics_label(phys_form)), eqns.X)
+        phys_b_form = physics_beta * lamda * beta2 * P_expr * dx
+        phys_qv_form = physics_beta * tau1 * P_expr * dx
+        phys_qc_form = -physics_beta * tau2 * P_expr * dx
+        eqns.residual += (
+            subject(prognostic(physics_label(phys_b_form), 'b'), eqns.X)
+        )
+        eqns.residual += (
+            subject(prognostic(physics_label(phys_qv_form), 'water_vapour'), eqns.X)
+        )
+        eqns.residual += (
+            subject(prognostic(physics_label(phys_qc_form), 'cloud_water'), eqns.X)
+        )
+
+        # Add linearisation of these terms
+        eqns.residual = eqns.generate_linear_terms(
+            eqns.residual, lambda t: t.has_label(physics_label)
+        )
 
     # IO
     if dirname == moist_thermal_gw_defaults['dirname'] and equivb:
