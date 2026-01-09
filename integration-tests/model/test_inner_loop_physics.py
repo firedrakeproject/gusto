@@ -51,17 +51,19 @@ def set_up_model_objects(mesh, dt, q0, beta2, nu, physics_type, output):
         H = eqns.parameters.H
         b_ebar = bbar - beta2*qvbar
         sat_expr = q0*H/(Dbar) * exp(nu*(1 - b_ebar/g))
-        P_expr = (
-            qv - sat_expr*(-D/Dbar - b*nu/g + qv*nu*beta2/g)
+        P_expr = qv - sat_expr*(-D/Dbar - b*nu/g + qv*nu*beta2/g)
+        phys_b_form = physics_beta * lamda * beta2 * P_expr * dx
+        phys_qv_form = physics_beta * tau1 * P_expr * dx
+        phys_qc_form = -physics_beta * tau2 * P_expr * dx
+        eqns.residual += (
+            subject(prognostic(physics_label(phys_b_form), 'b'), eqns.X)
         )
-        bform = subject(prognostic(physics_label(physics_beta * lamda * beta2 * P_expr * dx)), eqns.X)
-        eqns.residual += bform
-
-        qvform = subject(prognostic(physics_label(physics_beta * tau1 * P_expr * dx)), eqns.X)
-        eqns.residual += qvform
-
-        qcform = subject(prognostic(physics_label(-physics_beta * tau2 * P_expr * dx)), eqns.X)
-        eqns.residual += qcform
+        eqns.residual += (
+            subject(prognostic(physics_label(phys_qv_form), 'water_vapour'), eqns.X)
+        )
+        eqns.residual += (
+            subject(prognostic(physics_label(phys_qc_form), 'cloud_water'), eqns.X)
+        )
 
     io = IO(domain, output)
 
