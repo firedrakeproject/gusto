@@ -1,8 +1,9 @@
 """Classes for defining variants of the shallow-water equations."""
 
-from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg,
+from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg, DirichletBC,
                        dS, split, conditional, exp, sqrt, Function,
-                       SpatialCoordinate, Constant)
+                       SpatialCoordinate, Constant, TrialFunctions, TestFunctions, dot, grad,
+                       interpolate, assemble)
 from firedrake.fml import subject, drop, all_terms
 from gusto.core.labels import (
     linearisation, pressure_gradient, coriolis, prognostic
@@ -17,6 +18,7 @@ from gusto.equations.common_forms import (
     linear_vector_invariant_form, linear_circulation_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
+from gusto.core.logging import logger
 
 
 __all__ = ["ShallowWaterEquations", "LinearShallowWaterEquations",
@@ -434,11 +436,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 + jump(bbar*w, n) * avg(D_trial) * dS
                 + 0.5 * jump(Dbar*w, n) * avg(b_trial) * dS
                 - beta2 * D_trial * div(qvbar*w)*dx
-                - 0.5 * beta2 * qvbar * div(Dbar*w) * dx
                 + beta2 * jump(qvbar*w, n) * avg(D_trial) * dS
-                + 0.5 * beta2 * jump(Dbar*w, n) * avg(qvbar) * dS
-                - 0.5 * bbar * div(Dbar*w) * dx
-                + 0.5 * jump(Dbar*w, n) * avg(bbar) * dS
                 - 0.5 * bbar * div(D_trial*w) * dx
                 + 0.5 * jump(D_trial*w, n) * avg(bbar) * dS
                 - beta2 * 0.5 * qvbar * div(D_trial*w) * dx
@@ -463,8 +461,6 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                                    + jump(bbar*w, n) * avg(D_trial) * dS
                                    - 0.5 * b_trial * div(Dbar*w) * dx
                                    + 0.5 * jump(Dbar*w, n) * avg(b_trial) * dS
-                                   - 0.5 * bbar * div(Dbar*w) * dx
-                                   + 0.5 * jump(Dbar*w, n) * avg(bbar) * dS
                                    - 0.5 * bbar * div(D_trial*w) * dx
                                    + 0.5 * jump(D_trial*w, n) * avg(bbar) * dS,
                                    'u'), self.X))
@@ -534,6 +530,74 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             topog = self.prescribed_fields('topography')
             sat_expr = q0*H/(D+topog) * exp(nu*(1-b/g))
         return sat_expr
+
+    def schur_complement_form(self, alpha=0.5, tau_values=None):
+        # Approximate elimination of b
+        domain = self.domain
+        dt = domain.dt
+        tau_values = tau_values or {}
+        beta_u = dt*tau_values.get("u", alpha)
+        beta_d = dt*tau_values.get("D", alpha)
+        beta_b = dt*tau_values.get("b", alpha)
+
+        n = FacetNormal(domain.mesh)
+        Vu = domain.spaces("HDiv")
+        VD = domain.spaces("DG")
+        M_ = Vu*VD
+        u_, D_ = TrialFunctions(M_)
+        w_, phi_ = TestFunctions(M_)
+
+        _, Dref, bref = self.X_ref.subfunctions[0:3]
+        b_ = -dot(u_, grad(bref))*beta_b
+
+        if self.equivalent_buoyancy:
+            # compute q_v using q_sat to partition q_t into q_v and q_c
+            self.q_sat_func = Function(VD)
+            self.qvbar = Function(VD)
+            qtbar = split(self.X_ref)[3]
+
+            # set up interpolators that use the X_ref values for D and b_e
+            self.q_sat_expr_interpolate = interpolate(
+                self.compute_saturation(self.X_ref), VD)
+            self.q_v_interpolate = interpolate(
+                conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
+                VD)
+
+            # bbar was be_bar and here we correct to become bbar
+            bref += self.parameters.beta2 * self.qvbar
+
+        seqn = (
+            inner(w_, (u_)) * dx
+            - beta_u * (D_) * div(w_*bref) * dx
+            + beta_u * jump(w_*bref, n) * avg(D_) * dS
+            - beta_u * 0.5 * Dref * b_ * div(w_) * dx
+            - beta_u * 0.5 * bref * div(w_*(D_)) * dx
+            + beta_u * 0.5 * jump((D_)*w_, n) * avg(bref) * dS
+            + inner(phi_, (D_)) * dx
+            + beta_d * phi_ * div(Dref*u_) * dx
+        )
+
+        if 'coriolis' in self.prescribed_fields._field_names:
+            f = self.prescribed_fields('coriolis')
+            seqn += beta_u * f * inner(w_, domain.perp(u_)) * dx
+
+        # Boundary conditions
+        sbcs = [DirichletBC(M_.sub(0), bc.function_arg, bc.sub_domain) for bc in self.bcs['u']]
+
+        return seqn, sbcs
+
+    def update_reference_profiles(self):
+        "Update reference profiles for equivalent buoyancy formulation."
+        if self.equivalent_buoyancy:
+            self.q_sat_func.assign(assemble(self.q_sat_expr_interpolate))
+            self.qvbar.assign(assemble(self.q_v_interpolate))
+
+            bbar = split(self.X_ref)[2]
+            b = self.X.subfunctions[2]
+            bbar_func = Function(b.function_space()).interpolate(bbar)
+            if bbar_func.dat.data.max() == 0 and bbar_func.dat.data.min() == 0:
+                logger.warning("The reference profile for b in the linear solver is zero. To set a non-zero profile add b to the set_reference_profiles argument.")
+            logger.info("Updated equivalent buoyancy reference profile.")
 
 
 class LinearThermalShallowWaterEquations(ThermalShallowWaterEquations):

@@ -282,7 +282,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             )
 
             # Set up all-but-last RHS
-            if self.idx is not None:
+            if self.idx is not None and self.wrapper is None:
                 # If original function is in mixed function space, then ensure
                 # correct test function in the all-but-last form
                 r_all_but_last = self.residual.label_map(
@@ -321,7 +321,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
         if self.rk_formulation == RungeKuttaFormulation.increment:
             self.x1.assign(x0)
-
             for i in range(stage):
                 self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage-1, i]*self.k[i])
             for evaluate in self.evaluate_source:
@@ -340,8 +339,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 self.x1.assign(x0)
                 for i in range(self.nStages):
                     self.x1.assign(self.x1 + self.dt*self.butcher_matrix[stage, i]*self.k[i])
-                self.x1.assign(self.x1)
-
                 if self.limiter is not None:
                     self.limiter.apply(self.x1)
 
@@ -352,7 +349,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             # Use previous stage value as a first guess (otherwise may not converge)
             self.field_i[stage+1].assign(self.field_i[stage])
-            if self.limiter is not None:
+            if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
+                self.augmentation.limit(self.field_i[stage])
+            elif self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
 
             for evaluate in self.evaluate_source:
@@ -363,7 +362,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             if (stage == self.nStages - 1):
                 self.x1.assign(self.field_i[stage+1])
-                if self.limiter is not None:
+                if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
+                    self.augmentation.limit(self.x1)
+                elif self.limiter is not None:
                     self.limiter.apply(self.x1)
 
         elif self.rk_formulation == RungeKuttaFormulation.linear:
