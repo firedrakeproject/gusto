@@ -80,28 +80,47 @@ class SIQNModel(ModelBase):
 
     @property
     def transported_fields(self):
-        theta_opts = EmbeddedDGOptions()
-        transported_fields = [
-            SSPRK3(self.domain, "u"),
-            SSPRK3(
-                self.domain, "rho",
-                rk_formulation=RungeKuttaFormulation.linear
-            ),
-            SSPRK3(
-                self.domain, "theta",
-                options=theta_opts
-            )
-        ]
+        transported_fields = []
+        for field_name in self.equation.field_names:
+            if self.equation.space_names[field_name] == 'L2':
+                transported_fields.append(
+                    SSPRK3(self.domain, field_name,
+                           rk_formulation=RungeKuttaFormulation.linear)
+                )
+            elif self.equation.space_names[field_name] == 'theta':
+                transported_fields.append(
+                    SSPRK3(self.domain, field_name,
+                           options=EmbeddedDGOptions())
+                )
+            else:
+                transported_fields.append(
+                    SSPRK3(
+                        self.domain, field_name)
+                )
         return transported_fields
 
     @property
     def transport_methods(self):
-        transport_methods = [
-            DGUpwind(self.equation, "u"),
-            DGUpwind(self.equation, "rho", advective_then_flux=True),
-            DGUpwind(self.equation, "theta")
-        ]
+        transport_methods = []
+        for field_name in self.equation.field_names:
+            if self.equation.space_names[field_name] == 'L2':
+                transport_methods.append(
+                    DGUpwind(self.equation, field_name,
+                             advective_then_flux=True)
+                )
+            else:
+                transport_methods.append(
+                    DGUpwind(self.equation, field_name)
+                )
         return transport_methods
+
+    @property
+    def tau_values(self):
+        tau_values = {}
+        for field_name in self.equation.field_names:
+            if field_name is not "u":
+                tau_values[field_name] = 1.0
+        return tau_values
 
     def setup(self, diagnostic_fields):
 
@@ -109,5 +128,5 @@ class SIQNModel(ModelBase):
         self.stepper = SemiImplicitQuasiNewton(
             self.equation, io, self.transported_fields,
             spatial_methods=self.transport_methods,
-            tau_values={'rho': 1.0, 'theta': 1.0}
+            tau_values=self.tau_values
         )
