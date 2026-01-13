@@ -13,7 +13,7 @@ from firedrake import (
     Function, sqrt, conditional, as_vector
 )
 from gusto import (
-    OutputParameters, SIQNModel,
+    OutputParameters, Model,
     CourantNumber, Perturbation,
     DiffusionParameters,
     CompressibleParameters, CompressibleEulerEquations,
@@ -75,10 +75,10 @@ def straka_bubble(
     eqns = CompressibleEulerEquations
 
     # Model
-    model = SIQNModel(mesh, dt, parameters, eqns,
-                      u_transport_option=u_eqn_type,
-                      diffusion_options=diffusion_options,
-                      family="CG", element_order=element_order)
+    model = Model(mesh, dt, parameters, eqns,
+                  u_transport_option=u_eqn_type,
+                  diffusion_options=diffusion_options,
+                  family="CG", element_order=element_order)
 
     # I/O
     output = OutputParameters(

@@ -13,7 +13,7 @@ from firedrake import (
 from gusto import (
     OutputParameters, ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, GeneralIcosahedralSphereMesh, ZonalComponent,
-    MeridionalComponent, RelativeVorticity, SubcyclingOptions, SIQNModel
+    MeridionalComponent, RelativeVorticity, SubcyclingOptions, Model
 )
 
 williamson_5_defaults = {
@@ -81,8 +81,8 @@ def williamson_5(
     # Transport schemes
     subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
 
-    model = SIQNModel(mesh, dt, parameters, eqns,
-                      family='BDM', element_order=element_order)
+    model = Model(mesh, dt, parameters, eqns,
+                  family='BDM', element_order=element_order)
     model.setup(output, subcycling_options=subcycling_options,
                 diagnostic_fields=diagnostic_fields)
 
