@@ -10,10 +10,8 @@ class ModelBase(object, metaclass=ABCMeta):
     """Base model class."""
 
     def __init__(self, mesh, dt, parameters, equation,
-                 u_transport_option="vector_invariant_form",
-                 sponge_options=None, diffusion_options=None,
                  family=None, element_order=None,
-                 no_normal_flow_bc_ids=None):
+                 no_normal_flow_bc_ids=None, **kwargs):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
@@ -54,13 +52,9 @@ class ModelBase(object, metaclass=ABCMeta):
         self.domain = Domain(mesh, dt, family, element_order)
 
         # set up prognostic equations
-        self.equation = equation(self.domain, parameters,
-                                 u_transport_option=u_transport_option,
-                                 sponge_options=sponge_options,
-                                 diffusion_options=diffusion_options,
-                                 no_normal_flow_bc_ids=no_normal_flow_bc_ids)
+        self.equation = equation(self.domain, parameters, **kwargs)
 
-        self.diffusion_options = diffusion_options
+        self.diffusion_options = kwargs.get("diffusion_options")
 
     @abstractmethod
     def setup(self):
@@ -146,8 +140,7 @@ class SIQNModel(ModelBase):
                 tau_values[field_name] = 1.0
         return tau_values
 
-    def setup(self, output, subcycling_options=None, diagnostic_fields=None,
-              alpha=0.5, spinup_steps=0):
+    def setup(self, output, **kwargs):
 
         """
         Args:
@@ -155,13 +148,15 @@ class SIQNModel(ModelBase):
                 controlling output
         """
 
-        self.subcycling_options = subcycling_options
-
+        diagnostic_fields = kwargs.pop("diagnostic_fields")
         io = IO(self.domain, output, diagnostic_fields=diagnostic_fields)
+
+        self.subcycling_options = kwargs.get("subcycling_options")
+
         self.stepper = SemiImplicitQuasiNewton(
             self.equation, io, self.transported_fields,
             spatial_methods=self.transport_methods+self.diffusion_methods,
             diffusion_schemes=self.diffusion_schemes,
             tau_values=self.tau_values,
-            alpha=alpha, spinup_steps=spinup_steps
+            **kwargs
         )
