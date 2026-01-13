@@ -85,17 +85,20 @@ class SIQNModel(ModelBase):
             if self.equation.space_names[field_name] == 'L2':
                 transported_fields.append(
                     SSPRK3(self.domain, field_name,
+                           subcycling_options=self.subcycling_options,
                            rk_formulation=RungeKuttaFormulation.linear)
                 )
             elif self.equation.space_names[field_name] == 'theta':
                 transported_fields.append(
                     SSPRK3(self.domain, field_name,
+                           subcycling_options=self.subcycling_options,
                            options=EmbeddedDGOptions())
                 )
             else:
                 transported_fields.append(
                     SSPRK3(
-                        self.domain, field_name)
+                        self.domain, field_name,
+                        subcycling_options=self.subcycling_options)
                 )
         return transported_fields
 
@@ -122,7 +125,9 @@ class SIQNModel(ModelBase):
                 tau_values[field_name] = 1.0
         return tau_values
 
-    def setup(self, diagnostic_fields):
+    def setup(self, subcycling_options, diagnostic_fields):
+
+        self.subcycling_options = subcycling_options
 
         io = IO(self.domain, self.output, diagnostic_fields=diagnostic_fields)
         self.stepper = SemiImplicitQuasiNewton(
