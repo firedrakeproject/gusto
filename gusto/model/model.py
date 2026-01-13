@@ -9,6 +9,8 @@ class ModelBase(object, metaclass=ABCMeta):
     """Base model class."""
 
     def __init__(self, mesh, dt, parameters, equation,
+                 u_transport_option="vector_invariant_form",
+                 sponge_parameters=None,
                  family=None, element_order=None,
                  no_normal_flow_bc_ids=None):
         """
@@ -52,10 +54,9 @@ class ModelBase(object, metaclass=ABCMeta):
 
         # set up prognostic equations
         self.equation = equation(self.domain, parameters,
+                                 u_transport_option=u_transport_option,
+                                 sponge_options=sponge_parameters,
                                  no_normal_flow_bc_ids=no_normal_flow_bc_ids)
-
-        # save output options for when IO is set up later
-        self.output = output
 
     @abstractmethod
     def setup(self):
@@ -119,11 +120,12 @@ class SIQNModel(ModelBase):
     def tau_values(self):
         tau_values = {}
         for field_name in self.equation.field_names:
-            if field_name is not "u":
+            if field_name != "u":
                 tau_values[field_name] = 1.0
         return tau_values
 
-    def setup(self, output, subcycling_options=None, diagnostic_fields=None):
+    def setup(self, output, subcycling_options=None, diagnostic_fields=None,
+              alpha=0.5, spinup_steps=0):
 
         """
         Args:
@@ -137,5 +139,6 @@ class SIQNModel(ModelBase):
         self.stepper = SemiImplicitQuasiNewton(
             self.equation, io, self.transported_fields,
             spatial_methods=self.transport_methods,
-            tau_values=self.tau_values
+            tau_values=self.tau_values,
+            alpha=alpha, spinup_steps=spinup_steps
         )
