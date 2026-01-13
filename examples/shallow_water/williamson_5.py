@@ -81,9 +81,10 @@ def williamson_5(
     # Transport schemes
     subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
 
-    model = SIQNModel(mesh, dt, parameters, eqns, output,
+    model = SIQNModel(mesh, dt, parameters, eqns,
                       family='BDM', element_order=1)
-    model.setup(subcycling_options, diagnostic_fields)
+    model.setup(output, subcycling_options=subcycling_options,
+                diagnostic_fields=diagnostic_fields)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

@@ -123,7 +123,7 @@ class SIQNModel(ModelBase):
                 tau_values[field_name] = 1.0
         return tau_values
 
-    def setup(self, output, subcycling_options, diagnostic_fields):
+    def setup(self, output, subcycling_options=None, diagnostic_fields=None):
 
         """
         Args:

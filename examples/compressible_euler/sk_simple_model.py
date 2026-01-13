@@ -77,11 +77,11 @@ def skamarock_klemp_nonhydrostatic(
         dump_vtus=False, dump_nc=True,
     )
 
-    model = SIQNModel(mesh, dt, parameters, eqns, output, family="CG",
+    model = SIQNModel(mesh, dt, parameters, eqns, family="CG",
                       element_order=element_order)
 
     diagnostic_fields = [Perturbation('theta')]
-    model.setup(diagnostic_fields)
+    model.setup(output=output, diagnostic_fields=diagnostic_fields)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
