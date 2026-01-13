@@ -8,7 +8,7 @@ from gusto.timestepping import SemiImplicitQuasiNewton
 class ModelBase(object, metaclass=ABCMeta):
     """Base model class."""
 
-    def __init__(self, mesh, dt, parameters, equation, output,
+    def __init__(self, mesh, dt, parameters, equation,
                  family=None, element_order=None,
                  no_normal_flow_bc_ids=None):
         """
@@ -19,8 +19,6 @@ class ModelBase(object, metaclass=ABCMeta):
                 equation parameters.
             equation (:class:`PrognosticEquationSet`): defines the model's
                 prognostic equation
-            output (:class:`OutputParameters`): provides parameters
-                controlling output
             family (str, optional): the finite element space family used for
                 the velocity field. This determines the other finite element
                 spaces used via the de Rham complex. If not provided, an
@@ -125,11 +123,17 @@ class SIQNModel(ModelBase):
                 tau_values[field_name] = 1.0
         return tau_values
 
-    def setup(self, subcycling_options, diagnostic_fields):
+    def setup(self, output, subcycling_options, diagnostic_fields):
+
+        """
+        Args:
+            output (:class:`OutputParameters`): provides parameters
+                controlling output
+        """
 
         self.subcycling_options = subcycling_options
 
-        io = IO(self.domain, self.output, diagnostic_fields=diagnostic_fields)
+        io = IO(self.domain, output, diagnostic_fields=diagnostic_fields)
         self.stepper = SemiImplicitQuasiNewton(
             self.equation, io, self.transported_fields,
             spatial_methods=self.transport_methods,
