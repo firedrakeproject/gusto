@@ -1,7 +1,8 @@
 from abc import ABCMeta, abstractmethod
 from gusto.core import (Domain, IO, EmbeddedDGOptions)
-from gusto.spatial_methods import DGUpwind
-from gusto.time_discretisation import SSPRK3, RungeKuttaFormulation
+from gusto.spatial_methods import DGUpwind, InteriorPenaltyDiffusion
+from gusto.time_discretisation import (SSPRK3, RungeKuttaFormulation,
+                                       BackwardEuler)
 from gusto.timestepping import SemiImplicitQuasiNewton
 
 
@@ -10,7 +11,7 @@ class ModelBase(object, metaclass=ABCMeta):
 
     def __init__(self, mesh, dt, parameters, equation,
                  u_transport_option="vector_invariant_form",
-                 sponge_parameters=None,
+                 sponge_options=None, diffusion_options=None,
                  family=None, element_order=None,
                  no_normal_flow_bc_ids=None):
         """
@@ -55,8 +56,11 @@ class ModelBase(object, metaclass=ABCMeta):
         # set up prognostic equations
         self.equation = equation(self.domain, parameters,
                                  u_transport_option=u_transport_option,
-                                 sponge_options=sponge_parameters,
+                                 sponge_options=sponge_options,
+                                 diffusion_options=diffusion_options,
                                  no_normal_flow_bc_ids=no_normal_flow_bc_ids)
+
+        self.diffusion_options = diffusion_options
 
     @abstractmethod
     def setup(self):
@@ -76,6 +80,24 @@ class ModelBase(object, metaclass=ABCMeta):
 
 
 class SIQNModel(ModelBase):
+
+    @property
+    def diffusion_methods(self):
+        diffusion_methods = []
+        for field, params in self.diffusion_options:
+            diffusion_methods.append(
+                InteriorPenaltyDiffusion(self.equation, field, params)
+            )
+        return diffusion_methods
+
+    @property
+    def diffusion_schemes(self):
+        diffusion_schemes = []
+        for field, _ in self.diffusion_options:
+            diffusion_schemes.append(
+                BackwardEuler(self.domain, field)
+            )
+        return diffusion_schemes
 
     @property
     def transported_fields(self):
@@ -138,7 +160,8 @@ class SIQNModel(ModelBase):
         io = IO(self.domain, output, diagnostic_fields=diagnostic_fields)
         self.stepper = SemiImplicitQuasiNewton(
             self.equation, io, self.transported_fields,
-            spatial_methods=self.transport_methods,
+            spatial_methods=self.transport_methods+self.diffusion_methods,
+            diffusion_schemes=self.diffusion_schemes,
             tau_values=self.tau_values,
             alpha=alpha, spinup_steps=spinup_steps
         )
