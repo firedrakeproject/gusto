@@ -12,14 +12,16 @@ This example is implemented in two versions:
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from firedrake import (
     SpatialCoordinate, pi, sqrt, min_value, cos, Constant, Function, exp, sin,
+    dx, split
 )
 from gusto import (
     Domain, IO, OutputParameters, DGUpwind, ShallowWaterParameters,
     ThermalShallowWaterEquations, lonlatr_from_xyz, SubcyclingOptions,
-    RungeKuttaFormulation, SSPRK3, MeridionalComponent,
+    RungeKuttaFormulation, SSPRK3, MeridionalComponent, physics_label,
     SemiImplicitQuasiNewton, ForwardEuler, WaterVapour, CloudWater,
     xyz_vector_from_lonlatr, SWSaturationAdjustment, ZonalComponent,
-    GeneralIcosahedralSphereMesh, PartitionedCloud, monolithic_solver_parameters
+    GeneralIcosahedralSphereMesh, PartitionedCloud, prognostic, subject,
+    monolithic_solver_parameters
 )
 
 moist_thermal_gw_defaults = {
@@ -57,6 +59,7 @@ def moist_thermal_gw(
     u_max = 20.                 # max amplitude of the zonal wind (m/s)
     g = 9.80616                 # acceleration due to gravity (m/s^2)
     mean_depth = phi_0/g        # reference depth (m)
+    physics_beta = 0.5          # semi-implicit factor for physics term
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -78,6 +81,40 @@ def moist_thermal_gw(
     eqns = ThermalShallowWaterEquations(
         domain, parameters, active_tracers=tracers, equivalent_buoyancy=equivb
     )
+
+    # Need to add physics term to equation when using evaluating it in solver
+    if not equivb:
+        def sat_func(x_in):
+            D = x_in.subfunctions[1]
+            b = x_in.subfunctions[2]
+            qv = x_in.subfunctions[3]
+            b_e = b - beta2*qv
+            sat = q0*mean_depth/D * exp(nu*(1-b_e/g))
+            return sat
+
+        # Extract fields from equations
+        _, Dbar, _, _, _ = split(eqns.X_ref)
+        _, D, b, qv, _ = split(eqns.X)
+        _, _, lamda, tau1, tau2 = eqns.tests
+
+        P_expr = qv - sat_func(eqns.X_ref)*(-D/Dbar - b*nu/g + qv*nu*beta2/g)
+        phys_b_form = physics_beta * lamda * beta2 * P_expr * dx
+        phys_qv_form = physics_beta * tau1 * P_expr * dx
+        phys_qc_form = -physics_beta * tau2 * P_expr * dx
+        eqns.residual += (
+            subject(prognostic(physics_label(phys_b_form), 'b'), eqns.X)
+        )
+        eqns.residual += (
+            subject(prognostic(physics_label(phys_qv_form), 'water_vapour'), eqns.X)
+        )
+        eqns.residual += (
+            subject(prognostic(physics_label(phys_qc_form), 'cloud_water'), eqns.X)
+        )
+
+        # Add linearisation of these terms
+        eqns.residual = eqns.generate_linear_terms(
+            eqns.residual, lambda t: t.has_label(physics_label)
+        )
 
     # IO
     if dirname == moist_thermal_gw_defaults['dirname'] and equivb:
@@ -135,13 +172,6 @@ def moist_thermal_gw(
     if equivb:
         physics_schemes = None
     else:
-        def sat_func(x_in):
-            D = x_in.subfunctions[1]
-            b = x_in.subfunctions[2]
-            q_v = x_in.subfunctions[3]
-            b_e = b - beta2*q_v
-            sat = q0*mean_depth/D * exp(nu*(1-b_e/g))
-            return sat
 
         # Physics schemes
         sat_adj = SWSaturationAdjustment(
@@ -157,7 +187,8 @@ def moist_thermal_gw(
 
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        tau_values=tau_values, inner_physics_schemes=physics_schemes,
+        physics_beta=physics_beta, tau_values=tau_values,
+        inner_physics_schemes=physics_schemes,
         num_outer=2, num_inner=2, solver_prognostics=solver_prognostics,
         linear_solver_parameters=solver_parameters, reference_update_freq=10800.
     )
