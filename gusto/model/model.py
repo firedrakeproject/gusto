@@ -1,5 +1,6 @@
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.core import (Domain, IO, EmbeddedDGOptions)
+from gusto.recovery import BoundaryMethod, RecoverySpaces
 from gusto.spatial_methods import DGUpwind, InteriorPenaltyDiffusion
 from gusto.time_discretisation import (SSPRK3, RungeKuttaFormulation,
                                        BackwardEuler)
@@ -54,7 +55,7 @@ class ModelBase(object, metaclass=ABCMeta):
         # set up prognostic equations
         self.equation = equation(self.domain, parameters, **kwargs)
 
-        self.diffusion_options = kwargs.get("diffusion_options")
+        self.diffusion_options = kwargs.get("diffusion_options", [])
 
     @abstractmethod
     def setup(self):
@@ -75,70 +76,30 @@ class ModelBase(object, metaclass=ABCMeta):
 
 class SIQNModel(ModelBase):
 
-    @property
+    @abstractproperty
     def diffusion_methods(self):
-        diffusion_methods = []
-        for field, params in self.diffusion_options:
-            diffusion_methods.append(
-                InteriorPenaltyDiffusion(self.equation, field, params)
-            )
-        return diffusion_methods
+        pass
 
-    @property
+    @abstractproperty
     def diffusion_schemes(self):
-        diffusion_schemes = []
-        for field, _ in self.diffusion_options:
-            diffusion_schemes.append(
-                BackwardEuler(self.domain, field)
-            )
-        return diffusion_schemes
+        pass
 
-    @property
+    @abstractproperty
     def transported_fields(self):
-        transported_fields = []
-        for field_name in self.equation.field_names:
-            if self.equation.space_names[field_name] == 'L2':
-                transported_fields.append(
-                    SSPRK3(self.domain, field_name,
-                           subcycling_options=self.subcycling_options,
-                           rk_formulation=RungeKuttaFormulation.linear)
-                )
-            elif self.equation.space_names[field_name] == 'theta':
-                transported_fields.append(
-                    SSPRK3(self.domain, field_name,
-                           subcycling_options=self.subcycling_options,
-                           options=EmbeddedDGOptions())
-                )
-            else:
-                transported_fields.append(
-                    SSPRK3(
-                        self.domain, field_name,
-                        subcycling_options=self.subcycling_options)
-                )
-        return transported_fields
+        pass
 
-    @property
+    @abstractproperty
     def transport_methods(self):
-        transport_methods = []
-        for field_name in self.equation.field_names:
-            if self.equation.space_names[field_name] == 'L2':
-                transport_methods.append(
-                    DGUpwind(self.equation, field_name,
-                             advective_then_flux=True)
-                )
-            else:
-                transport_methods.append(
-                    DGUpwind(self.equation, field_name)
-                )
-        return transport_methods
+        pass
 
     @property
     def tau_values(self):
-        tau_values = {}
+        _tau_values = {}
         for field_name in self.equation.field_names:
             if field_name != "u":
-                tau_values[field_name] = 1.0
-        return tau_values
+                _tau_values[field_name] = 1.0
+        return _tau_values
+        pass
 
     def setup(self, output, **kwargs):
 
@@ -160,3 +121,137 @@ class SIQNModel(ModelBase):
             tau_values=self.tau_values,
             **kwargs
         )
+
+
+class Model(SIQNModel):
+
+    def __init__(self, mesh, dt, parameters, equation,
+                 family=None,
+                 no_normal_flow_bc_ids=None, **kwargs):
+
+        super().__init__(mesh, dt, parameters, equation,
+                         family=family, element_order=1,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         **kwargs)
+
+    @property
+    def diffusion_methods(self):
+        _diffusion_methods = []
+        for field, params in self.diffusion_options:
+            _diffusion_methods.append(
+                InteriorPenaltyDiffusion(self.equation, field, params)
+            )
+        return _diffusion_methods
+
+    @property
+    def diffusion_schemes(self):
+        _diffusion_schemes = []
+        for field, _ in self.diffusion_options:
+            _diffusion_schemes.append(
+                BackwardEuler(self.domain, field)
+            )
+        return _diffusion_schemes
+
+    @property
+    def transported_fields(self):
+        _transported_fields = []
+        for field_name in self.equation.field_names:
+            if self.equation.space_names[field_name] == 'L2':
+                _transported_fields.append(
+                    SSPRK3(self.domain, field_name,
+                           subcycling_options=self.subcycling_options,
+                           rk_formulation=RungeKuttaFormulation.linear)
+                )
+            elif self.equation.space_names[field_name] == 'theta':
+                _transported_fields.append(
+                    SSPRK3(self.domain, field_name,
+                           subcycling_options=self.subcycling_options,
+                           options=EmbeddedDGOptions())
+                )
+            else:
+                _transported_fields.append(
+                    SSPRK3(
+                        self.domain, field_name,
+                        subcycling_options=self.subcycling_options)
+                )
+        return _transported_fields
+
+    @property
+    def transport_methods(self):
+        _transport_methods = []
+        for field_name in self.equation.field_names:
+            if self.equation.space_names[field_name] == 'L2':
+                _transport_methods.append(
+                    DGUpwind(self.equation, field_name,
+                             advective_then_flux=True)
+                )
+            else:
+                _transport_methods.append(
+                    DGUpwind(self.equation, field_name)
+                )
+        return _transport_methods
+
+
+class LowestOrderModel(SIQNModel):
+
+    def __init__(self, mesh, dt, parameters, equation,
+                 family=None,
+                 no_normal_flow_bc_ids=None, **kwargs):
+
+        super().__init__(mesh, dt, parameters, equation,
+                         family=family, element_order=0,
+                         no_normal_flow_bc_ids=no_normal_flow_bc_ids,
+                         **kwargs)
+
+    @property
+    def diffusion_methods(self):
+        _diffusion_methods = []
+        for field, params in self.diffusion_options:
+            _diffusion_methods.append(
+                InteriorPenaltyDiffusion(self.equation, field, params)
+            )
+        return _diffusion_methods
+
+    @property
+    def diffusion_schemes(self):
+        _diffusion_schemes = []
+        for field, _ in self.diffusion_options:
+            _diffusion_schemes.append(
+                BackwardEuler(self.domain, field)
+            )
+        return _diffusion_schemes
+
+    @property
+    def transported_fields(self):
+        boundary_methods = {'DG': BoundaryMethod.taylor}
+        recovery_spaces = RecoverySpaces(
+            self.domain, boundary_methods, use_vector_spaces=True
+        )
+        _transported_fields = []
+        for field_name in self.equation.field_names:
+            if self.equation.space_names[field_name] == 'HDiv':
+                _transported_fields.append(
+                    SSPRK3(self.domain, field_name,
+                           subcycling_options=self.subcycling_options,
+                           options=recovery_spaces.HDiv_options)
+                )
+            elif self.equation.space_names[field_name] == 'L2':
+                _transported_fields.append(
+                    SSPRK3(self.domain, field_name,
+                           subcycling_options=self.subcycling_options,
+                           options=recovery_spaces.DG_options)
+                )
+            elif self.equation.space_names[field_name] == 'theta':
+                _transported_fields.append(
+                    SSPRK3(self.domain, field_name,
+                           subcycling_options=self.subcycling_options,
+                           options=recovery_spaces.theta_options)
+                )
+        return _transported_fields
+
+    @property
+    def transport_methods(self):
+        _transport_methods = []
+        for field_name in self.equation.field_names:
+            _transport_methods.append(DGUpwind(self.equation, field_name))
+        return _transport_methods
