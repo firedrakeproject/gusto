@@ -113,6 +113,7 @@ class SIQNModel(ModelBase):
         io = IO(self.domain, output, diagnostic_fields=diagnostic_fields)
 
         self.subcycling_options = kwargs.pop("subcycling_options", None)
+        self.limiters = kwargs.pop("limiters", {})
 
         self.stepper = SemiImplicitQuasiNewton(
             self.equation, io, self.transported_fields,
@@ -160,19 +161,22 @@ class Model(SIQNModel):
                 _transported_fields.append(
                     SSPRK3(self.domain, field_name,
                            subcycling_options=self.subcycling_options,
-                           rk_formulation=RungeKuttaFormulation.linear)
+                           rk_formulation=RungeKuttaFormulation.linear,
+                           limiter=self.limiters.get(field_name))
                 )
             elif self.equation.space_names[field_name] == 'theta':
                 _transported_fields.append(
                     SSPRK3(self.domain, field_name,
                            subcycling_options=self.subcycling_options,
-                           options=EmbeddedDGOptions())
+                           options=EmbeddedDGOptions(),
+                           limiter=self.limiters.get(field_name))
                 )
             else:
                 _transported_fields.append(
                     SSPRK3(
                         self.domain, field_name,
-                        subcycling_options=self.subcycling_options)
+                        subcycling_options=self.subcycling_options,
+                        limiter=self.limiters.get(field_name))
                 )
         return _transported_fields
 
@@ -233,19 +237,22 @@ class LowestOrderModel(SIQNModel):
                 _transported_fields.append(
                     SSPRK3(self.domain, field_name,
                            subcycling_options=self.subcycling_options,
-                           options=recovery_spaces.HDiv_options)
+                           options=recovery_spaces.HDiv_options,
+                           limiter=self.limiters.get(field_name))
                 )
             elif self.equation.space_names[field_name] == 'L2':
                 _transported_fields.append(
                     SSPRK3(self.domain, field_name,
                            subcycling_options=self.subcycling_options,
-                           options=recovery_spaces.DG_options)
+                           options=recovery_spaces.DG_options,
+                           limiter=self.limiters.get(field_name))
                 )
             elif self.equation.space_names[field_name] == 'theta':
                 _transported_fields.append(
                     SSPRK3(self.domain, field_name,
                            subcycling_options=self.subcycling_options,
-                           options=recovery_spaces.theta_options)
+                           options=recovery_spaces.theta_options,
+                           limiter=self.limiters.get(field_name))
                 )
         return _transported_fields
 

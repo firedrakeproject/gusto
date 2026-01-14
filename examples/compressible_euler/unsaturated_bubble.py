@@ -23,8 +23,8 @@ from firedrake import (
 )
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto import (
-    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    Perturbation, RecoverySpaces, BoundaryMethod, Recoverer, Fallout,
+    OutputParameters, LowestOrderModel, DGUpwind, SSPRK3,
+    Perturbation, BoundaryMethod, Recoverer, Fallout,
     Coalescence, SaturationAdjustment, EvaporationOfRain, thermodynamics,
     CompressibleParameters, CompressibleEulerEquations,
     unsaturated_hydrostatic_balance, WaterVapour, CloudWater, Rain,
@@ -71,7 +71,6 @@ def unsaturated_bubble(
     # Our settings for this set up
     # ------------------------------------------------------------------------ #
 
-    element_order = 0
     u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
@@ -81,14 +80,16 @@ def unsaturated_bubble(
     # Domain
     base_mesh = PeriodicIntervalMesh(ncolumns, domain_width)
     mesh = ExtrudedMesh(base_mesh, nlayers, layer_height=domain_height/nlayers)
-    domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
-    params = CompressibleParameters(mesh)
+    parameters = CompressibleParameters(mesh)
     tracers = [WaterVapour(), CloudWater(), Rain()]
-    eqns = CompressibleEulerEquations(
-        domain, params, active_tracers=tracers, u_transport_option=u_eqn_type
-    )
+    eqns = CompressibleEulerEquations
+
+    model = LowestOrderModel(mesh, dt, parameters, eqns,
+                             u_transport_option=u_eqn_type,
+                             active_tracers=tracers,
+                             family="CG")
 
     # I/O
     output = OutputParameters(
@@ -96,61 +97,41 @@ def unsaturated_bubble(
         dumplist=['cloud_water', 'rain']
     )
     diagnostic_fields = [
-        RelativeHumidity(eqns), Perturbation('theta'), Perturbation('rho'),
+        RelativeHumidity(model.equation), Perturbation('theta'),
+        Perturbation('rho'),
         Perturbation('water_vapour'), Perturbation('RelativeHumidity')
     ]
-    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    # Transport schemes -- specify options for using recovery wrapper
-    boundary_methods = {'DG': BoundaryMethod.taylor}
-
-    recovery_spaces = RecoverySpaces(domain, boundary_method=boundary_methods, use_vector_spaces=True)
-
-    u_opts = recovery_spaces.HDiv_options
-    rho_opts = recovery_spaces.DG_options
-    theta_opts = recovery_spaces.theta_options
-
-    VDG1 = domain.spaces("DG1_equispaced")
+    VDG1 = model.domain.spaces("DG1_equispaced")
     limiter = VertexBasedLimiter(VDG1)
-
-    transported_fields = [
-        SSPRK3(domain, "u", options=u_opts),
-        SSPRK3(domain, "rho", options=rho_opts),
-        SSPRK3(domain, "theta", options=theta_opts),
-        SSPRK3(domain, "water_vapour", options=theta_opts, limiter=limiter),
-        SSPRK3(domain, "cloud_water", options=theta_opts, limiter=limiter),
-        SSPRK3(domain, "rain", options=theta_opts, limiter=limiter)
-    ]
-
-    transport_methods = [
-        DGUpwind(eqns, field) for field in
-        ["u", "rho", "theta", "water_vapour", "cloud_water", "rain"]
-    ]
+    limiters = {"water_vapour": limiter,
+                "cloud_water": limiter,
+                "rain": limiter}
 
     # Physics schemes
-    Vt = domain.spaces('theta')
-    rainfall_method = DGUpwind(eqns, 'rain', outflow=True)
+    Vt = model.domain.spaces('theta')
+    rainfall_method = DGUpwind(model.equation, 'rain', outflow=True)
     zero_limiter = MixedFSLimiter(
-        eqns,
+        model.equation,
         {'water_vapour': ZeroLimiter(Vt), 'cloud_water': ZeroLimiter(Vt)}
     )
     physics_schemes = [
-        (Fallout(eqns, 'rain', domain, rainfall_method), SSPRK3(domain)),
-        (Coalescence(eqns), ForwardEuler(domain)),
-        (EvaporationOfRain(eqns), ForwardEuler(domain)),
-        (SaturationAdjustment(eqns), ForwardEuler(domain, limiter=zero_limiter))
+        (Fallout(model.equation, 'rain', model.domain, rainfall_method), SSPRK3(model.domain)),
+        (Coalescence(model.equation), ForwardEuler(model.domain)),
+        (EvaporationOfRain(model.equation), ForwardEuler(model.domain)),
+        (SaturationAdjustment(model.equation), ForwardEuler(model.domain, limiter=zero_limiter))
     ]
 
-    # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods,
-        final_physics_schemes=physics_schemes, tau_values={'rho': 1.0, 'theta': 1.0}
-    )
+    # Setup model
+    model.setup(output, limiters=limiters,
+                final_physics_schemes=physics_schemes,
+                diagnostic_fields=diagnostic_fields)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
+    stepper = model.stepper
     u0 = stepper.fields("u")
     rho0 = stepper.fields("rho")
     theta0 = stepper.fields("theta")
@@ -159,7 +140,7 @@ def unsaturated_bubble(
     water_r0 = stepper.fields("rain")
 
     # spaces
-    Vr = domain.spaces("DG")
+    Vr = model.domain.spaces("DG")
     x, z = SpatialCoordinate(mesh)
     quadrature_degree = (4, 4)
     dxp = dx(degree=(quadrature_degree))
@@ -167,14 +148,14 @@ def unsaturated_bubble(
     physics_boundary_method = BoundaryMethod.extruded
 
     # Define constant theta_e and water_t
-    exner_surf = (float(psurf) / float(eqns.parameters.p_0)) ** float(eqns.parameters.kappa)
-    theta_surf = thermodynamics.theta(eqns.parameters, Tsurf, psurf)
+    exner_surf = (float(psurf) / float(parameters.p_0)) ** float(parameters.kappa)
+    theta_surf = thermodynamics.theta(parameters, Tsurf, psurf)
     theta_d = Function(Vt).interpolate(theta_surf * exp(S*z))
     rel_hum = Function(Vt).assign(rel_hum_background)
 
     # Calculate hydrostatic fields
     unsaturated_hydrostatic_balance(
-        eqns, stepper.fields, theta_d, rel_hum,
+        model.equation, stepper.fields, theta_d, rel_hum,
         exner_boundary=Constant(exner_surf)
     )
 
@@ -208,16 +189,16 @@ def unsaturated_bubble(
     water_v_eval = Function(Vt)
     delta = 1.0
 
-    R_d = eqns.parameters.R_d
-    R_v = eqns.parameters.R_v
+    R_d = parameters.R_d
+    R_v = parameters.R_v
     epsilon = R_d / R_v
 
     # make expressions to evaluate residual
-    exner_expr = thermodynamics.exner_pressure(eqns.parameters, rho_averaged, theta0)
-    p_expr = thermodynamics.p(eqns.parameters, exner_expr)
-    T_expr = thermodynamics.T(eqns.parameters, theta0, exner_expr, water_v0)
-    water_v_expr = thermodynamics.r_v(eqns.parameters, rel_hum, T_expr, p_expr)
-    rel_hum_expr = thermodynamics.RH(eqns.parameters, water_v0, T_expr, p_expr)
+    exner_expr = thermodynamics.exner_pressure(parameters, rho_averaged, theta0)
+    p_expr = thermodynamics.p(parameters, exner_expr)
+    T_expr = thermodynamics.T(parameters, theta0, exner_expr, water_v0)
+    water_v_expr = thermodynamics.r_v(parameters, rel_hum, T_expr, p_expr)
+    rel_hum_expr = thermodynamics.RH(parameters, water_v0, T_expr, p_expr)
     rel_hum_eval = Function(Vt)
 
     # set-up rho problem to keep exner constant
@@ -275,7 +256,7 @@ def unsaturated_bubble(
     # Run
     # ------------------------------------------------------------------------ #
 
-    stepper.run(t=0, tmax=tmax)
+    model.run(t=0, tmax=tmax)
 
 # ---------------------------------------------------------------------------- #
 # MAIN
