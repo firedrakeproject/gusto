@@ -103,7 +103,7 @@ def schaer_mountain(
     # Model
     model = Model(mesh, dt, parameters, eqns,
                   u_transport_option=u_eqn_type,
-                  sponge_parameters=sponge_params,
+                  sponge_options=sponge_params,
                   family="CG")
 
     # I/O
