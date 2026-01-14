@@ -47,12 +47,6 @@ def williamson_5(
     phi_c = pi/6.               # latitudinal centre of mountain (rad)
 
     # ------------------------------------------------------------------------ #
-    # Our settings for this set up
-    # ------------------------------------------------------------------------ #
-
-    element_order = 1
-
-    # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
@@ -82,7 +76,7 @@ def williamson_5(
     subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
 
     model = Model(mesh, dt, parameters, eqns,
-                  family='BDM', element_order=element_order)
+                  family='BDM')
     model.setup(output, subcycling_options=subcycling_options,
                 diagnostic_fields=diagnostic_fields)
 

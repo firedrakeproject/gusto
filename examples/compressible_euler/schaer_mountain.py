@@ -66,7 +66,6 @@ def schaer_mountain(
 
     spinup_steps = 5  # Not necessary but helps balance initial conditions
     alpha = 0.51      # Necessary to absorb grid scale waves
-    element_order = 1
     u_eqn_type = 'vector_invariant_form'
 
     # ------------------------------------------------------------------------ #
@@ -105,7 +104,7 @@ def schaer_mountain(
     model = Model(mesh, dt, parameters, eqns,
                   u_transport_option=u_eqn_type,
                   sponge_parameters=sponge_params,
-                  family="CG", element_order=element_order)
+                  family="CG")
 
     # I/O
     output = OutputParameters(

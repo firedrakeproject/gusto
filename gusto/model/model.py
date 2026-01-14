@@ -112,7 +112,7 @@ class SIQNModel(ModelBase):
         diagnostic_fields = kwargs.pop("diagnostic_fields")
         io = IO(self.domain, output, diagnostic_fields=diagnostic_fields)
 
-        self.subcycling_options = kwargs.get("subcycling_options")
+        self.subcycling_options = kwargs.pop("subcycling_options")
 
         self.stepper = SemiImplicitQuasiNewton(
             self.equation, io, self.transported_fields,
