@@ -109,10 +109,10 @@ class SIQNModel(ModelBase):
                 controlling output
         """
 
-        diagnostic_fields = kwargs.pop("diagnostic_fields")
+        diagnostic_fields = kwargs.pop("diagnostic_fields", None)
         io = IO(self.domain, output, diagnostic_fields=diagnostic_fields)
 
-        self.subcycling_options = kwargs.pop("subcycling_options")
+        self.subcycling_options = kwargs.pop("subcycling_options", None)
 
         self.stepper = SemiImplicitQuasiNewton(
             self.equation, io, self.transported_fields,
