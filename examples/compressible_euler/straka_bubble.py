@@ -57,7 +57,6 @@ def straka_bubble(
 
     delta = domain_height/nlayers
     ncolumns = 8 * nlayers
-    element_order = 1
     u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
@@ -78,7 +77,7 @@ def straka_bubble(
     model = Model(mesh, dt, parameters, eqns,
                   u_transport_option=u_eqn_type,
                   diffusion_options=diffusion_options,
-                  family="CG", element_order=element_order)
+                  family="CG")
 
     # I/O
     output = OutputParameters(
