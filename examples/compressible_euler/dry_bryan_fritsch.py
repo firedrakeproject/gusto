@@ -15,8 +15,7 @@ from firedrake import (
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     RecoverySpaces, BoundaryMethod, Perturbation, CompressibleParameters,
-    CompressibleEulerEquations, CompressibleSolver,
-    compressible_hydrostatic_balance
+    CompressibleEulerEquations, compressible_hydrostatic_balance
 )
 
 dry_bryan_fritsch_defaults = {
@@ -101,13 +100,10 @@ def dry_bryan_fritsch(
         DGUpwind(eqns, field) for field in ["u", "rho", "theta"]
     ]
 
-    # Linear solver
-    linear_solver = CompressibleSolver(eqns, tau_values={'rho': 1.0, 'theta': 1.0})
-
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
+        tau_values={'rho': 1.0, 'theta': 1.0}
     )
 
     # ------------------------------------------------------------------------ #

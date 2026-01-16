@@ -13,21 +13,19 @@ used.
 """
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from petsc4py import PETSc
-PETSc.Sys.popErrorHandler()
 import itertools
 from firedrake import (
     as_vector, SpatialCoordinate, PeriodicIntervalMesh, ExtrudedMesh, exp, sin,
-    Function, pi, COMM_WORLD, sqrt
+    PETSc, Function, pi, COMM_WORLD, sqrt
 )
 import numpy as np
 from gusto import (
     Domain, IO, OutputParameters, TRBDF2QuasiNewton, SemiImplicitQuasiNewton,
     DGUpwind, logger, EmbeddedDGOptions, Perturbation, CompressibleParameters,
     CompressibleEulerEquations, HydrostaticCompressibleEulerEquations,
-    compressible_hydrostatic_balance, RungeKuttaFormulation, CompressibleSolver,
-    hydrostatic_parameters, SubcyclingOptions, SSPRK3
+    compressible_hydrostatic_balance, RungeKuttaFormulation, SubcyclingOptions, SSPRK3
 )
+PETSc.Sys.popErrorHandler()
 
 skamarock_klemp_nonhydrostatic_defaults = {
     'ncolumns': 150,
@@ -72,7 +70,6 @@ def skamarock_klemp_nonhydrostatic(
 
     if timestepper == 'TR-BDF2':
         gamma = (1-sqrt(2)/2)
-        gamma2 = (1 - 2*float(gamma))/(2 - 2*float(gamma))
     else:
         alpha = 0.5
 
@@ -154,34 +151,17 @@ def skamarock_klemp_nonhydrostatic(
     tau_values = {'rho': 1.0, 'theta': 1.0}
     if hydrostatic and timestepper == 'TR-BDF2':
         raise ValueError('Hydrostatic equations not implmented for TR-BDF2')
-    elif hydrostatic:
-        linear_solver = CompressibleSolver(
-            eqns, solver_parameters=hydrostatic_parameters,
-            overwrite_solver_parameters=True, alpha=alpha
-        )
-    elif timestepper == 'TR-BDF2':
-        tr_solver = CompressibleSolver(
-            eqns, alpha=gamma, tau_values=tau_values
-        )
-        bdf_solver = CompressibleSolver(
-            eqns, alpha=gamma2, tau_values=tau_values
-        )
-    else:
-        linear_solver = CompressibleSolver(
-            eqns, alpha=alpha, tau_values=tau_values
-        )
 
     # Time stepper
     if timestepper == 'TR-BDF2':
         stepper = TRBDF2QuasiNewton(
             eqns, io, transported_fields, transport_methods,
-            gamma=gamma, tr_solver=tr_solver, bdf_solver=bdf_solver
+            gamma=gamma, tau_values_tr=tau_values, tau_values_bdf=tau_values
         )
 
     elif timestepper == 'SIQN':
         stepper = SemiImplicitQuasiNewton(
-            eqns, io, transported_fields, transport_methods,
-            alpha=alpha, linear_solver=linear_solver
+            eqns, io, transported_fields, transport_methods, alpha=alpha, tau_values=tau_values
         )
     # ------------------------------------------------------------------------ #
     # Initial conditions

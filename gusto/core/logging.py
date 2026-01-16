@@ -5,8 +5,10 @@ All logging functionality for Gusto is controlled from
 created internally.
 
 The primary means of configuration is via environment variables, the
-same way that the standard Python root logger is. See the
-:mod:`logging` page for details.
+same way that the standard Python root logger is, e.g.:
+`export GUSTO_LOG_LEVEL=DEBUG`
+
+See the :mod:`logging` page for details.
 
 Set ``GUSTO_LOG_LEVEL`` to any of ``DEBUG``, ``INFO``, ``WARNING``,
 ``ERROR`` or ``CRITICAL`` (from most verbose to least verbose).
@@ -198,6 +200,7 @@ def update_logfile_location(new_path, comm):
         new_fh.name = "gusto-file-log"
         logger.addHandler(new_fh)
         logger.debug("Re-opening logger")
+
     elif len(fh) > 1:
         raise LoggingError(
             "More than one log handler with name `gusto-temp-file-log`\n"
