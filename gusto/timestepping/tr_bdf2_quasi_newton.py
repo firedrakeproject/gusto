@@ -446,8 +446,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         for parametrisation, scheme in self.bdf_fast_physics_schemes:
             apply_bcs = True
             print(f'BDF fast physics length check')
-            dt_scale = 1.0 
-            scale_proxy = 1.0 
+            dt_scale = (1.0 - 2*self.gamma) 
+            scale_proxy = (1.0 - 2*g1) 
             logger.info(f'BDF fast physics: dt scaling set to {scale_proxy}')
             scheme.setup(self.equation, apply_bcs, parametrisation.label,
                          dt_scale=dt_scale)
