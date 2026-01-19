@@ -160,7 +160,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.to_update_ref_profile = False
 
         # Set transporting velocity to be average
-        self.alpha_u = Function(self.R, val=0.5)
+        self.alpha_u = Function(R, val=0.5)
         self.implicit_terms = [incompressible, sponge]
         self.spatial_methods = spatial_methods
 
