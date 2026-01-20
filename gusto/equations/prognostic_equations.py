@@ -124,9 +124,11 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         self.X_ref = Function(W)
 
         # Set up no-normal-flow boundary conditions
-        if no_normal_flow_bc_ids is None:
-            no_normal_flow_bc_ids = []
-        self.set_no_normal_flow_bcs(domain, no_normal_flow_bc_ids)
+        # if no_normal_flow_bc_ids is None:
+        #     no_normal_flow_bc_ids = []
+        # self.set_no_normal_flow_bcs(domain, no_normal_flow_bc_ids)
+        if no_normal_flow_bc_ids is not None:
+            self.set_no_normal_flow_bcs(domain, no_normal_flow_bc_ids)
 
     # ======================================================================== #
     # Set up time derivative / mass terms
