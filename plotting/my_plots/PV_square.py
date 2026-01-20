@@ -52,14 +52,20 @@ if not os.path.exists(plot_dir):
 
 PV_structured, times = fcs.make_structured(filepath, field_name)
 
+# breakpoint()
+
 if diff:
     PV_structured = PV_structured.diff(dim='time')
     times = times[1:]
 
-if field_name in ['PotentialVorticity', 'RelativeVorticity', 'D']:
+if field_name in ['RelativeVorticity', 'D']:
     cmap = 'RdBu_r'
     vmin = np.min(PV_structured[:,:,0])
     vmax = np.max(PV_structured[:,:,0])
+elif field_name in ['b', 'PotentialVorticity']:
+    cmap = 'RdBu_r'
+    vmin = np.min(PV_structured[:,:,-1])
+    vmax = np.max(PV_structured[:,:,-1])
 elif field_name == 'D_error':
     cmap = 'RdBu_r'
     But = filepath.split('Bu')[1].split('b')[0]
@@ -100,7 +106,7 @@ elif field_name in ['cloud_water', 'water_vapour']:
 elif field_name == 'RelativeHumidity':
     PV_structured = PV_structured.where(PV_structured!=100, 101)
     cmap = plt.cm.YlGnBu.copy()
-    cmap.set_under('white')
+    # cmap.set_under('white')
     cmap.set_over('purple')
     vmin = 0
     vmax = 100
@@ -128,6 +134,8 @@ for i in tqdm(range(len(times)), desc='Making plots'):
     # print(f'{i:0{digits}d}')
     fig, ax = plt.subplots(1,1, figsize=(8,8))
     ax.set_aspect('equal')
+    if field_name in ['cloud_water']:
+        PV_structured = PV_structured.where(PV_structured>=1e-10, -1)
     pcolor = PV_structured[:,:,i].plot.imshow(ax=ax, x='x', y='y', cmap=cmap, extend=extend, add_colorbar=False, vmin=vmin, vmax=vmax)
 
     ### pcolormesh option, it's worse so don't use
