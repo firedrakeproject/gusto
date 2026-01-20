@@ -13,7 +13,7 @@ __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
            "ShallowWaterPotentialEnstrophy", "PotentialVorticity",
            "RelativeVorticity", "AbsoluteVorticity", "PartitionedVapour",
            "PartitionedCloud", "ShallowWaterAvailablePotentialEnergy",
-           "MoistConvectiveSWRelativeHumidity"]
+           "MoistConvectiveSWRelativeHumidity", "MoistThermalSWRelativeHumidity"]
 
 
 class ShallowWaterKineticEnergy(Energy):
