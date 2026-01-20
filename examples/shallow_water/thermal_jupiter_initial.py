@@ -7,8 +7,8 @@ from gusto import (
     SubcyclingOptions, TrapeziumRule, SSPRK3, DGUpwind,
     SemiImplicitQuasiNewton, VectorFunctionSpace, assemble, Function,
     FunctionSpace, WaterVapour, CloudWater, DG1Limiter, SWSaturationAdjustment,
-    ForwardEuler, ZeroLimiter, MixedFSLimiter, MoistConvectiveSWRelativeHumidity,
-    SWHeightRelax
+    ForwardEuler, ZeroLimiter, MixedFSLimiter, MoistThermalSWRelativeHumidity,
+    SWHeightRelax, ThermalSWSolver
 )
 from firedrake import (
     SpatialCoordinate, VertexOnlyMesh, as_vector, pi, interpolate, exp, cos, sin,
@@ -271,12 +271,10 @@ def initialise_D(X, idx):
 def sat_func_phys(x_in):
     D = x_in.subfunctions[1]
     b = x_in.subfunctions[2]
-    result = sat_func(b, D)
-    return result
+    return (q0*H/D)*exp(20.*(1-b/g))
 
 def sat_func(b, D):
     return (q0*H/D)*exp(20.*(1-b/g))
-    # return q0
 
 def gamma_v(x_in):
     D = x_in.subfunctions[1]
@@ -393,9 +391,9 @@ H = phi0/g
 t_day = 2*pi/Omega
 
 ### timing options
-dump_freq = 1    # dump frequency of output
+dump_freq = 30    # dump frequency of output
 dt = 250          # timestep (in seconds)
-tmax = 1*t_day       # duration of the simulation (in seconds)
+tmax = 100*t_day       # duration of the simulation (in seconds)
 
 restart = False
 restart_name = 'highf0_single_radt5beta3900q01em2xi1em1_Bu1b1p5Rop2_l5dt250df1'
@@ -406,7 +404,8 @@ south_lat_deg = [90.]#, 83., 83., 83., 83., 83.]#, 70.]
 south_lon_deg = [0.]#, 72., 144., 216., 288., 0.]#, 0.]
 
 ### add noise to initial depth profile?
-noise = False
+noise = True
+noise_amp = 1.5e-2
 
 ### include available potential energy diagnostic or no?
 avlpe_diag = True
@@ -425,12 +424,9 @@ extract_res = 2
 ### anticyclone?
 ac = False
 
-### moist convective setup?
-moist = True
-
 ### moist variables
 epsilon = 1./165.  # 1/T0 where T0 is standard reference temperature
-xi = 1e-1   # how far below saturation we start
+xi = 1e-2   # how far below saturation we start
 q0 = 1e-2  # scaling such that max(q0*H/D*exp(20*theta))=atmospheric specific humidity in kg/kg
 Lp = 18
 beta2 = g*Lp
@@ -489,13 +485,11 @@ if fplane:
 elif flattrap:
     setup = f'{setup}flattrap_'
 if noise:
-    noise_name = f'_n'
+    noiseint, noisedec = split_number(noise_amp)
+    noise_name = f'_n{noiseint}{noisedec}'
 else:
     noise_name = ''
-if moist:
-    moist_name = f'Lp{Lp}q0{q01fint}{q01fdec}e{q02i}xi{xiprefix}{xi1fint}{xi1fdec}e{xi2i}_'
-else:
-    moist_name = ''
+moist_name = f'Lp{Lp}q0{q01fint}{q01fdec}e{q02i}xi{xiprefix}{xi1fint}{xi1fdec}e{xi2i}_'
 if raddamp:
     rad_name = f'radt{taurint}{taurdec}'
 else:
@@ -540,12 +534,13 @@ r, theta_coord = rtheta_from_xy(x, y)
 _, lat = lonlat_from_rtheta(r, theta_coord)
 
 # Create a spatially varying function for the Coriolis force:
+Omega_num = Omega
 Omega = parameters.Omega
 fexpr = 2*Omega*(1-0.5*r**2/R**2)
 if flattrap:
     fexpr = 2*Omega*(1-0.5*(rstar-smooth_delta*Lx/nx)**2/R**2)
 # ftrap = conditional(r < rstar, fexpr, 2*Omega)
-coeffs = smooth_f_profile(degree=smooth_degree, delta=smooth_delta, style='flat' if flattrap else 'polar', rstar=rstar, Omega=parameters.Omega, R=R, Lx=Lx, nx=nx)
+coeffs = smooth_f_profile(degree=smooth_degree, delta=smooth_delta, style='flat' if flattrap else 'polar', rstar=rstar, Omega=Omega_num, R=R, Lx=Lx, nx=nx)
 fsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
 if smooth_degree == 5:
     fsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
@@ -584,7 +579,7 @@ if avlpe_diag:
     diagnostic_fields.append(ShallowWaterAvailablePotentialEnergy(parameters))
 if D_perturb:
     diagnostic_fields.append(SteadyStateError('D'))
-diagnostic_fields.append(MoistConvectiveSWRelativeHumidity(sat_func))
+diagnostic_fields.append(MoistThermalSWRelativeHumidity(sat_func))
 
 io = IO(domain, output=output, diagnostic_fields=diagnostic_fields)
 
@@ -609,18 +604,34 @@ if raddamp:
 transport_methods = [
     DGUpwind(eqns, field_name) for field_name in eqns.field_names
 ]
+DG1limiter = DG1Limiter(domain.spaces('DG'))
+zerolimiter = ZeroLimiter(domain.spaces('DG'))
+physics_sublimiters = {'water_vapour': zerolimiter,
+                        'cloud_water': zerolimiter}
+transport_sublimiters = {'water_vapour': DG1limiter,
+                        'cloud_water': DG1limiter}
+physics_limiter = MixedFSLimiter(eqns, physics_sublimiters)
+transport_limiter = MixedFSLimiter(eqns, transport_sublimiters)
+transported_fields = [TrapeziumRule(domain, "u"),
+                        SSPRK3(domain, "D", subcycling_options=subcycling_options),
+                        SSPRK3(domain, "water_vapour", limiter=DG1limiter),
+                        SSPRK3(domain, "cloud_water", limiter=DG1limiter)]
+
+linear_solver = ThermalSWSolver(eqns)
 
 stepper = SemiImplicitQuasiNewton(
     eqns, io,
+    transport_schemes=transported_fields,
     spatial_methods=transport_methods,
-    physics_schemes=physics_schemes
-)
-
+    physics_schemes=physics_schemes,
+    linear_solver=linear_solver
+    )
 
 
 u0 = stepper.fields("u")
 D0 = stepper.fields("D")
 wv0 = stepper.fields("water_vapour")
+cw0 = stepper.fields("cloud_water")
 b0 = stepper.fields("b")
 
 # south_lat_deg = [90., 85., 85., 85., 85., 75.]
@@ -687,26 +698,29 @@ if not restart:
 
     u0.project(uexpr)
     D0.interpolate(Dfinal)
-    if moist:
-        initial_msat = sat_func(Dfinal)
-        coeffs = smooth_tophat(degree=smooth_degree, delta=smooth_delta, rstar=rstar, Lx=Lx, nx=nx)
-        hatsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
-        if smooth_degree == 5:
-            hatsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
-        tophat1 = conditional(r<rstar-smooth_delta*Lx/nx, 1, hatsmooth)
-        tophat = conditional(r<rstar+smooth_delta*Lx/nx, tophat1, 0)
-        wvexpr = (1-xi) * initial_msat * tophat
-        wv0.interpolate(wvexpr)
-        b0.assign(g)
+    b0.assign(g)
+    # breakpoint()
+    initial_msat = sat_func(b0, Dfinal)
+    coeffs = smooth_tophat(degree=smooth_degree, delta=smooth_delta, rstar=rstar, Lx=Lx, nx=nx)
+    hatsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
+    if smooth_degree == 5:
+        hatsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
+    tophat1 = conditional(r<rstar-smooth_delta*Lx/nx, 1, hatsmooth)
+    tophat = conditional(r<rstar+smooth_delta*Lx/nx, tophat1, 0)
+    wvexpr = (1-xi) * initial_msat * tophat
+    wv0.interpolate(wvexpr)
+    cw0.assign(0.)
+    
 
     if noise:
         pcg = PCG64()
         rg = RandomGenerator(pcg)
-        f_normal = rg.normal(VD, 0.0, 1.5e-3*H)
+        f_normal = rg.normal(VD, 0.0, noise_amp*H)
         D0 += f_normal
 
 Dbar = Function(D0.function_space()).assign(H)
-stepper.set_reference_profiles([('D', Dbar)])
+bbar = Function(b0.function_space()).assign(g)
+stepper.set_reference_profiles([('D', Dbar), ('b', bbar)])
 
 start_time = time.time()
 

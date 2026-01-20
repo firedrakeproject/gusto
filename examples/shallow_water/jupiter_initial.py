@@ -8,7 +8,9 @@ from gusto import (
     Function, FunctionSpace, WaterVapour, CloudWater, DG1Limiter,
     MoistConvectiveSWSolver, SWSaturationAdjustment, ForwardEuler,
     ZeroLimiter, MixedFSLimiter, MoistConvectiveSWRelativeHumidity,
-    SWHeightRelax
+    SWHeightRelax, ThermalShallowWaterEquations, ThermalSWSolver,
+    MoistThermalSWRelativeHumidity, DiffusionEquation, DiffusionParameters,
+    BackwardEuler, CGDiffusion, Timestepper
 )
 from firedrake import (
     SpatialCoordinate, VertexOnlyMesh, as_vector, pi, interpolate, exp, cos, sin,
@@ -268,19 +270,39 @@ def initialise_D(X, idx):
     # return list of D values in correct order
     return D_values
 
-def sat_func_phys(x_in):
+def sat_func_phys_nt(x_in):
     D = x_in.subfunctions[1]
-    result = sat_func(D)
-    return result
-
-def sat_func(D):
     return (q0*H/D)
-    # return q0
 
-def gamma_v(x_in):
-    qsat = sat_func_phys(x_in)
+def sat_func_phys_t(x_in):
     D = x_in.subfunctions[1]
-    return (1+qsat*beta1/D)**(-1)
+    b = x_in.subfunctions[2]
+    factor = exp(20.*(1-b/g))
+    return (q0*H/D)*factor
+
+def sat_func_nt(D):
+    return (q0*H/D)
+
+def sat_func_t(D, b):
+    factor = exp(20.*(1-b/g))
+    return (q0*H/D)*factor
+
+def gamma_v_t(x_in):
+    D = x_in.subfunctions[1]
+    b = x_in.subfunctions[2]
+    denom = sat_func_t(D, b)*20.*beta2/g
+    return (1+denom)**(-1)
+
+def gamma_v_ct(x_in):
+    D = x_in.subfunctions[1]
+    b = x_in.subfunctions[2]
+    denom = sat_func_t(D, b)*(20.*beta2/g+beta1/D)
+    return (1+denom)**(-1)
+
+def gamma_v_c(x_in):
+    D = x_in.subfunctions[1]
+    denom = sat_func_nt(D)*beta1/D
+    return (1+denom)**(-1)
 
 def smooth_tophat(degree, delta, rstar, Lx, nx):
     delta *= Lx/nx
@@ -347,6 +369,43 @@ def extract_points(fields, res):
         )
         ds.to_netcdf(f'{dirname}/end_fields.nc')
 
+def diffusion_noise_generation(mesh, Lx):
+
+    mesh = mesh
+    Lx = Lx
+    factor = Lx/10
+
+    dt = 0.01*factor
+    tmax = 0.2*factor
+
+    kappa = 1.*factor
+    # mu = 5.
+    logger.info('Generating noise')
+    output = OutputParameters(dump_vtus=False, dump_diagnostics=False)
+    domain = Domain(mesh, dt, "RTCF", 1)
+
+    V = domain.spaces("H1")
+
+    diffusion_params = DiffusionParameters(domain.mesh, kappa=kappa)
+    eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
+    diffusion_scheme = BackwardEuler(domain)
+    diffusion_methods = [CGDiffusion(eqn, "f", diffusion_params)]
+    io = IO(domain, output=output)
+    timestepper = Timestepper(eqn, diffusion_scheme, io, spatial_methods=diffusion_methods)
+
+    f0 = timestepper.fields("f")
+    pcg = PCG64()
+    rg = RandomGenerator(pcg)
+    noise_init = rg.normal(V, 0.0, 1.)
+
+    # x = SpatialCoordinate(mesh)
+    # noise_init = exp(-((x[0]-0.5*L)**2 + (x[1]-0.5*L)**2))
+
+    f0.interpolate(noise_init)
+    timestepper.run(0., tmax)
+
+    return timestepper.fields("f")
+
 ### options changed in Cheng Li 2020
 Bu = 1
 b = 1.5
@@ -392,20 +451,27 @@ H = phi0/g
 t_day = 2*pi/Omega
 
 ### timing options
-dump_freq = 1    # dump frequency of output
+dump_freq = 30    # dump frequency of output
 dt = 250          # timestep (in seconds)
-tmax = 1*t_day       # duration of the simulation (in seconds)
+tmax = 200*t_day       # duration of the simulation (in seconds)
 
 restart = False
-restart_name = 'highf0_single_radt5beta3900q01em2xi1em1_Bu1b1p5Rop2_l5dt250df1'
-t0 = 5*t_day
+restart_name = 'single_beta3900Lp18q01em2xi1em1_Bu1b1p5Rop2_l200dt250df30_lgnp05'
+t0 = 200*t_day
 
 ### vortex locations
 south_lat_deg = [90.]#, 83., 83., 83., 83., 83.]#, 70.]
 south_lon_deg = [0.]#, 72., 144., 216., 288., 0.]#, 0.]
 
 ### add noise to initial depth profile?
-noise = False
+noise = True
+large_noise = True
+noise_amp = 0.05
+
+### add noise to initial moist profile?
+moist_noise = True
+moist_noise_amp = 0.01
+
 
 ### include available potential energy diagnostic or no?
 avlpe_diag = True
@@ -424,21 +490,26 @@ extract_res = 2
 ### anticyclone?
 ac = False
 
-### moist convective setup?
+### moist setup?
 moist = True
+### which version of convective, thermal, convective thermal to pick
+convective = True
+thermal = True
 
 ### moist variables
 epsilon = 1./165.  # 1/T0 where T0 is standard reference temperature
 xi = 1e-1   # how far below saturation we start
 q0 = 1e-2  # scaling such that max(q0*H/D*exp(20*theta))=atmospheric specific humidity in kg/kg
-beta1 = 390000 # calculated from formula
+beta1 = 3900 # calculated from formula
+Lp = 18   # pseudo Latent heat as in Z&A
+beta2 = g*Lp
 
 ### radiative damping
-raddamp = True
+raddamp = False
 tau_r = 5  # number of days for timescale 
 
 ### name
-setup = 'highf0_single'
+setup = 'single'
 
 ##########################################################################
 
@@ -487,18 +558,34 @@ if fplane:
 elif flattrap:
     setup = f'{setup}flattrap_'
 if noise:
-    noise_name = f'_n'
+    noiseint, noisedec = split_number(noise_amp)
+    if large_noise:
+        noisetype = 'lg'
+    else:
+        noisetype = ''
+    noise_name = f'_{noisetype}n{noiseint}{noisedec}'
 else:
     noise_name = ''
+if moist_noise:
+    moist_noiseint, moist_noisedec = split_number(moist_noise_amp)
+    moist_noise_name = f'_qn{moist_noiseint}{moist_noisedec}'
+else:
+    moist_noise_name = ''
 if moist:
-    moist_name = f'beta{beta1}q0{q01fint}{q01fdec}e{q02i}xi{xiprefix}{xi1fint}{xi1fdec}e{xi2i}_'
+    ##### need to change this
+    if thermal:
+        moist_name = f'Lp{Lp}q0{q01fint}{q01fdec}e{q02i}xi{xiprefix}{xi1fint}{xi1fdec}e{xi2i}_'
+        if convective:
+            moist_name = f'beta{beta1}{moist_name}'
+    elif not thermal:
+        moist_name = f'beta{beta1}q0{q01fint}{q01fdec}e{q02i}xi{xiprefix}{xi1fint}{xi1fdec}e{xi2i}_'
 else:
     moist_name = ''
 if raddamp:
     rad_name = f'radt{taurint}{taurdec}'
 else:
     rad_name = ''
-folder_name = f'{setup}{rad_name}{moist_name}Bu{Buint}{Budec}b{bint}{bdec}Ro{Roint}{Rodec}_l{round(tmax/t_day)}dt{int(dt)}df{dump_freq}{noise_name}'
+folder_name = f'{setup}{rad_name}{moist_name}Bu{Buint}{Budec}b{bint}{bdec}Ro{Roint}{Rodec}_l{round(tmax/t_day)}dt{int(dt)}df{dump_freq}{noise_name}{moist_noise_name}'
 
 dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}'
 dirnameold=f'/data/home/sh1293/results/jupiter_sw/{restart_name}'
@@ -538,12 +625,13 @@ r, theta_coord = rtheta_from_xy(x, y)
 _, lat = lonlat_from_rtheta(r, theta_coord)
 
 # Create a spatially varying function for the Coriolis force:
+Omega_num = Omega
 Omega = parameters.Omega
 fexpr = 2*Omega*(1-0.5*r**2/R**2)
 if flattrap:
     fexpr = 2*Omega*(1-0.5*(rstar-smooth_delta*Lx/nx)**2/R**2)
 # ftrap = conditional(r < rstar, fexpr, 2*Omega)
-coeffs = smooth_f_profile(degree=smooth_degree, delta=smooth_delta, style='flat' if flattrap else 'polar', rstar=rstar, Omega=parameters.Omega, R=R, Lx=Lx, nx=nx)
+coeffs = smooth_f_profile(degree=smooth_degree, delta=smooth_delta, style='flat' if flattrap else 'polar', rstar=rstar, Omega=Omega_num, R=R, Lx=Lx, nx=nx)
 fsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
 if smooth_degree == 5:
     fsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
@@ -561,8 +649,10 @@ if moist:
         CloudWater(space='DG')
     ]
     
-
-eqns = ShallowWaterEquations(domain, parameters, fexpr=ftrap, active_tracers=tracers)
+if thermal:
+    eqns = ThermalShallowWaterEquations(domain, parameters, fexpr=ftrap, active_tracers=tracers)
+else:
+    eqns = ShallowWaterEquations(domain, parameters, fexpr=ftrap, active_tracers=tracers)
 logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
 Ld = sqrt(H*g)/f0
@@ -585,16 +675,22 @@ if avlpe_diag:
 if D_perturb:
     diagnostic_fields.append(SteadyStateError('D'))
 if moist:
-    diagnostic_fields.append(MoistConvectiveSWRelativeHumidity(sat_func))
+    if thermal:
+        diagnostic_fields.append(MoistThermalSWRelativeHumidity(sat_func_t))
+    elif not thermal:
+        diagnostic_fields.append(MoistConvectiveSWRelativeHumidity(sat_func_nt))
 
 io = IO(domain, output=output, diagnostic_fields=diagnostic_fields)
 
 subcycling_options = SubcyclingOptions(subcycle_by_courant=0.33)
 
+
+transport_methods = [
+    DGUpwind(eqns, field_name) for field_name in eqns.field_names
+]
 if not moist:
     transported_fields = [TrapeziumRule(domain, "u"),
                           SSPRK3(domain, "D", subcycling_options=subcycling_options)]
-    transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods
     )
@@ -611,18 +707,38 @@ elif moist:
                           SSPRK3(domain, "D", subcycling_options=subcycling_options),
                           SSPRK3(domain, "water_vapour", limiter=DG1limiter),
                           SSPRK3(domain, "cloud_water", limiter=DG1limiter)]
-    transport_methods = [DGUpwind(eqns, "u"),
-                         DGUpwind(eqns, "D"),
-                         DGUpwind(eqns, 'water_vapour'),
-                         DGUpwind(eqns, 'cloud_water')]
-    linear_solver = MoistConvectiveSWSolver(eqns)
+    if thermal:
+        linear_solver = ThermalSWSolver(eqns)
+        transported_fields.append((SSPRK3(domain, "b", limiter=DG1limiter)))
+    else:
+        linear_solver = MoistConvectiveSWSolver(eqns)
 
     # Physics schemes
-    sat_adj = SWSaturationAdjustment(
-        eqns, sat_func_phys, time_varying_saturation=True,
-        convective_feedback=True, beta1=beta1, gamma_v=gamma_v,
-        time_varying_gamma_v=True, parameters=parameters
-    )
+    if thermal and not convective:
+        sat_adj = SWSaturationAdjustment(
+            eqns, sat_func_phys_t,
+            time_varying_saturation=True,
+            thermal_feedback=True, beta2=beta2,
+            gamma_v=gamma_v_t, time_varying_gamma_v=True,
+            parameters=parameters
+        )
+    elif convective and not thermal:
+        sat_adj = SWSaturationAdjustment(
+            eqns, sat_func_phys_nt,
+            time_varying_saturation=True,
+            convective_feedback=True, beta1=beta1,
+            gamma_v=gamma_v_c, time_varying_gamma_v=True,
+            parameters=parameters
+        )
+    elif convective and thermal:
+        sat_adj = SWSaturationAdjustment(
+            eqns, sat_func_phys_t,
+            time_varying_saturation=True,
+            convective_feedback=True, beta1=beta1,
+            thermal_feedback=True, beta2=beta2,
+            gamma_v=gamma_v_ct, time_varying_gamma_v=True,
+            parameters=parameters
+        )
 
     height_relax = SWHeightRelax(eqns, H_rel=H, tau_r=tau_r*t_day)
 
@@ -647,6 +763,10 @@ u0 = stepper.fields("u")
 D0 = stepper.fields("D")
 if moist:
     wv0 = stepper.fields("water_vapour")
+    if moist_noise:
+        qnoise = Function(wv0.function_space())
+    if thermal:
+        b0 = stepper.fields("b")
 
 # south_lat_deg = [90., 85., 85., 85., 85., 75.]
 
@@ -671,6 +791,7 @@ if not restart:
     # values from each vortex
     Dtmp = Function(D0.function_space())
     Dfinal = Function(D0.function_space())
+    Dnoise = Function(D0.function_space())
     # loop over vortices
     for idx in range(len(south_lat)):
         # calculate depth perturbation for each vortex
@@ -712,8 +833,13 @@ if not restart:
 
     u0.project(uexpr)
     D0.interpolate(Dfinal)
+    if thermal:
+        b0.assign(g)
     if moist:
-        initial_msat = sat_func(Dfinal)
+        if thermal:
+            initial_msat = sat_func_t(Dfinal, b0)
+        elif not thermal:
+            initial_msat = sat_func_nt(Dfinal)
         coeffs = smooth_tophat(degree=smooth_degree, delta=smooth_delta, rstar=rstar, Lx=Lx, nx=nx)
         hatsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
         if smooth_degree == 5:
@@ -722,15 +848,37 @@ if not restart:
         tophat = conditional(r<rstar+smooth_delta*Lx/nx, tophat1, 0)
         wvexpr = (1-xi) * initial_msat * tophat
         wv0.interpolate(wvexpr)
+        if moist_noise:
+            noise = diffusion_noise_generation(mesh, Lx)
+            scaled_noise = noise*moist_noise_amp*10/np.max(abs(noise.dat.data)) * tophat
+            qnoise.interpolate(scaled_noise)
+            # qnoise_scaled = qnoise*moist_noise_amp*q0/np.max(qnoise.dat.data)
+            # logger.info(f'{np.max(qnoise.dat.data)}')
+            wv0 += qnoise
 
     if noise:
-        pcg = PCG64()
-        rg = RandomGenerator(pcg)
-        f_normal = rg.normal(VD, 0.0, 1.5e-3*H)
-        D0 += f_normal
+        if not large_noise:
+            pcg = PCG64()
+            rg = RandomGenerator(pcg)
+            f_normal = rg.normal(VD, 0.0, noise_amp*H)
+            D0 += f_normal
+        elif large_noise:
+            large_noise = diffusion_noise_generation(mesh, Lx)
+            scaled_noise = large_noise*noise_amp*H/np.max(abs(large_noise.dat.data))
+            # logger.info(np.max(large_noise.dat.data))
+            # logger.info(np.max(abs(large_noise.dat.data)))
+            # breakpoint()
+            Dnoise.interpolate(scaled_noise)
+            # Dnoise_scaled = Dnoise*noise_amp*H/np.max(Dnoise.dat.data)
+            # logger.info(f'{np.max(Dnoise.dat.data)}')
+            D0 += Dnoise
+
 
 Dbar = Function(D0.function_space()).assign(H)
 stepper.set_reference_profiles([('D', Dbar)])
+if thermal:
+    bbar = Function(b0.function_space()).assign(g)
+    stepper.set_reference_profiles([('b', bbar)])
 
 start_time = time.time()
 
