@@ -489,8 +489,8 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         for parametrisation, scheme in self.xi2_physics_schemes:
             print(f'Xi2 physics length check')
             apply_bcs = True
-            dt_scale = 2.0*self.gamma
-            scale_proxy = 2.0*g1
+            dt_scale = (1 - 2.0*self.gamma)
+            scale_proxy = (1 - 2.0*g1)
             logger.info(f'TR-BDF2 Xi2 physics: dt scaling is {scale_proxy}')
             scheme.setup(self.equation, apply_bcs, parametrisation.label,
                          dt_scale=dt_scale)
@@ -500,7 +500,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         for parametrisation, scheme in self.xi3_physics_schemes:
             print(f'Xi3 physics length check')
             apply_bcs = True
-            if len(self.xi3_physics_schemes) > 0:
+            if len(self.xi2_physics_schemes) > 0:
                 dt_scale = (1 - 2*self.gamma)
                 scale_proxy = 1 - 2*g1
             else:
