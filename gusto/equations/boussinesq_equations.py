@@ -149,8 +149,6 @@ class BoussinesqEquations(PrognosticEquationSet):
             print(H_PML)
             print(Constant(sigma0))
 
-            #import sys; sys.exit()
-
             sigma_expr = conditional(z <= H_PML,
                                      0.0,
                                      sigma0*((z-H_PML)/delta)**3)
@@ -158,7 +156,7 @@ class BoussinesqEquations(PrognosticEquationSet):
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
             self.sigma = self.prescribed_fields("PML", W_DG).interpolate(sigma_expr)
 
-            self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0))# + gamma0*self.sigma)
+            self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0) + gamma0*self.sigma)
 
             # Also need to define equivalents for the RT space.
 
@@ -179,18 +177,27 @@ class BoussinesqEquations(PrognosticEquationSet):
             w_vert = domain.k*inner(w, domain.k)
             w_horiz = w - w_vert
 
+            # Vertical component of the u perturbation
             u_pert_vert = domain.k*inner(u_pert, domain.k)
 
             # PML q_u test function
             q_u_test_vert = domain.k*inner(q_u_test, domain.k)
 
             # For the PML, scale the vertical advecting velocity.
-            # To do later, for now we just use u.
+            #u_vert_scaled = (1/self.gamma_z)*u_vert
+            #u_advect = as_vector([u_horiz, u_vert_scaled])
+            #u_advect = as_vector([])
+
+            # For initial tests without PML stretching
+            u_advect = u
+
+            # Perturbed velocity
+            u_vert_pert = inner(u_pert, domain.k)
 
             #scale_vect = as_vector([Constant(1.0), self.gamma_z])
             #u_advect = as_vector([u_horiz, u_vert_scaled])
-            u_advect = u
-            u_vert_advect = as_vector([Constant(0.0), inner(u, domain.k)])
+            #u_advect = u
+            #u_vert_advect = as_vector([Constant(0.0), inner(u, domain.k)])
             #u_w = as_vector([u_horiz, u_vert])
             #u_w = u_vert
         else:
@@ -254,9 +261,12 @@ class BoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
-        pressure_gradient_form = pressure_gradient(subject(prognostic(
-            -div(w)*p*dx, 'u'), self.X))
-
+        if PML_options is not None:
+            pressure_gradient_form = pressure_gradient(subject(prognostic(
+                -(div(w_horiz) + div(w_vert/self.gamma_z))*p*dx, 'u'), self.X))
+        else:
+            pressure_gradient_form = pressure_gradient(subject(prognostic(
+                -div(w)*p*dx, 'u'), self.X))
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
@@ -270,11 +280,14 @@ class BoussinesqEquations(PrognosticEquationSet):
             cs = parameters.cs
             # On assuming ``cs`` as a constant, it is right keep it out of the
             # integration.
-            linear_div_form = divergence(subject(
-                prognostic(cs**2 * (phi * div(u_trial) * dx), 'p'), self.X))
-            divergence_form = divergence(linearisation(
-                subject(prognostic(cs**2 * (phi * div(u) * dx), 'p'), self.X),
-                linear_div_form))
+            if PML_options is not None:
+                divergence_form = divergence(subject(prognostic(cs**2 * (phi * (div(u_horiz) + (1/self.gamma_z)*div(u_vert)) * dx), 'p'), self.X))
+            else:
+                linear_div_form = divergence(subject(
+                    prognostic(cs**2 * (phi * div(u_trial) * dx), 'p'), self.X))
+                divergence_form = divergence(linearisation(
+                    subject(prognostic(cs**2 * (phi * div(u) * dx), 'p'), self.X),
+                    linear_div_form))
         else:
             # This enforces that div(u) = 0
             # The p features here so that the div(u) evaluated in the
@@ -329,10 +342,10 @@ class BoussinesqEquations(PrognosticEquationSet):
             # have a minus sign in front of them.
 
             # Advective forms for q_u, q_p, q_b
-            #q_u_adv = subject(prognostic(advection_form(q_u_test, u, u_w), 'q_u'), self.X)
-            q_u_adv = subject(prognostic(advection_form(q_u_test, u_pert, u_vert_advect), 'q_u'), self.X)
-            q_p_adv = subject(prognostic(advection_form(q_p_test, p_pert, u_vert_advect), 'q_p'), self.X)
-            q_b_adv = subject(prognostic(advection_form(q_b_test, b_pert, u_vert_advect), 'q_b'), self.X)
+            # I don't think we want these .... 
+            #q_u_adv = subject(prognostic(advection_form(q_u_test, u_pert, u_vert_advect), 'q_u'), self.X)
+            #q_p_adv = subject(prognostic(advection_form(q_p_test, p_pert, u_vert_advect), 'q_p'), self.X)
+            #q_b_adv = subject(prognostic(advection_form(q_b_test, b_pert, u_vert_advect), 'q_b'), self.X)
 
             #if self.linearisation_map(q_p_adv.terms[0]):
             #    print('yup yup, q_p linearisation')
@@ -344,15 +357,19 @@ class BoussinesqEquations(PrognosticEquationSet):
             #    linear_q_b_adv = linear_advection_form(q_b_test, b_trial, u_trial, b_bar, u_bar)
             #    q_b_adv = linearisation(q_b_adv, linear_q_b_adv)
 
-            residual -= subject(q_u_adv + q_p_adv + q_b_adv, self.X)
+            #residual -= subject(q_u_adv + q_p_adv + q_b_adv, self.X)
 
             # Vertical pressure gradient term
             residual -= pressure_gradient(subject(prognostic(
-                -div(q_u_test_vert)*p_pert*dx, 'q_u'), self.X))
+                -p_pert*div(q_u_test_vert/self.gamma_z)*dx, 'q_u'), self.X))
 
             # Divergence term
             residual -= divergence(
                 subject(prognostic(cs**2 * (q_p_test * div(u_pert_vert) * dx), 'p'), self.X))
+    
+            # Perturbed buoyancy term for q_b
+            N = parameters.N
+            residual -= gravity(subject(prognostic(q_b_test * (u_vert_pert/self.gamma_z) * N**2 * dx, 'b'), self.X))
             
             # The PML damping terms
             residual -= subject(prognostic(self.sigma*inner(w, q_u)*dx, 'u'), self.X)
@@ -571,9 +588,6 @@ class LinearAcousticBuoyancyEquations(PrognosticEquationSet):
 
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
             self.sigma = self.prescribed_fields("PML", W_DG).interpolate(sigma_expr)
-
-            #self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0))
-            #self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0) + gamma0*z)
             self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0) + gamma0*self.sigma)
 
             # Also need to define equivalents for the RT space.
@@ -605,18 +619,20 @@ class LinearAcousticBuoyancyEquations(PrognosticEquationSet):
             # For the PML, scale the vertical advecting velocity:
             #scale_vect = as_vector([Constant(1.0), self.gamma_z])
             #u_advect = as_vector([u_horiz, u_vert_scaled])
-            u_advect = u
+        #    u_advect = u
             #u_w = as_vector([Constant(0.0), u[1]])
             #u_w = u_vert
-        else:
-            u_advect = u
+        #else:
+        #    u_advect = u
 
         # -------------------------------------------------------------------- #
         # Pressure Gradient Term
         # -------------------------------------------------------------------- #
         if PML_options is not None:
             pressure_gradient_form = pressure_gradient(subject(prognostic(
-                -(div(w_horiz) + (1/self.gamma_z)*div(w_vert))*p*dx, 'u'), self.X))
+                -(div(w_horiz) + div(w_vert/self.gamma_z))*p*dx, 'u'), self.X))
+            #pressure_gradient_form = pressure_gradient(subject(prognostic(
+            #    -(div(w_horiz) + (1/self.gamma_z)*div(w_vert))*p*dx, 'u'), self.X))
         else:
             pressure_gradient_form = pressure_gradient(subject(prognostic(
                 -div(w)*p*dx, 'u'), self.X))
@@ -677,11 +693,8 @@ class LinearAcousticBuoyancyEquations(PrognosticEquationSet):
         if PML_options is not None:
 
             # Vertical pressure gradient term
-            residual -= subject(prognostic(
-            -(1/self.gamma_z)*div(q_u_test_vert)*p*dx, 'q_u'), self.X)
-
-            # Optionally, add buoyancy to q_u equation:
-            #residual += subject(prognostic(b*inner(q_u_test, domain.k)*dx, 'u'), self.X)
+            residual += subject(prognostic(
+            p*div(q_u_test_vert/self.gamma_z)*dx, 'q_u'), self.X)
 
             # Divergence term
             residual -= divergence(
@@ -690,10 +703,8 @@ class LinearAcousticBuoyancyEquations(PrognosticEquationSet):
             # The PML damping terms
             residual -= subject(prognostic(self.sigma*inner(w, q_u)*dx, 'u'), self.X)
             residual -= subject(prognostic(self.sigma*phi*q_p*dx, 'p'), self.X)
-            #residual -= subject(prognostic(self.sigma*gamma*q_b*dx, 'b'), self.X) 
             residual += subject(prognostic((self.sigma+alpha)*inner(q_u_test, q_u)*dx, 'q_u'), self.X) 
             residual += subject(prognostic((self.sigma+alpha)*q_p_test*q_p*dx, 'q_p'), self.X)
-            #residual += subject(prognostic((self.sigma+alpha)*q_b_test*q_b*dx, 'q_b'), self.X)
 
         self.residual = residual
 
@@ -804,8 +815,7 @@ class AcousticEquations(PrognosticEquationSet):
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
             self.sigma = self.prescribed_fields("PML", W_DG).interpolate(sigma_expr)
 
-            self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0))
-            #self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0) + gamma0*self.sigma)
+            self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0) + gamma0*self.sigma)
 
             # Also need to define equivalents for the RT space.
 
@@ -818,9 +828,6 @@ class AcousticEquations(PrognosticEquationSet):
         # PML modified advection
         # -------------------------------------------------------------------- #
         if PML_options is not None:
-
-            # Scaled gradient
-            #grad_S = 
 
             # Vertical components of u and the u test function
             u_vert = domain.k*inner(u, domain.k)
@@ -837,21 +844,21 @@ class AcousticEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         if PML_options is not None:
             pressure_gradient_form = pressure_gradient(subject(prognostic(
-                -div(tau_u)*p*dx, 'u'), self.X))
+                -(div(tau_u_horiz) + div(tau_u_vert/self.gamma_z))*p*dx, 'u'), self.X))
         else:
             pressure_gradient_form = pressure_gradient(subject(prognostic(
-                -(div(tau_u_horiz) + div(tau_u_vert/self.gamma_z))*p*dx, 'u'), self.X))
+                -div(tau_u)*p*dx, 'u'), self.X))
 
 
         # -------------------------------------------------------------------- #
         # Divergence Term
         # -------------------------------------------------------------------- #
         cs = parameters.cs
-        #divergence_form = divergence(subject(prognostic(cs**2 * (tau_p * div(u) * dx), 'p'), self.X))
-        #divergence_form = divergence(subject(prognostic(cs**2 * (tau_p * (u[0].dx(0) + u[1].dx(1)) * dx), 'p'), self.X))
-        #divergence_form = divergence(subject(prognostic(cs**2 * (tau_p * (div(u_horiz) + div(u_vert)) * dx), 'p'), self.X))
-        divergence_form = divergence(subject(prognostic(cs**2 * (tau_p * (div(u_horiz) + (1/self.gamma_z)*div(u_vert)) * dx), 'p'), self.X))
-        
+        if PML_options is not None:
+            divergence_form = divergence(subject(prognostic(cs**2 * (tau_p * (div(u_horiz) + (1/self.gamma_z)*div(u_vert)) * dx), 'p'), self.X))
+        else:
+            divergence_form = divergence(subject(prognostic(cs**2 * (tau_p * div(u) * dx), 'p'), self.X))
+
         residual = (mass_form + divergence_form + pressure_gradient_form)
 
         # -------------------------------------------------------------------- #
@@ -865,7 +872,7 @@ class AcousticEquations(PrognosticEquationSet):
             #-div(chi_u_vert)*p*dx, 'q_u'), self.X)
             #residual -= subject(prognostic(
             #-(chi_u[1].dx(1))*p*dx, 'q_u'), self.X)
-            residual -= subject(prognostic(
+            residual += subject(prognostic(
             p*div(chi_u_vert/self.gamma_z)*dx, 'q_u'), self.X)
 
             # Divergence term
