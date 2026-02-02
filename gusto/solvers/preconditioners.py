@@ -464,6 +464,7 @@ class CompressibleHybridisedSCPC(PCBase):
         'mat_type': 'matfree',
         'ksp_type': 'preonly',
         'pc_type': 'python',
+        'ksp_monitor_true_residual': None,
         'pc_python_type': 'firedrake.SCPC',
         'pc_sc_eliminate_fields': '0, 1',
         # The reduced operator is not symmetric
@@ -573,6 +574,7 @@ class CompressibleHybridisedSCPC(PCBase):
         # Analytical (approximate) elimination of theta
         k = equations.domain.k       # Upward pointing unit vector
         theta = -dot(k, u)*dot(k, grad(thetabar))*beta_t + theta_in
+        #theta = theta_in
 
         # Only include theta' (rather than exner') in the vertical
         # component of the gradient
@@ -662,10 +664,11 @@ class CompressibleHybridisedSCPC(PCBase):
             + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_v_qp + dS_h_qp)
             + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tb_qp + ds_v_qp)
             # mass continuity equation
-            + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
-            + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
-            # term added because u.n=0 is enforced weakly via the traces
-            + beta_r*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v)
+            + (phi*(rho - rho_in))*dx + beta_r*phi*div(u)*rhobar*dx# - beta_r*inner(grad(phi), u)*rhobar)*dx
+            + phi*dot(k, u)*dot(k, grad(rhobar))*beta_r*dx
+            # + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
+            # # term added because u.n=0 is enforced weakly via the traces
+            # + beta_r*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v)
             # constraint equation to enforce continuity of the velocity
             # through the interior facets and weakly impose the no-slip
             # condition
@@ -681,7 +684,7 @@ class CompressibleHybridisedSCPC(PCBase):
         if equations.parameters.Omega is not None:
             Omega = as_vector([0, 0, equations.parameters.Omega])
             eqn += beta_u*inner(w, cross(2*Omega, u))*dx
-
+        #eqn -= equations.parameters.g*inner(w, k)*beta_u*dx
         aeqn = lhs(eqn)
         Leqn = rhs(eqn)
 
@@ -719,6 +722,7 @@ class CompressibleHybridisedSCPC(PCBase):
         self.theta = Function(self.Vtheta)
         theta_eqn = gamma*(theta - theta_in
                            + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta_t)*dx
+        #theta_eqn = gamma*theta*dx - gamma*theta_in*dx
 
         theta_problem = LinearVariationalProblem(
             lhs(theta_eqn), rhs(theta_eqn), self.theta, constant_jacobian=True

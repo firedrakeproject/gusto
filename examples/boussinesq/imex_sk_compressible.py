@@ -15,17 +15,19 @@ from firedrake import (
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, SUPGOptions, Divergence, Perturbation, CourantNumber,
-    BoussinesqParameters, BoussinesqEquations, boussinesq_hydrostatic_balance
+    BoussinesqParameters, BoussinesqEquations, boussinesq_hydrostatic_balance,
+    IMEX_Euler, Timestepper, hybridised_solver_parameters, implicit, explicit,
+    transport, time_derivative, split_continuity_form, IMEX_SSP3
 )
 import time
 
 skamarock_klemp_compressible_bouss_defaults = {
     'ncolumns': 300,
     'nlayers': 10,
-    'dt': 6.0,
-    'tmax': 3600.,
-    'dumpfreq': 300,
-    'dirname': 'skamarock_klemp_compressible_bouss'
+    'dt': 3.0,
+    'tmax': 3000.,
+    'dumpfreq': 1000,
+    'dirname': 'imex_sk_comp_bouss'
 }
 
 
@@ -68,6 +70,8 @@ def skamarock_klemp_compressible_bouss(
     # Equation
     parameters = BoussinesqParameters(mesh, cs=cs)
     eqns = BoussinesqEquations(domain, parameters)
+    eqns = split_continuity_form(eqns)
+    opts =SUPGOptions(suboptions={"b": [transport]})
 
     # I/O
     output = OutputParameters(
@@ -78,21 +82,66 @@ def skamarock_klemp_compressible_bouss(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
-    b_opts = SUPGOptions()
-    transported_fields = [
-        TrapeziumRule(domain, "u"),
-        SSPRK3(domain, "p"),
-        SSPRK3(domain, "b", options=b_opts)
-    ]
+    # b_opts = SUPGOptions()
+    # transported_fields = [
+    #     TrapeziumRule(domain, "u"),
+    #     SSPRK3(domain, "p"),
+    #     SSPRK3(domain, "b", options=b_opts)
+    # ]
     transport_methods = [
         DGUpwind(eqns, "u"),
         DGUpwind(eqns, "p"),
-        DGUpwind(eqns, "b", ibp=b_opts.ibp)
+        DGUpwind(eqns, "b")
     ]
 
+    eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
+    eqns.label_terms(lambda t: t.has_label(transport), explicit)
+
+    solver_parameters, appctx = hybridised_solver_parameters(eqns, ['u', 'p', 'b'], alpha=1.0, tau_values=None, nonlinear=True)
+    # Jform , bcs, u= eqns.linear_form(alpha=1.0, tau_values=None)
+    nl_solver_parameters = {
+    "snes_converged_reason": None,
+    "snes_lag_preconditioner_persists":None,
+    "snes_lag_preconditioner":-2,
+    "snes_lag_jacobian": -2,
+    "snes_lag_jacobian_persists": None,
+    'ksp_ew': None,
+    'ksp_ew_version': 1,
+    "ksp_ew_threshold": 1e-2,
+    "ksp_ew_rtol0": 1e-3,
+    "mat_type": "matfree",
+    "ksp_type": "gmres",
+    "ksp_converged_reason": None,
+    "ksp_atol": 1e-8,
+    "ksp_rtol": 1e-8,
+    "snes_atol": 1e-4,
+    "snes_rtol": 1e-4,
+    "ksp_max_it": 400,
+    "pc_type": "python",
+    "pc_python_type": "firedrake.AssembledPC","assembled": {
+        "pc_type": "python",
+        "pc_python_type": "firedrake.ASMStarPC",
+        "pc_star": {
+            "construct_dim": 0,
+            "sub_sub": {
+                "pc_type": "lu",
+                "pc_factor_mat_ordering_type": "rcm",
+                "pc_factor_reuse_ordering": None,
+                "pc_factor_reuse_fill": None,
+                "pc_factor_fill": 1.2
+            }
+        },
+    },}
+    linear_solver_parameters = {'snes_type': 'ksponly',
+                                'ksp_rtol': 1e-5,
+                                'ksp_rtol': 1e-7,
+                                'ksp_type': 'cg',
+                                'pc_type': 'bjacobi',
+                                'sub_pc_type': 'ilu'}
+    scheme = IMEX_SSP3(domain, options=opts, nonlinear_solver_parameters=nl_solver_parameters, appctx=None)
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods
+    stepper = Timestepper(
+        eqns, scheme, io, transport_methods
     )
 
     # ------------------------------------------------------------------------ #

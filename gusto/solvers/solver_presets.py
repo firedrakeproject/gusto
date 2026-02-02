@@ -114,6 +114,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                 'ksp_monitor': None,
                 'ksp_type': 'preonly',
                 'pc_type': 'python',
+                'ksp_monitor_true_residual': None,
                 'pc_python_type': 'gusto.AuxiliaryPC',
                 'aux': {
                     'mat_type': 'matfree',
@@ -241,6 +242,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'fieldsplit_1': {  # (u, D) solve, hybridized
                 'ksp_type': 'preonly',
                 'pc_type': 'python',
+                'ksp_monitor_true_residual': None,
                 'pc_python_type': 'gusto.AuxiliaryPC',
                 'aux': {
                     'mat_type': 'matfree',
@@ -324,7 +326,6 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         settings = {
             'ksp_type': 'preonly',
             'mat_type': 'matfree',
-            ''
             'pc_type': 'python',
             'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
             'hybridization': {                              # hybridization PC
@@ -366,15 +367,16 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
        settings = {
            'snes_type': 'newtonls',
            'snes_max_it': 50,
-           'snes_atol': 1e-8,
-           'snes_rtol': 1e-8,
+           'snes_atol': 1e-4,
+           'snes_rtol': 1e-4,
            'snes_converged_reason': None,
        } | settings
 
        settings['ksp_type'] = 'gmres'
-       settings['ksp_max_it'] = 100
-       settings['ksp_rtol'] = 1e-8
-       settings['ksp_atol'] = 1e-8
+       settings['ksp_max_it'] = 200
+       settings['ksp_rtol'] = 1e-4
+       settings['ksp_atol'] = 1e-12
+    #    settings['ksp_norm_type'] = 'unpreconditioned'
        settings['ksp_monitor_true_residual'] = None
        settings['snes_monitor'] = None
 

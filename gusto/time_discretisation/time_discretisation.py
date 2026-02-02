@@ -22,6 +22,8 @@ from gusto.core.labels import (time_derivative, prognostic, physics_label,
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.wrappers import *
 from gusto.solvers import mass_parameters
+from gusto.solvers.solver_presets import hybridised_solver_parameters
+from gusto.equations.compressible_euler_equations import CompressibleEulerEquations
 
 
 __all__ = ["TimeDiscretisation", "ExplicitTimeDiscretisation", "BackwardEuler",
@@ -64,7 +66,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
     def __init__(self, domain, field_name=None, subcycling_options=None,
                  solver_parameters=None, limiter=None, options=None,
-                 augmentation=None):
+                 augmentation=None, appctx=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -88,7 +90,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """
         self.domain = domain
         self.field_name = field_name
-        self.equation = None
         R = FunctionSpace(domain.mesh, "R", 0)
         self.dt = Function(R, val=0.0)
         self.dt.assign(domain.dt)
@@ -99,6 +100,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.courant_max = None
         self.augmentation = augmentation
         self.subcycling_options = subcycling_options
+        self.appctx = appctx
 
         if self.subcycling_options is not None:
             self.subcycling_options.check_options()
@@ -401,6 +403,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         solver_name = self.field_name+self.__class__.__name__
         solver = NonlinearVariationalSolver(
             problem,
+            appctx=self.appctx,
             solver_parameters=self.solver_parameters,
             options_prefix=solver_name
         )
@@ -832,6 +835,11 @@ class ThetaMethod(TimeDiscretisation):
         self.x1.assign(x_in)
         # Set initial solver guess
         self.x_out.assign(x_in)
+        pc = self.solver.snes.getKSP().getPC()
+        if (isinstance(self.equation, CompressibleEulerEquations) and pc.getType() == "python"):
+            self.equation.X_ref.assign(x_in)
+            self.equation.update_reference_profiles()
+            pc.getPythonContext().update(pc)
         self.solver.solve()
         x_out.assign(self.x_out)
 
@@ -888,6 +896,11 @@ class TrapeziumRule(ThetaMethod):
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
                          options=options, augmentation=augmentation)
+    
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        super().setup(equation, apply_bcs, *active_labels)
+        self.solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, ['u', 'rho', 'theta'], alpha=0.5, tau_values=None, nonlinear=True)
+
 
 
 class TR_BDF2(TimeDiscretisation):

@@ -8,7 +8,9 @@ from gusto.core.labels import time_derivative, implicit, explicit, source_label
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
+from gusto.solvers.solver_presets import hybridised_solver_parameters
 import numpy as np
+from gusto.equations.compressible_euler_equations import CompressibleEulerEquations
 
 
 __all__ = ["IMEXRungeKutta", "IMEX_Euler", "IMEX_ARS3", "IMEX_ARK2",
@@ -244,11 +246,13 @@ class IMEXRungeKutta(TimeDiscretisation):
         """Set up a list of solvers for each problem at a stage."""
         solvers = []
         for stage in range(self.solver_start_stage, self.nStages):
-            J = ufl_expr.derivative(self.Jform, self.u)
+            # J = ufl_expr.derivative(self.Jform, self.u)
             # setup solver using residual defined in derived class
-            problem = NonlinearVariationalProblem(self.res(stage), self.x_out, J = J, bcs=self.bcs)
+            alpha = self.butcher_imp[stage, stage]
+            solver_parameters, appctx = hybridised_solver_parameters(self.equation, ['u', 'rho', 'theta'], alpha=alpha, tau_values=None, nonlinear=True)
+            problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
-            solvers.append(NonlinearVariationalSolver(problem, appctx=self.appctx, solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
+            solvers.append(NonlinearVariationalSolver(problem, appctx=appctx, solver_parameters=solver_parameters, options_prefix=solver_name))
         return solvers
 
     @cached_property
@@ -270,10 +274,23 @@ class IMEXRungeKutta(TimeDiscretisation):
 
             self.solver = solver_list[stage-self.solver_start_stage]
             # Set initial solver guess
-            self.x_out.assign(self.xs[stage-1])
+            if stage > 0:
+                self.x_out.assign(self.x1)
+            else:
+                self.x_out.assign(x_in)
+
             # Evaluate source terms
             for evaluate in self.evaluate_source:
                 evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
+            
+            # # TODO: Issue #686 is to address this reference profile update bug (pythonPC update not called)
+            # # this line forces it to update for now
+            pc = self.solver.snes.getKSP().getPC()
+            if (isinstance(self.equation, CompressibleEulerEquations) and pc.getType() == "python"):
+                self.equation.X_ref.assign(self.x_out)
+                self.equation.update_reference_profiles()
+                pc.getPythonContext().update(pc)
+            #self.x1.assign(self.x_out)
             self.solver.solve()
 
             # Apply limiter
