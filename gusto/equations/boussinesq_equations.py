@@ -145,17 +145,12 @@ class BoussinesqEquations(PrognosticEquationSet):
             x = SpatialCoordinate(domain.mesh)
             z = x[len(x)-1]
 
-            print(len(x))
-            print(H_PML)
-            print(Constant(sigma0))
-
             sigma_expr = conditional(z <= H_PML,
                                      0.0,
                                      sigma0*((z-H_PML)/delta)**3)
 
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
             self.sigma = self.prescribed_fields("PML", W_DG).interpolate(sigma_expr)
-
             self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0) + gamma0*self.sigma)
 
             # Also need to define equivalents for the RT space.
@@ -184,12 +179,18 @@ class BoussinesqEquations(PrognosticEquationSet):
             q_u_test_vert = domain.k*inner(q_u_test, domain.k)
 
             # For the PML, scale the vertical advecting velocity.
-            #u_vert_scaled = (1/self.gamma_z)*u_vert
+            u_vert_scaled = (1/self.gamma_z)*inner(u, domain.k)
+            #u_advect = domain.k*u_vert_scaled
+            #print(u_vert)
+            #print(u_advect)
             #u_advect = as_vector([u_horiz, u_vert_scaled])
+            
+            # Need to fix as u[0] isn't exactly u_horiz
+            u_advect = as_vector([u[0], u_vert_scaled])
             #u_advect = as_vector([])
 
             # For initial tests without PML stretching
-            u_advect = u
+            #u_advect = u
 
             # Perturbed velocity
             u_vert_pert = inner(u_pert, domain.k)
@@ -197,7 +198,7 @@ class BoussinesqEquations(PrognosticEquationSet):
             #scale_vect = as_vector([Constant(1.0), self.gamma_z])
             #u_advect = as_vector([u_horiz, u_vert_scaled])
             #u_advect = u
-            #u_vert_advect = as_vector([Constant(0.0), inner(u, domain.k)])
+            u_vert_advect = as_vector([Constant(0.0), inner(u, domain.k)])
             #u_w = as_vector([u_horiz, u_vert])
             #u_w = u_vert
         else:
@@ -360,16 +361,21 @@ class BoussinesqEquations(PrognosticEquationSet):
             #residual -= subject(q_u_adv + q_p_adv + q_b_adv, self.X)
 
             # Vertical pressure gradient term
-            residual -= pressure_gradient(subject(prognostic(
-                -p_pert*div(q_u_test_vert/self.gamma_z)*dx, 'q_u'), self.X))
+            residual += pressure_gradient(subject(prognostic(
+                p_pert*div(q_u_test_vert/self.gamma_z)*dx, 'q_u'), self.X))
 
             # Divergence term
             residual -= divergence(
-                subject(prognostic(cs**2 * (q_p_test * div(u_pert_vert) * dx), 'p'), self.X))
+                subject(prognostic(cs**2 * (q_p_test * (1/self.gamma_z) * div(u_pert_vert) * dx), 'q_p'), self.X))
     
-            # Perturbed buoyancy term for q_b
-            N = parameters.N
-            residual -= gravity(subject(prognostic(q_b_test * (u_vert_pert/self.gamma_z) * N**2 * dx, 'b'), self.X))
+            # Perturbed buoyancy term for q_b.
+            # Here we use that d b_bar/dt = N^2.
+            #N = parameters.N
+            #residual -= gravity(subject(prognostic(q_b_test * (u_vert_pert/self.gamma_z) * N**2 * dx, 'q_b'), self.X))
+
+            # Also a perturbed buoyancy term for q_p
+            #z = x[len(x)-1]
+            #residual -= gravity(subject(prognostic(q_p_test * (u_vert_pert/self.gamma_z) * N**2 * z * dx, 'q_p'), self.X))
             
             # The PML damping terms
             residual -= subject(prognostic(self.sigma*inner(w, q_u)*dx, 'u'), self.X)

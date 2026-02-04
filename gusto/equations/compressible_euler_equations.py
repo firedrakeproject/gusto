@@ -114,6 +114,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             u, rho, theta, q_u, q_rho, q_theta = split(self.X)[0:6]
             u_trial, rho_trial, theta_trial, q_u_trial, q_rho_trial, q_theta_trial = split(self.trials)[0:6]
             u_bar, rho_bar, theta_bar, q_u_bar, q_rho_bar, q_theta_bar = split(self.X_ref)[0:6]
+            # Define perturbations:
+            u_pert = u - u_bar
+            rho_pert = rho - rho_bar
+            theta_pert = theta - theta_bar
         else:
             w, phi, gamma = self.tests[0:3]
             u, rho, theta = split(self.X)[0:3]
@@ -121,7 +125,14 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             u_bar, rho_bar, theta_bar = split(self.X_ref)[0:3]
 
         zero_expr = Constant(0.0)*theta
+
+        # Need a perturbation Exner with the PML
         exner = exner_pressure(parameters, rho, theta)
+        if PML_options is not None:
+            exner_bar = exner_pressure(parameters, rho_bar, theta_bar)
+            exner_pert = exner - exner_bar
+
+
         n = FacetNormal(domain.mesh)
 
         # Specify quadrature degree to use for pressure gradient term
@@ -148,12 +159,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             x = SpatialCoordinate(domain.mesh)
             z = x[len(x)-1]
 
-            print(len(x))
-            print(H_PML)
-            print(Constant(sigma0))
-
-            #import sys; sys.exit()
-
             sigma_expr = conditional(z <= H_PML,
                                      0.0,
                                      sigma0*((z-H_PML)/delta)**3)
@@ -161,7 +166,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
             self.sigma = self.prescribed_fields("PML", W_DG).interpolate(sigma_expr)
 
-            self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0))# + gamma0*self.sigma)
+            self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0) + gamma0*self.sigma)
 
             # Also need to define equivalents for the RT space.
 
@@ -233,7 +238,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Density transport (conservative form)
         if PML_options is not None:
             # Directly construct the form, for now.
-            L = inner(phi, (u[0]*rho).dx(0) + (1/self.gamma_z)*(u[1]*rho).dx(1))*dx
+            L = inner(phi, div(u_horiz*rho) + (1/self.gamma_z)*div(u_vert*rho))*dx
             form = transporting_velocity(L, u_advect)
             rho_adv = prognostic(transport(form, TransportEquationType.conservative), 'rho')
         else:
@@ -280,12 +285,17 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         
         if PML_options is not None:
             # Modify the normal term for PML stretch
+            pressure_gradient_form = pressure_gradient(subject(prognostic(
+                cp*(-(div(theta_v*w_horiz)+(1/self.gamma_z)*div(theta_v*w_vert))*exner*dx_qp
+                    + jump(theta_v*w, n)*avg(exner)*dS_v_qp), 'u'), self.X))
+            
+
             #pressure_gradient_form = pressure_gradient(subject(prognostic(
             #    cp*(-div(theta_v*w)*exner*dx_qp
              #       + jump(theta_v*w, n)*avg(exner)*dS_v_qp), 'u'), self.X))
-            pressure_gradient_form = pressure_gradient(subject(prognostic(
-                cp*(- ((theta_v*w[0]).dx(0) + (1/self.gamma_z)*(theta_v*w[1]).dx(1))*exner*dx_qp
-                    + jump(theta_v*w, n)*avg(exner)*dS_v_qp), 'u'), self.X))
+            #pressure_gradient_form = pressure_gradient(subject(prognostic(
+            #    cp*(- ((theta_v*w[0]).dx(0) + (1/self.gamma_z)*(theta_v*w[1]).dx(1))*exner*dx_qp
+            #        + jump(theta_v*w, n)*avg(exner)*dS_v_qp), 'u'), self.X))
             # Add a pressure gradient for the PML variable of q_w = vertical component of q_u
             #pressure_gradient_form -= pressure_gradient(subject(prognostic(
             #    cp*(- ((1/self.gamma_z)*(theta_v*q_u_test[1]).dx(1))*exner*dx_qp
@@ -300,8 +310,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             #    cp*(- ((theta_v*q_u_test[1]).dx(1))*exner*dx_qp), 'q_u'), self.X))
 
             # Perhaps need to take 
-            pressure_gradient_form -= pressure_gradient(subject(prognostic(
-                cp*(- ((theta_v*q_u_test[1]).dx(1))*exner*dx_qp), 'q_u'), self.X))
+            #pressure_gradient_form -= pressure_gradient(subject(prognostic(
+            #    cp*(- ((theta_v*q_u_test[1]).dx(1))*exner*dx_qp), 'q_u'), self.X))
 
         else:
             pressure_gradient_form = pressure_gradient(subject(prognostic(
@@ -398,23 +408,39 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         if PML_options is not None:
 
+            # OLD:::
+
             # Add vertical advection PML terms for the PML variables
             # These are all 1d transport in the vertical, and 
             # have a minus sign in front of them.
 
             # Advective forms for q_u, q_theta equations
-            q_u_adv = subject(prognostic(advection_form(q_u_test, u, u_w), 'q_u'), self.X)
-            q_theta_adv = subject(prognostic(advection_form(q_theta_test, theta, u_w), 'q_theta'), self.X)
+            #q_u_adv = subject(prognostic(advection_form(q_u_test, u, u_w), 'q_u'), self.X)
+            #q_theta_adv = subject(prognostic(advection_form(q_theta_test, theta, u_w), 'q_theta'), self.X)
 
             # Conservative form for q_rho equation
-            L = inner(q_rho_test, (1/self.gamma_z)*((u[1]*rho).dx(1)))*dx
-            form = transporting_velocity(L, u_w)
-            q_rho_adv = subject(prognostic(transport(form, TransportEquationType.conservative), 'q_rho'), self.X)
+            #L = inner(q_rho_test, (1/self.gamma_z)*div((u_vert*rho).dx(1)))*dx
+            #form = transporting_velocity(L, u_w)
+            #q_rho_adv = subject(prognostic(transport(form, TransportEquationType.conservative), 'q_rho'), self.X)
 
             # Make these terms negative in the residual
-            residual -= subject(q_u_adv + q_theta_adv + q_rho_adv, self.X)
+            #residual -= subject(q_u_adv + q_theta_adv + q_rho_adv, self.X)
 
             # Probably should add linearisations, but see if we can get away without for now.
+
+            # q_w equation pressure terms:
+            residual -= subject(prognostic(exner_pert*div((cp/self.gamma_z)*q_u_test_vert*theta_bar)*dx, 'q_u'), self.X)
+            residual -= subject(prognostic(exner_bar*div((cp/self.gamma_z)*q_u_test_vert*theta_pert)*dx, 'q_u'), self.X)
+
+            # q_rho equation pressure gradient:
+
+            # q_rho equation vertical advection:
+
+            # q_theta buoyancy term
+            residual -= subject(prognostic(
+                cp*(-div(theta_v*w)*exner*dx_qp
+                    + jump(theta_v*w, n)*avg(exner)*dS_v_qp), 'u'), self.X)
+
             
             # Six sigma PML terms, one for each equation
             # Negative sign for standard variables, positive for PML
