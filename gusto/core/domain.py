@@ -28,7 +28,7 @@ class Domain(object):
     """
     def __init__(self, mesh, dt, family, degree=None,
                  horizontal_degree=None, vertical_degree=None,
-                 max_quad_degree=None):
+                 max_quad_degree=None, dt_solver=None):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
@@ -70,6 +70,15 @@ class Domain(object):
 
         # Make a placeholder for the time
         self.t = Function(R, val=0.0)
+        if dt_solver is not None:
+            if type(dt_solver) is Constant:
+                self.dt_solver = Function(R, val=float(dt_solver))
+            elif type(dt_solver) in (float, int):
+                self.dt_solver = Function(R, val=dt_solver)
+            else:
+                raise TypeError(f'dt_solver must be a Constant, float or int, not {type(dt_solver)}')
+        else: 
+            self.dt_solver = self.dt
 
         # -------------------------------------------------------------------- #
         # Build compatible function spaces

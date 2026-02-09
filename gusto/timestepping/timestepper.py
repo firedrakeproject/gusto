@@ -370,7 +370,7 @@ class Timestepper(BaseTimestepper):
         xnp1 = self.x.np1
         name = self.equation.field_name
         x_in = [x(name) for x in self.x.previous[-self.scheme.nlevels:]]
-
+        self.equation.X_ref.assign(self.x.n(name))
         self.scheme.apply(xnp1(name), *x_in)
 
 

@@ -149,9 +149,9 @@ class TransportMethod(SpatialMethod):
                     lambda t: t.has_label(transport) and t.has_label(horizontal_transport) and t.get(prognostic) == self.variable,
                     map_if_true=lambda _: new_horizontal_term)
 
-                equation.residual = equation.residual.label_map(
-                    lambda t: t.has_label(transport) and t.has_label(vertical_transport) and t.get(prognostic) == self.variable,
-                    map_if_true=lambda _: new_vertical_term)
+                # equation.residual = equation.residual.label_map(
+                #     lambda t: t.has_label(transport) and t.has_label(vertical_transport) and t.get(prognostic) == self.variable,
+                #     map_if_true=lambda _: new_vertical_term)
             else:
                 raise RuntimeError('Found multiple transport terms for the same '
                                    'variable in the equation where there should only be one')

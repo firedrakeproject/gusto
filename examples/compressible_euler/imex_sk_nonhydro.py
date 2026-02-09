@@ -26,7 +26,8 @@ from gusto import (
     compressible_hydrostatic_balance, RungeKuttaFormulation, SubcyclingOptions,
     SSPRK3, SUPGOptions, Divergence, CourantNumber, IMEX_SSP3, hybridised_solver_parameters,
     implicit, explicit, transport, time_derivative, split_continuity_form, Timestepper,
-    split_hv_advective_form, SplitDGUpwind, horizontal_transport, vertical_transport
+    split_hv_advective_form, SplitDGUpwind, horizontal_transport, vertical_transport,
+    pressure_gradient, coriolis, divergence, gravity
 )
 PETSc.Sys.popErrorHandler()
 
@@ -127,19 +128,25 @@ def skamarock_klemp_nonhydrostatic(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     eqns = split_continuity_form(eqns)
-    eqns = split_hv_advective_form(eqns, "rho")
-    eqns = split_hv_advective_form(eqns, "theta")
-    eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
-    eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(horizontal_transport), explicit)
-    eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(vertical_transport), implicit)
-    eqns.label_terms(lambda t: t.has_label(transport) and not any(t.has_label(horizontal_transport, vertical_transport)), explicit)
+    # eqns = split_hv_advective_form(eqns, "rho")
+    # eqns = split_hv_advective_form(eqns, "theta")
+    implicit_terms = [divergence, pressure_gradient, gravity]
+    explicit_terms = [transport, coriolis]
+    for term in implicit_terms:
+        eqns.label_terms(lambda t: t.has_label(term), implicit)
+    for term in explicit_terms:
+        eqns.label_terms(lambda t: t.has_label(term), explicit)
+    # eqns.label_terms(lambda t: not any(t.has_label(time_derivative, transport)), implicit)
+    # eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(horizontal_transport), explicit)
+    # eqns.label_terms(lambda t: t.has_label(transport) and t.has_label(vertical_transport), implicit)
+    # eqns.label_terms(lambda t: t.has_label(transport) and not any(t.has_label(horizontal_transport, vertical_transport)), explicit)
 
     # eqns = split_continuity_form(eqns)
     # opts =SUPGOptions(suboptions={"theta": [transport]})
     transport_methods = [
         DGUpwind(eqns, "u"),
-        SplitDGUpwind(eqns, "rho"),
-        SplitDGUpwind(eqns, "theta")
+        DGUpwind(eqns, "rho"),
+        DGUpwind(eqns, "theta")
     ]
 
     # Linear solver

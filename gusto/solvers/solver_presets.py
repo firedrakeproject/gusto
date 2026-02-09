@@ -72,7 +72,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'ksp_type': 'preonly',
             'mat_type': 'matfree',
             'pc_type': 'python',
-            'pc_python_type': 'gusto.CompressibleHybridisedSCPC',
+            'pc_python_type': 'gusto.CompressibleHybridisedSCPCIMEX',
         }
 
         # We pass the implicit weighting parameter (alpha) and tau_values to the
@@ -367,18 +367,16 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
        settings = {
            'snes_type': 'newtonls',
            'snes_max_it': 50,
-           'snes_atol': 1e-4,
-           'snes_rtol': 1e-4,
-           'snes_converged_reason': None,
+           'snes_atol': 1e-3,
+           'snes_rtol': 1e-3,
        } | settings
 
-       settings['ksp_type'] = 'gmres'
+       settings['ksp_type'] = 'preonly'
        settings['ksp_max_it'] = 200
        settings['ksp_rtol'] = 1e-4
        settings['ksp_atol'] = 1e-12
-    #    settings['ksp_norm_type'] = 'unpreconditioned'
-       settings['ksp_monitor_true_residual'] = None
-       settings['snes_monitor'] = None
+       settings['ksp_norm_type'] = 'unpreconditioned'
+       #settings['ksp_monitor_true_residual'] = None
 
        print(settings)
 

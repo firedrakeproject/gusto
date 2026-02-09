@@ -2,15 +2,16 @@
 
 from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver, ufl_expr)
-from firedrake.fml import replace_subject, all_terms, drop
-from firedrake.utils import cached_property
-from gusto.core.labels import time_derivative, implicit, explicit, source_label
+from firedrake.fml import replace_subject, all_terms, drop, Term
+import ufl
+from gusto.core.labels import time_derivative, implicit, explicit, source_label, transporting_velocity, LabelledForm
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
 from gusto.solvers.solver_presets import hybridised_solver_parameters
 import numpy as np
 from gusto.equations.compressible_euler_equations import CompressibleEulerEquations
+from firedrake.utils import cached_property
 
 
 __all__ = ["IMEXRungeKutta", "IMEX_Euler", "IMEX_ARS3", "IMEX_ARK2",
@@ -123,6 +124,7 @@ class IMEXRungeKutta(TimeDiscretisation):
                                                 'sub_pc_type': 'ilu'}
         else:
             self.nonlinear_solver_parameters = nonlinear_solver_parameters
+            
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -144,6 +146,7 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
         self.source = [Function(self.fs) for i in range(self.nStages)]
+
 
     def res(self, stage):
         """Set up the discretisation's residual for a given stage."""
@@ -198,48 +201,87 @@ class IMEXRungeKutta(TimeDiscretisation):
             map_if_false=lambda t: Constant(self.butcher_imp[stage, stage])*self.dt*t)
         residual += r_imp
         return residual.form
+    
+    def update_transporting_velocity(self, residual, uadv):
+        """
+        Set up the time discretisation by replacing the transporting velocity
+        used by the appropriate one for this time loop.
 
-    @property
-    def final_res(self):
-        """Set up the discretisation's final residual."""
-        # Add time derivative terms  y^{n+1} - y^n
-        mass_form = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                            map_if_false=drop)
-        residual = mass_form.label_map(all_terms,
-                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
-        residual -= mass_form.label_map(all_terms,
-                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
-        # Loop through stages up to s-1 and calcualte/sum
-        # dt*(b_1*F(y_1) + b_2*F(y_2) + .... + b_s*F(y_s))
-        # and
-        # dt*(e_1*S(y_1) + e_2*S(y_2) + .... + e_s*S(y_s))
-        for i in range(self.nStages):
-            r_exp = self.residual.label_map(
-                lambda t: t.has_label(explicit),
-                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
-                map_if_false=drop)
-            r_exp = r_exp.label_map(
-                lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.butcher_exp[self.nStages, i])*self.dt*t)
-            r_imp = self.residual.label_map(
-                lambda t: t.has_label(implicit),
-                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
-                map_if_false=drop)
-            r_imp = r_imp.label_map(
-                lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.butcher_imp[self.nStages, i])*self.dt*t)
-            residual += r_imp
-            residual += r_exp
-            # Calculate source terms
-            r_source = self.residual.label_map(
-                lambda t: t.has_label(source_label),
-                map_if_true=replace_subject(self.source[i], old_idx=self.idx),
-                map_if_false=drop)
-            r_source = r_source.label_map(
-                all_terms,
-                map_if_true=lambda t: Constant(self.butcher_exp[self.nStages, i])*self.dt*t)
-            residual += r_source
-        return residual.form
+        Args:
+            scheme (:class:`TimeDiscretisation`): the time discretisation whose
+                transport term should be replaced with the transport term of
+                this discretisation.
+        """
+        
+
+        residual = residual.label_map(
+            lambda t: t.has_label(transporting_velocity),
+            map_if_true=lambda t:
+            Term(ufl.replace(t.form, {t.get(transporting_velocity): uadv}), t.labels)
+        )
+
+        residual = transporting_velocity.update_value(residual, uadv)
+
+        # Now also replace transporting velocity in the terms that are
+        # contained in labels
+        for idx, t in enumerate(residual.terms):
+            if t.has_label(transporting_velocity):
+                for label in t.labels.keys():
+                    if type(t.labels[label]) is LabelledForm:
+                        t.labels[label] = t.labels[label].label_map(
+                            lambda s: s.has_label(transporting_velocity),
+                            map_if_true=lambda s:
+                            Term(ufl.replace(
+                                s.form,
+                                {s.get(transporting_velocity): uadv}),
+                                s.labels
+                            )
+                        )
+
+                        residual.terms[idx].labels[label] = \
+                            transporting_velocity.update_value(t.labels[label], uadv)
+
+    # @property
+    # def final_res(self):
+    #     """Set up the discretisation's final residual."""
+    #     # Add time derivative terms  y^{n+1} - y^n
+    #     mass_form = self.residual.label_map(lambda t: t.has_label(time_derivative),
+    #                                         map_if_false=drop)
+    #     residual = mass_form.label_map(all_terms,
+    #                                    map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+    #     residual -= mass_form.label_map(all_terms,
+    #                                     map_if_true=replace_subject(self.x1, old_idx=self.idx))
+    #     # Loop through stages up to s-1 and calcualte/sum
+    #     # dt*(b_1*F(y_1) + b_2*F(y_2) + .... + b_s*F(y_s))
+    #     # and
+    #     # dt*(e_1*S(y_1) + e_2*S(y_2) + .... + e_s*S(y_s))
+    #     for i in range(self.nStages):
+    #         r_exp = self.residual.label_map(
+    #             lambda t: t.has_label(explicit),
+    #             map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
+    #             map_if_false=drop)
+    #         r_exp = r_exp.label_map(
+    #             lambda t: t.has_label(time_derivative),
+    #             map_if_false=lambda t: Constant(self.butcher_exp[self.nStages, i])*self.dt*t)
+    #         r_imp = self.residual.label_map(
+    #             lambda t: t.has_label(implicit),
+    #             map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
+    #             map_if_false=drop)
+    #         r_imp = r_imp.label_map(
+    #             lambda t: t.has_label(time_derivative),
+    #             map_if_false=lambda t: Constant(self.butcher_imp[self.nStages, i])*self.dt*t)
+    #         residual += r_imp
+    #         residual += r_exp
+    #         # Calculate source terms
+    #         r_source = self.residual.label_map(
+    #             lambda t: t.has_label(source_label),
+    #             map_if_true=replace_subject(self.source[i], old_idx=self.idx),
+    #             map_if_false=drop)
+    #         r_source = r_source.label_map(
+    #             all_terms,
+    #             map_if_true=lambda t: Constant(self.butcher_exp[self.nStages, i])*self.dt*t)
+    #         residual += r_source
+    #     return residual.form
 
     @cached_property
     def solvers(self):
@@ -255,13 +297,13 @@ class IMEXRungeKutta(TimeDiscretisation):
             solvers.append(NonlinearVariationalSolver(problem, appctx=appctx, solver_parameters=solver_parameters, options_prefix=solver_name))
         return solvers
 
-    @cached_property
-    def final_solver(self):
-        """Set up a solver for the final solve to evaluate time level n+1."""
-        # setup solver using residual (res) defined in derived class
-        problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
-        solver_name = self.field_name+self.__class__.__name__
-        return NonlinearVariationalSolver(problem, solver_parameters=self.linear_solver_parameters, options_prefix=solver_name)
+    # @cached_property
+    # def final_solver(self):
+    #     """Set up a solver for the final solve to evaluate time level n+1."""
+    #     # setup solver using residual (res) defined in derived class
+    #     problem = NonlinearVariationalProblem(self.final_res, self.x_out, bcs=self.bcs)
+    #     solver_name = self.field_name+self.__class__.__name__
+    #     return NonlinearVariationalSolver(problem, solver_parameters=self.linear_solver_parameters, options_prefix=solver_name)
 
     @wrapper_apply
     def apply(self, x_out, x_in):
@@ -289,19 +331,20 @@ class IMEXRungeKutta(TimeDiscretisation):
             if (isinstance(self.equation, CompressibleEulerEquations) and pc.getType() == "python"):
                 self.equation.X_ref.assign(self.x_out)
                 self.equation.update_reference_profiles()
-                pc.getPythonContext().update(pc)
+                # pc.getPythonContext().update(pc)
             #self.x1.assign(self.x_out)
+            # uadv = self.xs[stage-1].subfunctions[0] 
+            # self.update_transporting_velocity(uadv)
             self.solver.solve()
-
             # Apply limiter
             if self.limiter is not None:
                 self.limiter.apply(self.x_out)
             self.xs[stage].assign(self.x_out)
 
-        # Solve final stage
-        for evaluate in self.evaluate_source:
-            evaluate(self.xs[-1], self.dt, x_out=self.source[-1])
-        self.final_solver.solve()
+        # # Solve final stage
+        # for evaluate in self.evaluate_source:
+        #     evaluate(self.xs[-1], self.dt, x_out=self.source[-1])
+        # self.final_solver.solve()
 
         # Apply limiter
         if self.limiter is not None:
