@@ -278,7 +278,10 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 raise ValueError(f'When initialising reference profile {field_name}'
                                  + ' the passed profile must be a Function')
             # if field name is not prognostic we need to add it
-            ref.interpolate(profile)
+            if field_name == 'u':
+                ref.project(profile)
+            else:
+                ref.interpolate(profile)
             # Assign profile to X_ref belonging to equation
             if isinstance(self.equation, PrognosticEquationSet):
                 if field_name in self.equation.field_names:

@@ -184,6 +184,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             u_vert = domain.k*inner(u, domain.k)
             u_horiz = u - u_vert
             u_vert_scaled = (Constant(1.0)/self.gamma_z)*u_vert
+            #u_advect = u_horiz + u_vert
 
             # This is the test function
             w_vert = domain.k*inner(w, domain.k)
@@ -192,6 +193,11 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             # PML u test function
             q_u_test_vert = domain.k*inner(q_u_test, domain.k)
             #q_u_test_horiz = q_u_test - q_u_test_vert
+
+            # Decompose the u perturbation
+            u_vert_pert = domain.k*inner(u_pert, domain.k)
+            u_horiz_pert = u_pert - u_vert_pert
+            u_vert_pert_scaled = u_vert_pert/self.gamma_z
 
             # For the PML, scale the vertical advecting velocity:
             scale_vect = as_vector([Constant(1.0), self.gamma_z])
@@ -238,9 +244,11 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # Density transport (conservative form)
         if PML_options is not None:
             # Directly construct the form, for now.
-            L = inner(phi, div(u_horiz*rho) + (1/self.gamma_z)*div(u_vert*rho))*dx
-            form = transporting_velocity(L, u_advect)
-            rho_adv = prognostic(transport(form, TransportEquationType.conservative), 'rho')
+            #L = inner(phi, div(u_horiz*rho) + (1/self.gamma_z)*div(u_vert*rho))*dx
+            #form = transporting_velocity(L, u_advect)
+            #rho_adv = prognostic(transport(form, TransportEquationType.conservative), 'rho')
+            # For testing:
+            rho_adv = prognostic(continuity_form(phi, rho, u), 'rho')
         else:
             rho_adv = prognostic(continuity_form(phi, rho, u), 'rho')
 
@@ -429,17 +437,23 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             # Probably should add linearisations, but see if we can get away without for now.
 
             # q_w equation pressure terms:
-            residual -= subject(prognostic(exner_pert*div((cp/self.gamma_z)*q_u_test_vert*theta_bar)*dx, 'q_u'), self.X)
-            residual -= subject(prognostic(exner_bar*div((cp/self.gamma_z)*q_u_test_vert*theta_pert)*dx, 'q_u'), self.X)
+            residual += subject(prognostic(cp*exner_pert*div((q_u_test_vert/self.gamma_z)*theta_bar)*dx, 'q_u'), self.X)
+            residual += subject(prognostic(cp*exner_bar*div((q_u_test_vert/self.gamma_z)*theta_pert)*dx, 'q_u'), self.X)
 
-            # q_rho equation pressure gradient:
+            # q_rho equation transport term
+            L = inner(q_rho_test, div(u_horiz_pert*rho_bar) + (1/self.gamma_z)*div(u_vert_pert*rho_bar))*dx
+            form = transporting_velocity(L, u_advect)
+            q_rho_adv = prognostic(transport(form, TransportEquationType.conservative), 'q_rho')
+            residual -= q_rho_adv
 
-            # q_rho equation vertical advection:
+            # q_theta advection term
+            #q_theta_adv = prognostic(advection_form(q_theta_test, theta_bar, u_vert_pert_scaled), 'q_theta')
+            #q_theta_adv = prognostic(advection_form(q_theta_test, theta_bar, u_advect), 'q_theta')
+            #residual -= q_theta_adv
 
-            # q_theta buoyancy term
-            residual -= subject(prognostic(
-                cp*(-div(theta_v*w)*exner*dx_qp
-                    + jump(theta_v*w, n)*avg(exner)*dS_v_qp), 'u'), self.X)
+            #residual -= subject(prognostic(
+            #    cp*(-div(theta_v*w)*exner*dx_qp
+            #        + jump(theta_v*w, n)*avg(exner)*dS_v_qp), 'u'), self.X)
 
             
             # Six sigma PML terms, one for each equation
@@ -451,6 +465,9 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             residual += subject(prognostic((self.sigma+alpha)*inner(q_u_test, q_u)*dx, 'q_u'), self.X) 
             residual += subject(prognostic(q_rho_test*(self.sigma+alpha)*q_rho*dx, 'q_rho'), self.X)
             residual += subject(prognostic(q_theta_test*(self.sigma+alpha)*q_theta*dx, 'q_theta'), self.X)
+
+        #for term in residual.terms:
+        #    print(term.form)
 
         # -------------------------------------------------------------------- #
         # Linearise equations

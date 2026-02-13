@@ -260,6 +260,10 @@ class IO(object):
             logger.info("Physical parameters that take non-default values:")
             logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items() if type(v) is not MeshGeometry))
 
+        if hasattr(equation, 'PML_options') and equation.PML_options is not None:
+            logger.info("PML parameters")
+            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.PML_options).items() if type(v) is not MeshGeometry))
+
     def setup_log_courant(self, state_fields, name='u', component="whole",
                           expression=None):
         """

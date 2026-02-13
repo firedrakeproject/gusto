@@ -20,7 +20,7 @@ import numpy as np
 
 __all__ = ["Diagnostics", "DiagnosticField", "CourantNumber", "Gradient",
            "XComponent", "YComponent", "ZComponent", "MeridionalComponent",
-           "ZonalComponent", "RadialComponent", "Energy", "KineticEnergy",
+           "ZonalComponent", "RadialComponent", "Energy", "KineticEnergy", "VerticalKineticEnergy",
            "Sum", "Difference", "SteadyStateError", "Perturbation",
            "Divergence", "TracerDensity", "IterativeDiagnosticField",
            "CumulativeSum"]
@@ -803,6 +803,35 @@ class KineticEnergy(Energy):
         """
         u = state_fields("u")
         self.expr = self.kinetic(u)
+        super().setup(domain, state_fields)
+
+class VerticalKineticEnergy(Energy):
+    """Diagnostic kinetic energy density."""
+    name = "VerticalKineticEnergy"
+
+    def __init__(self, space=None, method='interpolate'):
+        """
+        Args:
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        super().__init__(space=space, method=method, required_fields=("u"))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        u = state_fields("u")
+        u_vert = domain.k*inner(u, domain.k)
+        self.expr = self.kinetic(u_vert)
         super().setup(domain, state_fields)
 
 

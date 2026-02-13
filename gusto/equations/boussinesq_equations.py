@@ -361,22 +361,24 @@ class BoussinesqEquations(PrognosticEquationSet):
             #residual -= subject(q_u_adv + q_p_adv + q_b_adv, self.X)
 
             # Vertical pressure gradient term
-            residual += pressure_gradient(subject(prognostic(
-                p_pert*div(q_u_test_vert/self.gamma_z)*dx, 'q_u'), self.X))
+            residual += subject(prognostic(
+                p_pert*div(q_u_test_vert/self.gamma_z)*dx, 'q_u'), self.X)
 
-            # Divergence term
-            residual -= divergence(
-                subject(prognostic(cs**2 * (q_p_test * (1/self.gamma_z) * div(u_pert_vert) * dx), 'q_p'), self.X))
-    
-            # Perturbed buoyancy term for q_b.
-            # Here we use that d b_bar/dt = N^2.
-            #N = parameters.N
-            #residual -= gravity(subject(prognostic(q_b_test * (u_vert_pert/self.gamma_z) * N**2 * dx, 'q_b'), self.X))
-
-            # Also a perturbed buoyancy term for q_p
+            # A perturbed buoyancy term for q_p. Use that d p_bar/dz = N^2 z.
+            # Or, try with keeping d p_bar /dz??
+            # ORRR replace d p_bar /dz with b_bar
             #z = x[len(x)-1]
-            #residual -= gravity(subject(prognostic(q_p_test * (u_vert_pert/self.gamma_z) * N**2 * z * dx, 'q_p'), self.X))
-            
+            #residual -= subject(prognostic(q_p_test * (u_vert_pert/self.gamma_z) * N**2 * z * dx, 'q_p'), self.X)
+            residual -= subject(prognostic(q_p_test * (u_vert_pert/self.gamma_z) * b_bar * dx, 'q_p'), self.X)
+
+            # Divergence term for q_p
+            residual -= subject(prognostic(cs**2 * (q_p_test * (1/self.gamma_z) * div(u_pert_vert) * dx), 'q_p'), self.X)
+
+            # Perturbed buoyancy term for q_b.
+            # Here we use that d b_bar/dz = N^2.
+            N = parameters.N
+            residual -= subject(prognostic(q_b_test * (u_vert_pert/self.gamma_z) * N**2 * dx, 'q_b'), self.X)
+
             # The PML damping terms
             residual -= subject(prognostic(self.sigma*inner(w, q_u)*dx, 'u'), self.X)
             residual -= subject(prognostic(phi*self.sigma*q_p*dx, 'p'), self.X)
