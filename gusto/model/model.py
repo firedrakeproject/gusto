@@ -11,8 +11,8 @@ class ModelBase(object, metaclass=ABCMeta):
     """Base model class."""
 
     def __init__(self, mesh, dt, parameters, equation,
-                 family=None, element_order=None,
-                 no_normal_flow_bc_ids=None, **kwargs):
+                 element_order, family=None,
+                 **kwargs):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
@@ -21,17 +21,36 @@ class ModelBase(object, metaclass=ABCMeta):
                 equation parameters.
             equation (:class:`PrognosticEquationSet`): defines the model's
                 prognostic equation
+            element_order (int): the element degree used for the DG
+                space. Defaults to None.
             family (str, optional): the finite element space family used for
                 the velocity field. This determines the other finite element
                 spaces used via the de Rham complex. If not provided, an
                 appropriate choice will be made based on the cell of the mesh
                 (or the base mesh in 3D).
-            element_order (int): the element degree used for the DG
-                space. Defaults to None.
+
+        Kwargs:
+            Kwargs are passed straight through to the equation class; see
+            those classes for full documentation. Some common kwargs are
+            listed below.
+
+            u_transport_option (str, optional): specifies the transport term
+                used for the velocity equation. Supported options are:
+                'vector_invariant_form', 'vector_advection_form', and
+                'circulation_form'.Defaults to 'vector_invariant_form'.
+            diffusion_options (iterable, optional): iterable of
+                ``(field_name, diffusion_parameters)`` pairs where
+                diffusion_parameters is a :class:`DiffusionParameters`
+                object specifying the diffusion parameters to be applied
+                to the field field_name.  Defaults to None.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
                 None.
+            active_tracers (list, optional): a list of `ActiveTracer` objects
+                that encode the metadata for any active tracers to be included
+                in the equations. Defaults to None.
         """
+
         # if HDiv finite element family not provided figure out a
         # sensible default based on the cell shape of the mesh
         if family is None:
@@ -47,7 +66,9 @@ class ModelBase(object, metaclass=ABCMeta):
             elif cell == "triangle":
                 family = "BDM"
             else:
-                raise ValueError(f"The mesh provided (or its base mesh if 3D) must have cells of type interval, quadrilateral or triangle, not {cell}.")
+                raise ValueError(f"The mesh provided (or its base mesh if \
+                extruded) must have cells of type interval, quadrilateral \
+                or triangle, not {cell}.")
 
         # create domain
         self.domain = Domain(mesh, dt, family, element_order)
@@ -55,6 +76,8 @@ class ModelBase(object, metaclass=ABCMeta):
         # set up prognostic equations
         self.equation = equation(self.domain, parameters, **kwargs)
 
+        # store diffusions options as needed to set up spatial methods
+        # and diffusion schemes - default is an empty list
         self.diffusion_options = kwargs.get("diffusion_options", [])
 
     @abstractmethod
@@ -107,6 +130,11 @@ class SIQNModel(ModelBase):
         Args:
             output (:class:`OutputParameters`): provides parameters
                 controlling output
+
+        Kwargs:
+            diagnostic_fields
+            subcycling_options
+            Remaining kwargs are passed straight through to the stepper.
         """
 
         diagnostic_fields = kwargs.pop("diagnostic_fields", None)
@@ -124,8 +152,11 @@ class SIQNModel(ModelBase):
         )
 
 
-class Model(SIQNModel):
+class GustoModel(SIQNModel):
 
+    """
+    Class encapsulating the current best setup for Gusto.
+    """
     def __init__(self, mesh, dt, parameters, equation,
                  family=None,
                  no_normal_flow_bc_ids=None, **kwargs):
