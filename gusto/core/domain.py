@@ -28,7 +28,7 @@ class Domain(object):
     """
     def __init__(self, mesh, dt, family, degree=None,
                  horizontal_degree=None, vertical_degree=None,
-                 max_quad_degree=None):
+                 max_quad_degree=None, move_mesh=False):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
@@ -130,6 +130,8 @@ class Domain(object):
             if dim == 2:
                 self.perp = perp
                 self.divperp = lambda u: -u[0].dx(1) + u[1].dx(0)
+
+        self.move_mesh = move_mesh
 
         # -------------------------------------------------------------------- #
         # Construct information relating to height/radius
