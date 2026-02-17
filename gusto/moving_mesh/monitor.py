@@ -104,7 +104,7 @@ class MonitorFunction(object):
         self.f.dat.data[:] = self.user_f.dat.data[:]
 
         # TODO don't need to do this if adapting to function
-        assemble(self.L_vp1, tensor=self.gradq)
+        assemble(interpolate(self.L_vp1, self.f.function_space()), tensor=self.gradq)
         self.gradq.dat /= assemble(self.a_vp1_lumped).dat  # obtain weak gradient
         if self.adapt_to == "hessian":
             assemble(self.L_tp1, tensor=self.hessq)
