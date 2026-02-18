@@ -28,7 +28,7 @@ from gusto.equations.compressible_euler_equations import CompressibleEulerEquati
 
 
 __all__ = ["TimeDiscretisation", "ExplicitTimeDiscretisation", "BackwardEuler",
-           "ThetaMethod", "TrapeziumRule", "TR_BDF2", "IMEX_Euler2"]
+           "ThetaMethod", "TrapeziumRule", "TR_BDF2", "IMEX_Euler2", "IMEX_Euler3"]
 
 
 def wrapper_apply(original_apply):
@@ -866,6 +866,208 @@ class IMEX_Euler2(TimeDiscretisation):
         x_out.assign(self.x1)
 
 
+class IMEX_Euler3(TimeDiscretisation):
+    """
+    Implements the backward Euler timestepping scheme.
+
+    The backward Euler method for operator F is the most simple implicit scheme: \n
+    y^(n+1) = y^n + dt*F[y^(n+1)].                                               \n
+    """
+    def __init__(self, domain, field_name=None, subcycling_options=None,
+                 solver_parameters=None, limiter=None, options=None,
+                 augmentation=None):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
+                Defaults to None.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
+            """
+        if not solver_parameters:
+            # default solver parameters
+            solver_parameters = {'ksp_type': 'gmres',
+                                 'pc_type': 'bjacobi',
+                                 'sub_pc_type': 'ilu'}
+        super().__init__(domain=domain, field_name=field_name,
+                         subcycling_options=subcycling_options,
+                         solver_parameters=solver_parameters,
+                         limiter=limiter, options=options,
+                         augmentation=augmentation)
+
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        """
+        Set up the time discretisation based on the equation.
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            apply_bcs (bool, optional): whether boundary conditions are to be
+                applied. Defaults to True.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation to include.
+        """
+        super().setup(equation, apply_bcs, *active_labels)
+
+        # if user has specified a number of fixed subcycles, then save this
+        # and rescale dt accordingly; else perform just one cycle using dt
+        if (self.subcycling_options is not None
+                and self.subcycling_options.fixed_subcycles is not None):
+            self.dt.assign(self.dt/self.fixed_subcycles)
+            self.ncycles = self.fixed_subcycles
+        else:
+            self.dt = self.dt
+            self.ncycles = 1
+        self.x0 = Function(self.fs)
+        self.x1 = Function(self.fs)
+        self.dt_exp = 0.0
+
+    @property
+    def res_imp(self):
+        """Set up the discretisation's residual."""
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual -= mass_form.label_map(all_terms,
+                                        
+                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        r_imp = self.residual.label_map(
+            lambda t: t.has_label(implicit),
+            map_if_true=replace_subject(
+                self.x_out, old_idx=self.idx
+            ),
+            map_if_false=drop
+        )
+        r_imp = r_imp.label_map(
+            all_terms,
+            map_if_true=lambda t: self.dt*t
+        )
+        residual += r_imp
+
+        return residual.form
+
+    @property
+    def res_exp(self):
+        """Set up the discretisation's residual."""
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual -= mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        r_exp = self.residual.label_map(
+            lambda t: t.has_label(explicit),
+            map_if_true=replace_subject(
+                self.x1, old_idx=self.idx
+            ),
+            map_if_false=drop
+        )
+        r_exp = r_exp.label_map(
+            all_terms,
+            map_if_true=lambda t: self.dt_exp*t
+        )
+
+        residual += r_exp
+
+        return residual.form
+
+
+    @cached_property
+    def solver_imp(self):
+        """Set up the problem and the solver."""
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res_imp, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__
+        solver_parameters, appctx = hybridised_solver_parameters(self.equation, ['u', 'rho', 'theta'], alpha=1.0, tau_values=None, nonlinear=True)
+        solver = NonlinearVariationalSolver(
+            problem,
+            appctx=appctx,
+            solver_parameters=solver_parameters,
+            options_prefix=solver_name
+        )
+        if logger.isEnabledFor(DEBUG):
+            solver.snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
+        return solver
+
+    @cached_property
+    def solver_exp(self):
+        """Set up the problem and the solver."""
+        # setup solver using residual (res) defined in derived class
+        problem = NonlinearVariationalProblem(self.res_exp, self.x_out, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_exp"
+        solver_parameters, appctx = hybridised_solver_parameters(self.equation, ['u', 'rho', 'theta'], alpha=1.0, tau_values=None, nonlinear=True)
+        self.linear_solver_parameters = {'ksp_type': 'gmres',
+                                         'pc_type': 'bjacobi',
+                                         'sub_pc_type': 'ilu'}
+        solver = NonlinearVariationalSolver(
+            problem,
+            solver_parameters=self.linear_solver_parameters,
+            options_prefix=solver_name
+        )
+        if logger.isEnabledFor(DEBUG):
+            solver.snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
+        return solver
+
+    def apply_cycle(self, x_out, x_in):
+        """
+        Apply the time discretisation through a single sub-step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
+        """
+
+        for evaluate in self.evaluate_source:
+            evaluate(x_in, self.dt)
+
+        self.x1.assign(x_in)
+        # Set initial solver guess
+        self.x_out.assign(x_in)
+        # # TODO: Issue #686 is to address this reference profile update bug (pythonPC update not called)
+        # # this line forces it to update for now
+        # pc = self.solver.snes.getKSP().getPC()
+        # if (isinstance(self.equation, CompressibleEulerEquations) and pc.getType() == "python"):
+        #     self.equation.X_ref.assign(x_in)
+        #     self.equation.update_reference_profiles()
+            # pc.getPythonContext().update(pc)
+        self.dt_exp = (self.dt)
+        print("dt_exp", self.dt_exp)
+        self.solver_exp.solve()
+        self.x1.assign(self.x_out)
+        self.solver_imp.solve()
+        x_out.assign(self.x_out)
+
+    @wrapper_apply
+    def apply(self, x_out, x_in):
+        """
+        Apply the time discretisation to advance one whole time step.
+
+        Args:
+            x_out (:class:`Function`): the output field to be computed.
+            x_in (:class:`Function`): the input field.
+        """
+        self.update_subcycling()
+
+        self.x0.assign(x_in)
+        for i in range(self.ncycles):
+            self.subcycle_idx = i
+            self.apply_cycle(self.x1, self.x0)
+            self.x0.assign(self.x1)
+        x_out.assign(self.x1)
+
 class ThetaMethod(TimeDiscretisation):
     """
     Implements the theta implicit-explicit timestepping method, which can
@@ -1047,7 +1249,7 @@ class TrapeziumRule(ThetaMethod):
     
     def setup(self, equation, apply_bcs=True, *active_labels):
         super().setup(equation, apply_bcs, *active_labels)
-        self.solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, ['u', 'rho', 'theta'], alpha=0.5, tau_values=None, nonlinear=True)
+        self.solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, ['u', 'rho', 'theta'], alpha=1.0, tau_values=None, nonlinear=True)
 
 
 
