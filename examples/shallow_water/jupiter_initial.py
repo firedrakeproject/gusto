@@ -512,7 +512,6 @@ tau_r = 5  # number of days for timescale
 setup = 'single'
 
 ##########################################################################
-
 if coriolisform == 'fplane':
     fplane = True
     flattrap = False
