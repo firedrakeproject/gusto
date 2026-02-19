@@ -384,3 +384,223 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         # If a source output is provided, assign the source term to it
         if x_out is not None:
             x_out.assign(self.source)
+
+
+def w(parameters, P):
+
+    L = parameters.L
+    rho0 = parameters.rho0
+    Cp = parameters.Cp
+    dtheta = parameters.dtheta
+
+    if parameters.adjust_Qcl:
+        Qcl = conditional(P > 0, parameters.Qcl_factor*parameters.Qcl, parameters.Qcl)
+    else:
+        Qcl = parameters.Qcl
+
+    return (L * P - Qcl) / (rho0 * Cp * dtheta)
+
+
+def precip(parameters, q):
+
+    qC = parameters.qC
+    mB = parameters.mB
+    q_ut = parameters.q_ut
+
+    return conditional(q > qC, mB * (q - q_ut), 0)
+
+
+def evap(parameters, q, u, qs):
+
+    cD = parameters.cD
+
+    if wind_dependant:
+        return conditional(
+            qs > q,
+            cD * sqrt(dot(u, u)) * (qs - q),
+            0)
+    else:
+        return conditional(
+            qs > q,
+            rho0 * cH * (qs - q),
+            0)
+
+
+def qW(q, P, w):
+
+    descent_expr = conditional(w < 0, w, 0)
+    ascent_expr = conditional(w >= 0, q * w - P, 0)
+    return assemble(ascent_expr * dx) / assemble(descent_expr * dx)
+
+
+class LinearFriction(PhysicsParametrisation):
+
+    def __init__(self, equation):
+
+        label_name = 'linear_friction'
+        super().__init__(equation, label_name)
+
+        r = self.parameters.r
+        W = equation.function_space
+        Vu = W.sub(0)
+        test_u = equation.tests[0]
+        self.u = Function(Vu)
+
+        equation.residual += source_label(self.label(
+            subject(inner(test_u, r * self.u) * dx, equation.X),
+            self.evaluate
+        ))
+
+    def evaluate(self, x_in, dt, x_out=None):
+
+        self.u.assign(x_in.subfunctions[0])
+
+
+class VerticalVelocity(PhysicsParametrisation):
+
+    def __init__(self, equation, max_its=10, tol=1e-6, inc=1e-2):
+
+        label_name = 'vertical_velocity'
+        super().__init__(equation, label_name)
+
+        self.max_its = max_its
+        self.tol = tol
+        self.diff = inc * self.parameters.qC
+
+        W = equation.function_space
+        Vh = W.sub(1)
+        test_h = equation.tests[1]
+        self.q = Function(Vh)
+        self.P = Function(Vh)
+        self.w = Function(Vh)
+
+        equation.residual += source_label(self.label(
+            subject(test_h * self.w * dx, equation.X),
+            self.evaluate
+        ))
+
+    def evaluate(self, x_in, dt, x_out=None):
+
+        if self.parameters.conserve_mass:
+            total_w = 1.
+            nits = 0
+            while abs(total_w) > self.tol and nits < self.max_its:
+                self.q.assign(x_in.subfunctions[-1])
+                self.P.interpolate(precip(self.parameters, self.q))
+                self.w.interpolate(w(self.parameters, self.P))
+                area = assemble(1*dx(domain=extract_unique_domain(self.w)))
+                total_w = assemble(self.w * dx) / area
+                if total_w > 0:
+                    self.parameters.qC += self.diff
+                else:
+                    self.parameters.qC -= self.diff
+                nits += 1
+                print(f"nits: {nits}, total_w: {total_w:.6f}, qC: {float(self.parameters.qC):.4f}, min w: {self.w.dat.data.min():.4f}, max w: {self.w.dat.data.max():.4f}")
+        self.q.assign(x_in.subfunctions[-1])
+        self.P.interpolate(precip(self.parameters, self.q))
+        self.w.interpolate(w(self.parameters, self.P))
+
+
+class Evaporation(PhysicsParametrisation):
+
+    def __init__(self, equation, qs, factor=None):
+
+        label_name = 'evaporation'
+        super().__init__(equation, label_name)
+
+        if factor is None:
+            factor = 1.
+
+        W = equation.function_space
+        Vu = W.sub(0)
+        self.u = Function(Vu)
+        Vq = W.sub(-1)
+        test_q = equation.tests[-1]
+        self.q = Function(Vq)
+        self.E = Function(Vq)
+        self.qs = qs
+
+        equation.residual -= source_label(self.label(
+            subject(test_q * factor * self.E * dx, equation.X),
+            self.evaluate
+        ))
+
+    def evaluate(self, x_in, dt, x_out=None):
+
+        self.u.assign(x_in.subfunctions[0])
+        self.q.assign(x_in.subfunctions[-1])
+        self.E.interpolate(evap(self.parameters, self.q, self.u, self.qs))
+
+
+class Precipitation(PhysicsParametrisation):
+
+    def __init__(self, equation):
+
+        label_name = 'precipitation'
+        super().__init__(equation, label_name)
+
+        rho0 = self.parameters.rho0
+        H = self.parameters.H
+
+        W = equation.function_space
+        Vu = W.sub(0)
+        self.u = Function(Vu)
+        Vq = W.sub(-1)
+        test_q = equation.tests[-1]
+        self.q = Function(Vq)
+        self.P = Function(Vq)
+
+        equation.residual += source_label(self.label(
+            subject(test_q * self.P / (rho0 * H) * dx, equation.X),
+            self.evaluate
+        ))
+
+    def evaluate(self, x_in, dt, x_out=None):
+
+        self.q.assign(x_in.subfunctions[-1])
+        self.P.interpolate(precip(self.parameters, self.q))
+
+
+class MoistureDescent(PhysicsParametrisation):
+
+    def __init__(self, equation):
+
+        label_name = 'moisture_descent'
+        super().__init__(equation, label_name)
+
+        self.qW = self.parameters.qW
+        H = self.parameters.H
+
+        W = equation.function_space
+        Vu = W.sub(0)
+        self.u = Function(Vu)
+        Vq = W.sub(-1)
+        test_q = equation.tests[-1]
+        self.P = Function(Vq)
+        self.w = Function(Vq)
+        self.q = Function(Vq)
+        self.qA = Function(Vq)
+
+        self.qA_expr = conditional(self.w < 0, self.qW, 0)
+
+        if self.parameters.use_w:
+            equation.residual += source_label(self.label(
+                subject(test_q * self.qA * self.w / H * dx, equation.X),
+                self.evaluate
+            ))
+        else:
+            equation.residual -= source_label(self.label(
+                subject(test_q * self.qA * div(self.u) * dx, equation.X),
+                self.evaluate
+            ))
+
+    def evaluate(self, x_in, dt, x_out=None):
+
+        self.q.assign(x_in.subfunctions[-1])
+        self.P.interpolate(precip(self.parameters, self.q))
+        self.w.interpolate(w(self.parameters, self.P))
+        if self.parameters.adjust_qW:
+            self.qW.assign(qW(self.q, self.P, self.w))
+        print(f"qW: {float(self.qW)}")
+        self.qA.interpolate(self.qA_expr)
+        self.u.assign(x_in.subfunctions[0])
