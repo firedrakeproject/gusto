@@ -4,7 +4,7 @@ Defines microphysics routines to be used with the moist shallow water equations.
 
 from firedrake import (
     conditional, Function, dx, min_value, max_value, FunctionSpace,
-    assemble, split
+    assemble, split, inner, sqrt, dot, div
 )
 from firedrake.__future__ import interpolate
 from firedrake.fml import subject
@@ -12,9 +12,12 @@ from gusto.core.logging import logger
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
 from gusto.core.labels import source_label
 from types import FunctionType
+from ufl.domain import extract_unique_domain
 
 
-__all__ = ["InstantRain", "SWSaturationAdjustment"]
+__all__ = ["InstantRain", "SWSaturationAdjustment", "LinearFriction",
+           "VerticalVelocity", "Evaporation", "Precipitation",
+           "MoistureDescent"]
 
 
 class InstantRain(PhysicsParametrisation):
@@ -410,11 +413,11 @@ def precip(parameters, q):
     return conditional(q > qC, mB * (q - q_ut), 0)
 
 
-def evap(parameters, q, u, qs):
+def evap(parameters, q, qs, u=None):
 
     cD = parameters.cD
 
-    if wind_dependant:
+    if u is not None:
         return conditional(
             qs > q,
             cD * sqrt(dot(u, u)) * (qs - q),
@@ -422,7 +425,7 @@ def evap(parameters, q, u, qs):
     else:
         return conditional(
             qs > q,
-            rho0 * cH * (qs - q),
+            cD * (qs - q),
             0)
 
 
