@@ -241,7 +241,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     def __init__(self, domain, parameters,
                  space_names=None, linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
-                 no_normal_flow_bc_ids=None, active_tracers=None):
+                 no_normal_flow_bc_ids=None, active_tracers=None,
+                 nonlinear_tracer_transport=False):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -277,8 +278,14 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
-        # Use the underlying routine to do a first linearisation of the equations
+        # Use the underlying routine to do a first linearisation of
+        # the equations
         self.linearise_equation_set()
+
+        # add in nonlinear transport for active tracers, if required
+        if nonlinear_tracer_transport:
+            self.residual += self.generate_tracer_transport_terms(
+                active_tracers)
 
 
 class ThermalShallowWaterEquations(ShallowWaterEquations):

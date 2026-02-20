@@ -1,6 +1,6 @@
 """Some simple tools for configuring the model."""
 from enum import Enum
-from firedrake import Function, FunctionSpace, Constant
+from firedrake import Function, FunctionSpace, Constant, exp
 import inspect
 
 
@@ -124,6 +124,40 @@ class ShallowWaterParameters(EquationParameters):
     q0 = None
     # Scaling factor for evaporation term when present
     cD = None
+    r = 3.6e-5          # linear coefficient of friction (N kg^-1 m^-1 s)
+    # =======================================================================
+    # Large scale moisture parameters
+    q_ut = 0.004        # upper-tropospheric specific humidity (kg kg^-1)
+    qW = q_ut           # tropically averaged descending moisture (kg
+                        # kg^-1). q_ut for now, but should be somewhat
+                        # higher probably.
+    # =======================================================================
+    # Parameters used to compute evaporation and precipitation
+    rho0 = 1            # constant density of boundary layer air (kg m^-3)
+    cH = 1e-3           # bulk coefficient (no units)
+    L = 2.5e6           # latent heat of condensation (J kg^-1)
+    Rw = 416            # specific gas constant for water vapour (J K^-1 kg^-1)
+    e0 = 2300*exp(L/(Rw*293.))   # reference saturation vapour pressure (Pa)
+    p0 = 1e5            # reference pressure (Pa)
+    mB = 0.006029       # boundary layer overturning timescale (kg m^-2 s^-1)
+
+    # =======================================================================
+    # Parameters used to compute vertical velocity w
+    Cp = 1005.          # specific heat capacity at constant pressure
+                        # of dry air (J K^-1 kg^-1)
+    dtheta = 50         # change in potential temperature across
+                        # troposphere (K)
+    Qcl = 100.          # net combined radiative-sensible cooling
+                        # of free atmosphere (W m^-2)
+    Qcl_factor = 0.5    # Factor to reduce Qcl by in precipitating regions
+    qC = 0.018          # critical specific humidity for
+                        # initiation of convection (kg kg^-1)
+    # =======================================================================
+    # Optimisation switches
+    adjust_qW = False
+    adjust_Qcl = False
+    use_w = True
+    conserve_mass = False
 
 
 class SpongeLayerParameters(EquationParameters):
