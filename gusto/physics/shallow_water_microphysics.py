@@ -506,7 +506,7 @@ class VerticalVelocity(PhysicsParametrisation):
 
 class Evaporation(PhysicsParametrisation):
 
-    def __init__(self, equation, qs, factor=None):
+    def __init__(self, equation, qs, wind_dependant=False, factor=None):
 
         label_name = 'evaporation'
         super().__init__(equation, label_name)
@@ -515,8 +515,12 @@ class Evaporation(PhysicsParametrisation):
             factor = 1.
 
         W = equation.function_space
-        Vu = W.sub(0)
-        self.u = Function(Vu)
+        if wind_dependant:
+            Vu = W.sub(0)
+            self.u = Function(Vu)
+        else:
+            self.u = None
+
         Vq = W.sub(-1)
         test_q = equation.tests[-1]
         self.q = Function(Vq)
@@ -532,7 +536,7 @@ class Evaporation(PhysicsParametrisation):
 
         self.u.assign(x_in.subfunctions[0])
         self.q.assign(x_in.subfunctions[-1])
-        self.E.interpolate(evap(self.parameters, self.q, self.u, self.qs))
+        self.E.interpolate(evap(self.parameters, self.q, self.qs, self.u))
 
 
 class Precipitation(PhysicsParametrisation):

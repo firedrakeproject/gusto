@@ -6,7 +6,7 @@ from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg, Di
                        interpolate, assemble)
 from firedrake.fml import subject, drop, all_terms
 from gusto.core.labels import (
-    linearisation, pressure_gradient, coriolis, prognostic
+    linearisation, pressure_gradient, coriolis, prognostic, transport
 )
 from gusto.core.equation_configuration import CoriolisOptions
 from gusto.core.kernels import MinKernel
@@ -284,6 +284,13 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
 
         # add in nonlinear transport for active tracers, if required
         if nonlinear_tracer_transport:
+            tracer_prognostics = [tracer.name for tracer in active_tracers]
+            # first drop the current linear transport terms
+            self.residual = self.residual.label_map(
+                lambda t: t.get(prognostic) in tracer_prognostics and t.has_label(transport),
+                map_if_true=drop
+            )
+            # now add back in the nonlinear transport terms
             self.residual += self.generate_tracer_transport_terms(
                 active_tracers)
 
