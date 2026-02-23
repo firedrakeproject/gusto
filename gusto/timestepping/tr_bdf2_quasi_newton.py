@@ -320,7 +320,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         if self.tr_predictor is not None:
             V_DG = equation_set.domain.spaces('DG')
             self.predictor_field_in = Function(V_DG)
-            div_factor = Constant(1.0) - 2*self.gamma*self.dt*div(self.x.n('u'))
+            div_factor = Constant(1.0) - self.gamma*self.dt*div(self.x.n('u'))
             self.predictor_interpolate = interpolate(
                 self.x.star(tr_predictor)*div_factor, V_DG)
 
