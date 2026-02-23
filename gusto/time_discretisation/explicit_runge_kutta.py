@@ -3,10 +3,10 @@
 import numpy as np
 
 from enum import Enum
+from functools import cached_property
 from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import replace_subject, drop, keep, Term
-from firedrake.utils import cached_property
 from firedrake.formmanipulation import split_form
 
 from gusto.core.labels import time_derivative, all_but_last, source_label
