@@ -10,6 +10,15 @@ __all__ = [
 ]
 
 
+class CoriolisOptions(Enum):
+
+    nonrotating = 11    # no Coriolis term
+    fplane = 23         # constant Coriolis term f0
+    betaplane = 31      # Coriolis term f0 + beta(y-y0)
+    gammaplane = 37     # Coriolis term f0 - gamma r**2 with gamma=Omega/R**2 and f0=2Omega
+    sphere = 42         # Coriolis term 2 Omega sin(lat)
+
+
 class EquationParameters(object):
     """A base configuration object for storing equation parameters."""
 
@@ -97,6 +106,11 @@ class ShallowWaterParameters(EquationParameters):
 
     g = 9.80616
     Omega = 7.292e-5  # rotation rate
+    f0 = None    # f-, beta- and gamma-plane Coriolis parameter
+    beta = None  # beta-plane y-variation parameter
+    y0 = None    # beta-plane y-centre
+    R = None     # Radius of planet used to compute gamma in gamma-plane approx
+    topog_expr = None  # topography expression
     H = None  # mean depth
     # Factor that multiplies the vapour in the equivalent buoyancy
     # formulation of the thermal shallow water equations

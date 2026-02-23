@@ -79,8 +79,6 @@ def setup_zero_limiter(dirname, limiter=False, rain=False):
 
     transport_methods = [DGUpwind(eqns, field_name) for field_name in eqns.field_names]
 
-    linear_solver = ThermalSWSolver(eqns)
-
     zerolimiter = ZeroLimiter(domain.spaces('DG'))
     DG1limiter = DG1Limiter(domain.spaces('DG'))
 
@@ -112,8 +110,7 @@ def setup_zero_limiter(dirname, limiter=False, rain=False):
                           ]
     stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
                                       transport_methods,
-                                      linear_solver=linear_solver,
-                                      physics_schemes=physics_schemes)
+                                      final_physics_schemes=physics_schemes)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions

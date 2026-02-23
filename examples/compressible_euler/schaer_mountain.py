@@ -15,7 +15,7 @@ from firedrake import (
     SpatialCoordinate, exp, pi, cos, Function, Mesh, Constant
 )
 from gusto import (
-    Domain, CompressibleParameters, CompressibleSolver, logger,
+    Domain, CompressibleParameters, logger,
     OutputParameters, IO, SSPRK3, DGUpwind, SemiImplicitQuasiNewton,
     compressible_hydrostatic_balance, SpongeLayerParameters, Exner, ZComponent,
     Perturbation, SUPGOptions, TrapeziumRule, MaxKernel, MinKernel,
@@ -97,11 +97,11 @@ def schaer_mountain(
 
     # Equation
     parameters = CompressibleParameters(mesh, g=g, cp=cp)
-    sponge = SpongeLayerParameters(
+    sponge_params = SpongeLayerParameters(
         mesh, H=domain_height, z_level=domain_height-sponge_depth, mubar=mu_dt/dt
     )
     eqns = CompressibleEulerEquations(
-        domain, parameters, sponge_options=sponge, u_transport_option=u_eqn_type
+        domain, parameters, sponge_options=sponge_params, u_transport_option=u_eqn_type
     )
 
     # I/O
@@ -134,14 +134,11 @@ def schaer_mountain(
         DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
     ]
 
-    # Linear solver
-    tau_values = {'rho': 1.0, 'theta': 1.0}
-    linear_solver = CompressibleSolver(eqns, alpha, tau_values=tau_values)
-
     # Time stepper
+    tau_values = {'rho': 1.0, 'theta': 1.0}
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, alpha=alpha, spinup_steps=spinup_steps
+        alpha=alpha, tau_values=tau_values, spinup_steps=spinup_steps
     )
 
     # ------------------------------------------------------------------------ #
