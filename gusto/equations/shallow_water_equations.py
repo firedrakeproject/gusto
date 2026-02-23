@@ -5,6 +5,7 @@ from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg, Di
                        SpatialCoordinate, Constant, TrialFunctions, TestFunctions, dot, grad,
                        interpolate, assemble)
 from firedrake.fml import subject, drop, all_terms
+from gusto.core.coord_transforms import rtheta_from_xy
 from gusto.core.labels import (
     linearisation, pressure_gradient, coriolis, prognostic
 )
@@ -201,7 +202,13 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 fexpr = self.parameters.f0
             elif rotation is CoriolisOptions.betaplane:
                 xyz = SpatialCoordinate(self.domain.mesh)
-                fexpr = self.parameters.f0 + self.parameters.beta * xyz[1]
+                fexpr = self.parameters.f0 + self.parameters.beta * (
+                    xyz[1] - self.parameters.y0)
+            elif rotation is CoriolisOptions.gammaplane:
+                x, y = SpatialCoordinate(self.domain.mesh)
+                r, _ = rtheta_from_xy(x, y)
+                Rsq = self.parameters.R**2
+                fexpr = 2*self.parameters.Omega * (1 - 0.5 * r**2 / Rsq)
             else:
                 raise NotImplementedError('Coriolis option is not implemented')
             self.prescribed_fields('coriolis', CG1).interpolate(fexpr)
