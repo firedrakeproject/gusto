@@ -1,7 +1,15 @@
+from firedrake import Function, as_vector, CheckpointFile
+from firedrake.ml.pytorch import to_torch, from_torch
 from torch.nn import Module, Sequential, Linear, ReLU
+from torch.utils.data import DataLoader, Dataset
+
+from collections import namedtuple
+import numpy as np
+import os
+import torch
 
 
-class HybridModel(object, metaclass=ABCMeta):
+class HybridModel(object):
 
     def __init__(self, pde_model, ml_model, fields_to_adjust,
                  data_dir, point_training_data_file,
@@ -14,7 +22,7 @@ class HybridModel(object, metaclass=ABCMeta):
             fields_to_adjust (list): list of names of fields to adjust
                 with ml model
             data_dir (str): directory where to save / load data to / from
-            data_file (str): name of 
+            data_file (str): name of
         """
 
         self.fields_to_adjust = fields_to_adjust
@@ -27,33 +35,34 @@ class HybridModel(object, metaclass=ABCMeta):
             numpy_data=os.path.join(data_dir, point_training_data_file),
             data_dir=data_dir
         )
-        self.train_point_dl = DataLoader(point_train_dataset,
+        self.train_point_dl = DataLoader(self.point_train_dataset,
                                          batch_size=batch_size,
                                          shuffle=False)
         self.point_test_dataset = PointDataset(
             numpy_data=os.path.join(data_dir, point_test_data_file),
             data_dir=data_dir
         )
-        self.test_point_dl = DataLoader(point_test_dataset,
+        self.test_point_dl = DataLoader(self.point_test_dataset,
                                         batch_size=batch_size,
                                         shuffle=False)
         self.global_train_dataset = GustoGlobalDataset(
-            dataset=os.path.join(data_dir, global_training_data_file),
+            dataset=os.path.join(data_dir, self.global_training_data_file),
             data_dir=data_dir
         )
         self.train_global_dl = DataLoader(
-            global_train_dataset,
+            self.global_train_dataset,
             batch_size=batch_size,
-            collate_fn=global_train_dataset.collate,
+            collate_fn=self.global_train_dataset.collate,
             shuffle=False)
         self.global_test_dataset = GustoGlobalDataset(
-            dataset=os.path.join(data_dir, global_testdata_file),
+            dataset=os.path.join(data_dir, self.global_testdata_file),
             data_dir=data_dir
         )
-        self.test_global_dl = DataLoader(global_test_dataset,
-                                         batch_size=batch_size,
-                                         collate_fn=global_test_dataset.collate,
-                                         shuffle=False)
+        self.test_global_dl = DataLoader(
+            self.global_test_dataset,
+            batch_size=batch_size,
+            collate_fn=self.global_test_dataset.collate,
+            shuffle=False)
 
         # Set double precision in ml_model to match types
         ml_model.double()
@@ -70,7 +79,7 @@ class HybridModel(object, metaclass=ABCMeta):
         ML cost function
         """
 
-    def assemble_prediction(self):
+    def assemble_prediction(self, dyn, ml):
         """
         This adds the ml prediction to the dynamics predictions
         """
@@ -78,23 +87,21 @@ class HybridModel(object, metaclass=ABCMeta):
         ml_idx = 0
         for field_name in self.fields_to_adjust:
             idx = self.pde_model.equation.field_names.index(field_name)
-            if field_name is "u":
-                ml_out.subfunctions[idx].project(
+            if field_name == "u":
+                self.ml_out.subfunctions[idx].project(
                     as_vector([ml[ml_idx], ml[ml_idx+1]])
                 )
                 ml_idx += 2
             else:
-                ml_out.subfunctions[idx].interpolate(ml[ml_idx])
+                self.ml_out.subfunctions[idx].interpolate(ml[ml_idx])
                 ml_idx += 1
 
-        self.prediction.interpolate(dyn + ml_out)
+        self.prediction.interpolate(dyn + self.ml_out)
 
     def forward_pass(self):
         """
         Forward pass of the ml model. Returns a list of tensors.
         """
-
-        
 
     def generate_data(self):
         """
@@ -105,7 +112,6 @@ class HybridModel(object, metaclass=ABCMeta):
         """
         Train the hybrid model.
         """
-        
 
     def evalute(self, filename=None):
         """
@@ -156,7 +162,7 @@ class GustoGlobalDataset(Dataset):
         self.fs = self.batch_elements_fd[0][0].function_space()
 
     def __len__(self):
-        return(self.batch_elements_fd)
+        return self.batch_elements_fd
 
     def __getitem__(self, idx):
         """
@@ -240,21 +246,20 @@ class PointNN(Module):
         super().__init__()
 
         self.nn_encoder = Sequential(Linear(n_in, 32),
-                                    ReLU(True),
-                                    Linear(32, 64),
-                                    ReLU(True),
-                                    Linear(64, 128),
-                                    ReLU(True))
+                                     ReLU(True),
+                                     Linear(32, 64),
+                                     ReLU(True),
+                                     Linear(64, 128),
+                                     ReLU(True))
 
         self.nn_decoder = Sequential(Linear(128, 64),
-                                    ReLU(True),
-                                    Linear(64, 32),
-                                    ReLU(True),
-                                    Linear(32, n_out))
-        
+                                     ReLU(True),
+                                     Linear(64, 32),
+                                     ReLU(True),
+                                     Linear(32, n_out))
 
     def forward(self, input_tensor):
-    
+
         # CNN encoder-decoder
         z = self.nn_encoder(input_tensor)
         y = self.nn_decoder(z)
