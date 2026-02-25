@@ -215,7 +215,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
                     xyz[1] - self.parameters.y0)
             elif rotation is CoriolisOptions.gammaplane:
                 x, y = SpatialCoordinate(self.domain.mesh)
-                r, _ = rtheta_from_xy(x, y)
+                r, _ = rtheta_from_xy(x, y, self.parameters.x0, self.parameters.y0)
                 Rsq = self.parameters.R**2
                 fexpr = 2*self.parameters.Omega * (1 - 0.5 * r**2 / Rsq)
                 if self.coriolis_trap is not None:

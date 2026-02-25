@@ -1,13 +1,13 @@
 """Some simple tools for configuring the model."""
-from enum import Enum
 from firedrake import Function, FunctionSpace, Constant
 import inspect
+from enum import Enum
 
 
 __all__ = [
     "BoussinesqParameters", "CompressibleParameters",
     "ShallowWaterParameters", "CoriolisOptions",
-    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
+    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters",
 ]
 
 
@@ -111,7 +111,8 @@ class ShallowWaterParameters(EquationParameters):
     Omega = 7.292e-5  # rotation rate
     f0 = None    # f-, beta- and gamma-plane Coriolis parameter
     beta = None  # beta-plane y-variation parameter
-    y0 = None    # beta-plane y-centre
+    y0 = None    # beta- or gamma-plane y-centre
+    x0 = None    # gamma-plane y-centre
     R = None     # Radius of planet used to compute gamma in gamma-plane approx
     topog_expr = None  # topography expression
     H = None  # mean depth
@@ -124,6 +125,8 @@ class ShallowWaterParameters(EquationParameters):
     # Scaling factor for the saturation function in the equivalent buoyancy
     # formulation of the thermal shallow water equations
     q0 = None
+    # Scaling factor for evaporation term when present
+    cD = None
 
 
 class SpongeLayerParameters(EquationParameters):
