@@ -3,7 +3,7 @@ The TR-BDF2 Quasi-Newton timestepper.
 """
 import numpy as np
 from firedrake import (
-    Function, FunctionSpace, sqrt, Constant
+    Function, FunctionSpace, sqrt, Constant, div, interpolate, assemble
 )
 
 from pyop2.profiling import timed_stage
@@ -46,6 +46,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                  final_physics_schemes=None,
                  scaled_final_physics_schemes=None,
                  gamma=(1-sqrt(2)/2),
+                 tr_predictor=None,
                  tau_values_tr=None,
                  tau_values_bdf=None,
                  num_outer_tr=2, num_inner_tr=2,
@@ -92,6 +93,15 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 timestep between 0 and 0.5. A value of 0.5 corresponds to a SIQN
                 scheme with alpha = 0.5. Defaults to 1 - sqrt(2)/2, which makes
                 the scheme L-stable.
+            predictor (str, optional): a single string corresponding to the name
+                of a variable to transport using the divergence predictor in the
+                TR step. This pre-multiplies that variable by (1 - beta*dt*div(u))
+                before the transport step, and calculates its transport increment from the
+                transport of this variable. This can improve the stability of
+                the time stepper at large time steps, when not using an
+                advective-then-flux formulation. This is only suitable for the
+                use on the conservative variable (e.g. depth or density).
+                Defaults to None, in which case no predictor is used.
             tau_values_tr (dict, optional): a dictionary with keys the names of
                 prognostic variables and values the tau values to use for each
                 variable. Defaults to None, in which case the value of gamma
@@ -149,6 +159,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
         mesh = equation_set.domain.mesh
         R = FunctionSpace(mesh, "R", 0)
+        self.tr_predictor = tr_predictor
         self.gamma = Function(R, val=float(gamma))
         self.gamma2 = Function(R, val=((1 - 2*float(gamma))/(2 - 2*float(gamma))))
         self.gamma3 = Function(R, val=((1-float(self.gamma2))/(2*float(gamma))))
@@ -369,6 +380,15 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.bdf_forcing = Forcing(equation_set, self.implicit_terms, alpha=1.0, dt=self.gamma2*dt)
         self.bcs = equation_set.bcs
 
+        # Set up the predictor last, as it requires the state fields to already
+        # be created
+        if self.tr_predictor is not None:
+            V_DG = equation_set.domain.spaces('DG')
+            self.predictor_field_in = Function(V_DG)
+            div_factor = Constant(1.0) - self.gamma*self.dt*div(self.x.n('u'))
+            self.predictor_interpolate = interpolate(
+                self.x.star(tr_predictor)*div_factor, V_DG)
+
     def _apply_bcs(self, X):
         """
         Set the zero boundary conditions in the velocity.
@@ -567,10 +587,19 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                   the transport.
         """
         for name, scheme in self.active_transport:
-
-            logger.info(f'TR-BDF2 Quasi Newton: Transport {outer}: {name}')
-            # transports a single field from x_in and puts the result in x_out
-            scheme.apply(x_out(name), x_in(name))
+            if name == self.tr_predictor:
+                logger.info(f'TR-BDF2 Quasi Newton: Predictor Transport {outer}: {name}')
+                # Pre-multiply this variable by (1 - dt*beta*div(u))
+                V = x_in(name).function_space()
+                field_out = Function(V)
+                self.predictor_field_in.assign(assemble(self.predictor_interpolate))
+                scheme.apply(field_out, self.predictor_field_in)
+                # xp is xstar plus the increment from the transported predictor
+                x_out(name).assign(x_in(name) + field_out - self.predictor_field_in)
+            else:
+                logger.info(f'TR-BDF2 Quasi Newton: Transport {outer}: {name}')
+                # transports a single field from x_in and puts the result in x_out
+                scheme.apply(x_out(name), x_in(name))
 
     def update_reference_profiles(self):
         """
