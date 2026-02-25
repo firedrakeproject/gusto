@@ -456,9 +456,9 @@ H = phi0/g
 t_day = 2*pi/Omega
 
 ### timing options
-dump_freq = 30    # dump frequency of output
+dump_freq = 1    # dump frequency of output
 dt = 250          # timestep (in seconds)
-tmax = 200*t_day       # duration of the simulation (in seconds)
+tmax = 1*t_day       # duration of the simulation (in seconds)
 
 restart = False
 restart_name = 'single_beta3900Lp18q01em2xi1em1_Bu1b1p5Rop2_l200dt250df30_lgnp05'
@@ -469,12 +469,12 @@ south_lat_deg = [90.]#, 83., 83., 83., 83., 83.]#, 70.]
 south_lon_deg = [0.]#, 72., 144., 216., 288., 0.]#, 0.]
 
 ### add noise to initial depth profile?
-noise = True
+noise = False
 large_noise = True
 noise_amp = 0.05
 
 ### add noise to initial moist profile?
-moist_noise = True
+moist_noise = False
 moist_noise_amp = 0.01
 
 
@@ -496,10 +496,10 @@ extract_res = 2
 ac = False
 
 ### moist setup?
-moist = True
+moist = False
 ### which version of convective, thermal, convective thermal to pick
-convective = True
-thermal = True
+convective = False
+thermal = False
 
 ### moist variables
 epsilon = 1./165.  # 1/T0 where T0 is standard reference temperature
