@@ -1,5 +1,8 @@
-from firedrake import Function, as_vector, CheckpointFile
-from firedrake.ml.pytorch import to_torch, from_torch
+from firedrake import (Function, as_vector, CheckpointFile, assemble, dx,
+                       VectorFunctionSpace, FunctionSpace, VertexOnlyMesh,
+                       interpolate)
+from firedrake.adjoint import Control, ReducedFunctional
+from firedrake.ml.pytorch import to_torch, from_torch, fem_operator
 from torch.nn import Module, Sequential, Linear, ReLU
 from torch.utils.data import DataLoader, Dataset
 
@@ -12,9 +15,7 @@ import torch
 class HybridModel(object):
 
     def __init__(self, pde_model, ml_model, fields_to_adjust,
-                 data_dir, point_training_data_file,
-                 point_test_data_file, global_training_data_file,
-                 global_test_data_file):
+                 data_dir):
         """
         Args:
             pde_model: PDE model (Gusto model class?)
@@ -22,47 +23,14 @@ class HybridModel(object):
             fields_to_adjust (list): list of names of fields to adjust
                 with ml model
             data_dir (str): directory where to save / load data to / from
-            data_file (str): name of
         """
 
+        self.pde_model = pde_model
+        self.ml_model = ml_model
         self.fields_to_adjust = fields_to_adjust
+        self.data_dir = data_dir
 
-        batch_size = 1
-
-        # Create dataset classes and dataloader classes for reading in
-        # test and training data
-        self.point_train_dataset = PointDataset(
-            numpy_data=os.path.join(data_dir, point_training_data_file),
-            data_dir=data_dir
-        )
-        self.train_point_dl = DataLoader(self.point_train_dataset,
-                                         batch_size=batch_size,
-                                         shuffle=False)
-        self.point_test_dataset = PointDataset(
-            numpy_data=os.path.join(data_dir, point_test_data_file),
-            data_dir=data_dir
-        )
-        self.test_point_dl = DataLoader(self.point_test_dataset,
-                                        batch_size=batch_size,
-                                        shuffle=False)
-        self.global_train_dataset = GustoGlobalDataset(
-            dataset=os.path.join(data_dir, self.global_training_data_file),
-            data_dir=data_dir
-        )
-        self.train_global_dl = DataLoader(
-            self.global_train_dataset,
-            batch_size=batch_size,
-            collate_fn=self.global_train_dataset.collate,
-            shuffle=False)
-        self.global_test_dataset = GustoGlobalDataset(
-            dataset=os.path.join(data_dir, self.global_testdata_file),
-            data_dir=data_dir
-        )
-        self.test_global_dl = DataLoader(
-            self.global_test_dataset,
-            batch_size=batch_size,
-            collate_fn=self.global_test_dataset.collate,
-            shuffle=False)
+        self.batch_size = 1
 
         # Set double precision in ml_model to match types
         ml_model.double()
@@ -70,14 +38,15 @@ class HybridModel(object):
         device = "cpu"
         ml_model.to(device)
 
-        fs = self.train_global_dl.dataset.fs
+        fs = pde_model.equation.X.function_space()
         self.ml_out = Function(fs)
-        self.prediction = Function(fs)
+        self.x_predicted = Function(fs)
 
-    def cost_function(self):
+    def assemble_cost_function(self, x_predicted, x_target):
         """
         ML cost function
         """
+        return assemble(0.5 * (x_predicted, x_target)**2 * dx)
 
     def assemble_prediction(self, dyn, ml):
         """
@@ -98,20 +67,162 @@ class HybridModel(object):
 
         self.prediction.interpolate(dyn + self.ml_out)
 
+    def generate_data(self, initial_conditions, data_fields, ndt):
+        """
+        Generate data using the PDE model.
+        Args:
+            initial_conditions, (list): a list of tuples specifying initial
+                conditions. Each tuple should contain tuples specifying the
+                pairs (field_name, initial_condition) where field_name is a
+                string corresponding to a prognostic field in the PDE model
+                and initial_condition is a ufl.Expr or Firedrake function that
+                specifies the initial values of that field.
+            data_fields, (list): a list of strings specifying the fields we
+                need to store and process data for.
+            ndt, (int): number of timesteps to run the model for
+        """
+
+        # for each initial condition, we make a copy of the PDE model
+        # class, initialise it, timestep it and save the data in a
+        # checkpoint file.
+        # CHECK: is it ok to reuse the model class with different ics?
+        pde_model = self.pde_model
+        # CHECK: there must be a better way to change the model output settings?
+        output = pde_model.stepper.io.output
+        output.checkpoint = True
+        # TODO: probably should be input arg, along with e.g. spinup_steps
+        output.chkptfreq = 1
+        output.multichkpt = True
+        # create list to store output directories for data processing
+        dir_list = []
+        for i, ic in enumerate(initial_conditions):
+            output.dirname = os.path.join(self.data_dir, f"test_train_{i}")
+            dir_list.append(output.dirname)
+            stepper = pde_model.stepper
+            for field_name, field_ic in ic:
+                field = stepper.fields(field_name)
+                if field_name == "u":
+                    field.project(field_ic)
+                else:
+                    field.interpolate(field_ic)
+            stepper.run(t=0, tmax=ndt*float(pde_model.domain.dt))
+
+        point_data = []
+        global_data = []
+        for i, dirname in enumerate(dir_list):
+            chkpt_file = os.path.join("results/", self.data_dir,
+                                      f"test_train_{i}", "chkpt.h5")
+            with CheckpointFile(chkpt_file, 'r') as chkfile:
+                mesh = chkfile.load_mesh(name='mesh')
+                fields = []
+                for n in range(ndt):
+                    t = chkfile.get_timestepping_history(mesh, 'u').get('time')[n]
+                    for field_name in data_fields:
+                        if field_name == "u":
+                            u = chkfile.load_function(mesh, field_name, n)
+                            # Extract components of u
+                            # TODO: generalise Vdg function space
+                            Vdg = FunctionSpace(mesh, "DG", 1)
+                            # TODO: this only works on the plane
+                            u0 = Function(Vdg).interpolate(u[0])
+                            u1 = Function(Vdg).interpolate(u[1])
+                            fields.append(u0)
+                            fields.append(u1)
+                        else:
+                            fields.append(chkfile.load_function(mesh, field_name, n))
+                    point_values = self.point_evaluation(mesh, fields)
+                    for data_tuple in zip(*point_values):
+                        point_data.append((*data_tuple, t, n))
+
+                    # Append fields to the global data list
+                    global_data.append((*fields, t, i, n))
+
+    def point_evaluation(self, mesh, fields):
+
+        # find point locations
+        L2 = self.pde_model.domain.spaces("L2")
+        # TODO: generalise Vdg function space
+        Vdg = FunctionSpace(mesh, "DG", 1)
+        W = VectorFunctionSpace(mesh, Vdg.ufl_element())
+        X = assemble(interpolate(mesh.coordinates, W))
+        coords = X.dat.data_ro
+
+        # create VOM
+        vom = VertexOnlyMesh(mesh, coords)
+        P0DG = FunctionSpace(vom, "DG", 0)
+
+        point_values = []
+        for field in fields:
+            field_at_points = assemble(interpolate(field, P0DG))
+            point_values.append(field_at_points.dat.data_ro)
+
+        # append coordinates
+        # TODO only works on plane
+        point_values.append(coords[:, 0])
+        point_values.append(coords[:, 1])
+
+        return point_values
+
     def forward_pass(self):
         """
         Forward pass of the ml model. Returns a list of tensors.
         """
 
-    def generate_data(self):
-        """
-        Generate data using the forward model.
-        """
-
-    def train(self):
+    def train(self, data_dir, point_training_data, global_training_data,
+              point_test_data, global_test_data,
+              learning_rate=5e-5, epochs=20, rollout_length=2):
         """
         Train the hybrid model.
         """
+        # Create dataset classes and dataloader classes for reading in
+        # training and testing data
+        point_train_dataset = PointDataset(
+            numpy_data=os.path.join(data_dir, point_training_data),
+            data_dir=data_dir
+        )
+        point_train_dl = DataLoader(
+            point_train_dataset, batch_size=self.batch_size, shuffle=False
+        )
+        global_train_dataset = GustoGlobalDataset(
+            dataset=os.path.join(data_dir, global_training_data),
+            data_dir=data_dir
+        )
+        global_train_dl = DataLoader(
+            global_train_dataset, batch_size=self.batch_size,
+            collate_fn=global_train_dataset.collate, shuffle=False
+        )
+
+        point_test_dataset = PointDataset(
+            numpy_data=os.path.join(data_dir, point_test_data),
+            data_dir=data_dir
+        )
+        point_test_dl = DataLoader(
+            point_test_dataset, batch_size=self.batch_size, shuffle=False
+        )
+        global_test_dataset = GustoGlobalDataset(
+            dataset=os.path.join(data_dir, global_test_data),
+            data_dir=data_dir
+        )
+        global_test_dl = DataLoader(
+            global_test_dataset, batch_size=self.batch_size,
+            collate_fn=self.global_test_dataset.collate, shuffle=False
+        )
+
+        # 
+        with set_working_tape() as tape:
+            F_pred = ReducedFunctional(
+                self.assemble_prediction(dyn_out, nn_u0, nn_u1, nn_D),
+                [Control(dyn_out), Control(nn_u0), Control(nn_u1), Control(nn_D)],
+                eval_cb_pre=advance_pde)
+            G = fem_operator(F_pred)
+            F_u0_in = ReducedFunctional(pred_to_u0_input(pred_func),
+                                        [Control(pred_func)])
+            J_u0 = fem_operator(F_u0_in)
+            F_loss = ReducedFunctional(assemble_L2_error(f_pred, f_exact),
+                                       [Control(f_pred), Control(f_exact)])
+            H = fem_operator(F_loss)
+
+        optimiser = optim.AdamW(model.parameters(), lr=learning_rate, eps=1e-8)
 
     def evalute(self, filename=None):
         """
