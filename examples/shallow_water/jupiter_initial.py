@@ -6,22 +6,22 @@ from gusto import (
     SteadyStateError, IO, SubcyclingOptions, TrapeziumRule, SSPRK3,
     DGUpwind, SemiImplicitQuasiNewton, VectorFunctionSpace, assemble,
     Function, FunctionSpace, WaterVapour, CloudWater, DG1Limiter,
-    MoistConvectiveSWSolver, SWSaturationAdjustment, ForwardEuler,
+    SWSaturationAdjustment, ForwardEuler,
     ZeroLimiter, MixedFSLimiter, MoistConvectiveSWRelativeHumidity,
-    SWHeightRelax, ThermalShallowWaterEquations, ThermalSWSolver,
-    MoistThermalSWRelativeHumidity, DiffusionEquation, DiffusionParameters,
-    BackwardEuler, CGDiffusion, Timestepper
+    SWHeightRelax, ThermalShallowWaterEquations,
+    MoistThermalSWRelativeHumidity, DiffusionParameters, DiffusionEquation,
+    BackwardEuler, CGDiffusion, Timestepper, xy_from_rtheta, rtheta_from_xy,
+    rtheta_from_lonlat, lonlat_from_rtheta, CoriolisOptions
 )
 from firedrake import (
     SpatialCoordinate, VertexOnlyMesh, as_vector, pi, interpolate, exp, cos, sin,
     sqrt, PeriodicRectangleMesh, atan2, conditional, RandomGenerator, PCG64,
     MinCellEdgeLength, MaxCellEdgeLength
 )
-from stephen_functions import (
-    split_number, create_restart_nc, rtheta_from_xy, lonlat_from_rtheta,
-    rtheta_from_lonlat, xy_from_rtheta, smooth_f_profile, smooth_tophat,
-    diffusion_noise_generation
-)
+# from stephen_functions import (
+#     split_number, create_restart_nc, smooth_f_profile, smooth_tophat,
+#     diffusion_noise_generation
+# )
 import scipy
 import numpy as np
 import time
@@ -31,25 +31,25 @@ import pdb
 from decimal import Decimal, ROUND_HALF_UP
 import sympy as sp
 
-# def split_number(x):
-#     x = float(abs(x))
-#     xint, xdec = str(x).split('.')
-#     if xint == '0':
-#         xint = ''
-#     if xdec == '0':
-#         xdec = ''
-#     else:
-#         xdec = f'p{xdec}'
-#     return xint, xdec
+def split_number(x):
+    x = float(abs(x))
+    xint, xdec = str(x).split('.')
+    if xint == '0':
+        xint = ''
+    if xdec == '0':
+        xdec = ''
+    else:
+        xdec = f'p{xdec}'
+    return xint, xdec
 
-# def create_restart_nc(dirname, dirnameold):#, groups):
-#     if not os.path.exists(f'{dirname}/'):
-#         os.makedirs(f'{dirname}')
-#     shutil.copy(f'{dirnameold}/field_output.nc', f'{dirname}/field_output.nc')
-#     # Paths to the original and target files
-#     input_file = f'{dirnameold}/field_output.nc'
-#     output_file = f'{dirname}/field_output.nc'
-#     # new_groups(input_file, output_file, groups, 'D')
+def create_restart_nc(dirname, dirnameold):#, groups):
+    if not os.path.exists(f'{dirname}/'):
+        os.makedirs(f'{dirname}')
+    shutil.copy(f'{dirnameold}/field_output.nc', f'{dirname}/field_output.nc')
+    # Paths to the original and target files
+    # input_file = f'{dirnameold}/field_output.nc'
+    # output_file = f'{dirname}/field_output.nc'
+    # new_groups(input_file, output_file, groups, 'D')
 
 # def rtheta_from_xy(x, y, Lx, Ly, angle_units='rad'):
 #     """
@@ -187,54 +187,54 @@ import sympy as sp
 
 #     return x_shift, y_shift
 
-# def smooth_f_profile(degree, delta, style, rstar, Omega, R, Lx, nx):
-#     delta *= Lx/nx
-#     r = sp.symbols('r')
-#     if style == 'polar':
-#         fexpr = 2*Omega*(1-0.5*r**2/R**2)
-#         left_val = fexpr.subs(r, rstar-delta)
-#         right_val = 2*Omega
-#         left_diff_val = sp.diff(fexpr, r).subs(r, rstar-delta)
-#         left_diff2_val = sp.diff(fexpr, r, 2).subs(r, rstar-delta)
-#     elif style == 'flat':
-#         left_val = 2*Omega*(1-0.5*(rstar-delta)**2/R**2)
-#         right_val = 2*Omega
-#         left_diff_val = 0
-#         left_diff2_val = 0
+def smooth_f_profile(degree, delta, style, rstar, Omega, R, Lx, nx):
+    delta *= Lx/nx
+    r = sp.symbols('r')
+    if style == 'polar':
+        fexpr = 2*Omega*(1-0.5*r**2/R**2)
+        left_val = fexpr.subs(r, rstar-delta)
+        right_val = 2*Omega
+        left_diff_val = sp.diff(fexpr, r).subs(r, rstar-delta)
+        left_diff2_val = sp.diff(fexpr, r, 2).subs(r, rstar-delta)
+    elif style == 'flat':
+        left_val = 2*Omega*(1-0.5*(rstar-delta)**2/R**2)
+        right_val = 2*Omega
+        left_diff_val = 0
+        left_diff2_val = 0
 
-#     a = sp.symbols(f'a_0:{degree+1}')
-#     P = a[0]
-#     for i in range(1, degree+1):
-#         P += a[i]*r**i
+    a = sp.symbols(f'a_0:{degree+1}')
+    P = a[0]
+    for i in range(1, degree+1):
+        P += a[i]*r**i
 
-#     if degree == 3:
-#         eqns = [
-#             P.subs(r, rstar-delta) - left_val,
-#             P.subs(r, rstar+delta) - right_val,
-#             sp.diff(P, r).subs(r, rstar-delta) - left_diff_val,
-#             sp.diff(P, r).subs(r, rstar+delta)
-#         ]
-#     elif degree == 5:
-#         eqns = [
-#             P.subs(r, rstar-delta) - left_val,
-#             P.subs(r, rstar+delta) - right_val,
-#             sp.diff(P, r).subs(r, rstar-delta) - left_diff_val,
-#             sp.diff(P, r).subs(r, rstar+delta),
-#             sp.diff(P, r, 2).subs(r, rstar-delta) - left_diff2_val,
-#             sp.diff(P, r, 2).subs(r, rstar+delta)
-#         ]
-#     else:
-#         print('do not have BCs for this degree')
+    if degree == 3:
+        eqns = [
+            P.subs(r, rstar-delta) - left_val,
+            P.subs(r, rstar+delta) - right_val,
+            sp.diff(P, r).subs(r, rstar-delta) - left_diff_val,
+            sp.diff(P, r).subs(r, rstar+delta)
+        ]
+    elif degree == 5:
+        eqns = [
+            P.subs(r, rstar-delta) - left_val,
+            P.subs(r, rstar+delta) - right_val,
+            sp.diff(P, r).subs(r, rstar-delta) - left_diff_val,
+            sp.diff(P, r).subs(r, rstar+delta),
+            sp.diff(P, r, 2).subs(r, rstar-delta) - left_diff2_val,
+            sp.diff(P, r, 2).subs(r, rstar+delta)
+        ]
+    else:
+        print('do not have BCs for this degree')
 
-#     sol = sp.solve(eqns, a)
-#     coeffs = [sol[sp.Symbol(f'a_{i}')] for i in range(degree+1)]
-#     # P_smooth = P.subs(sol)
-#     # f_smooth = sp.Piecewise(
-#     #     (fexpr, r<rstar-delta),
-#     #     (P_smooth, (rstar-delta<=r) & (r<=rstar+delta)),
-#     #     (right_val, rstar+delta<r)
-#     # )
-#     return coeffs
+    sol = sp.solve(eqns, a)
+    coeffs = [sol[sp.Symbol(f'a_{i}')] for i in range(degree+1)]
+    # P_smooth = P.subs(sol)
+    # f_smooth = sp.Piecewise(
+    #     (fexpr, r<rstar-delta),
+    #     (P_smooth, (rstar-delta<=r) & (r<=rstar+delta)),
+    #     (right_val, rstar+delta<r)
+    # )
+    return coeffs
 
 def initialise_D(X, idx):
     # computes the initial depth perturbation corresponding to vortex
@@ -249,7 +249,10 @@ def initialise_D(X, idx):
     # print('convert to r theta')
     r_c, theta_c = rtheta_from_lonlat(lamda_c, phi_c, R)
     # print('convert to x y')
-    x_c, y_c = xy_from_rtheta(r_c, theta_c, Lx, Ly)
+    x_c_shift, y_c_shift = xy_from_rtheta(r_c, theta_c, Lx/2, Ly/2)
+
+    x_c = x_c_shift # + Lx/2
+    y_c = y_c_shift # + Ly/2
 
     # make an empty list of D values to append to
     D_values = []
@@ -309,47 +312,47 @@ def gamma_v_c(x_in):
     denom = sat_func_nt(D)*beta1/D
     return (1+denom)**(-1)
 
-# def smooth_tophat(degree, delta, rstar, Lx, nx):
-#     delta *= Lx/nx
-#     r = sp.symbols('r')
-#     left_val = 1
-#     right_val = 0
-#     left_diff_val = 0
-#     left_diff2_val = 0
+def smooth_tophat(degree, delta, rstar, Lx, nx):
+    delta *= Lx/nx
+    r = sp.symbols('r')
+    left_val = 1
+    right_val = 0
+    left_diff_val = 0
+    left_diff2_val = 0
 
-#     a = sp.symbols(f'a_0:{degree+1}')
-#     P = a[0]
-#     for i in range(1, degree+1):
-#         P += a[i]*r**i
+    a = sp.symbols(f'a_0:{degree+1}')
+    P = a[0]
+    for i in range(1, degree+1):
+        P += a[i]*r**i
 
-#     if degree == 3:
-#         eqns = [
-#             P.subs(r, rstar-delta) - left_val,
-#             P.subs(r, rstar+delta) - right_val,
-#             sp.diff(P, r).subs(r, rstar-delta) - left_diff_val,
-#             sp.diff(P, r).subs(r, rstar+delta)
-#         ]
-#     elif degree == 5:
-#         eqns = [
-#             P.subs(r, rstar-delta) - left_val,
-#             P.subs(r, rstar+delta) - right_val,
-#             sp.diff(P, r).subs(r, rstar-delta) - left_diff_val,
-#             sp.diff(P, r).subs(r, rstar+delta),
-#             sp.diff(P, r, 2).subs(r, rstar-delta) - left_diff2_val,
-#             sp.diff(P, r, 2).subs(r, rstar+delta)
-#         ]
-#     else:
-#         print('do not have BCs for this degree')
+    if degree == 3:
+        eqns = [
+            P.subs(r, rstar-delta) - left_val,
+            P.subs(r, rstar+delta) - right_val,
+            sp.diff(P, r).subs(r, rstar-delta) - left_diff_val,
+            sp.diff(P, r).subs(r, rstar+delta)
+        ]
+    elif degree == 5:
+        eqns = [
+            P.subs(r, rstar-delta) - left_val,
+            P.subs(r, rstar+delta) - right_val,
+            sp.diff(P, r).subs(r, rstar-delta) - left_diff_val,
+            sp.diff(P, r).subs(r, rstar+delta),
+            sp.diff(P, r, 2).subs(r, rstar-delta) - left_diff2_val,
+            sp.diff(P, r, 2).subs(r, rstar+delta)
+        ]
+    else:
+        print('do not have BCs for this degree')
 
-#     sol = sp.solve(eqns, a)
-#     coeffs = [sol[sp.Symbol(f'a_{i}')] for i in range(degree+1)]
-#     # P_smooth = P.subs(sol)
-#     # f_smooth = sp.Piecewise(
-#     #     (1, r<rstar-delta),
-#     #     (P_smooth, (rstar-delta<=r) & (r<=rstar+delta)),
-#     #     (0, rstar+delta<r)
-#     # )
-#     return coeffs
+    sol = sp.solve(eqns, a)
+    coeffs = [sol[sp.Symbol(f'a_{i}')] for i in range(degree+1)]
+    # P_smooth = P.subs(sol)
+    # f_smooth = sp.Piecewise(
+    #     (1, r<rstar-delta),
+    #     (P_smooth, (rstar-delta<=r) & (r<=rstar+delta)),
+    #     (0, rstar+delta<r)
+    # )
+    return coeffs
 
 def extract_points(fields, res):
     import xarray as xr
@@ -374,42 +377,42 @@ def extract_points(fields, res):
         )
         ds.to_netcdf(f'{dirname}/end_fields.nc')
 
-# def diffusion_noise_generation(mesh, Lx):
+def diffusion_noise_generation(mesh, Lx):
 
-#     mesh = mesh
-#     Lx = Lx
-#     factor = Lx/10
+    mesh = mesh
+    Lx = Lx
+    factor = Lx/10
 
-#     dt = 0.01*factor
-#     tmax = 0.2*factor
+    dt = 0.01*factor
+    tmax = 0.2*factor
 
-#     kappa = 1.*factor
-#     # mu = 5.
-#     logger.info('Generating noise')
-#     output = OutputParameters(dump_vtus=False, dump_diagnostics=False)
-#     domain = Domain(mesh, dt, "RTCF", 1)
+    kappa = 1.*factor
+    # mu = 5.
+    logger.info('Generating noise')
+    output = OutputParameters(dump_vtus=False, dump_diagnostics=False)
+    domain = Domain(mesh, dt, "RTCF", 1)
 
-#     V = domain.spaces("H1")
+    V = domain.spaces("H1")
 
-#     diffusion_params = DiffusionParameters(domain.mesh, kappa=kappa)
-#     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
-#     diffusion_scheme = BackwardEuler(domain)
-#     diffusion_methods = [CGDiffusion(eqn, "f", diffusion_params)]
-#     io = IO(domain, output=output)
-#     timestepper = Timestepper(eqn, diffusion_scheme, io, spatial_methods=diffusion_methods)
+    diffusion_params = DiffusionParameters(domain.mesh, kappa=kappa)
+    eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
+    diffusion_scheme = BackwardEuler(domain)
+    diffusion_methods = [CGDiffusion(eqn, "f", diffusion_params)]
+    io = IO(domain, output=output)
+    timestepper = Timestepper(eqn, diffusion_scheme, io, spatial_methods=diffusion_methods)
 
-#     f0 = timestepper.fields("f")
-#     pcg = PCG64()
-#     rg = RandomGenerator(pcg)
-#     noise_init = rg.normal(V, 0.0, 1.)
+    f0 = timestepper.fields("f")
+    pcg = PCG64()
+    rg = RandomGenerator(pcg)
+    noise_init = rg.normal(V, 0.0, 1.)
 
-#     # x = SpatialCoordinate(mesh)
-#     # noise_init = exp(-((x[0]-0.5*L)**2 + (x[1]-0.5*L)**2))
+    # x = SpatialCoordinate(mesh)
+    # noise_init = exp(-((x[0]-0.5*L)**2 + (x[1]-0.5*L)**2))
 
-#     f0.interpolate(noise_init)
-#     timestepper.run(0., tmax)
+    f0.interpolate(noise_init)
+    timestepper.run(0., tmax)
 
-#     return timestepper.fields("f")
+    return timestepper.fields("f")
 
 ### options changed in Cheng Li 2020
 Bu = 1
@@ -456,9 +459,9 @@ H = phi0/g
 t_day = 2*pi/Omega
 
 ### timing options
-dump_freq = 30    # dump frequency of output
+dump_freq = 1    # dump frequency of output
 dt = 250          # timestep (in seconds)
-tmax = 200*t_day       # duration of the simulation (in seconds)
+tmax = 1*t_day       # duration of the simulation (in seconds)
 
 restart = False
 restart_name = 'single_beta3900Lp18q01em2xi1em1_Bu1b1p5Rop2_l200dt250df30_lgnp05'
@@ -469,12 +472,12 @@ south_lat_deg = [90.]#, 83., 83., 83., 83., 83.]#, 70.]
 south_lon_deg = [0.]#, 72., 144., 216., 288., 0.]#, 0.]
 
 ### add noise to initial depth profile?
-noise = True
+noise = False
 large_noise = True
 noise_amp = 0.05
 
 ### add noise to initial moist profile?
-moist_noise = True
+moist_noise = False
 moist_noise_amp = 0.01
 
 
@@ -496,10 +499,10 @@ extract_res = 2
 ac = False
 
 ### moist setup?
-moist = True
+moist = False
 ### which version of convective, thermal, convective thermal to pick
-convective = True
-thermal = True
+convective = False
+thermal = False
 
 ### moist variables
 epsilon = 1./165.  # 1/T0 where T0 is standard reference temperature
@@ -514,7 +517,7 @@ raddamp = False
 tau_r = 5  # number of days for timescale 
 
 ### name
-setup = 'single'
+setup = 'single-new_gamma_plane-shift_fns'
 
 ##########################################################################
 if coriolisform == 'fplane':
@@ -620,11 +623,12 @@ x, y = SpatialCoordinate(mesh)
 # x *= Lx
 # y *= Ly
 
-parameters = ShallowWaterParameters(mesh, H=H, g=g, Omega=Omega)
+parameters = ShallowWaterParameters(mesh, H=H, g=g, Omega=Omega, R=R, rotation=CoriolisOptions.gammaplane, x0=Lx/2, y0=Ly/2)
 
 domain = Domain(mesh, dt, "RTCF", 1)
 
-r, theta_coord = rtheta_from_xy(x, y, Lx, Ly)
+# r, theta_coord = rtheta_from_xy(x-Lx/2, y-Ly/2)
+r, theta_coord = rtheta_from_xy(x, y, Lx/2, Ly/2)
 
 _, lat = lonlat_from_rtheta(r, theta_coord, R)
 
@@ -640,8 +644,10 @@ fsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(
 if smooth_degree == 5:
     fsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
 
-ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
-ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)#-2*Omega
+# ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
+# ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)#-2*Omega
+
+ftrap = conditional(r<rstar+smooth_delta*Lx/nx, fsmooth, 2*Omega)
 
 if fplane:
     ftrap = 2*Omega
@@ -656,7 +662,7 @@ if moist:
 if thermal:
     eqns = ThermalShallowWaterEquations(domain, parameters, fexpr=ftrap, active_tracers=tracers)
 else:
-    eqns = ShallowWaterEquations(domain, parameters, fexpr=ftrap, active_tracers=tracers)
+    eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap), active_tracers=tracers)
 logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
 Ld = sqrt(H*g)/f0
@@ -712,10 +718,7 @@ elif moist:
                           SSPRK3(domain, "water_vapour", limiter=DG1limiter),
                           SSPRK3(domain, "cloud_water", limiter=DG1limiter)]
     if thermal:
-        linear_solver = ThermalSWSolver(eqns)
         transported_fields.append((SSPRK3(domain, "b", limiter=DG1limiter)))
-    else:
-        linear_solver = MoistConvectiveSWSolver(eqns)
 
     # Physics schemes
     if thermal and not convective:
@@ -757,8 +760,7 @@ elif moist:
         eqns, io,
         transport_schemes=transported_fields,
         spatial_methods=transport_methods,
-        linear_solver=linear_solver,
-        physics_schemes=physics_schemes
+        final_physics_schemes=physics_schemes
     )
 
 
@@ -813,7 +815,9 @@ if not restart:
     for i in range(len(south_lat)):
         r_c, theta_c = rtheta_from_lonlat(south_lon[i], south_lat[i], R)
         # logger.info(f'r is {r_c}, theta is {theta_c}')
-        x_c, y_c = xy_from_rtheta(r_c, theta_c, Lx, Ly)
+        x_c_shift, y_c_shift = xy_from_rtheta(r_c, theta_c, Lx/2, Ly/2)
+        x_c = x_c_shift #+ Lx/2
+        y_c = y_c_shift #+ Ly/2
         # logger.info(f'x is {x_c}, y is {y_c}')
         # print(f'(x, y) is ({x_c}, {y_c})')
         dr = sqrt((x-x_c)**2 + (y-y_c)**2)

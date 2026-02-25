@@ -15,6 +15,8 @@ from pyop2.mpi import MPI
 import numpy as np
 from gusto.core.logging import logger, update_logfile_location
 from collections import namedtuple
+from enum import Enum
+from ufl.core.expr import Expr
 
 __all__ = ["pick_up_mesh", "IO", "TimeData"]
 
@@ -258,7 +260,7 @@ class IO(object):
         """
         if hasattr(equation, 'parameters') and equation.parameters is not None:
             logger.info("Physical parameters that take non-default values:")
-            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items() if type(v) is not MeshGeometry))
+            logger.info(", ".join("%s: %s" % (k, float(v)) for (k, v) in vars(equation.parameters).items() if type(v) is not MeshGeometry and not isinstance(v, Expr) and not isinstance(v, Enum)))
 
     def setup_log_courant(self, state_fields, name='u', component="whole",
                           expression=None):
