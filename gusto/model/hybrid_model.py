@@ -82,6 +82,9 @@ class HybridModel(object):
             ndt, (int): number of timesteps to run the model for
         """
 
+        self.ndt = ndt
+        self.data_fields = data_fields
+
         # for each initial condition, we make a copy of the PDE model
         # class, initialise it, timestep it and save the data in a
         # checkpoint file.
@@ -89,15 +92,16 @@ class HybridModel(object):
         pde_model = self.pde_model
         # CHECK: there must be a better way to change the model output settings?
         output = pde_model.stepper.io.output
+        # TODO: use data_fields to prescribe which fields to dump
         output.checkpoint = True
         # TODO: probably should be input arg, along with e.g. spinup_steps
         output.chkptfreq = 1
         output.multichkpt = True
         # create list to store output directories for data processing
-        dir_list = []
+        self.dir_list = []
         for i, ic in enumerate(initial_conditions):
             output.dirname = os.path.join(self.data_dir, f"test_train_{i}")
-            dir_list.append(output.dirname)
+            self.dir_list.append(output.dirname)
             stepper = pde_model.stepper
             for field_name, field_ic in ic:
                 field = stepper.fields(field_name)
@@ -107,11 +111,30 @@ class HybridModel(object):
                     field.interpolate(field_ic)
             stepper.run(t=0, tmax=ndt*float(pde_model.domain.dt))
 
+    def process_data(self, data_fields=None, ndt=None, dir_list=None):
+        """
+        Processes multiple global checkpoint data files into point data
+        and global data in the format required for training the model
+        Args:
+           data_fields, (list)
+           ndt, (int):
+           dir_list, (list):
+        """
+        if ndt is None:
+            ndt = self.ndt
+        if data_fields is None:
+            data_fields = self.data_fields
+        if dir_list is None:
+            dir_list = self.dir_list
         point_data = []
         global_data = []
+        point_times = []
+        point_labels = []
+        global_times = []
+        global_labels = []
+        simulation_numbers = []
         for i, dirname in enumerate(dir_list):
-            chkpt_file = os.path.join("results/", self.data_dir,
-                                      f"test_train_{i}", "chkpt.h5")
+            chkpt_file = os.path.join(dirname, "chkpt.h5")
             with CheckpointFile(chkpt_file, 'r') as chkfile:
                 mesh = chkfile.load_mesh(name='mesh')
                 fields = []
@@ -124,23 +147,93 @@ class HybridModel(object):
                             # TODO: generalise Vdg function space
                             Vdg = FunctionSpace(mesh, "DG", 1)
                             # TODO: this only works on the plane
-                            u0 = Function(Vdg).interpolate(u[0])
-                            u1 = Function(Vdg).interpolate(u[1])
+                            u0 = Function(Vdg, name="u").interpolate(u[0])
+                            u1 = Function(Vdg, name="v").interpolate(u[1])
                             fields.append(u0)
                             fields.append(u1)
                         else:
                             fields.append(chkfile.load_function(mesh, field_name, n))
-                    point_values = self.point_evaluation(mesh, fields)
+                    point_values, coords = self.point_evaluation(mesh, fields)
                     for data_tuple in zip(*point_values):
-                        point_data.append((*data_tuple, t, n))
+                        point_data.append(data_tuple)
+                        # Save labels to identify the time and simulation
+                        # for the data
+                        point_times.append(t)
+                        # TODO label is maybe not necessary - the same
+                        # information can be accessed from a
+                        # combination of the time and simulation
+                        # number
+                        point_labels.append(n)
 
                     # Append fields to the global data list
-                    global_data.append((*fields, t, i, n))
+                    global_data.append(fields)
+                    # Save labels to identify the time and simulation
+                    # for the data
+                    global_times.append(t)
+                    # TODO label is maybe not necessary - the same
+                    # information can be accessed from a
+                    # combination of the time and simulation
+                    # number
+                    global_labels.append(n)
+                    simulation_numbers.append(i)
+
+        # split into training and testing data
+        global_train, global_test, point_train, point_test = \
+            self.train_test_split(global_data, point_data, 0.8)
+
+        # write global training data to checkpoint file
+        filename = os.path.join(self.data_dir, "global_train_data.h5")
+        n_global_train = len(global_train)
+        with CheckpointFile(filename, "w") as afile:
+            afile.h5pyfile["n"] = len(global_train)
+            afile.save_mesh(mesh)
+            for i, fields in enumerate(global_train):
+                for field in fields:
+                    afile.save_function(field, idx=i, name=field.name())
+            afile.set_attr("/", "times", global_times[:n_global_train])
+            afile.set_attr("/", "sims", simulation_numbers[:n_global_train])
+            afile.set_attr("/", "labels", global_labels[:n_global_train])
+            afile.set_attr("/", "locations", coords)
+
+        # write global testing data to checkpoint file
+        filename = os.path.join(self.data_dir, "global_test_data.h5")
+        with CheckpointFile(filename, "w") as afile:
+            afile.h5pyfile["n"] = len(global_test)
+            afile.save_mesh(mesh)
+            for i, fields in enumerate(global_test):
+                for field in fields:
+                    afile.save_function(field, idx=i, name=field.name())
+            afile.set_attr("/", "times", global_times[n_global_train:])
+            afile.set_attr("/", "sims", simulation_numbers[n_global_train:])
+            afile.set_attr("/", "labels", global_labels[n_global_train:])
+            afile.set_attr("/", "locations", coords)
+
+        filename = os.path.join(self.data_dir, "point_train_data")
+        n_point_train = len(point_train)
+        point_times_train = np.array([point_times[:n_point_train]])
+        point_labels_train = np.array([point_labels[:n_point_train]])
+        print(point_train[0])
+        print(np.array([point_train]).shape, point_times_train.shape, point_labels_train.shape)
+        np.save(filename,
+                np.concatenate([np.array(point_train),
+                                point_times_train.T,
+                                point_labels_train.T]))
+        filename = os.path.join(self.data_dir, "point_test_data")
+        point_times_test = np.array([point_times[n_point_train:]])
+        point_labels_test = np.array([point_labels[n_point_train:]])
+        np.save(filename,
+                np.concatenate([point_test,
+                                point_times_test.T,
+                                point_labels_test.T]))
 
     def point_evaluation(self, mesh, fields):
-
+        """
+        Evaluates fields at coordinates of DG space.
+        Args:
+            mesh: mesh from checkpoint file
+            fields: list of Firedrake Functions to evaluate at points
+        """
         # find point locations
-        L2 = self.pde_model.domain.spaces("L2")
         # TODO: generalise Vdg function space
         Vdg = FunctionSpace(mesh, "DG", 1)
         W = VectorFunctionSpace(mesh, Vdg.ufl_element())
@@ -161,14 +254,38 @@ class HybridModel(object):
         point_values.append(coords[:, 0])
         point_values.append(coords[:, 1])
 
-        return point_values
+        return point_values, coords
+
+    def train_test_split(self, global_data, point_data, train_proportion):
+        """
+        Args:
+            global_data (list): a list of all global data
+            point_data (list): a list of all point data
+            train_proportion (float): the proportion (between 0 and 1) of the
+                data to use as the training set. The remaining data become the
+                test set.
+        """
+        total_global_samples = len(global_data)
+        total_point_samples = len(point_data)
+        pp_sample = int(total_point_samples/total_global_samples)
+
+        n_global_train = int(train_proportion * total_global_samples)
+        n_point_train = int(n_global_train * pp_sample)
+
+        global_train = global_data[:n_global_train]
+        global_test = global_data[n_global_train:]
+
+        point_train = point_data[:n_point_train]
+        point_test = point_data[n_point_train:]
+
+        return global_train, global_test, point_train, point_test
 
     def forward_pass(self):
         """
         Forward pass of the ml model. Returns a list of tensors.
         """
 
-    def train(self, data_dir, point_training_data, global_training_data,
+    def train(self, point_training_data, global_training_data,
               point_test_data, global_test_data,
               learning_rate=5e-5, epochs=20, rollout_length=2):
         """
@@ -177,15 +294,15 @@ class HybridModel(object):
         # Create dataset classes and dataloader classes for reading in
         # training and testing data
         point_train_dataset = PointDataset(
-            numpy_data=os.path.join(data_dir, point_training_data),
-            data_dir=data_dir
+            numpy_data=os.path.join(self.data_dir, point_training_data),
+            data_dir=self.data_dir
         )
         point_train_dl = DataLoader(
             point_train_dataset, batch_size=self.batch_size, shuffle=False
         )
         global_train_dataset = GustoGlobalDataset(
-            dataset=os.path.join(data_dir, global_training_data),
-            data_dir=data_dir
+            dataset=os.path.join(self.data_dir, global_training_data),
+            data_dir=self.data_dir
         )
         global_train_dl = DataLoader(
             global_train_dataset, batch_size=self.batch_size,
@@ -193,22 +310,22 @@ class HybridModel(object):
         )
 
         point_test_dataset = PointDataset(
-            numpy_data=os.path.join(data_dir, point_test_data),
-            data_dir=data_dir
+            numpy_data=os.path.join(self.data_dir, point_test_data),
+            data_dir=self.data_dir
         )
         point_test_dl = DataLoader(
             point_test_dataset, batch_size=self.batch_size, shuffle=False
         )
         global_test_dataset = GustoGlobalDataset(
-            dataset=os.path.join(data_dir, global_test_data),
-            data_dir=data_dir
+            dataset=os.path.join(self.data_dir, global_test_data),
+            data_dir=self.data_dir
         )
         global_test_dl = DataLoader(
             global_test_dataset, batch_size=self.batch_size,
             collate_fn=self.global_test_dataset.collate, shuffle=False
         )
 
-        # 
+        #
         with set_working_tape() as tape:
             F_pred = ReducedFunctional(
                 self.assemble_prediction(dyn_out, nn_u0, nn_u1, nn_D),
@@ -223,6 +340,121 @@ class HybridModel(object):
             H = fem_operator(F_loss)
 
         optimiser = optim.AdamW(model.parameters(), lr=learning_rate, eps=1e-8)
+
+        # Training loop
+        for epoch_num in trange(epochs):
+            model.train()
+            total_loss = 0.0
+            train_steps = len(global_train_dl)
+            point_train_data_subsets = sub_sample_point_data(point_train_dl)
+
+            if len(point_train_data_subsets) != train_steps:
+                print("The number of data subsets does not match the number of global samples")
+
+            for step_num, (subset, global_sample) in tqdm(enumerate(list(zip(point_train_data_subsets, global_train_dl))),
+                                                          total=train_steps):
+        
+                model.zero_grad()
+
+                batch = SWBatchedElement(*[x.to(device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in global_sample])
+                initial_u_tensor = batch.u
+                initial_D_tensor = batch.D
+
+                # Set initial values for dynamics and network
+                nn_in = subset
+                dyn_in = torch.cat([initial_u_tensor, initial_D_tensor], dim=1)
+
+                # The index of the sample
+                sample_idx = batch.idx[0]
+
+                # The time of the sample
+                time = batch.t[0][sample_idx]
+
+                for rollout_step in range(rollout_length):
+                    # Produce a network prediction for u and D using the same
+                    # initial condition that the dynamics will see
+                    u0_nn_out, u1_nn_out, D_nn_out, _ = forced_sw_forward_pass(nn_in, model,
+                                                                               batch_size,
+                                                                               rollout_step)
+            
+                    # Run forward PDE model for ndt timesteps and add the network forcings
+                    pred_tensor = G(dyn_in, u0_nn_out, u1_nn_out, D_nn_out)
+
+                    # Prepare input for next network call
+                    next_u0_tensor = J_u0(pred_tensor)
+                    next_u1_tensor = J_u1(pred_tensor)
+                    next_D_tensor = J_D(pred_tensor)
+
+                    # Stack tensors of (u0, u1, D, x, y) (we don't include time)
+                    nn_in = torch.stack((next_u0_tensor, next_u1_tensor, next_D_tensor,
+                                         x_tensor, y_tensor),
+                                        dim=2)
+
+                    # Create input for the next dynamics call
+                    dyn_in = pred_tensor
+        
+                # The target is the u solution the rollout length time later
+                target_idx = sample_idx + rollout_length
+
+                # Access the sample using its index, while the target
+                # index is less than the length of indices
+                try:
+                    target_sample = list(global_train_dl)[target_idx]
+                except:
+                    pass
+                target_batch = SWBatchedElement(*[x.to(device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in target_sample])
+
+                # Check that the target comes from the same simulation
+                # (the last two will never)
+                IC_sim_no = target_batch.s[0][sample_idx]
+                try:
+                    target_sim_no = target_batch.s[0][target_idx]
+                except:
+                    pass
+
+                # where these are not the same we don't use the data
+                # if they are the same define a target, set up a loss
+                # function and backprop
+                if IC_sim_no == target_sim_no:
+                    target_u_tensor = target_batch.u
+                    target_D_tensor = target_batch.D
+                    target_tensor = torch.cat([target_u_tensor, target_D_tensor],
+                                              dim=1)
+
+                    # Define L2-loss using Firedrake
+                    loss = H(pred_tensor, target_tensor)
+                    total_loss += loss.item()
+
+                    # Backprop and perform Adam optimisation
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
+                    optimiser.step()
+
+            # Evaluate this version of the model on the test set
+            error = evaluate_forced_sw_model(model, device, point_test_dl, global_test_dl,
+                                             pde_model=pde_model, disable_tqdm=False, write_out_results=False,
+                                             rollout_length=rollout_length, dt=dt, ndt=ndt)
+
+            # Save best-performing model
+            if error < best_error or epoch_num == 0:
+                best_error = error
+                # Create directory for trained models
+                model_dir = f'{abspath(dirname(__file__))}/../../data/saved_models/'
+                name_dir = f"forced_sw_epoch-{epoch_num}-error_{best_error:.5f}"
+                model_dir = os.path.join(model_dir, "forced_sw",
+                                     name_dir)
+                if not os.path.exists(model_dir):
+                    os.makedirs(model_dir)
+
+                # Save model
+                # Take care of distributed/parallel training
+                model_to_save = (model.module if hasattr(model, "module") else model)
+                checkpoint = {
+                    'epoch': epoch_num + 1,
+                    'state_dict': model_to_save.state_dict(),
+                    'optimiser': optimiser.state_dict()
+                }
+                torch.save(checkpoint, os.path.join(model_dir, "model.pt"))
 
     def evalute(self, filename=None):
         """
