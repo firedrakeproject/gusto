@@ -230,7 +230,7 @@ class SIQNModel(SIQNModelBase):
         return _transport_methods
 
 
-class LowestOrderSIQNModel(SIQNModel):
+class LowestOrderSIQNModel(SIQNModelBase):
     """
     SIQN model class encapsulating the best settings for lowest
     order methods.
