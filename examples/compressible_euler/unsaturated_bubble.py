@@ -23,7 +23,7 @@ from firedrake import (
 )
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto import (
-    OutputParameters, LowestOrderModel, DGUpwind, SSPRK3,
+    OutputParameters, LowestOrderSIQNModel, DGUpwind, SSPRK3,
     Perturbation, BoundaryMethod, Recoverer, Fallout,
     Coalescence, SaturationAdjustment, EvaporationOfRain, thermodynamics,
     CompressibleParameters, CompressibleEulerEquations,
@@ -86,10 +86,10 @@ def unsaturated_bubble(
     tracers = [WaterVapour(), CloudWater(), Rain()]
     eqns = CompressibleEulerEquations
 
-    model = LowestOrderModel(mesh, dt, parameters, eqns,
-                             u_transport_option=u_eqn_type,
-                             active_tracers=tracers,
-                             family="CG")
+    model = LowestOrderSIQNModel(mesh, dt, parameters, eqns,
+                                 u_transport_option=u_eqn_type,
+                                 active_tracers=tracers,
+                                 family="CG")
 
     # I/O
     output = OutputParameters(

@@ -19,7 +19,7 @@ from firedrake import (
 )
 from gusto import (
     Perturbation, CompressibleParameters, OutputParameters,
-    CompressibleEulerEquations, Model,
+    CompressibleEulerEquations, SIQNModel,
     compressible_hydrostatic_balance
 )
 
@@ -77,8 +77,8 @@ def skamarock_klemp_nonhydrostatic(
         dump_vtus=False, dump_nc=True,
     )
 
-    model = Model(mesh, dt, parameters, eqns, family="CG",
-                  element_order=element_order)
+    model = SIQNModel(mesh, dt, parameters, eqns, family="CG",
+                      element_order=element_order)
 
     diagnostic_fields = [Perturbation('theta')]
     model.setup(output=output, diagnostic_fields=diagnostic_fields)

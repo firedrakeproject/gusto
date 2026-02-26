@@ -97,8 +97,11 @@ class ModelBase(object, metaclass=ABCMeta):
         self.stepper.run(t=t, tmax=tmax, pick_up=pick_up)
 
 
-class SIQNModel(ModelBase):
-
+class SIQNModelBase(ModelBase):
+    """
+    Base for model classes using SIQN. Child classes should define the
+    standard transport and diffusion schemes and methods.
+    """
     @abstractproperty
     def diffusion_methods(self):
         pass
@@ -125,7 +128,6 @@ class SIQNModel(ModelBase):
         pass
 
     def setup(self, output, **kwargs):
-
         """
         Args:
             output (:class:`OutputParameters`): provides parameters
@@ -152,14 +154,15 @@ class SIQNModel(ModelBase):
         )
 
 
-class GustoModel(SIQNModel):
-
+class SIQNModel(SIQNModelBase):
     """
-    Class encapsulating the current best setup for Gusto.
+    SIQN model class encapsulating the best settings for next-to-lowest
+    order methods. Currently the standard Gusto model.
     """
     def __init__(self, mesh, dt, parameters, equation,
                  family=None,
-                 no_normal_flow_bc_ids=None, **kwargs):
+                 no_normal_flow_bc_ids=None,
+                 **kwargs):
 
         super().__init__(mesh, dt, parameters, equation,
                          family=family, element_order=1,
@@ -227,8 +230,11 @@ class GustoModel(SIQNModel):
         return _transport_methods
 
 
-class LowestOrderModel(SIQNModel):
-
+class LowestOrderSIQNModel(SIQNModel):
+    """
+    SIQN model class encapsulating the best settings for lowest
+    order methods.
+    """
     def __init__(self, mesh, dt, parameters, equation,
                  family=None,
                  no_normal_flow_bc_ids=None, **kwargs):

@@ -13,7 +13,7 @@ from firedrake import (
     LinearVariationalProblem, LinearVariationalSolver
 )
 from gusto import (
-    OutputParameters, LowestOrderModel,
+    OutputParameters, LowestOrderSIQNModel,
     Perturbation, CompressibleParameters,
     CompressibleEulerEquations, compressible_hydrostatic_balance
 )
@@ -67,9 +67,9 @@ def dry_bryan_fritsch(
     eqns = CompressibleEulerEquations
 
     # Model
-    model = LowestOrderModel(mesh, dt, params, eqns,
-                             u_transport_option=u_eqn_type,
-                             family="CG", no_normal_flow_bc_ids=[1, 2])
+    model = LowestOrderSIQNModel(mesh, dt, params, eqns,
+                                 u_transport_option=u_eqn_type,
+                                 family="CG", no_normal_flow_bc_ids=[1, 2])
 
     # I/O
     output = OutputParameters(

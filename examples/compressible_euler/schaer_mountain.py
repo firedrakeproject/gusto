@@ -16,7 +16,7 @@ from firedrake import (
 )
 from gusto import (
     CompressibleParameters, logger,
-    OutputParameters, Model,
+    OutputParameters, SIQNModel,
     compressible_hydrostatic_balance, SpongeLayerParameters, Exner, ZComponent,
     Perturbation, MaxKernel, MinKernel,
     CompressibleEulerEquations, SubcyclingOptions
@@ -101,10 +101,10 @@ def schaer_mountain(
     eqns = CompressibleEulerEquations
 
     # Model
-    model = Model(mesh, dt, parameters, eqns,
-                  u_transport_option=u_eqn_type,
-                  sponge_options=sponge_params,
-                  family="CG")
+    model = SIQNModel(mesh, dt, parameters, eqns,
+                      u_transport_option=u_eqn_type,
+                      sponge_options=sponge_params,
+                      family="CG")
 
     # I/O
     output = OutputParameters(
