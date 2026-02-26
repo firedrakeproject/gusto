@@ -137,9 +137,9 @@ class HybridModel(object):
             chkpt_file = os.path.join(dirname, "chkpt.h5")
             with CheckpointFile(chkpt_file, 'r') as chkfile:
                 mesh = chkfile.load_mesh(name='mesh')
-                fields = []
                 for n in range(ndt):
                     t = chkfile.get_timestepping_history(mesh, 'u').get('time')[n]
+                    fields = []
                     for field_name in data_fields:
                         if field_name == "u":
                             u = chkfile.load_function(mesh, field_name, n)
@@ -212,19 +212,17 @@ class HybridModel(object):
         n_point_train = len(point_train)
         point_times_train = np.array([point_times[:n_point_train]])
         point_labels_train = np.array([point_labels[:n_point_train]])
-        print(point_train[0])
-        print(np.array([point_train]).shape, point_times_train.shape, point_labels_train.shape)
         np.save(filename,
-                np.concatenate([np.array(point_train),
+                np.concatenate([point_train,
                                 point_times_train.T,
-                                point_labels_train.T]))
+                                point_labels_train.T], axis=1))
         filename = os.path.join(self.data_dir, "point_test_data")
         point_times_test = np.array([point_times[n_point_train:]])
         point_labels_test = np.array([point_labels[n_point_train:]])
         np.save(filename,
                 np.concatenate([point_test,
                                 point_times_test.T,
-                                point_labels_test.T]))
+                                point_labels_test.T], axis=1))
 
     def point_evaluation(self, mesh, fields):
         """
