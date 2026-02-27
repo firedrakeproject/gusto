@@ -24,7 +24,9 @@ sw_model.stepper.set_reference_profiles([("D", Dbar)])
 
 ml_model = PointNN(n_in=5, n_out=3)
 
-hybrid_model = HybridModel(sw_model, ml_model, fields_to_adjust=["u", "D"],
+hybrid_model = HybridModel(sw_model, ml_model,
+                           input_fields=["u", "D"],
+                           fields_to_adjust=["u", "D"],
                            data_dir="results/sw_ml")
 
 def generate_initial_conditions(mesh, n_ics, n_gaussians, scale, extent, H):
@@ -61,8 +63,9 @@ dir_list = ["results/sw_ml/test_train_0", "results/sw_ml/test_train_1",
             "results/sw_ml/test_train_4", "results/sw_ml/test_train_5",
             "results/sw_ml/test_train_6", "results/sw_ml/test_train_7",
             "results/sw_ml/test_train_8", "results/sw_ml/test_train_9"]
-hybrid_model.process_data(["u", "D"], ndt=4, dir_list=dir_list)
+#hybrid_model.process_data(["u", "D"], ndt=4, dir_list=dir_list)
 
-hybrid_model.train()
+hybrid_model.train("point_train_data.npy", "global_train_data.h5",
+                   "point_test_data.npy", "global_test_data.h5")
 
 hybrid_model.evaluate()

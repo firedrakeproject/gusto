@@ -1,12 +1,16 @@
 from firedrake import (Function, as_vector, CheckpointFile, assemble, dx,
                        VectorFunctionSpace, FunctionSpace, VertexOnlyMesh,
-                       interpolate)
-from firedrake.adjoint import Control, ReducedFunctional
+                       interpolate, Constant)
+from firedrake.adjoint import Control, ReducedFunctional, set_working_tape
 from firedrake.ml.pytorch import to_torch, from_torch, fem_operator
-from torch.nn import Module, Sequential, Linear, ReLU
-from torch.utils.data import DataLoader, Dataset
 
-from collections import namedtuple
+from torch.nn import Module, Sequential, Linear, ReLU
+import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset, Subset
+
+from tqdm.auto import tqdm, trange
+
+from collections import namedtuple, defaultdict
 import numpy as np
 import os
 import torch
@@ -14,12 +18,13 @@ import torch
 
 class HybridModel(object):
 
-    def __init__(self, pde_model, ml_model, fields_to_adjust,
+    def __init__(self, pde_model, ml_model, input_fields, fields_to_adjust,
                  data_dir):
         """
         Args:
             pde_model: PDE model (Gusto model class?)
             ml_model: PyTorch model
+            input_fields, (list):
             fields_to_adjust (list): list of names of fields to adjust
                 with ml model
             data_dir (str): directory where to save / load data to / from
@@ -27,6 +32,7 @@ class HybridModel(object):
 
         self.pde_model = pde_model
         self.ml_model = ml_model
+        self.input_fields = input_fields
         self.fields_to_adjust = fields_to_adjust
         self.data_dir = data_dir
 
@@ -35,10 +41,11 @@ class HybridModel(object):
         # Set double precision in ml_model to match types
         ml_model.double()
         # Move ml_model to device
-        device = "cpu"
-        ml_model.to(device)
+        self.device = "cpu"
+        ml_model.to(self.device)
 
         fs = pde_model.equation.X.function_space()
+        self.pde_out = Function(fs)
         self.ml_out = Function(fs)
         self.x_predicted = Function(fs)
 
@@ -65,9 +72,11 @@ class HybridModel(object):
                 self.ml_out.subfunctions[idx].interpolate(ml[ml_idx])
                 ml_idx += 1
 
-        self.prediction.interpolate(dyn + self.ml_out)
+        self.x_predicted.interpolate(dyn + self.ml_out)
 
-    def generate_data(self, initial_conditions, data_fields, ndt):
+        return self.x_predicted
+
+    def generate_data(self, initial_conditions, ndt):
         """
         Generate data using the PDE model.
         Args:
@@ -77,13 +86,10 @@ class HybridModel(object):
                 string corresponding to a prognostic field in the PDE model
                 and initial_condition is a ufl.Expr or Firedrake function that
                 specifies the initial values of that field.
-            data_fields, (list): a list of strings specifying the fields we
-                need to store and process data for.
             ndt, (int): number of timesteps to run the model for
         """
 
         self.ndt = ndt
-        self.data_fields = data_fields
 
         # for each initial condition, we make a copy of the PDE model
         # class, initialise it, timestep it and save the data in a
@@ -92,7 +98,7 @@ class HybridModel(object):
         pde_model = self.pde_model
         # CHECK: there must be a better way to change the model output settings?
         output = pde_model.stepper.io.output
-        # TODO: use data_fields to prescribe which fields to dump
+        # TODO: use self.input_fields to prescribe which fields to dump
         output.checkpoint = True
         # TODO: probably should be input arg, along with e.g. spinup_steps
         output.chkptfreq = 1
@@ -111,19 +117,16 @@ class HybridModel(object):
                     field.interpolate(field_ic)
             stepper.run(t=0, tmax=ndt*float(pde_model.domain.dt))
 
-    def process_data(self, data_fields=None, ndt=None, dir_list=None):
+    def process_data(self, ndt=None, dir_list=None):
         """
         Processes multiple global checkpoint data files into point data
         and global data in the format required for training the model
         Args:
-           data_fields, (list)
            ndt, (int):
            dir_list, (list):
         """
         if ndt is None:
             ndt = self.ndt
-        if data_fields is None:
-            data_fields = self.data_fields
         if dir_list is None:
             dir_list = self.dir_list
         point_data = []
@@ -140,7 +143,7 @@ class HybridModel(object):
                 for n in range(ndt):
                     t = chkfile.get_timestepping_history(mesh, 'u').get('time')[n]
                     fields = []
-                    for field_name in data_fields:
+                    for field_name in self.input_fields:
                         if field_name == "u":
                             u = chkfile.load_function(mesh, field_name, n)
                             # Extract components of u
@@ -278,6 +281,63 @@ class HybridModel(object):
 
         return global_train, global_test, point_train, point_test
 
+    def advance_pde(self, xin, xout, ndt):
+
+        for field_name in self.pde_model.equation.field_names:
+            idx = self.pde_model.equation.field_names.index(field_name)
+            self.pde_model.stepper.fields(field_name).assign(xin.subfunctions[idx])
+        tmax = float(Constant(self.stepper.domain.dt) * ndt)
+
+        self.stepper.run(0, tmax)
+
+        for field_name in self.pde_model.equation.field_names:
+            idx = self.pde_model.equation.field_names.index(field_name)
+            xin.subfunctions[idx].assign(self.pde_model.stepper.fields(field_name))
+
+    def pde_to_ml(self):
+        """
+        Converts hybrid prediction into tensors for next ml model step
+        """
+
+    def sub_sample_point_data(self, point_train_dataloader):
+        """
+        Args:
+            point_train_dataloader (:class: `Dataloader`): a Dataloader object
+            with all the point data, to be separated by global sample where
+            one global sample corresponds to the solution at one a single
+            time of a simulation.
+        """
+        labels = []
+        for step_num, point_sample in enumerate(point_train_dataloader):
+            point_label = point_sample[:, -1].item()
+            labels.append(point_label)
+            # define a list of lists of indices where all the labels match
+            index_list = []
+            for lables, indices in sorted(self.list_duplicates(labels)):
+                index_list.append(indices)
+
+            # use index_list to sub-sample the point data by labels
+            subsets = []
+            for l in index_list:
+                subset = Subset(point_train_dataloader.dataset, l)
+                subsets.append(subset)
+
+        # return a list of datasets, where all examples in each
+        # dataset belong to one global sample
+        return subsets
+
+    def list_duplicates(labels):
+        # This method returns a list of tuples of (label, [indices])
+        # where [indices] is a list of where the label occurs
+        """
+        Args:
+        labels (list): a list of integer simulation labels
+        """
+        tally = defaultdict(list)
+        for i, item in enumerate(labels):
+            tally[item].append(i)
+        return (indices for indices in tally.items() if len(indices) > 1)
+
     def forward_pass(self):
         """
         Forward pass of the ml model. Returns a list of tensors.
@@ -292,15 +352,17 @@ class HybridModel(object):
         # Create dataset classes and dataloader classes for reading in
         # training and testing data
         point_train_dataset = PointDataset(
-            numpy_data=os.path.join(self.data_dir, point_training_data),
+            numpy_data=point_training_data,
             data_dir=self.data_dir
         )
         point_train_dl = DataLoader(
             point_train_dataset, batch_size=self.batch_size, shuffle=False
         )
         global_train_dataset = GustoGlobalDataset(
-            dataset=os.path.join(self.data_dir, global_training_data),
-            data_dir=self.data_dir
+            dataset=global_training_data,
+            data_dir=self.data_dir,
+            field_names=self.input_fields,
+            attr_names=""
         )
         global_train_dl = DataLoader(
             global_train_dataset, batch_size=self.batch_size,
@@ -308,53 +370,65 @@ class HybridModel(object):
         )
 
         point_test_dataset = PointDataset(
-            numpy_data=os.path.join(self.data_dir, point_test_data),
+            numpy_data=point_test_data,
             data_dir=self.data_dir
         )
         point_test_dl = DataLoader(
             point_test_dataset, batch_size=self.batch_size, shuffle=False
         )
         global_test_dataset = GustoGlobalDataset(
-            dataset=os.path.join(self.data_dir, global_test_data),
-            data_dir=self.data_dir
+            dataset=global_test_data,
+            data_dir=self.data_dir,
+            field_names=self.input_fields,
+            attr_names=""
         )
         global_test_dl = DataLoader(
             global_test_dataset, batch_size=self.batch_size,
-            collate_fn=self.global_test_dataset.collate, shuffle=False
+            collate_fn=global_test_dataset.collate, shuffle=False
         )
 
         #
         with set_working_tape() as tape:
             F_pred = ReducedFunctional(
-                self.assemble_prediction(dyn_out, nn_u0, nn_u1, nn_D),
-                [Control(dyn_out), Control(nn_u0), Control(nn_u1), Control(nn_D)],
-                eval_cb_pre=advance_pde)
+                self.assemble_prediction(self.pde_out, self.ml_out),
+                [Control(self.pde_out), Control(self.ml_out)],
+                eval_cb_pre=self.advance_pde
+            )
             G = fem_operator(F_pred)
-            F_u0_in = ReducedFunctional(pred_to_u0_input(pred_func),
-                                        [Control(pred_func)])
-            J_u0 = fem_operator(F_u0_in)
-            F_loss = ReducedFunctional(assemble_L2_error(f_pred, f_exact),
-                                       [Control(f_pred), Control(f_exact)])
+
+            F_ml_in = ReducedFunctional(self.pde_to_ml(self.x_predicted),
+                                        [Control(self.x_predicted)])
+            J = fem_operator(F_ml_in)
+
+            F_loss = ReducedFunctional(
+                self.assemble_cost_function(self.x_predicted, self.x_target),
+                [Control(self.x_predicted), Control(self.x_target)])
             H = fem_operator(F_loss)
 
-        optimiser = optim.AdamW(model.parameters(), lr=learning_rate, eps=1e-8)
+        optimiser = optim.AdamW(self.ml_model.parameters(),
+                                lr=learning_rate, eps=1e-8)
+
+        best_error = np.finfo(float).max
+        max_grad_norm = 1.
 
         # Training loop
         for epoch_num in trange(epochs):
-            model.train()
+            self.ml_model.train()
             total_loss = 0.0
             train_steps = len(global_train_dl)
-            point_train_data_subsets = sub_sample_point_data(point_train_dl)
+            point_train_data_subsets = self.subsample_point_data(point_train_dl)
 
             if len(point_train_data_subsets) != train_steps:
                 print("The number of data subsets does not match the number of global samples")
 
             for step_num, (subset, global_sample) in tqdm(enumerate(list(zip(point_train_data_subsets, global_train_dl))),
                                                           total=train_steps):
-        
-                model.zero_grad()
 
-                batch = SWBatchedElement(*[x.to(device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in global_sample])
+                self.ml_model.zero_grad()
+
+                if isinstance(x, torch.Tensor):
+                    batch = BatchedElement(*[x.to(self.device, non_blocking=True)
+                                             else x for x in global_sample])
                 initial_u_tensor = batch.u
                 initial_D_tensor = batch.D
 
@@ -365,32 +439,26 @@ class HybridModel(object):
                 # The index of the sample
                 sample_idx = batch.idx[0]
 
-                # The time of the sample
-                time = batch.t[0][sample_idx]
-
                 for rollout_step in range(rollout_length):
                     # Produce a network prediction for u and D using the same
                     # initial condition that the dynamics will see
-                    u0_nn_out, u1_nn_out, D_nn_out, _ = forced_sw_forward_pass(nn_in, model,
-                                                                               batch_size,
-                                                                               rollout_step)
-            
-                    # Run forward PDE model for ndt timesteps and add the network forcings
-                    pred_tensor = G(dyn_in, u0_nn_out, u1_nn_out, D_nn_out)
+                    nn_out = self.forward_pass(nn_in, self.ml_model,
+                                               batch_size,
+                                               rollout_step)
+
+                    # Run forward PDE model for ndt timesteps and add
+                    # the network forcings
+                    pred_tensor = G(dyn_in, nn_out)
 
                     # Prepare input for next network call
-                    next_u0_tensor = J_u0(pred_tensor)
-                    next_u1_tensor = J_u1(pred_tensor)
-                    next_D_tensor = J_D(pred_tensor)
+                    next_tensor = J(pred_tensor)
 
-                    # Stack tensors of (u0, u1, D, x, y) (we don't include time)
-                    nn_in = torch.stack((next_u0_tensor, next_u1_tensor, next_D_tensor,
-                                         x_tensor, y_tensor),
-                                        dim=2)
+                    # Stack tensors
+                    nn_in = torch.stack(*next_tensor, dim=2)
 
                     # Create input for the next dynamics call
                     dyn_in = pred_tensor
-        
+
                 # The target is the u solution the rollout length time later
                 target_idx = sample_idx + rollout_length
 
@@ -400,7 +468,7 @@ class HybridModel(object):
                     target_sample = list(global_train_dl)[target_idx]
                 except:
                     pass
-                target_batch = SWBatchedElement(*[x.to(device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in target_sample])
+                target_batch = BatchedElement(*[x.to(self.device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in target_sample])
 
                 # Check that the target comes from the same simulation
                 # (the last two will never)
@@ -414,10 +482,10 @@ class HybridModel(object):
                 # if they are the same define a target, set up a loss
                 # function and backprop
                 if IC_sim_no == target_sim_no:
-                    target_u_tensor = target_batch.u
-                    target_D_tensor = target_batch.D
-                    target_tensor = torch.cat([target_u_tensor, target_D_tensor],
-                                              dim=1)
+                    targets = []
+                    for field in self.input_fields:
+                        targets.append(target_batch.getattr(field))
+                    target_tensor = torch.cat(targets, dim=1)
 
                     # Define L2-loss using Firedrake
                     loss = H(pred_tensor, target_tensor)
@@ -425,34 +493,32 @@ class HybridModel(object):
 
                     # Backprop and perform Adam optimisation
                     loss.backward()
-                    torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
+                    torch.nn.utils.clip_grad_norm_(
+                        parameters=self.ml_model.parameters(),
+                        max_norm=max_grad_norm)
                     optimiser.step()
 
             # Evaluate this version of the model on the test set
-            error = evaluate_forced_sw_model(model, device, point_test_dl, global_test_dl,
-                                             pde_model=pde_model, disable_tqdm=False, write_out_results=False,
-                                             rollout_length=rollout_length, dt=dt, ndt=ndt)
+            error = self.evaluate(self.ml_model, self.device,
+                                  point_test_dl, global_test_dl,
+                                  pde_model=self.pde_model,
+                                  disable_tqdm=False, write_out_results=False,
+                                  rollout_length=rollout_length, dt=dt, ndt=ndt)
 
             # Save best-performing model
-            if error < best_error or epoch_num == 0:
+            if error < best_error:
                 best_error = error
-                # Create directory for trained models
-                model_dir = f'{abspath(dirname(__file__))}/../../data/saved_models/'
-                name_dir = f"forced_sw_epoch-{epoch_num}-error_{best_error:.5f}"
-                model_dir = os.path.join(model_dir, "forced_sw",
-                                     name_dir)
-                if not os.path.exists(model_dir):
-                    os.makedirs(model_dir)
 
                 # Save model
                 # Take care of distributed/parallel training
-                model_to_save = (model.module if hasattr(model, "module") else model)
+                model_to_save = (self.ml_model.module if hasattr(self.ml_model, "module") else self.ml_model)
                 checkpoint = {
                     'epoch': epoch_num + 1,
                     'state_dict': model_to_save.state_dict(),
                     'optimiser': optimiser.state_dict()
                 }
-                torch.save(checkpoint, os.path.join(model_dir, "model.pt"))
+                model_name = f"epoch-{epoch_num}-error_{best_error:.5f}.pt"
+                torch.save(checkpoint, os.path.join(self.data_dir, model_name))
 
     def evalute(self, filename=None):
         """
@@ -544,20 +610,15 @@ class PointDataset(Dataset):
     solution. The pointwise data should be saved as numpy arrays.
     """
 
-    def __init__(self, numpy_data, data_dir=None):
+    def __init__(self, numpy_data, data_dir):
         """
         Args:
             numpy_data (string): the name of the .npy file with the data
             data_dir (string, optional): the path to where the numpy data are saved
         """
         # Check dataset directory
-        if data_dir is not None:
-            dataset_dir = os.path.join(data_dir, "datasets", numpy_data)
-            if not os.path.exists(dataset_dir):
-                raise ValueError(f"Dataset directory {os.path.abspath(dataset_dir)} does not exist")
-            self.numpy_list = np.load(numpy_data)
-        else:
-            self.numpy_list = numpy_data
+        datafile = os.path.join(data_dir, numpy_data)
+        self.numpy_list = np.load(datafile)
 
     def __len__(self):
         return len(self.numpy_list)
