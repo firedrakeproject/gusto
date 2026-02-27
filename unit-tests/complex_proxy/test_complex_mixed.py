@@ -125,9 +125,9 @@ def test_mixed_function_space(mesh, mixed_element):
         idx_real = 2*i+0
         idx_imag = 2*i+1
 
-        real_elem = W.subfunctions[idx_real].ufl_element()
-        imag_elem = W.subfunctions[idx_imag].ufl_element()
-        orig_elem = V.subfunctions[i].ufl_element()
+        real_elem = W.subspaces[idx_real].ufl_element()
+        imag_elem = W.subspaces[idx_imag].ufl_element()
+        orig_elem = V.subspaces[i].ufl_element()
 
         assert real_elem == orig_elem, "The complex function space should have the cpx Element corresponding to the cpx Element of the real space"
         assert imag_elem == orig_elem, "The complex function space should have the cpx Element corresponding to the cpx Element of the real space"
