@@ -1,7 +1,8 @@
 from firedrake import (Function, as_vector, CheckpointFile, assemble, dx,
                        VectorFunctionSpace, FunctionSpace, VertexOnlyMesh,
                        interpolate, Constant)
-from firedrake.adjoint import Control, ReducedFunctional, set_working_tape
+from firedrake.adjoint import (Control, ReducedFunctional, set_working_tape,
+                               continue_annotation)
 from firedrake.ml.pytorch import to_torch, from_torch, fem_operator
 
 from torch.nn import Module, Sequential, Linear, ReLU
@@ -15,6 +16,7 @@ import numpy as np
 import os
 import torch
 
+continue_annotation()
 
 class HybridModel(object):
 
@@ -48,12 +50,13 @@ class HybridModel(object):
         self.pde_out = Function(fs)
         self.ml_out = Function(fs)
         self.x_predicted = Function(fs)
+        self.x_target = Function(fs)
 
     def assemble_cost_function(self, x_predicted, x_target):
         """
         ML cost function
         """
-        return assemble(0.5 * (x_predicted, x_target)**2 * dx)
+        return assemble(0.5 * (x_predicted - x_target)**2 * dx)
 
     def assemble_prediction(self, dyn, ml):
         """
@@ -302,7 +305,7 @@ class HybridModel(object):
         for field in self.input_fields:
             tensors.append()
 
-    def sub_sample_point_data(self, point_train_dataloader):
+    def subsample_point_data(self, point_train_dataloader):
         """
         Args:
             point_train_dataloader (:class: `Dataloader`): a Dataloader object
@@ -329,7 +332,7 @@ class HybridModel(object):
         # dataset belong to one global sample
         return subsets
 
-    def list_duplicates(labels):
+    def list_duplicates(self, labels):
         # This method returns a list of tuples of (label, [indices])
         # where [indices] is a list of where the label occurs
         """
@@ -399,9 +402,9 @@ class HybridModel(object):
             )
             G = fem_operator(F_pred)
 
-            F_ml_in = ReducedFunctional(self.pde_to_ml(self.x_predicted),
-                                        [Control(self.x_predicted)])
-            J = fem_operator(F_ml_in)
+            #F_ml_in = ReducedFunctional(self.pde_to_ml(self.x_predicted),
+            #                            [Control(self.x_predicted)])
+            #J = fem_operator(F_ml_in)
 
             F_loss = ReducedFunctional(
                 self.assemble_cost_function(self.x_predicted, self.x_target),
@@ -429,13 +432,14 @@ class HybridModel(object):
 
                 self.ml_model.zero_grad()
 
-                batch = SWBatchedElement(*[x.to(device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in global_sample])
-                initial_u_tensor = batch.u
-                initial_D_tensor = batch.D
+                batch = BatchedElement(*[x.to(device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in global_sample])
+                tensors = []
+                for field in self.input_fields:
+                    tensors.append(batch.__getattr__(field))
 
                 # Set initial values for dynamics and network
                 nn_in = subset
-                dyn_in = torch.cat([initial_u_tensor, initial_D_tensor], dim=1)
+                dyn_in = torch.cat(tensors, dim=1)
 
                 # The index of the sample
                 sample_idx = batch.idx[0]
@@ -570,7 +574,7 @@ class GustoGlobalDataset(Dataset):
         self.fs = self.batch_elements_fd[0][0].function_space()
 
     def __len__(self):
-        return self.batch_elements_fd
+        return len(self.batch_elements_fd)
 
     def __getitem__(self, idx):
         """
@@ -601,7 +605,35 @@ class GustoGlobalDataset(Dataset):
 
     def collate(self, batch_elements):
 
-        BatchedElement
+        batch_size = len(batch_elements)
+        tensors = {}
+        for field_name in self.field_names:
+            be_field = batch_elements[0].__getattr__(field_name)
+            n = be.size(-1)
+            tensors[field_name] = torch.zeros(batch_size, n, dtype= be.dtype)
+
+        name_list = []
+        for be in batch_elements[0]:
+            if isinstance(be, Function):
+                name_list.append(field_name)
+                name_list.append(be.name+"_fd")
+            else:
+                name_list.append(be.key)
+
+        values = []
+        for i, be in enumerate(batch_elements):
+            for field_name in self.field_names:
+                tensors[field_name][i, :] = be.__getattr__(field_name)
+                field = be.__getattr__(field_name)
+            attrs = []
+            for attr in self.attr_names:
+                attrs.append(be.__getattr__(attr))
+            attrs.append(be.idx)
+            values.append(tensors[field_name], field, attrs)
+
+        BatchedElement = namedtuple("BatchedElement", name_list)
+        BatchedElement(*values)
+
         return BatchedElement
 
 
