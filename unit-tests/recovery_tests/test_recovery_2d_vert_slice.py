@@ -82,7 +82,7 @@ def test_vertical_slice_recovery(geometry, mesh, expr):
     # our actual theta and rho and v
     rho_CG1_true = Function(CG1).interpolate(expr)
     theta_CG1_true = Function(CG1).interpolate(expr)
-    v_CG1_true = Function(vec_CG1).interpolate(as_vector([expr, expr]))
+    v_CG1_true = Function(vec_CG1).interpolate(as_vector([expr, -3.0*expr]))
     rho_Vt_true = Function(Vt).interpolate(expr)
 
     # make the initial fields by projecting expressions into the lowest order spaces
@@ -90,7 +90,7 @@ def test_vertical_slice_recovery(geometry, mesh, expr):
     rho_CG1 = Function(CG1)
     theta_Vt = Function(Vt).interpolate(expr)
     theta_CG1 = Function(CG1)
-    v_Vu = Function(Vu).project(as_vector([expr, expr]))
+    v_Vu = Function(Vu).project(as_vector([expr, -3.0*expr]))
     v_CG1 = Function(vec_CG1)
     rho_Vt = Function(Vt)
 

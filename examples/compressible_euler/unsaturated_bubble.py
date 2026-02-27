@@ -26,7 +26,7 @@ from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     Perturbation, RecoverySpaces, BoundaryMethod, Recoverer, Fallout,
     Coalescence, SaturationAdjustment, EvaporationOfRain, thermodynamics,
-    CompressibleParameters, CompressibleEulerEquations, CompressibleSolver,
+    CompressibleParameters, CompressibleEulerEquations,
     unsaturated_hydrostatic_balance, WaterVapour, CloudWater, Rain,
     RelativeHumidity, ForwardEuler, MixedFSLimiter, ZeroLimiter
 )
@@ -102,8 +102,7 @@ def unsaturated_bubble(
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes -- specify options for using recovery wrapper
-    boundary_methods = {'DG': BoundaryMethod.taylor,
-                        'HDiv': BoundaryMethod.taylor}
+    boundary_methods = {'DG': BoundaryMethod.taylor}
 
     recovery_spaces = RecoverySpaces(domain, boundary_method=boundary_methods, use_vector_spaces=True)
 
@@ -128,9 +127,6 @@ def unsaturated_bubble(
         ["u", "rho", "theta", "water_vapour", "cloud_water", "rain"]
     ]
 
-    # Linear solver
-    linear_solver = CompressibleSolver(eqns)
-
     # Physics schemes
     Vt = domain.spaces('theta')
     rainfall_method = DGUpwind(eqns, 'rain', outflow=True)
@@ -148,7 +144,7 @@ def unsaturated_bubble(
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver, physics_schemes=physics_schemes
+        final_physics_schemes=physics_schemes, tau_values={'rho': 1.0, 'theta': 1.0}
     )
 
     # ------------------------------------------------------------------------ #

@@ -28,7 +28,7 @@ class Domain(object):
     """
     def __init__(self, mesh, dt, family, degree=None,
                  horizontal_degree=None, vertical_degree=None,
-                 rotated_pole=None, max_quad_degree=None):
+                 max_quad_degree=None):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
@@ -44,11 +44,6 @@ class Domain(object):
                 horizontal part of the DG space. Defaults to None.
             vertical_degree (int, optional): the element degree used for the
                 vertical part of the DG space. Defaults to None.
-            rotated_pole (tuple, optional): a tuple of floats (lon, lat) of the
-                location to use as the north pole in a spherical coordinate
-                system. These are expressed in the original coordinate system.
-                The longitude and latitude must be expressed in radians.
-                Defaults to None. This is unused for non-spherical domains.
             max_quad_degree (int, optional): the maximum quadrature degree to
                 use in certain non-linear terms (e.g. when using an expression
                 for the Exner pressure). Defaults to None, in which case this
@@ -106,7 +101,7 @@ class Domain(object):
         # Figure out if we're on a sphere
         # WARNING: if we ever wanted to run on other domains (e.g. circle, disk
         # or torus) then the identification of domains would no longer be unique
-        if hasattr(mesh, "_base_mesh") and hasattr(mesh._base_mesh, 'geometric_dimension'):
+        if mesh.extruded and hasattr(mesh._base_mesh, 'geometric_dimension'):
             self.on_sphere = (mesh._base_mesh.geometric_dimension == 3 and mesh._base_mesh.topological_dimension == 2)
         else:
             self.on_sphere = (mesh.geometric_dimension == 3 and mesh.topological_dimension == 2)
@@ -118,7 +113,7 @@ class Domain(object):
             R = sqrt(inner(x, x))
             self.k = grad(R)
             if dim == 2:
-                if hasattr(mesh, "_base_mesh"):
+                if mesh.extruded:
                     sphere_degree = mesh._base_mesh.coordinates.function_space().ufl_element().degree()
                 else:
                     if not hasattr(mesh, "_cell_orientations"):
@@ -141,7 +136,7 @@ class Domain(object):
         # -------------------------------------------------------------------- #
 
         if self.on_sphere:
-            spherical_shell_mesh = mesh._base_mesh if hasattr(mesh, "_base_mesh") else mesh
+            spherical_shell_mesh = mesh._base_mesh if mesh.extruded else mesh
             xyz_shell = SpatialCoordinate(spherical_shell_mesh)
             r_shell = sqrt(inner(xyz_shell, xyz_shell))
             CG1 = FunctionSpace(spherical_shell_mesh, "CG", 1)
@@ -156,14 +151,13 @@ class Domain(object):
         # Set up coordinates
         # -------------------------------------------------------------------- #
 
-        self.coords = Coordinates(mesh, on_sphere=self.on_sphere,
-                                  rotated_pole=rotated_pole, radius=radius)
+        self.coords = Coordinates(mesh, on_sphere=self.on_sphere, radius=radius)
         # Set up DG1 equispaced space, used for making metadata
         _ = self.spaces('DG1_equispaced')
         self.coords.register_space(self, 'DG1_equispaced')
 
         # Set height above surface (requires coordinates)
-        if hasattr(mesh, "_base_mesh"):
+        if mesh.extruded:
             self.set_height_above_surface()
 
         # -------------------------------------------------------------------- #
@@ -219,7 +213,7 @@ def construct_domain_metadata(mesh, coords, on_sphere):
     metadata = {}
     metadata['extruded'] = mesh.extruded
 
-    if on_sphere and hasattr(mesh, "_base_mesh"):
+    if on_sphere and mesh.extruded:
         metadata['domain_type'] = 'extruded_spherical_shell'
     elif on_sphere:
         metadata['domain_type'] = 'spherical_shell'

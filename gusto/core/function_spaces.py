@@ -69,7 +69,6 @@ class Spaces(object):
             mesh (:class:`Mesh`): the model's mesh.
         """
         self.mesh = mesh
-        self.extruded_mesh = hasattr(mesh, "_base_mesh")
         self.de_rham_complex = {}
         self.continuity = {}
 
@@ -117,7 +116,7 @@ class Spaces(object):
         # set the continuity of the space - for extruded meshes specify both directions
         if continuity is None:
             continuity = is_cg(space)
-            if self.extruded_mesh:
+            if self.mesh.extruded:
                 self.continuity[name] = {
                     'horizontal': continuity,
                     'vertical': continuity
@@ -125,7 +124,7 @@ class Spaces(object):
             else:
                 self.continuity[name] = continuity
         else:
-            if self.extruded_mesh:
+            if self.mesh.extruded:
                 self.continuity[name] = {
                     'horizontal': continuity['horizontal'],
                     'vertical': continuity['vertical']
@@ -223,7 +222,7 @@ class Spaces(object):
             (:class:`FunctionSpace`): the equispaced DG1 function space.
         """
 
-        if self.extruded_mesh:
+        if self.mesh.extruded:
             cell = self.mesh._base_mesh.ufl_cell().cellname
             hori_elt = FiniteElement('DG', cell, 1, variant='equispaced')
             vert_elt = FiniteElement('DG', interval, 1, variant='equispaced')
@@ -264,7 +263,6 @@ class DeRhamComplex(object):
                                       + 'or implemented in Gusto')
 
         self.mesh = mesh
-        self.extruded_mesh = hasattr(mesh, '_base_mesh')
         self.family = family
         self.complex_name = complex_name
         self.continuity = {}
@@ -284,7 +282,7 @@ class DeRhamComplex(object):
                 vertical part of the L2 space. Defaults to None.
         """
 
-        if self.extruded_mesh:
+        if self.mesh.extruded:
             cell = self.mesh._base_mesh.ufl_cell().cellname
         else:
             cell = self.mesh.ufl_cell().cellname
@@ -334,7 +332,7 @@ class DeRhamComplex(object):
             tuple: the created compatible :class:`FunctionSpace` objects.
         """
 
-        if self.extruded_mesh:
+        if self.mesh.extruded:
             # Horizontal and vertical degrees
             # need specifying separately. Vtheta needs returning.
             Vcg, continuity = self.build_h1_space()
@@ -419,7 +417,7 @@ class DeRhamComplex(object):
             logger.warning('There is no HCurl space for this family. Not creating one')
             return None, None
 
-        if self.extruded_mesh:
+        if self.mesh.extruded:
             Vh_elt = HCurl(TensorProductElement(self.base_elt_hori_hcurl,
                                                 self.base_elt_vert_cg))
             Vv_elt = HCurl(TensorProductElement(self.base_elt_hori_cg,
@@ -440,7 +438,7 @@ class DeRhamComplex(object):
         Returns:
             :class:`FunctionSpace`: the HDiv space.
         """
-        if self.extruded_mesh:
+        if self.mesh.extruded:
             Vh_elt = HDiv(TensorProductElement(self.base_elt_hori_hdiv,
                                                self.base_elt_vert_dg))
             Vt_elt = TensorProductElement(self.base_elt_hori_dg,
@@ -463,7 +461,7 @@ class DeRhamComplex(object):
             :class:`FunctionSpace`: the L2 space.
         """
 
-        if self.extruded_mesh:
+        if self.mesh.extruded:
             V_elt = TensorProductElement(self.base_elt_hori_dg, self.base_elt_vert_dg)
             continuity = {'horizontal': False, 'vertical': False}
         else:
@@ -487,7 +485,7 @@ class DeRhamComplex(object):
         Returns:
             :class:`FunctionSpace`: the 'theta' space.
         """
-        assert self.extruded_mesh, 'Cannot create theta space if mesh is not extruded'
+        assert self.mesh.extruded, 'Cannot create theta space if mesh is not extruded'
 
         V_elt = TensorProductElement(self.base_elt_hori_dg, self.base_elt_vert_cg)
         continuity = {'horizontal': False, 'vertical': True}
@@ -507,7 +505,7 @@ class DeRhamComplex(object):
             :class:`FunctionSpace`: the continuous space.
         """
 
-        if self.extruded_mesh:
+        if self.mesh.extruded:
             V_elt = TensorProductElement(self.base_elt_hori_cg, self.base_elt_vert_cg)
             continuity = {'horizontal': True, 'vertical': True}
         else:
@@ -534,18 +532,16 @@ def check_degree_args(name, mesh, degree, horizontal_degree, vertical_degree):
             of a space.
     """
 
-    extruded_mesh = hasattr(mesh, "_base_mesh")
-
     # Checks on degree arguments
     if degree is None and horizontal_degree is None:
         raise ValueError(f'Either "degree" or "horizontal_degree" must be passed to {name}')
-    if extruded_mesh and degree is None and vertical_degree is None:
+    if mesh.extruded and degree is None and vertical_degree is None:
         raise ValueError(f'For extruded meshes, either "degree" or "vertical_degree" must be passed to {name}')
     if degree is not None and horizontal_degree is not None:
         raise ValueError(f'Cannot pass both "degree" and "horizontal_degree" to {name}')
-    if extruded_mesh and degree is not None and vertical_degree is not None:
+    if mesh.extruded and degree is not None and vertical_degree is not None:
         raise ValueError(f'Cannot pass both "degree" and "vertical_degree" to {name}')
-    if not extruded_mesh and vertical_degree is not None:
+    if not mesh.extruded and vertical_degree is not None:
         raise ValueError(f'Cannot pass "vertical_degree" to {name} if mesh is not extruded')
 
 

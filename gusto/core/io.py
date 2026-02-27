@@ -57,7 +57,7 @@ def pick_up_mesh(output, mesh_name, comm=COMM_WORLD):
     else:
         dumpdir = path.join("results", output.dirname)
         chkfile = path.join(dumpdir, "chkpt.h5")
-    with CheckpointFile(chkfile, 'r', comm=comm) as chk:
+    with CheckpointFile(chkfile, 'r', comm) as chk:
         mesh = chk.load_mesh(mesh_name)
 
     if dumpdir:
@@ -665,7 +665,7 @@ class IO(object):
                     step = chk.read_attribute("/", "step")
 
             else:
-                with CheckpointFile(chkfile, 'r', comm) as chk:
+                with CheckpointFile(chkfile, 'r', self.domain.mesh.comm) as chk:
                     mesh = self.domain.mesh
                     # Recover compulsory fields from the checkpoint
                     for field_name in self.to_pick_up:
@@ -773,7 +773,7 @@ class IO(object):
                     chkpt_mode = 'a'
                 else:
                     chkpt_mode = 'w'
-                with CheckpointFile(self.chkpt_path, chkpt_mode) as chk:
+                with CheckpointFile(self.chkpt_path, chkpt_mode, self.mesh.comm) as chk:
                     chk.save_mesh(self.domain.mesh)
                     for field_name in self.to_pick_up:
                         if output.multichkpt:
@@ -826,8 +826,17 @@ class IO(object):
                 # we instead save string metadata as char arrays of fixed length.
                 if isinstance(output_value, str):
                     nc_field_file.createVariable(metadata_key, 'S1', ('dim_one', 'dim_string'))
-                    output_char_array = np.array([output_value], dtype='S256')
-                    nc_field_file[metadata_key][:] = stringtochar(output_char_array)
+                    try:
+                        # For more recent versions of netCDF need to specify encoding
+                        nc_field_file[metadata_key]._Encoding = 'UTF-8'  # tell netCDF4 this char var is UTF-8 text
+                        N = nc_field_file.dimensions['dim_string'].size
+                        max_chars = max(1, N // 4)  # max number of characters that can be stored
+                        output_char_array = np.array([output_value], dtype=f"U{max_chars}")
+                        nc_field_file[metadata_key][:] = stringtochar(output_char_array, encoding='utf-8')
+                    except ValueError:
+                        # For older versions of netCDF
+                        output_char_array = np.array([output_value], dtype='S256')
+                        nc_field_file[metadata_key][:] = stringtochar(output_char_array)
                 else:
                     nc_field_file.createVariable(metadata_key, type(output_value), ('dim_one',))
                     nc_field_file[metadata_key][0] = output_value
@@ -981,7 +990,7 @@ def make_nc_dataset(filename, access, comm):
 
     """
     try:
-        nc_field_file = Dataset(filename, access, parallel=True)
+        nc_field_file = Dataset(filename, access, parallel=True, comm=comm)
         nc_supports_parallel = True
     except ValueError:
         # parallel netCDF not available, use the serial version instead
