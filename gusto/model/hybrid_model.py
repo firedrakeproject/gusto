@@ -5,6 +5,7 @@ from firedrake.adjoint import (Control, ReducedFunctional, set_working_tape,
                                continue_annotation)
 from firedrake.ml.pytorch import to_torch, from_torch, fem_operator
 
+from torch import Tensor
 from torch.nn import Module, Sequential, Linear, ReLU
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset, Subset
@@ -17,6 +18,7 @@ import os
 import torch
 
 continue_annotation()
+
 
 class HybridModel(object):
 
@@ -368,7 +370,7 @@ class HybridModel(object):
             dataset=global_training_data,
             data_dir=self.data_dir,
             field_names=self.input_fields,
-            attr_names=""
+            attr_names=["times", "sims", "labels"]
         )
         global_train_dl = DataLoader(
             global_train_dataset, batch_size=self.batch_size,
@@ -386,7 +388,7 @@ class HybridModel(object):
             dataset=global_test_data,
             data_dir=self.data_dir,
             field_names=self.input_fields,
-            attr_names=""
+            attr_names=["times", "sims", "labels"]
         )
         global_test_dl = DataLoader(
             global_test_dataset, batch_size=self.batch_size,
@@ -432,10 +434,10 @@ class HybridModel(object):
 
                 self.ml_model.zero_grad()
 
-                batch = BatchedElement(*[x.to(device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in global_sample])
+                batch = BatchedElement(*[x.to(self.device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in global_sample])
                 tensors = []
                 for field in self.input_fields:
-                    tensors.append(batch.__getattr__(field))
+                    tensors.append(getattr(batch, field))
 
                 # Set initial values for dynamics and network
                 nn_in = subset
@@ -535,6 +537,7 @@ class HybridModel(object):
         """
         self.ml_model.load_state_dict(trained_ml_model["state_dict"])
 
+
 class GustoGlobalDataset(Dataset):
 
     def __init__(self, dataset, data_dir, field_names, attr_names):
@@ -549,7 +552,7 @@ class GustoGlobalDataset(Dataset):
             raise ValueError(f"Dataset directory {os.path.abspath(data_file)} does not exist")
 
         # Get mesh and batch elements (Firedrake functions)
-        self.attr_items = attr_names
+        self.attr_names = attr_names
         data = []
         with CheckpointFile(data_file, "r") as afile:
             n = int(np.array(afile.h5pyfile["n"]))
@@ -582,59 +585,66 @@ class GustoGlobalDataset(Dataset):
             idx (float): the index of the sample
         """
         batch_element = self.batch_elements_fd[idx]
-        name_list = []
+        names = []
         values = []
         # Convert Firedrake functions to PyTorch tensors
         for be in batch_element:
             if isinstance(be, Function):
-                name_list.append(be.name)
+                names.append(be.name())
                 values.append(to_torch(be))
-                name_list.append(be.name+"_fd")
+                names.append(be.name()+"_fd")
                 values.append(be)
             else:
-                name_list.append(be.key)
                 values.append(be)
 
-        name_list.append("idx")
+        names += self.attr_names
+        names.append("idx")
+
         values.append(idx)
 
-        BatchElement = namedtuple("BatchElement", name_list)
-        BatchElement(*values)
+        BatchElement = namedtuple("BatchElement", names)
+        batchele = BatchElement(*values)
 
-        return BatchElement
+        return batchele
 
     def collate(self, batch_elements):
 
         batch_size = len(batch_elements)
         tensors = {}
         for field_name in self.field_names:
-            be_field = batch_elements[0].__getattr__(field_name)
-            n = be.size(-1)
-            tensors[field_name] = torch.zeros(batch_size, n, dtype= be.dtype)
+            # CHECK: is this necessary or can we just use vstack later?
+            be_field = getattr(batch_elements[0], field_name)
+            n = be_field.size(-1)
+            tensors[field_name] = torch.zeros(batch_size, n,
+                                              dtype=be_field.dtype)
 
-        name_list = []
-        for be in batch_elements[0]:
-            if isinstance(be, Function):
-                name_list.append(field_name)
-                name_list.append(be.name+"_fd")
-            else:
-                name_list.append(be.key)
+        fd_funcs = {}
+        attrs = {}
+        names = batch_elements[0]._fields
 
-        values = []
+        for name in names:
+            val = getattr(batch_elements[0], name)
+            if isinstance(val, Function):
+                fd_funcs[name] = []
+            elif not isinstance(val, Tensor):
+                attrs[name] = []
+
         for i, be in enumerate(batch_elements):
-            for field_name in self.field_names:
-                tensors[field_name][i, :] = be.__getattr__(field_name)
-                field = be.__getattr__(field_name)
-            attrs = []
-            for attr in self.attr_names:
-                attrs.append(be.__getattr__(attr))
-            attrs.append(be.idx)
-            values.append(tensors[field_name], field, attrs)
+            for name in names:
+                val = getattr(be, name)
+                if isinstance(val, Tensor):
+                    tensors[name][i, :] = val
+                elif isinstance(val, Function):
+                    func = getattr(be, name)
+                    fd_funcs[name].append(func)
+                else:
+                    attrs[name].append(getattr(be, name))
 
-        BatchedElement = namedtuple("BatchedElement", name_list)
-        BatchedElement(*values)
+        BatchedElement = namedtuple("BatchedElement", names)
+        batchedele = BatchedElement(*tensors.values(), *fd_funcs.values(),
+                                    *attrs.values())
 
-        return BatchedElement
+        return batchedele
 
 
 class PointDataset(Dataset):
