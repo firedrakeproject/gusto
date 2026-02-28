@@ -559,9 +559,9 @@ class GustoGlobalDataset(Dataset):
             # Load mesh
             mesh = afile.load_mesh("mesh")
             # Load data
-            fields = []
-            attrs = []
             for i in range(n):
+                fields = []
+                attrs = []
                 for field_name in field_names:
                     fields.append(afile.load_function(
                         mesh, field_name, idx=i))
@@ -574,6 +574,7 @@ class GustoGlobalDataset(Dataset):
 
         self.field_names = field_names
         self.batch_elements_fd = data
+        # Check what actually this is and what it is used for
         self.fs = self.batch_elements_fd[0][0].function_space()
 
     def __len__(self):
@@ -599,7 +600,6 @@ class GustoGlobalDataset(Dataset):
 
         names += self.attr_names
         names.append("idx")
-
         values.append(idx)
 
         BatchElement = namedtuple("BatchElement", names)
