@@ -48,6 +48,26 @@ class HybridModel(object):
         self.device = "cpu"
         ml_model.to(self.device)
 
+        self.attr_names = ["times", "sims", "labels"]
+        names = []
+        names2 = []
+        for name in self.input_fields:
+            names.append(name)
+            names.append(name+"_fd")
+        names += self.attr_names
+        names.append("idx")
+        names2 = []
+        for name in self.input_fields:
+            names2.append(name)
+        for name in self.input_fields:
+            names2.append(name+"_fd")
+        names2 += self.attr_names
+        names2.append("idx")
+        names2.append("batch_elements")
+        self.BatchElement = namedtuple("BatchElement", names)
+        self.BatchedElement = namedtuple("BatchedElement",
+                                         names2)
+
         fs = pde_model.equation.X.function_space()
         self.pde_out = Function(fs)
         self.ml_out = Function(fs)
@@ -346,10 +366,68 @@ class HybridModel(object):
             tally[item].append(i)
         return (indices for indices in tally.items() if len(indices) > 1)
 
-    def forward_pass(self):
+    def forward_pass(self, ml_input, ml_model, n_outputs, batch_size,
+                     rollout_step=0, scaling=None):
         """
         Forward pass of the ml model. Returns a list of tensors.
         """
+        # Create a list for the tensor of each output
+        outputs = [[] for _ in range(n_outputs)]
+
+        if rollout_step == 0:
+
+            point_train_data_subset = ml_input
+            point_train_dl = DataLoader(point_train_data_subset,
+                                        batch_size=batch_size, shuffle=False)
+
+            for step, batch in enumerate(point_train_dl):
+                # extract inputs from the dataloader
+                inputs = batch[:, 0:len(ml_input)+1]
+
+                if scaling is not None:
+                    # Apply the scaling to the inputs that need it
+                    inputs_list = []
+                    for i in range(inputs.size(1)):
+                        inputs_list.append(inputs[0, i].reshape(1))
+                        # set up a scaled_inputs list that we can adjust
+                        scaled_inputs = torch.cat(inputs_list, dim=-1).unsqueeze(0)
+                    for pos, scale in scaling.items():
+                        # scale the inputs at the positions that
+                        # requires scaling
+                        scaled_inputs[0, pos] = scaled_inputs[0, pos] / scale
+                else:
+                    scaled_inputs = inputs
+        else:
+            for idx in range(ml_input.shape[1]):
+                # extract inputs from the tensor
+                inputs = ml_input[:, idx, :]
+
+                if scaling is not None:
+                    # Apply the scaling to the inputs that need it
+                    inputs_list = []
+                    for i in range(inputs.size(1)):
+                        inputs_list.append(inputs[0, i].reshape(1))
+                        # set up a scaled_inputs list that we can adjust
+                        scaled_inputs = torch.cat(inputs_list, dim=-1).unsqueeze(0)
+                    for pos, scale in scaling.items():
+                        # scale the inputs at the positions that requires scaling
+                        scaled_inputs[0, pos] = scaled_inputs[0, pos] / scale
+                else:
+                    scaled_inputs = inputs
+
+        # forward pass
+        for i in range(n_outputs):
+            network_point_out = ml_model(scaled_inputs)[:, i]
+            # add to list of tensor solutions
+            outputs[i].append(network_point_out)
+
+        # concatenate the tensor lists together
+        output_tensors = []
+        for i in range(n_outputs):
+            out_tensor = torch.cat(tuple(outputs[i]))
+            output_tensors.append(out_tensor)
+
+        return output_tensors
 
     def train(self, point_training_data, global_training_data,
               point_test_data, global_test_data,
@@ -357,6 +435,7 @@ class HybridModel(object):
         """
         Train the hybrid model.
         """
+
         # Create dataset classes and dataloader classes for reading in
         # training and testing data
         point_train_dataset = PointDataset(
@@ -370,7 +449,9 @@ class HybridModel(object):
             dataset=global_training_data,
             data_dir=self.data_dir,
             field_names=self.input_fields,
-            attr_names=["times", "sims", "labels"]
+            attr_names=self.attr_names,
+            BatchElement=self.BatchElement,
+            BatchedElement=self.BatchedElement
         )
         global_train_dl = DataLoader(
             global_train_dataset, batch_size=self.batch_size,
@@ -388,7 +469,9 @@ class HybridModel(object):
             dataset=global_test_data,
             data_dir=self.data_dir,
             field_names=self.input_fields,
-            attr_names=["times", "sims", "labels"]
+            attr_names=self.attr_names,
+            BatchElement=self.BatchElement,
+            BatchedElement=self.BatchedElement
         )
         global_test_dl = DataLoader(
             global_test_dataset, batch_size=self.batch_size,
@@ -420,22 +503,27 @@ class HybridModel(object):
         max_grad_norm = 1.
 
         # Training loop
-        for epoch_num in trange(epochs):
+        for epoch in trange(epochs):
             self.ml_model.train()
             total_loss = 0.0
             train_steps = len(global_train_dl)
             point_train_data_subsets = self.subsample_point_data(point_train_dl)
 
             if len(point_train_data_subsets) != train_steps:
-                print("The number of data subsets does not match the number of global samples")
+                print(f"The number of data subsets \
+                {len(point_train_data_subsets)} does not match the \
+                number of global samples {train_steps}.")
 
-            for step_num, (subset, global_sample) in tqdm(enumerate(list(zip(point_train_data_subsets, global_train_dl))),
-                                                          total=train_steps):
+            #for step_num, (subset, global_sample) in tqdm(enumerate(list(zip(point_train_data_subsets, global_train_dl))), total=train_steps):
+            for subset, global_sample in tqdm(zip(point_train_data_subsets,
+                                                  global_train_dl),
+                                              total=train_steps):
 
                 self.ml_model.zero_grad()
 
-                batch = BatchedElement(*[x.to(self.device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in global_sample])
+                batch = self.BatchedElement(*[x.to(self.device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in global_sample])
                 tensors = []
+
                 for field in self.input_fields:
                     tensors.append(getattr(batch, field))
 
@@ -449,9 +537,9 @@ class HybridModel(object):
                 for rollout_step in range(rollout_length):
                     # Produce a network prediction for u and D using the same
                     # initial condition that the dynamics will see
-                    nn_out = self.forward_pass(nn_in, self.ml_model,
-                                               batch_size,
-                                               rollout_step)
+                    nn_out = self.forward_pass(
+                        nn_in, self.ml_model, len(self.fields_to_adjust),
+                        self.batch_size, rollout_step)
 
                     # Run forward PDE model for ndt timesteps and add
                     # the network forcings
@@ -520,11 +608,11 @@ class HybridModel(object):
                 # Take care of distributed/parallel training
                 model_to_save = (self.ml_model.module if hasattr(self.ml_model, "module") else self.ml_model)
                 checkpoint = {
-                    'epoch': epoch_num + 1,
+                    'epoch': epoch + 1,
                     'state_dict': model_to_save.state_dict(),
                     'optimiser': optimiser.state_dict()
                 }
-                model_name = f"epoch-{epoch_num}-error_{best_error:.5f}.pt"
+                model_name = f"epoch-{epoch}-error_{best_error:.5f}.pt"
                 torch.save(checkpoint, os.path.join(self.data_dir, model_name))
 
     def evalute(self, filename=None):
@@ -540,7 +628,8 @@ class HybridModel(object):
 
 class GustoGlobalDataset(Dataset):
 
-    def __init__(self, dataset, data_dir, field_names, attr_names):
+    def __init__(self, dataset, data_dir, field_names, attr_names,
+                 BatchElement, BatchedElement):
         """
         Args:
             dataset (string): the name of the .h5 file with the data
@@ -551,8 +640,12 @@ class GustoGlobalDataset(Dataset):
         if not os.path.exists(data_file):
             raise ValueError(f"Dataset directory {os.path.abspath(data_file)} does not exist")
 
+        self.BatchElement = BatchElement
+        self.BatchedElement = BatchedElement
+
         # Get mesh and batch elements (Firedrake functions)
         self.attr_names = attr_names
+        self.field_names = field_names
         data = []
         with CheckpointFile(data_file, "r") as afile:
             n = int(np.array(afile.h5pyfile["n"]))
@@ -572,7 +665,6 @@ class GustoGlobalDataset(Dataset):
 
         self.mesh = mesh
 
-        self.field_names = field_names
         self.batch_elements_fd = data
         # Check what actually this is and what it is used for
         self.fs = self.batch_elements_fd[0][0].function_space()
@@ -602,8 +694,7 @@ class GustoGlobalDataset(Dataset):
         names.append("idx")
         values.append(idx)
 
-        BatchElement = namedtuple("BatchElement", names)
-        batchele = BatchElement(*values)
+        batchele = self.BatchElement(*values)
 
         return batchele
 
@@ -640,9 +731,8 @@ class GustoGlobalDataset(Dataset):
                 else:
                     attrs[name].append(getattr(be, name))
 
-        BatchedElement = namedtuple("BatchedElement", names)
-        batchedele = BatchedElement(*tensors.values(), *fd_funcs.values(),
-                                    *attrs.values())
+        batchedele = self.BatchedElement(*tensors.values(), *fd_funcs.values(),
+                                         *attrs.values(), batch_elements)
 
         return batchedele
 
