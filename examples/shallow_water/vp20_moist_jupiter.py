@@ -125,8 +125,9 @@ T0 = 165   # reference temperature
 alpha = L/(R*T0)   # V+P saturation function constant
 gamma = 3900   # V+P condensation feedback term (=Nell's beta1)
 xi = 0.1   # how far below saturation we start
-cD = 1    # scaling term for evaporation
+evap_scale = 1    # scaling term for evaporation
 q0 = 0.5   # scaling such that q0*exp(-alpha)=atmospheric specific humidity in kg/kg=1e-2
+qg = 5e-3  # value of ground moisture - evap occurs if q<qg
 
 ### radiative damping
 raddamp = True
@@ -215,7 +216,7 @@ elif restart:
 
 x, y = SpatialCoordinate(mesh)
 
-parameters = ShallowWaterParameters(mesh, H=H, g=g, Omega=Omega, cD=cD, R=R,
+parameters = ShallowWaterParameters(mesh, H=H, g=g, Omega=Omega, R=R,
 rotation=CoriolisOptions.gammaplane, x0=Lx/2, y0=Ly/2)
 
 domain = Domain(mesh, dt, "RTCF", 1)
@@ -241,7 +242,7 @@ ftrap = conditional(r<rstar+smooth_delta*Lx/nx, fsmooth, 2*Omega)
 if fplane:
     ftrap = 2*Omega
 
-tracers = [WaterVapour(space='DG')]
+tracers = [WaterVapour(space='DG'), Rain(space='DG')]
 
 eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap), active_tracers=tracers)
 
@@ -282,11 +283,16 @@ transported_fields = [TrapeziumRule(domain, "u"),
 ### physics schemes
 height_relax = SWHeightRelax(eqns, H_rel=H, tau_r=tau_r*t_day)
 
-# work: put in condensation and evaporation physics schemes
+instant_rain = InstantRain(eqns, sat_func_phys, vapour_name='water_vapour',
+                           rain_name='rain', convective_feedback=True,
+                           beta1=gamma)
+
+evaporation = Evaporation(eqns, qg, scaling=evap_scale)
 
 physics_schemes = [
     (height_relax, ForwardEuler(domain)),
-    # work: put in condensation and evaporation
+    (instant_rain, ForwardEuler(domain)),
+    (evaporation, ForwardEuler(domain))
 ]
 
 stepper = SemiImplicitQuasiNewton(

@@ -490,7 +490,7 @@ def precip(parameters, q):
     return conditional(q > qC, mB * (q - q_ut), 0)
 
 
-def evap(parameters, q, saturation_curve, scaling, u=None):
+def evap(parameters, q, saturation_curve, u=None):
     """
     Computes evaporation.
 
@@ -503,10 +503,6 @@ def evap(parameters, q, saturation_curve, scaling, u=None):
             sub-saturated evaporation will occur. The saturation curve is
             related to the surface temperature which is currently assumed
             constant in time.
-        scaling (float): Fraction of difference between
-            saturation function and vapour that is converted to vapour.
-            Defaults to one, in which case all of the difference is
-            converted.
         u (:class:`Function`, optional): Function specifying current wind.
             If not specified then use formula that does not depend on the
             magnitude of the wind. Defaults to None.
@@ -516,13 +512,13 @@ def evap(parameters, q, saturation_curve, scaling, u=None):
         # Return wind-dependant expression for evaporation
         return conditional(
             saturation_curve > q,
-            scaling * sqrt(dot(u, u)) * (saturation_curve - q),
+            sqrt(dot(u, u)) * (saturation_curve - q),
             0)
     else:
         # Return expression for evaporation
         return conditional(
             saturation_curve > q,
-            scaling * (saturation_curve - q),
+            (saturation_curve - q),
             0)
 
 
