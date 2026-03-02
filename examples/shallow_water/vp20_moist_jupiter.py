@@ -5,8 +5,10 @@ from gusto import (
     ShallowWaterPotentialEnstrophy, ShallowWaterAvailablePotentialEnergy,
     SteadyStateError, IO, SubcyclingOptions, TrapeziumRule, SSPRK3,
     DGUpwind, SemiImplicitQuasiNewton, VectorFunctionSpace, assemble,
-    Function, WaterVapour, DG1Limiter, MoistConvectiveSWSolver,
-    ForwardEuler, ZeroLimiter, MixedFSLimiter, SWHeightRelax
+    Function, WaterVapour, Rain, DG1Limiter, ForwardEuler, ZeroLimiter,
+    MixedFSLimiter, SWHeightRelax, MoistConvectiveSWRelativeHumidity,
+    xy_from_rtheta, rtheta_from_xy, rtheta_from_lonlat,
+    lonlat_from_rtheta, CoriolisOptions, InstantRain, Evaporation
 )
 from firedrake import (
     SpatialCoordinate, as_vector, pi, interpolate, exp, sqrt,
@@ -14,8 +16,7 @@ from firedrake import (
     MoistConvectiveSWRelativeHumidity
 )
 from stephen_functions import (
-    split_number, create_restart_nc, rtheta_from_xy, lonlat_from_rtheta,
-    rtheta_from_lonlat, xy_from_rtheta, smooth_f_profile, smooth_tophat,
+    split_number, create_restart_nc, smooth_f_profile, smooth_tophat,
     diffusion_noise_generation
 )
 import scipy
@@ -40,7 +41,7 @@ def initialise_D(X, idx):
     # print('convert to r theta')
     r_c, theta_c = rtheta_from_lonlat(lamda_c, phi_c, R)
     # print('convert to x y')
-    x_c, y_c = xy_from_rtheta(r_c, theta_c, Lx, Ly)
+    x_c, y_c = xy_from_rtheta(r_c, theta_c, Lx/2, Ly/2)
 
     # make an empty list of D values to append to
     D_values = []
@@ -124,7 +125,7 @@ T0 = 165   # reference temperature
 alpha = L/(R*T0)   # V+P saturation function constant
 gamma = 3900   # V+P condensation feedback term (=Nell's beta1)
 xi = 0.1   # how far below saturation we start
-cD =    # scaling term for evaporation
+cD = 1    # scaling term for evaporation
 q0 = 0.5   # scaling such that q0*exp(-alpha)=atmospheric specific humidity in kg/kg=1e-2
 
 ### radiative damping
@@ -132,7 +133,7 @@ raddamp = True
 tau_r = 5 # timescale in Jovian days
 
 ### name
-name = 'single' 
+setup = 'single' 
 
 ###############################################################
 if coriolisform == 'fplane':
@@ -154,6 +155,7 @@ bint, bdec = split_number(b)
 Roint, Rodec = split_number(Ro)
 Buint, Budec = split_number(Bu)
 taurint, taurdec = split_number(tau_r)
+cDint, cDdec = split_number(cD)
 if xi < 0:
     xiprefix = 'm'
 else:
@@ -173,8 +175,6 @@ xi1fint, xi1fdec = split_number(xi1f)
 
 if setup != '':
     setup = f'{setup}_'
-if ac:
-    setup = f'{setup}ac_'
 if fplane:
     setup = f'{setup}fplane_'
 elif flattrap:
@@ -193,10 +193,7 @@ if moist_noise:
     moist_noise_name = f'_qn{moist_noiseint}{moist_noisedec}'
 else:
     moist_noise_name = ''
-if moist:
-### work: moist name
-else:
-    moist_name = ''
+moist_name = f'cD{cDint}{cDdec}gamma{gamma}q0{q01fint}{q01fdec}e{q02i}xi{xiprefix}{xi1fint}{xi1fdec}e{xi2i}_'
 if raddamp:
     rad_name = f'radt{taurint}{taurdec}'
 else:
@@ -218,11 +215,12 @@ elif restart:
 
 x, y = SpatialCoordinate(mesh)
 
-parameters = ShallowWaterParameters(mesh, H=H, g=g, Omega=Omega, cD=cD)
+parameters = ShallowWaterParameters(mesh, H=H, g=g, Omega=Omega, cD=cD, R=R,
+rotation=CoriolisOptions.gammaplane, x0=Lx/2, y0=Ly/2)
 
 domain = Domain(mesh, dt, "RTCF", 1)
 
-r, theta_coord = rtheta_from_xy(x, y, Lx, Ly)
+r, theta_coord = rtheta_from_xy(x, y, Lx/2, Ly/2)
 
 _, lat = lonlat_from_rtheta(r, theta_coord, R)
 
@@ -238,16 +236,14 @@ fsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(
 if smooth_degree == 5:
     fsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
 
-ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
-ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)#-2*Omega
+ftrap = conditional(r<rstar+smooth_delta*Lx/nx, fsmooth, 2*Omega)
 
 if fplane:
     ftrap = 2*Omega
 
 tracers = [WaterVapour(space='DG')]
 
-eqns = ShallowWaterEquations(domain, parameters, fexpr=ftrap, active_tracers=tracers)
-# work: check
+eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap), active_tracers=tracers)
 
 logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
@@ -282,8 +278,6 @@ transport_limiter = MixedFSLimiter(eqns, transport_sublimiters)
 transported_fields = [TrapeziumRule(domain, "u"),
                         SSPRK3(domain, "D", subcycling_options=subcycling_options),
                         SSPRK3(domain, "water_vapour", limiter=DG1limiter)]
-linear_solver = MoistConvectiveSWSolver(eqns)
-# work: check all the above fields
 
 ### physics schemes
 height_relax = SWHeightRelax(eqns, H_rel=H, tau_r=tau_r*t_day)
@@ -299,8 +293,7 @@ stepper = SemiImplicitQuasiNewton(
     eqns, io,
     transport_schemes=transported_fields,
     spatial_methods=transport_methods,
-    linear_solver=linear_solver,
-    physics_schemes=physics_schemes
+    final_physics_schemes=physics_schemes
 )
 
 u0 = stepper.fields("u")
@@ -343,7 +336,7 @@ if not restart:
     logger.info('Setting initial velocity field')
     for i in range(len(south_lat)):
         r_c, theta_c = rtheta_from_lonlat(south_lon[i], south_lat[i], R)
-        x_c, y_c = xy_from_rtheta(r_c, theta_c, Lx, Ly)
+        x_c, y_c = xy_from_rtheta(r_c, theta_c, Lx/2, Ly/2)
         dr = sqrt((x-x_c)**2 + (y-y_c)**2)
         mag_veloc = vm * ( dr / rm ) * exp( (1/b) * ( 1 - ( dr / rm )**b ) )
         dx = x - x_c
@@ -396,7 +389,7 @@ elif restart:
 
 end_time = time.time()
 
-t_start = tmin is restart else 0
+t_start = tmin if restart else 0
 
 logger.info((f'Start time {t_start}'))
 logger.info(f'Total time taken {(end_time-start_time):.2f} seconds, {((end_time-start_time)/60**2):.2f} hours')
