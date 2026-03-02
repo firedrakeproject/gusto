@@ -111,8 +111,8 @@ class ShallowWaterParameters(EquationParameters):
     Omega = 7.292e-5  # rotation rate
     f0 = None    # f-, beta- and gamma-plane Coriolis parameter
     beta = None  # beta-plane y-variation parameter
-    y0 = None    # beta- or gamma-plane y-centre
-    x0 = None    # gamma-plane y-centre
+    y0 = None    # beta- or gamma-plane y-centre. Gamma-plane default is Ly/2
+    x0 = None    # gamma-plane x-centre. Gamma-plane default is Lx/2
     R = None     # Radius of planet used to compute gamma in gamma-plane approx
     topog_expr = None  # topography expression
     H = None  # mean depth
