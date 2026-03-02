@@ -623,7 +623,7 @@ x, y = SpatialCoordinate(mesh)
 # x *= Lx
 # y *= Ly
 
-parameters = ShallowWaterParameters(mesh, H=H, g=g, Omega=Omega, R=R, rotation=CoriolisOptions.gammaplane, x0=Lx/2, y0=Ly/2)
+parameters = ShallowWaterParameters(mesh, H=H, g=g, Omega=Omega, R=R, rotation=CoriolisOptions.gammaplane)
 
 domain = Domain(mesh, dt, "RTCF", 1)
 
