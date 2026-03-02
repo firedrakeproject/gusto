@@ -7,7 +7,7 @@ from enum import Enum
 __all__ = [
     "BoussinesqParameters", "CompressibleParameters",
     "ShallowWaterParameters", "CoriolisOptions",
-    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters",
+    "SpongeLayerParameters", "DiffusionParameters", "BoundaryLayerParameters"
 ]
 
 
@@ -125,8 +125,6 @@ class ShallowWaterParameters(EquationParameters):
     # Scaling factor for the saturation function in the equivalent buoyancy
     # formulation of the thermal shallow water equations
     q0 = None
-    # Scaling factor for evaporation term when present
-    cD = None
 
 
 class SpongeLayerParameters(EquationParameters):
