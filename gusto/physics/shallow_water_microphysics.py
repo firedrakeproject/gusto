@@ -15,9 +15,9 @@ from types import FunctionType
 from ufl.domain import extract_unique_domain
 
 
-__all__ = ["InstantRain", "SWSaturationAdjustment", "LinearFriction",
-           "VerticalVelocity", "Evaporation", "Precipitation",
-           "MoistureDescent"]
+__all__ = ["InstantRain", "SWSaturationAdjustment", "SWHeightRelax",
+           "LinearFriction", "VerticalVelocity", "Evaporation",
+           "Precipitation", "MoistureDescent"]
 
 
 class InstantRain(PhysicsParametrisation):

@@ -542,7 +542,7 @@ def xy_from_rtheta(r, theta, x0, y0, angle_units='rad'):
         r (:class:`np.ndarray` or :class:`ufl.Expr`): r-coordinate.
         theta (:class:`np.ndarray` or :class:`ufl.Expr`): theta-coordinate.
         x0: central x-coordinate for r-theta coords
-        y0: central y-coordinate for r-theta cooreds
+        y0: central y-coordinate for r-theta coords
         angle_units (str, optional): the units to use for the angle. Valid
             options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
     Returns:

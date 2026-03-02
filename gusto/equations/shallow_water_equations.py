@@ -7,7 +7,7 @@ from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg, Di
 from firedrake.fml import subject, drop, all_terms
 from gusto.core.coord_transforms import rtheta_from_xy
 from gusto.core.labels import (
-    linearisation, pressure_gradient, coriolis, prognostic, transport
+    linearisation, pressure_gradient, coriolis, prognostic
 )
 from gusto.core.equation_configuration import CoriolisOptions
 from gusto.core.kernels import MinKernel
@@ -215,7 +215,13 @@ class ShallowWaterEquations(PrognosticEquationSet):
                     xyz[1] - self.parameters.y0)
             elif rotation is CoriolisOptions.gammaplane:
                 x, y = SpatialCoordinate(self.domain.mesh)
-                r, _ = rtheta_from_xy(x, y, self.parameters.x0, self.parameters.y0)
+                Lx = self.domain.mesh.coordinates.dat.data[:, 0].max()
+                Ly = self.domain.mesh.coordinates.dat.data[:, 1].max()
+                breakpoint()
+                if not self.parameters.x0 and not self.parameters.y0:
+                    r, _ = rtheta_from_xy(x, y, Lx/2, Ly/2)
+                else:
+                    r, _ = rtheta_from_xy(x, y, self.parameters.x0, self.parameters.y0)
                 Rsq = self.parameters.R**2
                 fexpr = 2*self.parameters.Omega * (1 - 0.5 * r**2 / Rsq)
                 if self.coriolis_trap is not None:
@@ -260,8 +266,7 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
     def __init__(self, domain, parameters,
                  space_names=None, linearisation_map=all_terms,
                  u_transport_option="vector_invariant_form",
-                 no_normal_flow_bc_ids=None, active_tracers=None,
-                 nonlinear_tracer_transport=False):
+                 no_normal_flow_bc_ids=None, active_tracers=None):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -297,21 +302,8 @@ class LinearShallowWaterEquations(ShallowWaterEquations):
                          no_normal_flow_bc_ids=no_normal_flow_bc_ids,
                          active_tracers=active_tracers)
 
-        # Use the underlying routine to do a first linearisation of
-        # the equations
+        # Use the underlying routine to do a first linearisation of the equations
         self.linearise_equation_set()
-
-        # add in nonlinear transport for active tracers, if required
-        if nonlinear_tracer_transport:
-            tracer_prognostics = [tracer.name for tracer in active_tracers]
-            # first drop the current linear transport terms
-            self.residual = self.residual.label_map(
-                lambda t: t.get(prognostic) in tracer_prognostics and t.has_label(transport),
-                map_if_true=drop
-            )
-            # now add back in the nonlinear transport terms
-            self.residual += self.generate_tracer_transport_terms(
-                active_tracers)
 
 
 class ThermalShallowWaterEquations(ShallowWaterEquations):
