@@ -16,7 +16,18 @@ import os
 import shutil
 import sympy as sp
 
-folder_name_suffix = 'no_trap'
+
+# Currently trap=True works, and trap=False doesn't.
+
+# trap=False should give a gamma plane centred in the middle of the mesh, i.e. 
+# gradually decreasing PV from the centre. trap=True should be the same inside
+# the trap radius, but be constant at the polar PV value outside that.
+trap = True
+
+if trap:
+    folder_name_suffix = 'trap'
+else:
+    folder_name_suffix = 'no_trap'
 
 nx = 256
 ny = nx
@@ -38,7 +49,7 @@ H = phi0/g
 dt = 250
 tmax = 5*dt
 
-dirname=f'/data/home/sh1293/results/jupiter_sw/check_gamma_plane_{folder_name_suffix}'
+dirname=f'check_gamma_plane_{folder_name_suffix}'
 
 mesh = PeriodicRectangleMesh(nx=nx, ny=ny, Lx=Lx, Ly=Ly, quadrilateral=True)
 output = OutputParameters(dirname=f'{dirname}', dumpfreq=1, dump_nc=True)
@@ -48,10 +59,10 @@ parameters = ShallowWaterParameters(mesh, H=H, Omega=Omega, R=R,
 
 domain = Domain(mesh, dt, "RTCF", 1)
 
-
-### rstar and smooth_delta are so the trap can be in the same place as my big script
-
-eqns = ShallowWaterEquations(domain, parameters)#, coriolis_trap=(0.5*rstar-smooth_delta*Lx/nx, 2*Omega))
+if trap:
+    eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, 2*Omega))
+else:
+    eqns = ShallowWaterEquations(domain, parameters)
 
 diagnostic_fields = [PotentialVorticity()]
 
