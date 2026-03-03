@@ -468,8 +468,8 @@ restart_name = 'single_beta3900Lp18q01em2xi1em1_Bu1b1p5Rop2_l200dt250df30_lgnp05
 t0 = 200*t_day
 
 ### vortex locations
-south_lat_deg = [90.]#, 83., 83., 83., 83., 83.]#, 70.]
-south_lon_deg = [0.]#, 72., 144., 216., 288., 0.]#, 0.]
+south_lat_deg = [90., 83., 83., 83., 83., 83.]#, 70.]
+south_lon_deg = [0., 72., 144., 216., 288., 0.]#, 0.]
 
 ### add noise to initial depth profile?
 noise = False
@@ -517,7 +517,7 @@ raddamp = False
 tau_r = 5  # number of days for timescale 
 
 ### name
-setup = 'single-new_gamma_plane-shift_fns'
+setup = 'multi-new_gamma_plane-default-no_trap'
 
 ##########################################################################
 if coriolisform == 'fplane':
@@ -662,10 +662,12 @@ if moist:
 if thermal:
     eqns = ThermalShallowWaterEquations(domain, parameters, fexpr=ftrap, active_tracers=tracers)
 else:
-    eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap), active_tracers=tracers)
+    # eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap), active_tracers=tracers)
+    eqns = ShallowWaterEquations(domain, parameters, active_tracers=tracers)#, coriolis_trap=(rstar-smooth_delta*Lx/nx, 2*Omega))
 logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
 Ld = sqrt(H*g)/f0
+logger.info(f'H={H:.2f} m')
 logger.info(f'Ld={Ld/1e3:.2f} km')
 
 # diagnostic_fields = [SteadyStateError('u'), SteadyStateError('D'),

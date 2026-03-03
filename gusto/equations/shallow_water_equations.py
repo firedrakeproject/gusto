@@ -217,10 +217,9 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 x, y = SpatialCoordinate(self.domain.mesh)
                 Lx = self.domain.mesh.coordinates.dat.data[:, 0].max()
                 Ly = self.domain.mesh.coordinates.dat.data[:, 1].max()
-                if not self.parameters.x0 and not self.parameters.y0:
-                    r, _ = rtheta_from_xy(x, y, Lx/2, Ly/2)
-                else:
-                    r, _ = rtheta_from_xy(x, y, self.parameters.x0, self.parameters.y0)
+                # breakpoint()
+                r, _ = rtheta_from_xy(x, y, Lx/2, Ly/2)
+                # r, _ = rtheta_from_xy(x, y, 35e6, 35e6)
                 Rsq = self.parameters.R**2
                 fexpr = 2*self.parameters.Omega * (1 - 0.5 * r**2 / Rsq)
                 if self.coriolis_trap is not None:
