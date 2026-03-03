@@ -534,13 +534,15 @@ def great_arc_angle(lon1, lat1, lon2, lat2, units='rad'):
     return arc_length
 
 
-def xy_from_rtheta(r, theta, angle_units='rad'):
+def xy_from_rtheta(r, theta, x0, y0, angle_units='rad'):
     """
     Returns the planar cartsian x, y coordinates from the
     r, theta coordinates
     Args:
         r (:class:`np.ndarray` or :class:`ufl.Expr`): r-coordinate.
         theta (:class:`np.ndarray` or :class:`ufl.Expr`): theta-coordinate.
+        x0: central x-coordinate for r-theta coords
+        y0: central y-coordinate for r-theta coords
         angle_units (str, optional): the units to use for the angle. Valid
             options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
     Returns:
@@ -568,16 +570,21 @@ def xy_from_rtheta(r, theta, angle_units='rad'):
     x = r * cos(theta)
     y = r * sin(theta)
 
+    x += x0
+    y += y0
+
     return x, y
 
 
-def rtheta_from_xy(x, y, angle_units='rad'):
+def rtheta_from_xy(x, y, x0, y0, angle_units='rad'):
     """
     Returns the r, theta coordinates (where theta is measured anticlockwise
     from horizontal) from the planar Cartesian x, y coordinates.
     Args:
         x (:class:`np.ndarray` or :class:`ufl.Expr`): x-coordinate.
         y (:class:`np.ndarray` or :class:`ufl.Expr`): y-coordinate.
+        x0: central x-coordinate for r-theta coords
+        y0: central y-coordinate for r-theta coords
         angle_units (str, optional): the units to use for the angle. Valid
             options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
     Returns:
@@ -599,6 +606,9 @@ def rtheta_from_xy(x, y, angle_units='rad'):
         unit_factor = 180./pi
     if angle_units == 'rad':
         unit_factor = 1.0
+
+    x -= x0
+    y -= y0
 
     theta = atan2(y, x)
     r = sqrt(x**2 + y**2)

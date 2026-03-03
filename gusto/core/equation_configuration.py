@@ -1,7 +1,7 @@
 """Some simple tools for configuring the model."""
-from enum import Enum
 from firedrake import Function, FunctionSpace, Constant
 import inspect
+from enum import Enum
 
 
 __all__ = [
