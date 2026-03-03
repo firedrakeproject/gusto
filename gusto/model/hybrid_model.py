@@ -1,6 +1,6 @@
 from firedrake import (Function, as_vector, CheckpointFile, assemble, dx,
                        VectorFunctionSpace, FunctionSpace, VertexOnlyMesh,
-                       interpolate, Constant)
+                       interpolate, Constant, MixedFunctionSpace)
 from firedrake.adjoint import (Control, ReducedFunctional, set_working_tape,
                                continue_annotation)
 from firedrake.ml.pytorch import to_torch, from_torch, fem_operator
@@ -70,7 +70,14 @@ class HybridModel(object):
 
         fs = pde_model.equation.X.function_space()
         self.pde_out = Function(fs)
-        self.ml_out = Function(fs)
+        # TODO: create ml_fs based on input_fields - here we assume
+        # we're shallow water and we want 3 DG spaces because we're
+        # separating u into components
+        ml_fs = MixedFunctionSpace([fs.subspaces[-1]]*3)
+        self.ml_out = Function(ml_fs)
+        # Stores increment predicted by ml model - mast be on same
+        # function space as pde model.
+        self.ml_inc = Function(fs)
         self.x_predicted = Function(fs)
         self.x_target = Function(fs)
 
@@ -89,15 +96,15 @@ class HybridModel(object):
         for field_name in self.fields_to_adjust:
             idx = self.pde_model.equation.field_names.index(field_name)
             if field_name == "u":
-                self.ml_out.subfunctions[idx].project(
-                    as_vector([ml[ml_idx], ml[ml_idx+1]])
+                ml.subfunctions[idx].project(
+                    as_vector([self.ml_out[ml_idx], self.ml_out[ml_idx+1]])
                 )
                 ml_idx += 2
             else:
-                self.ml_out.subfunctions[idx].interpolate(ml[ml_idx])
+                ml.subfunctions[idx].interpolate(self.ml_out[ml_idx])
                 ml_idx += 1
 
-        self.x_predicted.interpolate(dyn + self.ml_out)
+        self.x_predicted.interpolate(dyn + ml)
 
         return self.x_predicted
 
@@ -381,8 +388,11 @@ class HybridModel(object):
                                         batch_size=batch_size, shuffle=False)
 
             for step, batch in enumerate(point_train_dl):
-                # extract inputs from the dataloader
-                inputs = batch[:, 0:len(ml_input)+1]
+                # extract inputs from the dataloader TODO: range here
+                # should be set based on number of inputs to ml model
+                # - it is the number of input fields plus locations
+                # and times
+                inputs = batch[:, 0:5]
 
                 if scaling is not None:
                     # Apply the scaling to the inputs that need it
@@ -481,8 +491,8 @@ class HybridModel(object):
         #
         with set_working_tape() as tape:
             F_pred = ReducedFunctional(
-                self.assemble_prediction(self.pde_out, self.ml_out),
-                [Control(self.pde_out), Control(self.ml_out)],
+                self.assemble_prediction(self.pde_out, self.ml_inc),
+                [Control(self.pde_out), Control(self.ml_inc)],
                 eval_cb_pre=self.advance_pde
             )
             G = fem_operator(F_pred)
@@ -522,13 +532,14 @@ class HybridModel(object):
                 self.ml_model.zero_grad()
 
                 batch = self.BatchedElement(*[x.to(self.device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in global_sample])
-                tensors = []
 
+                tensors = []
                 for field in self.input_fields:
                     tensors.append(getattr(batch, field))
+                print(len(tensors))
 
                 # Set initial values for dynamics and network
-                nn_in = subset
+                ml_in = subset
                 dyn_in = torch.cat(tensors, dim=1)
 
                 # The index of the sample
@@ -537,19 +548,19 @@ class HybridModel(object):
                 for rollout_step in range(rollout_length):
                     # Produce a network prediction for u and D using the same
                     # initial condition that the dynamics will see
-                    nn_out = self.forward_pass(
-                        nn_in, self.ml_model, len(self.fields_to_adjust),
+                    ml_out = self.forward_pass(
+                        ml_in, self.ml_model, len(self.fields_to_adjust),
                         self.batch_size, rollout_step)
 
                     # Run forward PDE model for ndt timesteps and add
                     # the network forcings
-                    pred_tensor = G(dyn_in, nn_out)
+                    pred_tensor = G(dyn_in, self.ml_inc)
 
                     # Prepare input for next network call
                     next_tensor = J(pred_tensor)
 
                     # Stack tensors
-                    nn_in = torch.stack(*next_tensor, dim=2)
+                    ml_in = torch.stack(*next_tensor, dim=2)
 
                     # Create input for the next dynamics call
                     dyn_in = pred_tensor
@@ -624,6 +635,29 @@ class HybridModel(object):
             generate_data method
         """
         self.ml_model.load_state_dict(trained_ml_model["state_dict"])
+
+    def validate(self):
+
+        # Point data
+        point_dataset = PointDataset(numpy_data=point_validation_data,
+                                     data_dir=self.data_dir)
+        point_dataloader = DataLoader(point_dataset,
+                                      batch_size=batch_size,
+                                      shuffle=False)
+
+        # Global data
+        global_dataset = GustoGlobalDataset(
+            dataset=global_validation_data,
+            data_dir=self.data_dir,
+            field_names=self.input_fields,
+            attr_names=self.attr_names,
+            BatchElement=self.BatchElement,
+            BatchedElement=self.BatchedElement
+        )
+        global_dataloader = DataLoader(global_dataset,
+                                       batch_size=batch_size,
+                                       collate_fn=global_dataset.collate,
+                                       shuffle=False)
 
 
 class GustoGlobalDataset(Dataset):
