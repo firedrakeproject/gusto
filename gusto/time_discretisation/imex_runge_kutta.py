@@ -9,10 +9,11 @@ from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
 import numpy as np
+from qmat.qcoeff.butcher import ARK548L2SAESDIRK2, ARK548L2SAERK2
 
 
 __all__ = ["IMEXRungeKutta", "IMEX_Euler", "IMEX_ARS3", "IMEX_ARK2",
-           "IMEX_Trap2", "IMEX_SSP3"]
+           "IMEX_Trap2", "IMEX_SSP3", "IMEX_ARS443", "IMEX_ARK4", "IMEX_ARK5"]
 
 
 class IMEXRungeKutta(TimeDiscretisation):
@@ -266,20 +267,34 @@ class IMEXRungeKutta(TimeDiscretisation):
 
             self.solver = solver_list[stage-self.solver_start_stage]
             # Set initial solver guess
-            self.x_out.assign(self.xs[stage-1])
+            if stage > 0:
+                self.x_out.assign(self.x1)
+            else:
+                self.x_out.assign(x_in)
+
             # Evaluate source terms
             for evaluate in self.evaluate_source:
                 evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
+            
+            # # TODO: Issue #686 is to address this reference profile update bug (pythonPC update not called)
+            # # this line forces it to update for now
+            # pc = self.solver.snes.getKSP().getPC()
+            # if (isinstance(self.equation, CompressibleEulerEquations) and pc.getType() == "python"):
+            #     self.equation.X_ref.assign(self.x_out)
+            #     self.equation.update_reference_profiles()
+                # pc.getPythonContext().update(pc)
+            #self.x1.assign(self.x_out)
+            # uadv = self.xs[stage-1].subfunctions[0] 
+            # self.update_transporting_velocity(uadv)
             self.solver.solve()
-
             # Apply limiter
             if self.limiter is not None:
                 self.limiter.apply(self.x_out)
             self.xs[stage].assign(self.x_out)
 
-        # Solve final stage
-        for evaluate in self.evaluate_source:
-            evaluate(self.xs[-1], self.dt, x_out=self.source[-1])
+        # # Solve final stage
+        # for evaluate in self.evaluate_source:
+        #     evaluate(self.xs[-1], self.dt, x_out=self.source[-1])
         self.final_solver.solve()
 
         # Apply limiter
@@ -519,3 +534,153 @@ class IMEX_Trap2(IMEXRungeKutta):
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
                          limiter=limiter, options=options, augmentation=augmentation)
+
+class IMEX_ARS443(IMEXRungeKutta):
+    r"""
+    Implements ARS(4,4,3) IMEX Runge–Kutta method (Ascher–Ruuth–Spiteri 1997).
+    """
+
+    def __init__(self, domain, field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None,
+                 limiter=None, options=None, augmentation=None):
+
+        # ---------- Explicit tableau (ERK) ----------
+        butcher_exp = np.array([
+            # a_ij for stages 1..4
+            [0., 0., 0., 0.],
+            [1767732205903/2027836641118, 0., 0., 0.],
+            [5535828885825/10492691773637, 788022342437/10882634858940, 0., 0.],
+            [6485989280629/16251701735622,
+             -4246266847089/9704473918619,
+              10755448449292/10357097424841, 0.],
+            # ---- b (weights)
+            [1471266399579/7840856788654,
+             -4482444167858/7529755066697,
+              11266239266428/11593286722821,
+              1767732205903/4055673282236]
+        ], dtype=float)
+
+        # ---------- Implicit tableau (DIRK) ----------
+        g = 1767732205903/4055673282236
+
+        butcher_imp = np.array([
+            [0., 0., 0., 0.],
+            [g,   g,  0., 0.],
+            [2746238789719/10658868560708,
+            -640167445237/6845629431997,
+            g, 0.],
+            [1471266399579/7840856788654,
+            -4482444167858/7529755066697,
+            11266239266428/11593286722821,
+            g],      # This is also bI
+            [1471266399579/7840856788654,
+            -4482444167858/7529755066697,
+            11266239266428/11593286722821,
+            g],  
+        ], dtype=float)
+
+        super().__init__(domain, butcher_imp, butcher_exp, field_name,
+                         linear_solver_parameters=linear_solver_parameters,
+                         nonlinear_solver_parameters=nonlinear_solver_parameters,
+                         limiter=limiter, options=options, augmentation=augmentation)
+        
+class IMEX_ARK4(IMEXRungeKutta):
+    r"""
+    Implements ARK4(3)6L[2]SA (Kennedy–Carpenter) 4th‑order IMEX Runge–Kutta.
+    """
+
+    def __init__(self, domain, field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None,
+                 limiter=None, options=None, augmentation=None):
+
+        # ---------- Explicit tableau (ERK) ----------
+        Aexp = [
+            [0, 0, 0, 0, 0, 0],
+            [1/2, 0, 0, 0, 0, 0],
+            [13861/62500, 6889/62500, 0, 0, 0, 0],
+            [-116923316275/2393684061468,
+             -2731218467317/15368042101831,
+              9408046702089/11113171139209, 0, 0, 0],
+            [-451086348788/2902428689909,
+             -2682348792572/7519795681897,
+              12662868775082/11960479115383,
+              3355817975965/11060851509271, 0, 0],
+            [647845179188/3216320057751,
+             73281519250/8382639484533,
+             552539513391/3454668386233,
+             3354512671639/8306763924573,
+             4040/17871, 0],
+            # --- b row
+            [82889/524892, 0,
+             15625/83664,
+             69875/102672,
+             -2260/8211,
+             1/4]
+        ]
+        butcher_exp = np.array(Aexp, dtype=float)
+
+        # ---------- Implicit tableau (DIRK) ----------
+        Adirk = [
+            [0, 0, 0, 0, 0, 0],
+            [1/4, 1/4, 0, 0, 0, 0],
+            [8611/62500, -1743/31250, 1/4, 0, 0, 0],
+            [5012029/34652500, -654441/2922500, 174375/388108, 1/4, 0, 0],
+            [15267082809/155376265600,
+             -71443401/120774400,
+              730878875/902184768,
+              2285395/8070912,
+              1/4, 0],
+            [82889/524892, 0,
+             15625/83664,
+             69875/102672,
+             -2260/8211,
+              1/4],
+            # stiffly‑accurate → b = last row
+            [82889/524892, 0,
+             15625/83664,
+             69875/102672,
+             -2260/8211,
+             1/4]
+        ]
+        butcher_imp = np.array(Adirk, dtype=float)
+
+        super().__init__(domain, butcher_imp, butcher_exp, field_name,
+                         linear_solver_parameters=linear_solver_parameters,
+                         nonlinear_solver_parameters=nonlinear_solver_parameters,
+                         limiter=limiter, options=options, augmentation=augmentation)
+        
+class IMEX_ARK5(IMEXRungeKutta):
+    r"""
+    Implements ARK5(4)8L[2]SA IMEX Runge–Kutta scheme
+    (Kennedy & Carpenter). This is the 5th-order additive RK pair
+    known in SUNDIALS/ARKODE as ARK548L2SA (explicit + implicit).
+
+    Explicit tableau:  ARK548L2SA_ERK
+    Implicit tableau:  ARK548L2SA_DIRK (ESDIRK, γ = 1/4)
+    """
+
+    def __init__(self, domain, field_name=None,
+                 linear_solver_parameters=None, nonlinear_solver_parameters=None,
+                 limiter=None, options=None, augmentation=None):
+
+        
+        dirk = ARK548L2SAESDIRK2()
+        erk = ARK548L2SAERK2()
+        A_imp  = dirk.A
+        A_exp  = erk.A
+        b_imp = dirk.b
+        b_exp = erk.b
+        b_imp_row = b_imp.reshape(1, -1)
+        b_exp_row = b_exp.reshape(1, -1)
+        self.butcher_imp = np.vstack([A_imp, b_imp_row])
+        self.butcher_exp = np.vstack([A_exp, b_exp_row])
+        super().__init__(
+            domain,
+            self.butcher_imp, self.butcher_exp,
+            field_name,
+            linear_solver_parameters=linear_solver_parameters,
+            nonlinear_solver_parameters=nonlinear_solver_parameters,
+            limiter=limiter,
+            options=options,
+            augmentation=augmentation
+        )

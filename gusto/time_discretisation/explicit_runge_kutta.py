@@ -16,7 +16,7 @@ from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisa
 
 __all__ = [
     "ForwardEuler", "ExplicitRungeKutta", "SSPRK2", "SSPRK3", "SSPRK4",
-    "RK4", "Heun", "RungeKuttaFormulation"
+    "RK4", "Heun", "RungeKuttaFormulation", "RK5"
 ]
 
 
@@ -833,3 +833,60 @@ def Heun(domain, field_name=None, subcycling_options=None,
     return SSPRK2(domain, field_name=field_name, subcycling_options=subcycling_options,
                   rk_formulation=rk_formulation, solver_parameters=solver_parameters,
                   limiter=limiter, options=options, augmentation=augmentation, stages=2)
+
+class RK5(ExplicitRungeKutta):
+    u"""
+    Implements the classic 7-stage Runge-Kutta method.
+
+    The classic 7-stage Runge-Kutta method for solving ∂y/∂t = F(y). It can be
+    written as:                                                               \n
+
+    where superscripts indicate the time-level.                               \n
+    """
+    def __init__(
+            self, domain, field_name=None, subcycling_options=None,
+            rk_formulation=RungeKuttaFormulation.increment,
+            solver_parameters=None, limiter=None, options=None,
+            augmentation=None
+    ):
+        """
+        Args:
+            domain (:class:`Domain`): the model's domain object, containing the
+                mesh and the compatible function spaces.
+            field_name (str, optional): name of the field to be evolved.
+                Defaults to None.
+            subcycling_options(:class:`SubcyclingOptions`, optional): an object
+                containing options for subcycling the time discretisation.
+                Defaults to None.
+            rk_formulation (:class:`RungeKuttaFormulation`, optional):
+                an enumerator object, describing the formulation of the Runge-
+                Kutta scheme. Defaults to the increment form.
+            solver_parameters (dict, optional): dictionary of parameters to
+                pass to the underlying solver. Defaults to None.
+            limiter (:class:`Limiter` object, optional): a limiter to apply to
+                the evolving field to enforce monotonicity. Defaults to None.
+            options (:class:`AdvectionOptions`, optional): an object containing
+                options to either be passed to the spatial discretisation, or
+                to control the "wrapper" methods, such as Embedded DG or a
+                recovery method. Defaults to None.
+            augmentation (:class:`Augmentation`): allows the equation solved in
+                this time discretisation to be augmented, for instances with
+                extra terms of another auxiliary variable. Defaults to None.
+        """
+        butcher_matrix = np.array([
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [1/5, 0, 0, 0, 0, 0, 0, 0],
+            [3/40, 9/40, 0, 0, 0, 0, 0, 0],
+            [44/45, -56/15, 32/9, 0, 0, 0, 0, 0],
+            [19372/6561, -25360/2187, 64448/6561, -212/729, 0, 0, 0, 0],
+            [9017/3168, -355/33, 46732/5247, 49/176, -5103/18656, 0, 0, 0],
+            [35/384, 0, 500/1113, 125/192, -2187/6784, 11/84, 0, 0],  # FSAL stage
+            [35/384, 0, 500/1113, 125/192, -2187/6784, 11/84, 0, 0],  # b row
+        ], dtype=float)
+
+        super().__init__(domain, butcher_matrix, field_name=field_name,
+                        subcycling_options=subcycling_options,
+                        rk_formulation=rk_formulation,
+                        solver_parameters=solver_parameters,
+                        limiter=limiter, options=options,
+                        augmentation=augmentation)
