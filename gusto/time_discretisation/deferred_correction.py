@@ -85,6 +85,7 @@ from firedrake.utils import cached_property
 from gusto.time_discretisation.time_discretisation import wrapper_apply
 from gusto.core.labels import (time_derivative, implicit, explicit, source_label)
 from qmat import genQCoeffs, genQDeltaCoeffs
+from gusto.solvers.solver_presets import hybridised_solver_parameters
 
 __all__ = ["SDC", "RIDC"]
 
@@ -610,10 +611,7 @@ class RIDC(object, metaclass=ABCMeta):
             self.linear_solver_parameters = linear_solver_parameters
 
         if nonlinear_solver_parameters is None:
-            self.nonlinear_solver_parameters = {'snes_type': 'newtonls',
-                                                'ksp_type': 'gmres',
-                                                'pc_type': 'bjacobi',
-                                                'sub_pc_type': 'ilu'}
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.field_name, alpha=1.0, tau_values=None)
         else:
             self.nonlinear_solver_parameters = nonlinear_solver_parameters
 
@@ -798,7 +796,7 @@ class RIDC(object, metaclass=ABCMeta):
         # setup solver using residual defined in derived class
         problem = NonlinearVariationalProblem(self.res, self.U_DC, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__
-        solver = NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name)
+        solver = NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name)
         return solver
 
     @cached_property

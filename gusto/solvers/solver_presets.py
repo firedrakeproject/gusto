@@ -339,9 +339,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             }
         }
         # Provide callback for the nullspace of the trace system with trace_nullsp.
-        appctx = {
-            'trace_nullspace': trace_nullsp,
-        }
+        appctx = {}
+
 
     else:
         raise NotImplementedError(

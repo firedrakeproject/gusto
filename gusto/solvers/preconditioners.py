@@ -2,7 +2,7 @@
 
 from firedrake import (dot, jump, dS_h, ds_b, ds_t, ds,
                        FacetNormal, Tensor, AssembledVector,
-                       AuxiliaryOperatorPC, PETSc)
+                       AuxiliaryOperatorPC, PETSc, RieszMap)
 
 from firedrake.preconditioners import PCBase
 from firedrake.matrix_free.operators import ImplicitMatrixContext
@@ -488,7 +488,7 @@ class CompressibleHybridisedSCPC(PCBase):
         'pc_type': 'bjacobi',
         'sub_pc_type': 'ilu'
     }
-
+    @timed_function("Gusto:PC_init")
     def initialize(self, pc):
         """
         Set up problem and solver
@@ -505,6 +505,8 @@ class CompressibleHybridisedSCPC(PCBase):
         from gusto.core.labels import hydrostatic
         if pc.getType() != "python":
             raise ValueError("Expecting PC type python")
+        if  hasattr(self, 'hybridized_solver'):
+            return
 
         self._process_context(pc)
 
@@ -547,6 +549,8 @@ class CompressibleHybridisedSCPC(PCBase):
         self.xstar = Cofunction(self.W.dual())
         self.xrhs = Function(self.W)
         self.y = Function(self.W)
+
+        self.Riesz_map = RieszMap(self.W.dual(), solver_parameters=self.cg_ilu_parameters, constant_jacobian=True)
 
         self.y_hybrid = Function(self.W_hyb)
 
@@ -738,7 +742,7 @@ class CompressibleHybridisedSCPC(PCBase):
         self.rho_avg_solver.solve()
         self.exner_avg_solver.solve()
         self.hybridized_solver.invalidate_jacobian()
-
+    @timed_function("Gusto:PC_apply")
     def apply(self, pc, x, y):
         """
         Apply the preconditioner to x, putting the result in y.
@@ -748,35 +752,39 @@ class CompressibleHybridisedSCPC(PCBase):
             x (:class:`PETSc.Vec`): the vector to apply the preconditioner to.
             y (:class:`PETSc.Vec`): the vector to store the result.
         """
+        with timed_region("Gusto:PC_apply_setup"):
+            # transfer x -> self.xstar
+            with self.xstar.dat.vec_wo as xv:
+                x.copy(xv)
+            self.xrhs.assign(self.Riesz_map.__call__(self.xstar))
+            #self.xrhs.assign(self.xstar.riesz_representation())
 
-        # transfer x -> self.xstar
-        with self.xstar.dat.vec_wo as xv:
-            x.copy(xv)
+        with timed_region("Gusto:PC_apply_hybridized_solve"):
+            # Solve hybridized system
+            self.hybridized_solver.solve()
 
-        self.xrhs.assign(self.xstar.riesz_representation())
-        # Solve hybridized system
-        self.hybridized_solver.solve()
+        with timed_region("Gusto:PC_apply_averaging"):
+            # Recover broken u and rho
+            u_broken, rho, l = self.y_hybrid.subfunctions
+            self.u_hdiv.assign(0)
+            self._average_kernel.apply(self.u_hdiv, self._weight, u_broken)
+            for bc in self.bcs:
+                bc.zero(self.u_hdiv)
 
-        # Recover broken u and rho
-        u_broken, rho, l = self.y_hybrid.subfunctions
-        self.u_hdiv.assign(0)
-        self._average_kernel.apply(self.u_hdiv, self._weight, u_broken)
-        for bc in self.bcs:
-            bc.zero(self.u_hdiv)
+            # Transfer data to non-hybrid space
+            self.y.subfunctions[0].assign(self.u_hdiv)
+            self.y.subfunctions[1].assign(rho)
 
-        # Transfer data to non-hybrid space
-        self.y.subfunctions[0].assign(self.u_hdiv)
-        self.y.subfunctions[1].assign(rho)
+        with timed_region("Gusto:PC_apply_theta_solve"):
+            # Recover theta
+            self.theta.assign(0)
+            self.theta_solver.solve()
+            self.y.subfunctions[2].assign(self.theta)
 
-        # Recover theta
-        self.theta.assign(0)
-        self.theta_solver.solve()
-        self.y.subfunctions[2].assign(self.theta)
-
-        with self.y.dat.vec_ro as vout:
-            # copy into PETSc output vector
-            vout.copy(y)
-
+            with self.y.dat.vec_ro as vout:
+                # copy into PETSc output vector
+                vout.copy(y)
+    @timed_function("Gusto:PC_update")
     def update(self, pc):
         PETSc.Sys.Print("[PC.update] Updating hybridized PC")
 
@@ -797,7 +805,7 @@ class CompressibleHybridisedSCPC(PCBase):
         tau_values = appctx.get('tau_values')
         self.tau_values = tau_values if tau_values is not None else {}
 
-        self.dt = self.equations.domain.dt
+        self.dt = self.equations.domain.dt_solver
 
     def applyTranspose(self, pc, x, y):
         """
