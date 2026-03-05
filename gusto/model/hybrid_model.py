@@ -83,9 +83,6 @@ class HybridModel(object):
         # Stores increment predicted by ml model - mast be on same
         # function space as pde model.
         self.ml_inc = Function(ml_fs)
-        print(len(self.ml_inc))
-        for ss in self.ml_inc.subfunctions:
-            print(len(ss.dat.data))
         self.x_predicted = Function(fs)
         self.x_target = Function(fs)
 
@@ -99,7 +96,6 @@ class HybridModel(object):
         """
         This adds the ml prediction to the dynamics predictions
         """
-
         self.ml_out.subfunctions[0].project(
                     as_vector([ml.subfunctions[0], ml.subfunctions[1]])
         )
@@ -186,21 +182,24 @@ class HybridModel(object):
                 mesh = chkfile.load_mesh(name='mesh')
                 for n in range(ndt):
                     t = chkfile.get_timestepping_history(mesh, 'u').get('time')[n]
-                    fields = []
+                    point_fields = []
+                    global_fields = []
                     for field_name in self.input_fields:
                         if field_name == "u":
                             u = chkfile.load_function(mesh, field_name, n)
+                            global_fields.append(u)
                             # Extract components of u
                             # TODO: generalise Vdg function space
                             Vdg = FunctionSpace(mesh, "DG", 1)
                             # TODO: this only works on the plane
                             u0 = Function(Vdg, name="u").interpolate(u[0])
                             u1 = Function(Vdg, name="v").interpolate(u[1])
-                            fields.append(u0)
-                            fields.append(u1)
+                            point_fields.append(u0)
+                            point_fields.append(u1)
                         else:
-                            fields.append(chkfile.load_function(mesh, field_name, n))
-                    point_values, coords = self.point_evaluation(mesh, fields)
+                            global_fields.append(chkfile.load_function(mesh, field_name, n))
+                            point_fields.append(chkfile.load_function(mesh, field_name, n))
+                    point_values, coords = self.point_evaluation(mesh, point_fields)
                     for data_tuple in zip(*point_values):
                         point_data.append(data_tuple)
                         # Save labels to identify the time and simulation
@@ -213,7 +212,7 @@ class HybridModel(object):
                         point_labels.append(i*ndt+n)
 
                     # Append fields to the global data list
-                    global_data.append(fields)
+                    global_data.append(global_fields)
                     # Save labels to identify the time and simulation
                     # for the data
                     global_times.append(t)
@@ -528,6 +527,8 @@ class HybridModel(object):
 
                 tensors = []
                 for field in self.input_fields:
+                    t = getattr(global_sample, field)
+                    print(field, t.size())
                     tensors.append(getattr(global_sample, field))
 
                 # Set initial values for dynamics and network
@@ -548,6 +549,7 @@ class HybridModel(object):
 
                     # Run forward PDE model for ndt timesteps and add
                     # the network forcings
+                    print(dyn_in.size(), ml_out.size())
                     pred_tensor = G(dyn_in, ml_out)
 
                     # Prepare input for next network call
