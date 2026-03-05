@@ -614,6 +614,7 @@ class RIDC(object, metaclass=ABCMeta):
             self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.field_name, alpha=1.0, tau_values=None)
         else:
             self.nonlinear_solver_parameters = nonlinear_solver_parameters
+            self.appctx=None
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """

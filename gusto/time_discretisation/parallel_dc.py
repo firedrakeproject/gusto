@@ -98,7 +98,8 @@ class Parallel_RIDC(RIDC):
         self.Uk_mp1 = Function(self.W)
         self.Uk_m = Function(self.W)
         self.Ukp1_m = Function(self.W)
-        self.U_send = Function(self.W)
+        self.U_send = [Function(self.W) for _ in range(self.M+1)]
+        self.Uprev = Function(self.W)
 
     @wrapper_apply
     def apply(self, x_out, x_in):
@@ -108,7 +109,13 @@ class Parallel_RIDC(RIDC):
         self.Un.assign(x_in)
         self.Unodes[0].assign(self.Un)
         # Loop through quadrature nodes and solve
-        self.Unodes1[0].assign(self.Unodes[0])
+        if (self.flush_freq > 0 and (self.step -1) % self.flush_freq == 0):
+            # After a flush, predictor and corrector start from same point
+            self.Unodes[0].assign(x_in)
+        else:
+            # No flush - predictor should be last timestep's pipeline value
+            self.Unodes[0].assign(self.Uprev)
+        self.Unodes1[0].assign(x_in)
         # for evaluate in self.evaluate_source:
         #     evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
         self.Uin.assign(self.Unodes[0])
@@ -125,14 +132,14 @@ class Parallel_RIDC(RIDC):
                 #     evaluate(self.Unodes[m+1], self.base.dt, x_out=self.source_Uk[m+1])
 
                 # Send base guess to k+1 correction
-                self.U_send.assign(self.Unodes[m+1])
-                self.comm.isend(self.U_send, dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
+                self.U_send[m+1].assign(self.Unodes[m+1])
+                self.comm.isend(self.U_send[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
                 # self.comm.send(self.source_Uk[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
         else:
             for m in range(1, self.kval + 1):
                 # Receive and evaluate the stencil of guesses we need to correct
-                self.comm.recv(self.U_send, source=self.kval-1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m)*100)
-                self.Unodes[m].assign(self.U_send)
+                self.comm.recv(self.U_send[m], source=self.kval-1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m)*100)
+                self.Unodes[m].assign(self.U_send[m])
                 # self.comm.recv(self.source_Uk[m], source=self.kval-1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
                 self.Uin.assign(self.Unodes[m])
                 # for evaluate in self.evaluate_source:
@@ -168,14 +175,14 @@ class Parallel_RIDC(RIDC):
                     self.limiter.apply(self.Unodes1[m+1])
                 # Send our updated value to next communicator
                 if self.kval < self.K:
-                    self.U_send.assign(self.Unodes1[m+1])
-                    self.comm.isend(self.U_send, dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
+                    self.U_send[m+1].assign(self.Unodes1[m+1])
+                    self.comm.isend(self.U_send[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
                     #self.comm.isend(self.source_Ukp1[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
 
             for m in range(self.kval, self.M):
                 # Receive the guess we need to correct and evaluate the rhs
-                self.comm.recv(self.U_send, source=self.kval-1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
-                self.Unodes[m+1].assign(self.U_send)
+                self.comm.recv(self.U_send[m+1], source=self.kval-1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
+                self.Unodes[m+1].assign(self.U_send[m+1])
                 #self.comm.recv(self.source_Uk[m+1], source=self.kval-1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
                 self.Uin.assign(self.Unodes[m+1])
                 # for evaluate in self.evaluate_source:
@@ -211,24 +218,29 @@ class Parallel_RIDC(RIDC):
 
                 # Send our updated value to next communicator
                 if self.kval < self.K:
-                    self.U_send.assign(self.Unodes1[m+1])
-                    self.comm.isend(self.U_send, dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
+                    self.U_send[m+1].assign(self.Unodes1[m+1])
+                    self.comm.isend(self.U_send[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
                     #self.comm.isend(self.source_Ukp1[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
 
-            for m in range(self.M+1):
-                self.Unodes[m].assign(self.Unodes1[m])
-                self.source_Uk[m].assign(self.source_Ukp1[m])
+            # for m in range(self.M+1):
+            #     self.Unodes[m].assign(self.Unodes1[m])
+            #     self.source_Uk[m].assign(self.source_Ukp1[m])
 
         if (self.flush_freq > 0 and self.step % self.flush_freq == 0) or self.step == self.J:
             # Flush the pipe to ensure all ranks have the same data
             if (self.kval == self.K):
-                x_out.assign(self.Unodes[-1])
+                x_out.assign(self.Unodes1[-1])
                 for i in range(self.K):
                     self.comm.isend(x_out, dest=i, tag=self.TAG_FLUSH_PIPE + self.step)
             else:
                 self.comm.recv(x_out, source=self.K, tag=self.TAG_FLUSH_PIPE + self.step)
         else:
-            x_out.assign(self.Unodes[-1])
+            if self.kval == 0:
+                x_out.assign(self.Unodes[-1])
+            else:
+                x_out.assign(self.Unodes1[-1])
+
+        self.Uprev.assign(self.Unodes[-1])
 
         self.step += 1
 
