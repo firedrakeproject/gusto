@@ -527,8 +527,6 @@ class HybridModel(object):
 
                 tensors = []
                 for field in self.input_fields:
-                    t = getattr(global_sample, field)
-                    print(field, t.size())
                     tensors.append(getattr(global_sample, field))
 
                 # Set initial values for dynamics and network
@@ -549,7 +547,6 @@ class HybridModel(object):
 
                     # Run forward PDE model for ndt timesteps and add
                     # the network forcings
-                    print(dyn_in.size(), ml_out.size())
                     pred_tensor = G(dyn_in, ml_out)
 
                     # Prepare input for next network call
