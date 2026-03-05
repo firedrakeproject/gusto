@@ -132,7 +132,6 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             exner_bar = exner_pressure(parameters, rho_bar, theta_bar)
             exner_pert = exner - exner_bar
 
-
         n = FacetNormal(domain.mesh)
 
         # Specify quadrature degree to use for pressure gradient term
@@ -152,23 +151,23 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             alpha_fact = PML_options.alpha_fact
 
             delta = delta_frac*H
-            H_PML = H - delta
+            z_PML = H - delta
             sigma0 = (4*c_max/(2*delta))*ln(1/tol)
             alpha = Constant(alpha_fact*sigma0)
 
             x = SpatialCoordinate(domain.mesh)
             z = x[len(x)-1]
 
-            sigma_expr = conditional(z <= H_PML,
+            # Apply a sin^2() PML.
+            sigma_expr = conditional(z <= z_PML,
                                      0.0,
-                                     sigma0*((z-H_PML)/delta)**3)
+                                     sigma0*sin((pi/2.)*(z-z_PML)/(delta))**2)
+
 
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
             self.sigma = self.prescribed_fields("PML", W_DG).interpolate(sigma_expr)
 
             self.gamma_z = self.prescribed_fields("gamma_z", W_DG).interpolate(Constant(1.0) + gamma0*self.sigma)
-
-            # Also need to define equivalents for the RT space.
 
         # -------------------------------------------------------------------- #
         # Time Derivative Terms
@@ -183,34 +182,40 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             # Decompose the velocity
             u_vert = domain.k*inner(u, domain.k)
             u_horiz = u - u_vert
-            u_vert_scaled = (Constant(1.0)/self.gamma_z)*u_vert
-            #u_advect = u_horiz + u_vert
+            #u_vert_scaled = (Constant(1.0)/self.gamma_z)*u_vert
+            
+            u_vert_scaled = (1/self.gamma_z)*inner(u, domain.k)
+            u_advect = as_vector([u[0], u_vert_scaled])
 
             # This is the test function
             w_vert = domain.k*inner(w, domain.k)
             w_horiz = w - w_vert
+
+            # The pertubred vertical velocity
+            u_vert_pert_scalar = inner(u_pert, domain.k)
+            u_vert_pert_vec = domain.k*inner(u_pert, domain.k)
 
             # PML u test function
             q_u_test_vert = domain.k*inner(q_u_test, domain.k)
             #q_u_test_horiz = q_u_test - q_u_test_vert
 
             # Decompose the u perturbation
-            u_vert_pert = domain.k*inner(u_pert, domain.k)
-            u_horiz_pert = u_pert - u_vert_pert
-            u_vert_pert_scaled = u_vert_pert/self.gamma_z
+            #u_vert_pert = domain.k*inner(u_pert, domain.k)
+            #u_horiz_pert = u_pert - u_vert_pert
+            #u_vert_pert_scaled = u_vert_pert/self.gamma_z
 
             # For the PML, scale the vertical advecting velocity:
-            scale_vect = as_vector([Constant(1.0), self.gamma_z])
+            #scale_vect = as_vector([Constant(1.0), self.gamma_z])
             #u_advect = as_vector([u_horiz, u_vert_scaled])
-            u_advect = u
-            u_w = as_vector([Constant(0.0), u[1]])
+            #u_advect = u
+            #u_w = as_vector([Constant(0.0), u[1]])
             #u_w = u_vert
-            print(u)
-            print(u_advect)
-            print(u_w)
-            print(dx)
-            print(u[1].dx(1))
-            print(grad(u[1]))
+            #print(u)
+            #print(u_advect)
+            #print(u_w)
+            #print(dx)
+            #print(u[1].dx(1))
+            #print(grad(u[1]))
         else:
             u_advect = u
 
@@ -243,12 +248,19 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
         # Density transport (conservative form)
         if PML_options is not None:
-            # Directly construct the form, for now.
+            # Directly construct the form.
+            # Orrrr, scale the trial function??
             #L = inner(phi, div(u_horiz*rho) + (1/self.gamma_z)*div(u_vert*rho))*dx
             #form = transporting_velocity(L, u_advect)
             #rho_adv = prognostic(transport(form, TransportEquationType.conservative), 'rho')
             # For testing:
-            rho_adv = prognostic(continuity_form(phi, rho, u), 'rho')
+            #rho_adv = prognostic(continuity_form(phi, rho, u), 'rho')
+            #
+            # Use separate horizontal and vertical transport
+            L_H = phi*div(u_horiz*rho)*dx
+            L_V = (phi/self.gamma_z)*div(u_vert*rho)*dx
+            form = transporting_velocity(L_H+L_V, u_advect)
+            rho_adv = prognostic(transport(form, TransportEquationType.conservative), 'rho')
         else:
             rho_adv = prognostic(continuity_form(phi, rho, u), 'rho')
 
@@ -256,10 +268,15 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # TODO #651: we should remove this hand-coded linearisation
         # currently REXI can't handle generated transport linearisations
         if self.linearisation_map(rho_adv.terms[0]):
-            print('linearising ...')
-            # Hmmmm, this won't be right with the PML vertical scaling.
-            linear_rho_adv = linear_continuity_form(phi, rho_trial, u_trial, rho_bar, u_bar)
-            rho_adv = linearisation(rho_adv, linear_rho_adv)
+            print('linearising ... rho')
+            if PML_options is not None:
+                # Hmmmm, this won't be right with the PML vertical scaling.
+                linear_rho_adv = linear_continuity_form(phi, rho_trial, u_trial, rho_bar, u_bar)
+                rho_adv = linearisation(rho_adv, linear_rho_adv)
+            else: 
+                # Hmmmm, this won't be right with the PML vertical scaling.
+                linear_rho_adv = linear_continuity_form(phi, rho_trial, u_trial, rho_bar, u_bar)
+                rho_adv = linearisation(rho_adv, linear_rho_adv)
 
         # Potential temperature transport (advective form)
         theta_adv = prognostic(advection_form(gamma, theta, u_advect), 'theta')
@@ -268,9 +285,13 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # TODO #651: we should remove this hand-coded linearisation
         # currently REXI can't handle generated transport linearisations
         if self.linearisation_map(theta_adv.terms[0]):
-            print('linearising ...')
-            linear_theta_adv = linear_advection_form(gamma, theta_trial, u_trial, theta_bar, u_bar)
-            theta_adv = linearisation(theta_adv, linear_theta_adv)
+            print('linearising ... theta')
+            if PML_options is not None:
+                linear_theta_adv = linear_advection_form(gamma, theta_trial, u_trial, theta_bar, u_bar)
+                theta_adv = linearisation(theta_adv, linear_theta_adv)
+            else:
+                linear_theta_adv = linear_advection_form(gamma, theta_trial, u_trial, theta_bar, u_bar)
+                theta_adv = linearisation(theta_adv, linear_theta_adv)
 
         adv_form = subject(u_adv + rho_adv + theta_adv, self.X)
 
@@ -292,34 +313,20 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         theta_v = theta / (Constant(1.0) + tracer_mr_total)
         
         if PML_options is not None:
-            # Modify the normal term for PML stretch
+            # Using the full pressure gradient
+            # The jump term on theta_v should only act in the horizontal
             pressure_gradient_form = pressure_gradient(subject(prognostic(
                 cp*(-(div(theta_v*w_horiz)+(1/self.gamma_z)*div(theta_v*w_vert))*exner*dx_qp
                     + jump(theta_v*w, n)*avg(exner)*dS_v_qp), 'u'), self.X))
             
-
-            #pressure_gradient_form = pressure_gradient(subject(prognostic(
-            #    cp*(-div(theta_v*w)*exner*dx_qp
-             #       + jump(theta_v*w, n)*avg(exner)*dS_v_qp), 'u'), self.X))
-            #pressure_gradient_form = pressure_gradient(subject(prognostic(
-            #    cp*(- ((theta_v*w[0]).dx(0) + (1/self.gamma_z)*(theta_v*w[1]).dx(1))*exner*dx_qp
-            #        + jump(theta_v*w, n)*avg(exner)*dS_v_qp), 'u'), self.X))
-            # Add a pressure gradient for the PML variable of q_w = vertical component of q_u
-            #pressure_gradient_form -= pressure_gradient(subject(prognostic(
-            #    cp*(- ((1/self.gamma_z)*(theta_v*q_u_test[1]).dx(1))*exner*dx_qp
-            #        + jump(theta_v*q_u_test_vert, n)*avg(exner)*dS_v_qp), 'q_u'), self.X))
-            #pressure_gradient_form -= pressure_gradient(subject(prognostic(
-            #   cp*(- ((theta_v*q_u_test[1]).dx(1))*exner*dx_qp
-            #        + jump(theta_v*q_u_test, n)*avg(exner)*dS_v_qp), 'q_u'), self.X))
-            #pressure_gradient_form -= pressure_gradient(subject(prognostic(
-            #    cp*(- div(theta_v*q_u_test_vert)*exner*dx_qp
-            #        + jump(theta_v*q_u_test_vert, n)*avg(exner)*dS_v_qp), 'q_u'), self.X))
-            #pressure_gradient_form -= pressure_gradient(subject(prognostic(
-            #    cp*(- ((theta_v*q_u_test[1]).dx(1))*exner*dx_qp), 'q_u'), self.X))
-
-            # Perhaps need to take 
-            #pressure_gradient_form -= pressure_gradient(subject(prognostic(
-            #    cp*(- ((theta_v*q_u_test[1]).dx(1))*exner*dx_qp), 'q_u'), self.X))
+            # Or, explicitly enforcing hydrostatic balance
+            pressure_gradient_form1 = pressure_gradient(subject(prognostic(
+                cp*(-(div(theta_pert*w_horiz)+(1/self.gamma_z)*div(theta_pert*w_vert))*exner*dx_qp
+                    + jump(theta_pert*w, n)*avg(exner)*dS_v_qp), 'u'), self.X))
+            
+            pressure_gradient_form2 = pressure_gradient(subject(prognostic(
+                cp*(-(div(theta_bar*w_horiz)+(1/self.gamma_z)*div(theta_bar*w_vert))*exner_pert*dx_qp
+                    + jump(theta_bar*w, n)*avg(exner_pert)*dS_v_qp), 'u'), self.X))
 
         else:
             pressure_gradient_form = pressure_gradient(subject(prognostic(
@@ -329,11 +336,18 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
+        # Only include the gravity term if we don't have the PML!
+        # This is to be able to apply PML stretching
+        #if PML_options is None
         gravity_form = gravity(subject(prognostic(g*inner(domain.k, w)*dx,
-                                                  'u'), self.X))
+                                                'u'), self.X))
 
-        residual = (mass_form + adv_form + pressure_gradient_form
-                    + gravity_form)
+        if PML_options is not None:
+                residual = (mass_form + adv_form + pressure_gradient_form1
+                    + pressure_gradient_form2)
+        else:
+            residual = (mass_form + adv_form + pressure_gradient_form
+                        + gravity_form)
 
         # -------------------------------------------------------------------- #
         # Moist Thermodynamic Divergence Term
@@ -440,16 +454,39 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             residual += subject(prognostic(cp*exner_pert*div((q_u_test_vert/self.gamma_z)*theta_bar)*dx, 'q_u'), self.X)
             residual += subject(prognostic(cp*exner_bar*div((q_u_test_vert/self.gamma_z)*theta_pert)*dx, 'q_u'), self.X)
 
-            # q_rho equation transport term
-            L = inner(q_rho_test, div(u_horiz_pert*rho_bar) + (1/self.gamma_z)*div(u_vert_pert*rho_bar))*dx
-            form = transporting_velocity(L, u_advect)
-            q_rho_adv = prognostic(transport(form, TransportEquationType.conservative), 'q_rho')
-            residual -= q_rho_adv
+            # Also need surface Exner terms??
 
-            # q_theta advection term
+            # q_rho equation transport term. This needs a linearisation
+            #L = inner(q_rho_test, div(u_horiz_pert*rho_bar) + (1/self.gamma_z)*div(u_vert_pert*rho_bar))*dx
+            #form = transporting_velocity(L, u_advect)
+            #q_rho_adv = prognostic(transport(form, TransportEquationType.conservative), 'q_rho')
+
+            # Without gamma_z for now.
+            #q_rho_adv = prognostic(continuity_form(q_rho_test, rho_bar, u_advect), 'q_rho')
+            #if self.linearisation_map(q_rho_adv.terms[0]):
+            #    print('linearising q_rho')
+                # Hmmmm, this won't be right with the PML vertical scaling.
+            #    linear_q_rho_adv = linear_continuity_form(q_rho_test, q_rho_trial, u_trial, rho_bar, u_bar)
+            #    q_rho_adv = linearisation(q_rho_adv, linear_q_rho_adv)
+            #residual -= q_rho_adv
+
+            # q_theta advection term. This needs a linearisation.
             #q_theta_adv = prognostic(advection_form(q_theta_test, theta_bar, u_vert_pert_scaled), 'q_theta')
             #q_theta_adv = prognostic(advection_form(q_theta_test, theta_bar, u_advect), 'q_theta')
+            #if self.linearisation_map(q_theta_adv.terms[0]):
+            #    print('linearising, q theta')
+            #    linear_q_theta_adv = linear_advection_form(q_theta_test, q_theta_trial, u_trial, theta_bar, u_bar)
+            #    q_theta_adv = linearisation(q_theta_adv, linear_q_theta_adv)
             #residual -= q_theta_adv
+
+            # q rho term
+            residual -= subject(prognostic((q_rho_test/self.gamma_z) * div(rho_bar * u_vert_pert_vec) * dx, 'q_rho'), self.X)
+
+            # q theta term
+            #dthetabar_dz = inner(grad(theta_bar), domain.k)
+            #residual -= subject(prognostic(q_theta_test * (u_vert_pert_scalar/self.gamma_z) * dthetabar_dz * dx, 'q_theta'), self.X)
+
+            residual -= subject(prognostic(q_theta_test * inner((u_vert_pert_vec/self.gamma_z),grad(theta_bar)) * dx, 'q_theta'), self.X)
 
             #residual -= subject(prognostic(
             #    cp*(-div(theta_v*w)*exner*dx_qp
@@ -467,12 +504,16 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             residual += subject(prognostic(q_theta_test*(self.sigma+alpha)*q_theta*dx, 'q_theta'), self.X)
 
         #for term in residual.terms:
-        #    print(term.form)
-
+            #if term.form is None:
+            #    print('oh no')
+            #print(term.form)
+            #print(type(term))
+        #import sys; sys.exit()
         # -------------------------------------------------------------------- #
         # Linearise equations
         # -------------------------------------------------------------------- #
         # Add linearisations to equations
+        #self.residual = residual
         self.residual = self.generate_linear_terms(residual, self.linearisation_map)
 
 

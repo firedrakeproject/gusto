@@ -2,7 +2,7 @@
 
 from firedrake import (
     inner, dx, div, cross, split, as_vector, Constant, SpatialCoordinate,
-    conditional, FunctionSpace, ln, sin, pi
+    conditional, FunctionSpace, ln, sin, pi, grad
 )
 
 from firedrake.fml import subject, all_terms
@@ -15,7 +15,7 @@ from gusto.equations.common_forms import (
     advection_form, vector_invariant_form,
     kinetic_energy_form, advection_equation_circulation_form,
     linear_advection_form, linear_circulation_form,
-    linear_vector_invariant_form
+    linear_vector_invariant_form, PML_advection_form
 )
 from gusto.equations.prognostic_equations import PrognosticEquationSet
 
@@ -138,16 +138,22 @@ class BoussinesqEquations(PrognosticEquationSet):
             alpha_fact = PML_options.alpha_fact
 
             delta = delta_frac*H
-            H_PML = H - delta
+            z_PML = H - delta
             sigma0 = (4*c_max/(2*delta))*ln(1/tol)
             alpha = Constant(alpha_fact*sigma0)
 
             x = SpatialCoordinate(domain.mesh)
             z = x[len(x)-1]
 
-            sigma_expr = conditional(z <= H_PML,
+            # Original PML form, cubic
+            #sigma_expr = conditional(z <= H_PML,
+            #                         0.0,
+            #                         sigma0*((z-H_PML)/delta)**3)
+            
+            # Instead, use sin^2()
+            sigma_expr = conditional(z <= z_PML,
                                      0.0,
-                                     sigma0*((z-H_PML)/delta)**3)
+                                     sigma0*sin((pi/2.)*(z-z_PML)/(delta))**2)
 
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
             self.sigma = self.prescribed_fields("PML", W_DG).interpolate(sigma_expr)
@@ -174,6 +180,7 @@ class BoussinesqEquations(PrognosticEquationSet):
 
             # Vertical component of the u perturbation
             u_pert_vert = domain.k*inner(u_pert, domain.k)
+            u_pert_horiz = u_pert - u_pert_vert
 
             # PML q_u test function
             q_u_test_vert = domain.k*inner(q_u_test, domain.k)
@@ -186,8 +193,10 @@ class BoussinesqEquations(PrognosticEquationSet):
             #u_advect = as_vector([u_horiz, u_vert_scaled])
             
             # Need to fix as u[0] isn't exactly u_horiz
+            #u_advect = u
             u_advect = as_vector([u[0], u_vert_scaled])
             #u_advect = as_vector([])
+            #u_advect = u_vert/self.gamma_z
 
             # For initial tests without PML stretching
             #u_advect = u
@@ -227,13 +236,21 @@ class BoussinesqEquations(PrognosticEquationSet):
             u_adv = circ_form + ke_form
 
         elif u_transport_option == "vector_advection_form":
-            u_adv = prognostic(advection_form(w, u, u_advect), 'u')
+            if PML_options is not None: 
+                #u_adv = prognostic(PML_advection_form(w, u, u_advect), 'u')
+                u_adv = prognostic(advection_form(w, u, u_advect), 'u')
+            else:
+                u_adv = prognostic(advection_form(w, u, u_advect), 'u')
 
         else:
             raise ValueError("Invalid u_transport_option: %s" % self.u_transport_option)
 
         # Buoyancy transport
-        b_adv = prognostic(advection_form(gamma, b, u_advect), 'b')
+        if PML_options is not None: 
+            #b_adv = prognostic(PML_advection_form(gamma, b, u_advect), 'b')
+            b_adv = prognostic(advection_form(gamma, b, u_advect), 'b')
+        else:
+            b_adv = prognostic(advection_form(gamma, b, u_advect), 'b')
 
         # TODO #651: we should remove this hand-coded linearisation
         # currently REXI can't handle generated transport linearisations
@@ -243,7 +260,11 @@ class BoussinesqEquations(PrognosticEquationSet):
 
         if compressible:
             # Pressure transport
-            p_adv = prognostic(advection_form(phi, p, u_advect), 'p')
+            if PML_options is not None: 
+                #p_adv = prognostic(PML_advection_form(phi, p, u_advect), 'p')
+                p_adv = prognostic(advection_form(phi, p, u_advect), 'p')
+            else:
+                p_adv = prognostic(advection_form(phi, p, u_advect), 'p')
 
             # TODO #651: we should remove this hand-coded linearisation
             # currently REXI can't handle generated transport linearisations
@@ -264,15 +285,19 @@ class BoussinesqEquations(PrognosticEquationSet):
         # -------------------------------------------------------------------- #
         if PML_options is not None:
             pressure_gradient_form = pressure_gradient(subject(prognostic(
-                -(div(w_horiz) + div(w_vert/self.gamma_z))*p*dx, 'u'), self.X))
+                -(div(w_horiz) + div(w_vert/self.gamma_z))*p_pert*dx, 'u'), self.X))
         else:
             pressure_gradient_form = pressure_gradient(subject(prognostic(
                 -div(w)*p*dx, 'u'), self.X))
         # -------------------------------------------------------------------- #
         # Gravitational Term
         # -------------------------------------------------------------------- #
-        gravity_form = gravity(subject(prognostic(
-            -b*inner(w, domain.k)*dx, 'u'), self.X))
+        if PML_options is not None:
+            gravity_form = gravity(subject(prognostic(
+                -b_pert*inner(w, domain.k)*dx, 'u'), self.X))
+        else:
+            gravity_form = gravity(subject(prognostic(
+                -b*inner(w, domain.k)*dx, 'u'), self.X))
 
         # -------------------------------------------------------------------- #
         # Divergence Term
@@ -283,6 +308,8 @@ class BoussinesqEquations(PrognosticEquationSet):
             # integration.
             if PML_options is not None:
                 divergence_form = divergence(subject(prognostic(cs**2 * (phi * (div(u_horiz) + (1/self.gamma_z)*div(u_vert)) * dx), 'p'), self.X))
+                #divergence_form = divergence(subject(prognostic(cs**2 * (phi * (div(u_pert_horiz) + (1/self.gamma_z)*div(u_pert_vert)) * dx), 'p'), self.X))
+                #divergence_form += divergence(subject(prognostic(cs**2 * (phi * (div(u_bar)) * dx), 'p'), self.X))
             else:
                 linear_div_form = divergence(subject(
                     prognostic(cs**2 * (phi * div(u_trial) * dx), 'p'), self.X))
@@ -361,23 +388,26 @@ class BoussinesqEquations(PrognosticEquationSet):
             #residual -= subject(q_u_adv + q_p_adv + q_b_adv, self.X)
 
             # Vertical pressure gradient term
-            residual += subject(prognostic(
-                p_pert*div(q_u_test_vert/self.gamma_z)*dx, 'q_u'), self.X)
+            residual += subject(prognostic(p_pert*div(q_u_test_vert/self.gamma_z)*dx, 'q_u'), self.X)
 
-            # A perturbed buoyancy term for q_p. Use that d p_bar/dz = N^2 z.
+            # A perturbed buoyancy term for q_p.
             # Or, try with keeping d p_bar /dz??
             # ORRR replace d p_bar /dz with b_bar
+            #N = parameters.N
             #z = x[len(x)-1]
             #residual -= subject(prognostic(q_p_test * (u_vert_pert/self.gamma_z) * N**2 * z * dx, 'q_p'), self.X)
-            residual -= subject(prognostic(q_p_test * (u_vert_pert/self.gamma_z) * b_bar * dx, 'q_p'), self.X)
+            dpbar_dz = inner(grad(p_bar), domain.k)
+            residual -= subject(prognostic(q_p_test * (u_vert_pert/self.gamma_z) * dpbar_dz * dx, 'q_p'), self.X)
 
             # Divergence term for q_p
-            residual -= subject(prognostic(cs**2 * (q_p_test * (1/self.gamma_z) * div(u_pert_vert) * dx), 'q_p'), self.X)
+            residual -= subject(prognostic(cs**2 * q_p_test * (1/self.gamma_z) * div(u_pert_vert) * dx, 'q_p'), self.X)
 
             # Perturbed buoyancy term for q_b.
-            # Here we use that d b_bar/dz = N^2.
-            N = parameters.N
-            residual -= subject(prognostic(q_b_test * (u_vert_pert/self.gamma_z) * N**2 * dx, 'q_b'), self.X)
+            #N = parameters.N
+            #residual -= subject(prognostic(q_b_test * (u_vert_pert/self.gamma_z) * N**2 * dx, 'q_b'), self.X)
+
+            dbbar_dz = inner(grad(b_bar), domain.k)
+            residual -= subject(prognostic(q_b_test * (u_vert_pert/self.gamma_z) * dbbar_dz * dx, 'q_b'), self.X)
 
             # The PML damping terms
             residual -= subject(prognostic(self.sigma*inner(w, q_u)*dx, 'u'), self.X)
@@ -581,16 +611,27 @@ class LinearAcousticBuoyancyEquations(PrognosticEquationSet):
             alpha_fact = PML_options.alpha_fact
 
             delta = delta_frac*H
-            H_PML = H - delta
+            z_PML = H - delta
             sigma0 = (4*c_max/(2*delta))*ln(1/tol)
             alpha = Constant(alpha_fact*sigma0)
 
             x = SpatialCoordinate(domain.mesh)
             z = x[len(x)-1]
 
-            sigma_expr = conditional(z <= H_PML,
+            # Original PML form, cubic
+            #sigma_expr = conditional(z <= H_PML,
+            #                         0.0,
+            #                         sigma0*((z-H_PML)/delta)**3)
+            
+            # Try quadratic instead
+            #sigma_expr = conditional(z <= H_PML,
+            #                         0.0,
+            #                         sigma0*((z-H_PML)/delta)**2)
+            
+            # Finally, use sin^2()
+            sigma_expr = conditional(z <= z_PML,
                                      0.0,
-                                     sigma0*((z-H_PML)/delta)**3)
+                                     sigma0*sin((pi/2.)*(z-z_PML)/(delta))**2)
             
             #sigma_expr = Constant(1.0)
 
