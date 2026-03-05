@@ -31,7 +31,9 @@ class HybridModel(object):
             input_fields, (list):
             fields_to_adjust (list): list of names of fields to adjust
                 with ml model
-            data_dir (str): directory where to save / load data to / from
+            data_dir (str): directory where to save / load data to / from.
+                Gets passed to gusto model output class where "results/" is
+                prepended to it
         """
 
         self.pde_model = pde_model
@@ -198,7 +200,7 @@ class HybridModel(object):
                         # information can be accessed from a
                         # combination of the time and simulation
                         # number
-                        point_labels.append(n)
+                        point_labels.append(i*ndt+n)
 
                     # Append fields to the global data list
                     global_data.append(fields)
@@ -209,15 +211,15 @@ class HybridModel(object):
                     # information can be accessed from a
                     # combination of the time and simulation
                     # number
-                    global_labels.append(n)
-                    simulation_numbers.append(i)
+                    global_labels.append(i*ndt+n)
+                    simulation_numbers.append(i+1)
 
         # split into training and testing data
         global_train, global_test, point_train, point_test = \
             self.train_test_split(global_data, point_data, 0.8)
 
         # write global training data to checkpoint file
-        filename = os.path.join(self.data_dir, "global_train_data.h5")
+        filename = os.path.join("results", self.data_dir, "global_train_data.h5")
         n_global_train = len(global_train)
         with CheckpointFile(filename, "w") as afile:
             afile.h5pyfile["n"] = len(global_train)
@@ -231,7 +233,7 @@ class HybridModel(object):
             afile.set_attr("/", "locations", coords)
 
         # write global testing data to checkpoint file
-        filename = os.path.join(self.data_dir, "global_test_data.h5")
+        filename = os.path.join("results", self.data_dir, "global_test_data.h5")
         with CheckpointFile(filename, "w") as afile:
             afile.h5pyfile["n"] = len(global_test)
             afile.save_mesh(mesh)
@@ -243,15 +245,16 @@ class HybridModel(object):
             afile.set_attr("/", "labels", global_labels[n_global_train:])
             afile.set_attr("/", "locations", coords)
 
-        filename = os.path.join(self.data_dir, "point_train_data")
+        filename = os.path.join("results", self.data_dir, "point_train_data")
         n_point_train = len(point_train)
         point_times_train = np.array([point_times[:n_point_train]])
         point_labels_train = np.array([point_labels[:n_point_train]])
+
         np.save(filename,
                 np.concatenate([point_train,
                                 point_times_train.T,
                                 point_labels_train.T], axis=1))
-        filename = os.path.join(self.data_dir, "point_test_data")
+        filename = os.path.join("results", self.data_dir, "point_test_data")
         point_times_test = np.array([point_times[n_point_train:]])
         point_labels_test = np.array([point_labels[n_point_train:]])
         np.save(filename,
@@ -343,19 +346,20 @@ class HybridModel(object):
             time of a simulation.
         """
         labels = []
-        for step_num, point_sample in enumerate(point_train_dataloader):
+        for point_sample in point_train_dataloader:
             point_label = point_sample[:, -1].item()
             labels.append(point_label)
-            # define a list of lists of indices where all the labels match
-            index_list = []
-            for lables, indices in sorted(self.list_duplicates(labels)):
-                index_list.append(indices)
 
-            # use index_list to sub-sample the point data by labels
-            subsets = []
-            for l in index_list:
-                subset = Subset(point_train_dataloader.dataset, l)
-                subsets.append(subset)
+        # define a list of lists of indices where all the labels match
+        index_list = []
+        for lables, indices in sorted(self.list_duplicates(labels)):
+            index_list.append(indices)
+
+        # use index_list to sub-sample the point data by labels
+        subsets = []
+        for l in index_list:
+            subset = Subset(point_train_dataloader.dataset, l)
+            subsets.append(subset)
 
         # return a list of datasets, where all examples in each
         # dataset belong to one global sample
@@ -450,14 +454,14 @@ class HybridModel(object):
         # training and testing data
         point_train_dataset = PointDataset(
             numpy_data=point_training_data,
-            data_dir=self.data_dir
+            data_dir=os.path.join("results", self.data_dir)
         )
         point_train_dl = DataLoader(
             point_train_dataset, batch_size=self.batch_size, shuffle=False
         )
         global_train_dataset = GustoGlobalDataset(
             dataset=global_training_data,
-            data_dir=self.data_dir,
+            data_dir=os.path.join("results", self.data_dir),
             field_names=self.input_fields,
             attr_names=self.attr_names,
             BatchElement=self.BatchElement,
@@ -470,14 +474,14 @@ class HybridModel(object):
 
         point_test_dataset = PointDataset(
             numpy_data=point_test_data,
-            data_dir=self.data_dir
+            data_dir=os.path.join("results", self.data_dir)
         )
         point_test_dl = DataLoader(
             point_test_dataset, batch_size=self.batch_size, shuffle=False
         )
         global_test_dataset = GustoGlobalDataset(
             dataset=global_test_data,
-            data_dir=self.data_dir,
+            data_dir=os.path.join("results", self.data_dir),
             field_names=self.input_fields,
             attr_names=self.attr_names,
             BatchElement=self.BatchElement,
@@ -520,9 +524,10 @@ class HybridModel(object):
             point_train_data_subsets = self.subsample_point_data(point_train_dl)
 
             if len(point_train_data_subsets) != train_steps:
-                print(f"The number of data subsets \
-                {len(point_train_data_subsets)} does not match the \
-                number of global samples {train_steps}.")
+                assert point_train_data_subsets == train_steps, \
+                    f"The number of data subsets \
+                    {len(point_train_data_subsets)} does not match the \
+                    number of global samples {train_steps}."
 
             #for step_num, (subset, global_sample) in tqdm(enumerate(list(zip(point_train_data_subsets, global_train_dl))), total=train_steps):
             for subset, global_sample in tqdm(zip(point_train_data_subsets,
