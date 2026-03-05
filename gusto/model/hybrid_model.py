@@ -23,7 +23,7 @@ continue_annotation()
 class HybridModel(object):
 
     def __init__(self, pde_model, ml_model, ml_input_fields, input_fields,
-                 fields_to_adjust,
+                 fields_to_adjust, ndt,
                  data_dir):
         """
         Args:
@@ -43,6 +43,7 @@ class HybridModel(object):
         self.ml_input_fields = ml_input_fields
         self.input_fields = input_fields
         self.fields_to_adjust = fields_to_adjust
+        self.ndt = ndt
         self.data_dir = data_dir
 
         self.batch_size = 1
@@ -325,18 +326,20 @@ class HybridModel(object):
 
         return global_train, global_test, point_train, point_test
 
-    def advance_pde(self, xin, xout, ndt):
+    def advance_pde(self, xin):
+
+        dyn_in = xin[0]
 
         for field_name in self.pde_model.equation.field_names:
             idx = self.pde_model.equation.field_names.index(field_name)
-            self.pde_model.stepper.fields(field_name).assign(xin.subfunctions[idx])
-        tmax = float(Constant(self.stepper.domain.dt) * ndt)
+            self.pde_model.stepper.fields(field_name).assign(dyn_in.subfunctions[idx])
+        tmax = float(self.pde_model.domain.dt) * self.ndt
 
-        self.stepper.run(0, tmax)
+        self.pde_model.stepper.run(0, tmax)
 
         for field_name in self.pde_model.equation.field_names:
             idx = self.pde_model.equation.field_names.index(field_name)
-            xin.subfunctions[idx].assign(self.pde_model.stepper.fields(field_name))
+            dyn_in.subfunctions[idx].assign(self.pde_model.stepper.fields(field_name))
 
     def pde_to_ml(self):
         """
