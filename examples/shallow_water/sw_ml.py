@@ -25,6 +25,7 @@ sw_model.stepper.set_reference_profiles([("D", Dbar)])
 ml_model = PointNN(n_in=5, n_out=3)
 
 hybrid_model = HybridModel(sw_model, ml_model,
+                           ml_input_fields=["u", "v", "D", "x", "y"],
                            input_fields=["u", "D"],
                            fields_to_adjust=["u", "D"],
                            data_dir="sw_ml")

@@ -22,13 +22,15 @@ continue_annotation()
 
 class HybridModel(object):
 
-    def __init__(self, pde_model, ml_model, input_fields, fields_to_adjust,
+    def __init__(self, pde_model, ml_model, ml_input_fields, input_fields,
+                 fields_to_adjust,
                  data_dir):
         """
         Args:
             pde_model: PDE model (Gusto model class?)
             ml_model: PyTorch model
-            input_fields, (list):
+            ml_input_fields: fields to give to ml model
+            input_fields, (list): fields to read from checkpoint
             fields_to_adjust (list): list of names of fields to adjust
                 with ml model
             data_dir (str): directory where to save / load data to / from.
@@ -38,6 +40,7 @@ class HybridModel(object):
 
         self.pde_model = pde_model
         self.ml_model = ml_model
+        self.ml_input_fields = ml_input_fields
         self.input_fields = input_fields
         self.fields_to_adjust = fields_to_adjust
         self.data_dir = data_dir
@@ -76,10 +79,13 @@ class HybridModel(object):
         # we're shallow water and we want 3 DG spaces because we're
         # separating u into components
         ml_fs = MixedFunctionSpace([fs.subspaces[-1]]*3)
-        self.ml_out = Function(ml_fs)
+        self.ml_out = Function(fs)
         # Stores increment predicted by ml model - mast be on same
         # function space as pde model.
-        self.ml_inc = Function(fs)
+        self.ml_inc = Function(ml_fs)
+        print(len(self.ml_inc))
+        for ss in self.ml_inc.subfunctions:
+            print(len(ss.dat.data))
         self.x_predicted = Function(fs)
         self.x_target = Function(fs)
 
@@ -94,19 +100,23 @@ class HybridModel(object):
         This adds the ml prediction to the dynamics predictions
         """
 
-        ml_idx = 0
-        for field_name in self.fields_to_adjust:
-            idx = self.pde_model.equation.field_names.index(field_name)
-            if field_name == "u":
-                ml.subfunctions[idx].project(
-                    as_vector([self.ml_out[ml_idx], self.ml_out[ml_idx+1]])
-                )
-                ml_idx += 2
-            else:
-                ml.subfunctions[idx].interpolate(self.ml_out[ml_idx])
-                ml_idx += 1
+        self.ml_out.subfunctions[0].project(
+                    as_vector([ml.subfunctions[0], ml.subfunctions[1]])
+        )
+        self.ml_out.subfunctions[1].interpolate(ml[2])
+        #ml_idx = 0
+        #for field_name in self.fields_to_adjust:
+        #    idx = self.pde_model.equation.field_names.index(field_name)
+        #    if field_name == "u":
+        #        self.ml_out.subfunctions[idx].project(
+        #            as_vector([ml.subfunctions[ml_idx], ml.subfunctions[ml_idx+1]])
+        #        )
+        #        ml_idx += 2
+        #    else:
+        #        self.ml_out.subfunctions[idx].interpolate(ml[ml_idx])
+        #        ml_idx += 1
 
-        self.x_predicted.interpolate(dyn + ml)
+        self.x_predicted.interpolate(dyn + self.ml_out)
 
         return self.x_predicted
 
@@ -377,71 +387,52 @@ class HybridModel(object):
             tally[item].append(i)
         return (indices for indices in tally.items() if len(indices) > 1)
 
-    def forward_pass(self, ml_input, ml_model, n_outputs, batch_size,
-                     rollout_step=0, scaling=None):
+    def forward_pass(self, ml_input, ml_model, n_outputs, input_names,
+                     batch_size, rollout_step=0, scaling=None):
         """
         Forward pass of the ml model. Returns a list of tensors.
         """
+        # Set scaling to be 1 for any fields for which it is not given
+        if scaling is None:
+            scaling = {}
+        for name in input_names:
+            scaling.setdefault(name, 1.)
+
         # Create a list for the tensor of each output
-        outputs = [[] for _ in range(n_outputs)]
+        outputs = []
 
         if rollout_step == 0:
 
-            point_train_data_subset = ml_input
-            point_train_dl = DataLoader(point_train_data_subset,
+            point_train_dl = DataLoader(ml_input,
                                         batch_size=batch_size, shuffle=False)
 
             for step, batch in enumerate(point_train_dl):
-                # extract inputs from the dataloader TODO: range here
-                # should be set based on number of inputs to ml model
-                # - it is the number of input fields plus locations
-                # and times
-                inputs = batch[:, 0:5]
+                # extract inputs from the dataloader
+                inputs = [
+                    scaling[name]*batch[:, input_names.index(name)]
+                    for name in input_names
+                ]
+                inputs = torch.cat(inputs, dim=-1).unsqueeze(0)
 
-                if scaling is not None:
-                    # Apply the scaling to the inputs that need it
-                    inputs_list = []
-                    for i in range(inputs.size(1)):
-                        inputs_list.append(inputs[0, i].reshape(1))
-                        # set up a scaled_inputs list that we can adjust
-                        scaled_inputs = torch.cat(inputs_list, dim=-1).unsqueeze(0)
-                    for pos, scale in scaling.items():
-                        # scale the inputs at the positions that
-                        # requires scaling
-                        scaled_inputs[0, pos] = scaled_inputs[0, pos] / scale
-                else:
-                    scaled_inputs = inputs
+                # forward pass
+                ml_out = ml_model(inputs)
+                # add to list of tensor solutions
+                outputs.append(ml_out)
         else:
             for idx in range(ml_input.shape[1]):
                 # extract inputs from the tensor
-                inputs = ml_input[:, idx, :]
+                inputs = scaling[name] * ml_input[:, idx, :]
+                inputs = torch.cat(inputs, dim=-1).unsqueeze(0)
 
-                if scaling is not None:
-                    # Apply the scaling to the inputs that need it
-                    inputs_list = []
-                    for i in range(inputs.size(1)):
-                        inputs_list.append(inputs[0, i].reshape(1))
-                        # set up a scaled_inputs list that we can adjust
-                        scaled_inputs = torch.cat(inputs_list, dim=-1).unsqueeze(0)
-                    for pos, scale in scaling.items():
-                        # scale the inputs at the positions that requires scaling
-                        scaled_inputs[0, pos] = scaled_inputs[0, pos] / scale
-                else:
-                    scaled_inputs = inputs
-
-        # forward pass
-        for i in range(n_outputs):
-            network_point_out = ml_model(scaled_inputs)[:, i]
-            # add to list of tensor solutions
-            outputs[i].append(network_point_out)
+                # forward pass
+                ml_out = ml_model(inputs)
+                # add to list of tensor solutions
+                outputs.append(ml_out)
 
         # concatenate the tensor lists together
-        output_tensors = []
-        for i in range(n_outputs):
-            out_tensor = torch.cat(tuple(outputs[i]))
-            output_tensors.append(out_tensor)
+        output_tensor = torch.cat(outputs, dim=-1)
 
-        return output_tensors
+        return output_tensor
 
     def train(self, point_training_data, global_training_data,
               point_test_data, global_test_data,
@@ -529,37 +520,35 @@ class HybridModel(object):
                     {len(point_train_data_subsets)} does not match the \
                     number of global samples {train_steps}."
 
-            #for step_num, (subset, global_sample) in tqdm(enumerate(list(zip(point_train_data_subsets, global_train_dl))), total=train_steps):
             for subset, global_sample in tqdm(zip(point_train_data_subsets,
                                                   global_train_dl),
                                               total=train_steps):
 
                 self.ml_model.zero_grad()
 
-                batch = self.BatchedElement(*[x.to(self.device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in global_sample])
-
                 tensors = []
                 for field in self.input_fields:
-                    tensors.append(getattr(batch, field))
-                print(len(tensors))
+                    tensors.append(getattr(global_sample, field))
 
                 # Set initial values for dynamics and network
                 ml_in = subset
                 dyn_in = torch.cat(tensors, dim=1)
 
                 # The index of the sample
-                sample_idx = batch.idx[0]
+                sample_idx = global_sample.idx[0]
 
                 for rollout_step in range(rollout_length):
                     # Produce a network prediction for u and D using the same
                     # initial condition that the dynamics will see
                     ml_out = self.forward_pass(
-                        ml_in, self.ml_model, len(self.fields_to_adjust),
-                        self.batch_size, rollout_step)
+                        ml_in, self.ml_model,
+                        n_outputs=3,
+                        input_names=self.ml_input_fields,
+                        batch_size=self.batch_size, rollout_step=rollout_step)
 
                     # Run forward PDE model for ndt timesteps and add
                     # the network forcings
-                    pred_tensor = G(dyn_in, self.ml_inc)
+                    pred_tensor = G(dyn_in, ml_out)
 
                     # Prepare input for next network call
                     next_tensor = J(pred_tensor)
