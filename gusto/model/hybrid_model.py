@@ -75,11 +75,13 @@ class HybridModel(object):
                                          names2)
 
         fs = pde_model.equation.X.function_space()
+        self.fs = fs
         self.pde_out = Function(fs)
         # TODO: create ml_fs based on input_fields - here we assume
         # we're shallow water and we want 3 DG spaces because we're
         # separating u into components
         ml_fs = MixedFunctionSpace([fs.subspaces[-1]]*3)
+        self.ml_fs = ml_fs
         self.ml_out = Function(fs)
         # Stores increment predicted by ml model - mast be on same
         # function space as pde model.
@@ -390,7 +392,7 @@ class HybridModel(object):
         return (indices for indices in tally.items() if len(indices) > 1)
 
     def forward_pass(self, ml_input, ml_model, n_outputs, input_names,
-                     batch_size, rollout_step=0, scaling=None):
+                     batch_size, rollout_step=0, scaling=None, coords=None):
         """
         Forward pass of the ml model. Returns a list of tensors.
         """
@@ -421,13 +423,23 @@ class HybridModel(object):
                 # add to list of tensor solutions
                 outputs.append(ml_out)
         else:
-            for idx in range(ml_input.shape[1]):
-                # extract inputs from the tensor
-                inputs = scaling[name] * ml_input[:, idx, :]
-                inputs = torch.cat(inputs, dim=-1).unsqueeze(0)
+            # extract inputs from the tensor
+            fn = from_torch(ml_input, self.fs)
+            tensors = []
+            u, D = fn.subfunctions
+            u0, u1, D0 = Function(self.ml_fs).subfunctions
+            u0.interpolate(u[0])
+            u1.interpolate(u[1])
+            D0.assign(D)
+            tensors.append(to_torch(u0))
+            tensors.append(to_torch(u1))
+            tensors.append(to_torch(D0))
+            tensors += coords
+            inputs = torch.stack(tensors, dim=2)
 
-                # forward pass
-                ml_out = ml_model(inputs)
+            # forward pass
+            for i in range(inputs.size()[1]):
+                ml_out = ml_model(inputs[:, i, :])
                 # add to list of tensor solutions
                 outputs.append(ml_out)
 
@@ -509,6 +521,13 @@ class HybridModel(object):
         best_error = np.finfo(float).max
         max_grad_norm = 1.
 
+        # Get the coordinates as tensors, to be used as inputs
+        # TODO: check why this comes from global rather than points
+        dataset_coords = global_train_dl.dataset.coords
+        coords = []
+        for dim in range(dataset_coords.shape[-1]):
+            coords.append(torch.tensor(dataset_coords[:, dim], requires_grad=True).unsqueeze(0))
+
         # Training loop
         for epoch in trange(epochs):
             self.ml_model.train()
@@ -522,9 +541,11 @@ class HybridModel(object):
                     {len(point_train_data_subsets)} does not match the \
                     number of global samples {train_steps}."
 
-            for subset, global_sample in tqdm(zip(point_train_data_subsets,
-                                                  global_train_dl),
-                                              total=train_steps):
+            n_samples = train_steps - rollout_length
+            for subset, global_sample in tqdm(
+                    zip(point_train_data_subsets[:n_samples],
+                        list(global_train_dl)[:n_samples]),
+                    total=train_steps):
 
                 self.ml_model.zero_grad()
 
@@ -546,59 +567,36 @@ class HybridModel(object):
                         ml_in, self.ml_model,
                         n_outputs=3,
                         input_names=self.ml_input_fields,
-                        batch_size=self.batch_size, rollout_step=rollout_step)
+                        batch_size=self.batch_size, rollout_step=rollout_step,
+                        coords=coords
+                    )
 
                     # Run forward PDE model for ndt timesteps and add
                     # the network forcings
-                    pred_tensor = G(dyn_in, ml_out)
+                    dyn_in = G(dyn_in, ml_out)
 
-                    # Prepare input for next network call
-                    next_tensor = J(pred_tensor)
-
-                    # Stack tensors
-                    ml_in = torch.stack(*next_tensor, dim=2)
-
-                    # Create input for the next dynamics call
-                    dyn_in = pred_tensor
+                    ml_in = dyn_in
 
                 # The target is the u solution the rollout length time later
                 target_idx = sample_idx + rollout_length
+                target_sample = list(global_train_dl)[target_idx]
 
-                # Access the sample using its index, while the target
-                # index is less than the length of indices
-                try:
-                    target_sample = list(global_train_dl)[target_idx]
-                except:
-                    pass
-                target_batch = BatchedElement(*[x.to(self.device, non_blocking=True) if isinstance(x, torch.Tensor) else x for x in target_sample])
+                #assert target_batch.s[0][sample_idx] == target_batch.s[0][target_idx]
+                targets = []
+                for field in self.input_fields:
+                    targets.append(getattr(target_sample, field))
+                target_tensor = torch.cat(targets, dim=1)
 
-                # Check that the target comes from the same simulation
-                # (the last two will never)
-                IC_sim_no = target_batch.s[0][sample_idx]
-                try:
-                    target_sim_no = target_batch.s[0][target_idx]
-                except:
-                    pass
+                # Define L2-loss using Firedrake
+                loss = H(dyn_in, target_tensor)
+                total_loss += loss.item()
 
-                # where these are not the same we don't use the data
-                # if they are the same define a target, set up a loss
-                # function and backprop
-                if IC_sim_no == target_sim_no:
-                    targets = []
-                    for field in self.input_fields:
-                        targets.append(target_batch.getattr(field))
-                    target_tensor = torch.cat(targets, dim=1)
-
-                    # Define L2-loss using Firedrake
-                    loss = H(pred_tensor, target_tensor)
-                    total_loss += loss.item()
-
-                    # Backprop and perform Adam optimisation
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(
-                        parameters=self.ml_model.parameters(),
-                        max_norm=max_grad_norm)
-                    optimiser.step()
+                # Backprop and perform Adam optimisation
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(
+                    parameters=self.ml_model.parameters(),
+                    max_norm=max_grad_norm)
+                optimiser.step()
 
             # Evaluate this version of the model on the test set
             error = self.evaluate(self.ml_model, self.device,
@@ -622,7 +620,7 @@ class HybridModel(object):
                 model_name = f"epoch-{epoch}-error_{best_error:.5f}.pt"
                 torch.save(checkpoint, os.path.join(self.data_dir, model_name))
 
-    def evalute(self, filename=None):
+    def evaluate(self, filename=None):
         """
         Evaluate the hybrid model
         Args:
@@ -681,6 +679,7 @@ class GustoGlobalDataset(Dataset):
             n = int(np.array(afile.h5pyfile["n"]))
             # Load mesh
             mesh = afile.load_mesh("mesh")
+            self.coords = afile.get_attr("/", "locations")
             # Load data
             for i in range(n):
                 fields = []
