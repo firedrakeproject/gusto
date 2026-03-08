@@ -406,7 +406,7 @@ class IO(object):
                     except OSError as e:
                         error = e
                         raise_parallel_exception = 2
-                elif not (running_tests or pick_up):
+                elif not (running_tests or pick_up or True):
                     # Throw an error if directory already exists, unless we
                     # are picking up or running tests
                     raise_parallel_exception = 1
