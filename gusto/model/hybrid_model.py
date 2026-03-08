@@ -616,7 +616,7 @@ class HybridModel(object):
                     'optimiser': optimiser.state_dict()
                 }
                 model_name = f"epoch-{epoch}-error_{best_error:.5f}.pt"
-                torch.save(checkpoint, os.path.join(self.data_dir, model_name))
+                torch.save(checkpoint, os.path.join("results", self.data_dir, model_name))
 
     def evaluate(self, pde_model, ml_model, point_dl, global_dl,
                  rollout_length):
@@ -698,12 +698,25 @@ class HybridModel(object):
                 target_idx = sample_idx + rollout_length
                 target_sample = list(global_dl)[target_idx]
 
-                targets = []
-                for field in self.input_fields:
-                    targets.append(getattr(target_sample, field+"_fd"))
-                target_tensor = torch.cat(targets, dim=1)
+                # TODO: make this in init
+                x_target = Function(self.fs)
+                x_target_ml = Function(self.ml_fs)
+                for field_name in self.input_fields:
+                    idx = self.pde_model.equation.field_names.index(field_name)
+                    # TODO: why is this a list and is it ok to get
+                    # just first entry of it?
+                    fn = getattr(target_sample, field_name+"_fd")[0]
+                    if field_name == "u":
+                        # TODO: don't make functions here!
+                        u0 = Function(x_target_ml.subfunctions[0]).interpolate(fn[0])
+                        u1 = Function(x_target_ml.subfunctions[0]).interpolate(fn[1])
+                        x_target.subfunctions[idx].project(
+                            as_vector([u0, u1])
+                            )
+                    else:
+                        x_target.subfunctions[idx].interpolate(fn)
 
-                total_error += errornorm(x_predicted, x_target)
+                total_error += errornorm(fd_in, x_target)
 
         return total_error / eval_steps
 
