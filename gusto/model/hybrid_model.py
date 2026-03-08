@@ -681,11 +681,11 @@ class HybridModel(object):
                             fd_in.subfunctions[idx].project(
                                 as_vector([ml_inc.subfunctions[0],
                                            ml_inc.subfunctions[1]])
-                                )
+                            )
                             fd_in.subfunctions[idx].assign(
                                 fd_in.subfunctions[idx]
                                 + self.pde_model.stepper.fields(field_name)
-                                )
+                            )
                         else:
                             fd_in.subfunctions[idx].interpolate(
                                 ml_inc.subfunctions[idx+1]
@@ -712,7 +712,7 @@ class HybridModel(object):
                         u1 = Function(x_target_ml.subfunctions[0]).interpolate(fn[1])
                         x_target.subfunctions[idx].project(
                             as_vector([u0, u1])
-                            )
+                        )
                     else:
                         x_target.subfunctions[idx].interpolate(fn)
 
@@ -720,9 +720,12 @@ class HybridModel(object):
 
         return total_error / eval_steps
 
-    def validate(self):
+    def validate(self, point_validation_data, global_validation_data):
 
+        trained_ml_model = torch.load(os.path.join("results", self.data_dir,
+                                                   "model.pt"))
         self.ml_model.load_state_dict(trained_ml_model["state_dict"])
+        batch_size = 1
 
         # Point data
         point_dataset = PointDataset(numpy_data=point_validation_data,
@@ -744,6 +747,9 @@ class HybridModel(object):
                                        batch_size=batch_size,
                                        collate_fn=global_dataset.collate,
                                        shuffle=False)
+
+        self.evaluate(self.pde_model, self.ml_model, point_dataloader,
+                      global_dataloader, rollout_length=4)
 
 
 class GustoGlobalDataset(Dataset):
