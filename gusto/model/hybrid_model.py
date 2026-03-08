@@ -1,6 +1,6 @@
 from firedrake import (Function, as_vector, CheckpointFile, assemble, dx,
                        VectorFunctionSpace, FunctionSpace, VertexOnlyMesh,
-                       interpolate, Constant, MixedFunctionSpace)
+                       interpolate, MixedFunctionSpace, errornorm)
 from firedrake.adjoint import (Control, ReducedFunctional, set_working_tape,
                                continue_annotation)
 from firedrake.ml.pytorch import to_torch, from_torch, fem_operator
@@ -100,20 +100,20 @@ class HybridModel(object):
         This adds the ml prediction to the dynamics predictions
         """
         self.ml_out.subfunctions[0].project(
-                    as_vector([ml.subfunctions[0], ml.subfunctions[1]])
+            as_vector([ml.subfunctions[0], ml.subfunctions[1]])
         )
         self.ml_out.subfunctions[1].interpolate(ml[2])
-        #ml_idx = 0
-        #for field_name in self.fields_to_adjust:
-        #    idx = self.pde_model.equation.field_names.index(field_name)
-        #    if field_name == "u":
-        #        self.ml_out.subfunctions[idx].project(
-        #            as_vector([ml.subfunctions[ml_idx], ml.subfunctions[ml_idx+1]])
-        #        )
-        #        ml_idx += 2
-        #    else:
-        #        self.ml_out.subfunctions[idx].interpolate(ml[ml_idx])
-        #        ml_idx += 1
+        # ml_idx = 0
+        # for field_name in self.fields_to_adjust:
+        #     idx = self.pde_model.equation.field_names.index(field_name)
+        #     if field_name == "u":
+        #         self.ml_out.subfunctions[idx].project(
+        #             as_vector([ml.subfunctions[ml_idx], ml.subfunctions[ml_idx+1]])
+        #         )
+        #         ml_idx += 2
+        #     else:
+        #         self.ml_out.subfunctions[idx].interpolate(ml[ml_idx])
+        #         ml_idx += 1
 
         self.x_predicted.interpolate(dyn + self.ml_out)
 
@@ -506,9 +506,9 @@ class HybridModel(object):
             )
             G = fem_operator(F_pred)
 
-            #F_ml_in = ReducedFunctional(self.pde_to_ml(self.x_predicted),
-            #                            [Control(self.x_predicted)])
-            #J = fem_operator(F_ml_in)
+            # F_ml_in = ReducedFunctional(self.pde_to_ml(self.x_predicted),
+            #                             [Control(self.x_predicted)])
+            # J = fem_operator(F_ml_in)
 
             F_loss = ReducedFunctional(
                 self.assemble_cost_function(self.x_predicted, self.x_target),
@@ -522,7 +522,6 @@ class HybridModel(object):
         max_grad_norm = 1.
 
         # Get the coordinates as tensors, to be used as inputs
-        # TODO: check why this comes from global rather than points
         dataset_coords = global_train_dl.dataset.coords
         coords = []
         for dim in range(dataset_coords.shape[-1]):
@@ -542,6 +541,7 @@ class HybridModel(object):
                     number of global samples {train_steps}."
 
             n_samples = train_steps - rollout_length
+            n_samples = 4
             for subset, global_sample in tqdm(
                     zip(point_train_data_subsets[:n_samples],
                         list(global_train_dl)[:n_samples]),
@@ -581,7 +581,7 @@ class HybridModel(object):
                 target_idx = sample_idx + rollout_length
                 target_sample = list(global_train_dl)[target_idx]
 
-                #assert target_batch.s[0][sample_idx] == target_batch.s[0][target_idx]
+                # assert target_batch.s[0][sample_idx] == target_batch.s[0][target_idx]
                 targets = []
                 for field in self.input_fields:
                     targets.append(getattr(target_sample, field))
@@ -599,11 +599,9 @@ class HybridModel(object):
                 optimiser.step()
 
             # Evaluate this version of the model on the test set
-            error = self.evaluate(self.ml_model, self.device,
+            error = self.evaluate(self.pde_model, self.ml_model,
                                   point_test_dl, global_test_dl,
-                                  pde_model=self.pde_model,
-                                  disable_tqdm=False, write_out_results=False,
-                                  rollout_length=rollout_length, dt=dt, ndt=ndt)
+                                  rollout_length=rollout_length)
 
             # Save best-performing model
             if error < best_error:
@@ -620,17 +618,98 @@ class HybridModel(object):
                 model_name = f"epoch-{epoch}-error_{best_error:.5f}.pt"
                 torch.save(checkpoint, os.path.join(self.data_dir, model_name))
 
-    def evaluate(self, filename=None):
+    def evaluate(self, pde_model, ml_model, point_dl, global_dl,
+                 rollout_length):
         """
         Evaluate the hybrid model
         Args:
-            filename (str, optional): where to find validation data. Defaults
-            to None in which case use validation data generated by
-            generate_data method
         """
-        self.ml_model.load_state_dict(trained_ml_model["state_dict"])
+        ml_model.eval()
+
+        # Get the coordinates as tensors, to be used as inputs
+        dataset_coords = global_dl.dataset.coords
+        coords = []
+        for dim in range(dataset_coords.shape[-1]):
+            coords.append(torch.tensor(dataset_coords[:, dim], requires_grad=True).unsqueeze(0))
+
+        point_data_subsets = self.subsample_point_data(point_dl)
+
+        total_error = 0.
+        eval_steps = len(global_dl)
+        n_samples = eval_steps - rollout_length
+
+        for subset, global_sample in tqdm(
+                zip(point_data_subsets[:n_samples],
+                    list(global_dl)[:n_samples]),
+                total=eval_steps):
+            tensors = []
+            for field in self.input_fields:
+                tensors.append(getattr(global_sample, field))
+
+            # Set initial values for dynamics and network
+            ml_in = subset
+            dyn_in = torch.cat(tensors, dim=1)
+
+            # The index of the sample
+            sample_idx = global_sample.idx[0]
+
+            with torch.no_grad():
+                for rollout_step in range(rollout_length):
+                    # Produce a network prediction for u and D using the same
+                    # initial condition that the dynamics will see
+                    ml_out = self.forward_pass(
+                        ml_in, ml_model,
+                        n_outputs=3,
+                        input_names=self.ml_input_fields,
+                        batch_size=self.batch_size, rollout_step=rollout_step,
+                        coords=coords
+                    )
+
+                    ml_inc = from_torch(ml_out, self.ml_fs)
+
+                    # initialise PDE model
+                    fd_in = from_torch(dyn_in, self.fs)
+                    for field_name in self.pde_model.equation.field_names:
+                        idx = self.pde_model.equation.field_names.index(field_name)
+                        field = self.pde_model.stepper.fields(field_name)
+                        field.assign(fd_in.subfunctions[idx])
+
+                    self.pde_model.stepper.run(t=0, tmax=self.ndt*float(pde_model.domain.dt))
+                    for field_name in self.pde_model.equation.field_names:
+                        idx = self.pde_model.equation.field_names.index(field_name)
+                        if field_name == "u":
+                            fd_in.subfunctions[idx].project(
+                                as_vector([ml_inc.subfunctions[0],
+                                           ml_inc.subfunctions[1]])
+                                )
+                            fd_in.subfunctions[idx].assign(
+                                fd_in.subfunctions[idx]
+                                + self.pde_model.stepper.fields(field_name)
+                                )
+                        else:
+                            fd_in.subfunctions[idx].interpolate(
+                                ml_inc.subfunctions[idx+1]
+                                + self.pde_model.stepper.fields(field_name)
+                            )
+
+                    ml_in = to_torch(fd_in)
+
+                # The target is the u solution the rollout length time later
+                target_idx = sample_idx + rollout_length
+                target_sample = list(global_dl)[target_idx]
+
+                targets = []
+                for field in self.input_fields:
+                    targets.append(getattr(target_sample, field+"_fd"))
+                target_tensor = torch.cat(targets, dim=1)
+
+                total_error += errornorm(x_predicted, x_target)
+
+        return total_error / eval_steps
 
     def validate(self):
+
+        self.ml_model.load_state_dict(trained_ml_model["state_dict"])
 
         # Point data
         point_dataset = PointDataset(numpy_data=point_validation_data,
