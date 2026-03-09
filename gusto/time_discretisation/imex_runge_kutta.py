@@ -10,6 +10,7 @@ from gusto.time_discretisation.time_discretisation import (
 )
 import numpy as np
 from qmat.qcoeff.butcher import ARK548L2SAESDIRK2, ARK548L2SAERK2
+from gusto.solvers.solver_presets import hybridised_solver_parameters
 
 
 __all__ = ["IMEXRungeKutta", "IMEX_Euler", "IMEX_ARS3", "IMEX_ARK2",
@@ -112,13 +113,17 @@ class IMEXRungeKutta(TimeDiscretisation):
         else:
             self.linear_solver_parameters = linear_solver_parameters
 
-        if nonlinear_solver_parameters is None:
-            self.nonlinear_solver_parameters = {'snes_type': 'newtonls',
-                                                'ksp_type': 'gmres',
-                                                'pc_type': 'bjacobi',
-                                                'sub_pc_type': 'ilu'}
+        # Set default linear and nonlinear solver options if none passed in
+        if linear_solver_parameters is None:
+            self.linear_solver_parameters = {'snes_type': 'ksponly',
+                                             'ksp_type': 'cg',
+                                             'pc_type': 'bjacobi',
+                                             'sub_pc_type': 'ilu'}
         else:
-            self.nonlinear_solver_parameters = nonlinear_solver_parameters
+            self.linear_solver_parameters = linear_solver_parameters
+
+        self.nonlinear_solver_parameters = nonlinear_solver_parameters
+
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -132,6 +137,8 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         super().setup(equation, apply_bcs, *active_labels)
 
+        self.equation = equation
+
         # Check all terms are labeled implicit, exlicit
         for t in self.residual:
             if ((not t.has_label(implicit)) and (not t.has_label(explicit))
@@ -140,6 +147,13 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
         self.source = [Function(self.fs) for i in range(self.nStages)]
+
+        if self.nonlinear_solver_parameters is None:
+            alpha = self.dt/self.domain.dt
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True)
+        else:
+            self.appctx=None
+
 
     def res(self, stage):
         """Set up the discretisation's residual for a given stage."""
@@ -245,7 +259,7 @@ class IMEXRungeKutta(TimeDiscretisation):
             # setup solver using residual defined in derived class
             problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
-            solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
+            solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name))
         return solvers
 
     @cached_property

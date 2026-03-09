@@ -8,7 +8,7 @@ from firedrake.fml import subject, drop
 from gusto.core.configuration import TransportEquationType
 from gusto.core.labels import (transport, transporting_velocity, diffusion,
                                prognostic, linearisation, horizontal_transport,
-                               vertical_transport)
+                               vertical_transport, divergence)
 
 __all__ = ["advection_form", "advection_form_1d", "continuity_form",
            "continuity_form_1d", "vector_invariant_form",
@@ -360,7 +360,7 @@ def split_continuity_form(equation):
 
             # Create new advective and divergence terms
             adv_term = prognostic(advection_form(test, q, uadv), prognostic_field_name)
-            div_term = prognostic(test*q*div(uadv)*dx, prognostic_field_name)
+            div_term = divergence(prognostic(test*q*div(uadv)*dx, prognostic_field_name))
 
             # Add linearisations of new terms if required
             if (t.has_label(linearisation)):

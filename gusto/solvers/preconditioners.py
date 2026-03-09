@@ -805,7 +805,7 @@ class CompressibleHybridisedSCPC(PCBase):
         tau_values = appctx.get('tau_values')
         self.tau_values = tau_values if tau_values is not None else {}
 
-        self.dt = self.equations.domain.dt_solver
+        self.dt = self.equations.domain.dt
 
     def applyTranspose(self, pc, x, y):
         """

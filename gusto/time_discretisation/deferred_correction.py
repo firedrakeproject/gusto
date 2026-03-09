@@ -577,6 +577,7 @@ class RIDC(object, metaclass=ABCMeta):
         self.M = M
         self.reduced = reduced
         self.dt = Constant(float(self.dt_coarse)/(self.M))
+        self.base.dt = self.dt
 
         if reduced:
             self.Q = []
@@ -632,9 +633,11 @@ class RIDC(object, metaclass=ABCMeta):
         self.evaluate_source = self.base.evaluate_source
         if self.nonlinear_solver_parameters is None:
             alpha = float(self.dt)//float(self.dt_coarse)
+            alpha = self.dt/self.domain.dt
             self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True)
         else:
             self.appctx=None
+        print(self.nonlinear_solver_parameters)
 
         for t in self.residual:
             # Check all terms are labeled implicit or explicit
