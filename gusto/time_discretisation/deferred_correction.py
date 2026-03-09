@@ -610,11 +610,9 @@ class RIDC(object, metaclass=ABCMeta):
         else:
             self.linear_solver_parameters = linear_solver_parameters
 
-        if nonlinear_solver_parameters is None:
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.field_name, alpha=1.0, tau_values=None)
-        else:
-            self.nonlinear_solver_parameters = nonlinear_solver_parameters
-            self.appctx=None
+        self.nonlinear_solver_parameters = nonlinear_solver_parameters
+
+
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -632,6 +630,11 @@ class RIDC(object, metaclass=ABCMeta):
         self.equation = self.base.equation
         self.residual = self.base.residual
         self.evaluate_source = self.base.evaluate_source
+        if self.nonlinear_solver_parameters is None:
+            alpha = float(self.dt)//float(self.dt_coarse)
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True)
+        else:
+            self.appctx=None
 
         for t in self.residual:
             # Check all terms are labeled implicit or explicit

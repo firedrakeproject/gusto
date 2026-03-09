@@ -15,7 +15,7 @@ from firedrake import VectorSpaceBasis
 __all__ = ["hybridised_solver_parameters", "monolithic_solver_parameters"]
 
 
-def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_values=None):
+def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_values=None, nonlinear=False):
     """
     Returns PETSc solver settings for hybridised solver for mixed finite
     element problems.
@@ -359,6 +359,12 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         for key in fieldsplit_keys:
             if key in settings:
                 settings[key]['ksp_monitor_true_residual'] = None
+    if nonlinear:
+        settings['snes_type'] = 'newtonls'
+        settings['snes_atol'] = 1e-4
+        settings['snes_rtol'] = 1e-4
+        settings['snes_max_it'] = 50
+        settings['snes_monitor'] = None
 
     return settings, appctx
 

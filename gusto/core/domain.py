@@ -28,7 +28,7 @@ class Domain(object):
     """
     def __init__(self, mesh, dt, family, degree=None,
                  horizontal_degree=None, vertical_degree=None,
-                 max_quad_degree=None):
+                 max_quad_degree=None, solver_dt=None):
         """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
@@ -49,6 +49,8 @@ class Domain(object):
                 for the Exner pressure). Defaults to None, in which case this
                 will be set to the 2*p+3, where p is the maximum polynomial
                 degree for the DG space.
+            solver_dt (:class:`Constant`, optional): the time step to be used by the solver.
+                Defaults to None, in which case the central dt will be used.
 
         Raises:
             ValueError: if incompatible degrees are specified (e.g. specifying
@@ -67,6 +69,15 @@ class Domain(object):
             self.dt = Function(R, val=dt)
         else:
             raise TypeError(f'dt must be a Constant, float or int, not {type(dt)}')
+        if solver_dt is None:
+            self.solver_dt = self.dt
+        else:
+            if type(solver_dt) is Constant:
+                self.solver_dt = Function(R, val=float(solver_dt))
+            elif type(solver_dt) in (float, int):
+                self.solver_dt = Function(R, val=solver_dt)
+            else:
+                raise TypeError(f'solver_dt must be a Constant, float or int, not {type(solver_dt)}')
 
         # Make a placeholder for the time
         self.t = Function(R, val=0.0)
