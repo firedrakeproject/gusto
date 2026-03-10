@@ -5,9 +5,9 @@ import os
 import functions as fcs
 
 # file1 = 'single-new_gamma_plane-shift_fns_Bu1b1p5Rop2_l1dt250df1'
-file1 = 'check_gamma_plane_step_trap'
+file1 = 'single-smooth-trap-232dg_Bu1b1p5Rop2_l1dt250df1'
 # file2 = 'single-new_gamma_plane-default-no_trap_Bu1b1p5Rop2_l1dt250df1'
-file2 = 'check_gamma_plane_no_trap'
+file2 = 'single-smooth-trap-232cg_Bu1b1p5Rop2_l1dt250df1'
 
 Bu = 1
 f0 = 2 * 1.74e-4
@@ -27,9 +27,8 @@ Lx = 7e7
 Ly = Lx
 
 ylen = len(d1.y)
-
-d2splice = d2[155,:,0]
-d1splice = d1[155,:,0]
+d2splice = d2[255,:,0]
+d1splice = d1[255,:,0]
 
 # d2splice = d2[:,155,0]
 # d1splice = d1[:,155,0]
