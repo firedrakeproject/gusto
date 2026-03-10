@@ -1,16 +1,28 @@
 from firedrake import *
 from gusto import *
 from numpy import random
+import itertools
 
-Lx = Ly = 100
+Lx = 100
 nx = ny = 10
-mesh = PeriodicRectangleMesh(nx, ny, Lx, Ly, direction="both", name="mesh")
+mesh = PeriodicSquareMesh(nx, ny, Lx, direction="both", name="mesh")
 dt = 0.02
 
 g = 9.80616
 H = 3e4/g
+
+x, y = SpatialCoordinate(mesh)
+pos = [0.25 * Lx, 0.75 * Lx]
+centres = itertools.product(pos, pos)
+topog_expr = 0.
+a = 0.8 * H
+for xs, ys in centres:
+    topog_expr += a * exp(-((x-xs)**2)/Lx - ((y-ys)**2)/Lx)
+
+
 parameters = ShallowWaterParameters(mesh, H=H, g=g,
-                                    rotation=CoriolisOptions.nonrotating)
+                                    rotation=CoriolisOptions.nonrotating,
+                                    topog_expr=topog_expr)
 
 eqns = ShallowWaterEquations
 
@@ -61,7 +73,7 @@ def generate_initial_conditions(mesh, n_ics, n_gaussians, scale, extent, H):
     return ics
 
 ics = generate_initial_conditions(mesh, 10, 6, Lx, Lx, H)
-#hybrid_model.generate_data(ics, ndt=4)
+hybrid_model.generate_data(ics, ndt=4)
 dir_list = ["results/sw_ml/test_train_0", "results/sw_ml/test_train_1",
             "results/sw_ml/test_train_2", "results/sw_ml/test_train_3",
             "results/sw_ml/test_train_4", "results/sw_ml/test_train_5",
@@ -72,4 +84,4 @@ hybrid_model.process_data(ndt=ndt, dir_list=dir_list)
 hybrid_model.train("point_train_data.npy", "global_train_data.h5",
                    "point_test_data.npy", "global_test_data.h5")
 
-hybrid_model.evaluate()
+#hybrid_model.validate()
