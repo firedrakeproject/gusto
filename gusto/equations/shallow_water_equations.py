@@ -222,14 +222,17 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 # r, _ = rtheta_from_xy(x, y, 35e6, 35e6)
                 Rsq = self.parameters.R**2
                 fexpr = 2*self.parameters.Omega * (1 - 0.5 * r**2 / Rsq)
+                # breakpoint()
                 if self.coriolis_trap is not None:
                     r_edge, f_trap = self.coriolis_trap
                     fexpr = conditional(r < r_edge, fexpr, f_trap)
             else:
                 raise NotImplementedError('Coriolis option is not implemented')
-            self.prescribed_fields('coriolis', CG1).interpolate(fexpr)
+            # breakpoint()
+            f = self.prescribed_fields('coriolis', self.domain.spaces("DG")).interpolate(fexpr)
+            # f = self.prescribed_fields('coriolis', CG1).interpolate(fexpr)
             coriolis_form = coriolis(subject(prognostic(
-                fexpr*inner(self.domain.perp(u), w)*dx(degree=quad), "u"), self.X))
+                f*inner(self.domain.perp(u), w)*dx(degree=quad), "u"), self.X))
             # Add linearisation manually, as linearisation cannot handle the
             # perp function on the plane / vertical slice
             if self.linearisation_map(coriolis_form.terms[0]):
