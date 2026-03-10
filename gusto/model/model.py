@@ -22,12 +22,12 @@ class ModelBase(object, metaclass=ABCMeta):
             equation (:class:`PrognosticEquationSet`): defines the model's
                 prognostic equation
             element_order (int): the element degree used for the DG
-                space. Defaults to None.
+                space.
             family (str, optional): the finite element space family used for
                 the velocity field. This determines the other finite element
                 spaces used via the de Rham complex. If not provided, an
                 appropriate choice will be made based on the cell of the mesh
-                (or the base mesh in 3D).
+                (or the base mesh in 3D). Defaults to None.
 
         Kwargs:
             Kwargs are passed straight through to the equation class; see
@@ -37,12 +37,12 @@ class ModelBase(object, metaclass=ABCMeta):
             u_transport_option (str, optional): specifies the transport term
                 used for the velocity equation. Supported options are:
                 'vector_invariant_form', 'vector_advection_form', and
-                'circulation_form'.Defaults to 'vector_invariant_form'.
+                'circulation_form'. Defaults to 'vector_invariant_form'.
             diffusion_options (iterable, optional): iterable of
                 ``(field_name, diffusion_parameters)`` pairs where
                 diffusion_parameters is a :class:`DiffusionParameters`
                 object specifying the diffusion parameters to be applied
-                to the field field_name.  Defaults to None.
+                to the field field_name. Defaults to None.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
                 None.
@@ -102,24 +102,47 @@ class SIQNModelBase(ModelBase):
     Base for model classes using SIQN. Child classes should define the
     standard transport and diffusion schemes and methods.
     """
+
     @abstractproperty
     def diffusion_methods(self):
+        """
+        Needs to return a list of instances of the diffusion discretisation
+        class for each of the prognostic fields in the model equation set that
+        has diffusion options defined.
+        """
         pass
 
     @abstractproperty
     def diffusion_schemes(self):
+        """
+        Need to return a list of instances of the timestepping scheme
+        class to be used for each of the prognostic fields in the model
+        equation set that has diffusion options defined.
+        """
         pass
 
     @abstractproperty
     def transported_fields(self):
+        """
+        Needs to return a list of instances of the timestepping scheme class
+        to be used for each of the prognostic fields in the model equation set.
+        """
         pass
 
     @abstractproperty
     def transport_methods(self):
+        """
+        Needs to return a list of instances of the transport method class
+        for each of the prognostic fields in the model equation set.
+        """
         pass
 
     @property
     def tau_values(self):
+        """
+        Returns a dictionary containing the semi-implicit relaxation
+        parameters for each field.
+        """
         _tau_values = {}
         for field_name in self.equation.field_names:
             if field_name != "u":
@@ -171,6 +194,11 @@ class SIQNModel(SIQNModelBase):
 
     @property
     def diffusion_methods(self):
+        """
+        Returns a list of instances of the InteriorPenaltyDiffusion
+        class for each of the prognostic fields in the model equation set that
+        has diffusion options defined.
+        """
         _diffusion_methods = []
         for field, params in self.diffusion_options:
             _diffusion_methods.append(
@@ -180,6 +208,11 @@ class SIQNModel(SIQNModelBase):
 
     @property
     def diffusion_schemes(self):
+        """
+        Returns a list of instances of the Backward Euler timestepping scheme
+        class for each of the prognostic fields in the model equation set that
+        has diffusion options defined.
+        """
         _diffusion_schemes = []
         for field, _ in self.diffusion_options:
             _diffusion_schemes.append(
@@ -189,6 +222,10 @@ class SIQNModel(SIQNModelBase):
 
     @property
     def transported_fields(self):
+        """
+        Returns a list of instances of the SSPRK3 timestepping scheme class
+        for each of the prognostic fields in the model equation set.
+        """
         _transported_fields = []
         for field_name in self.equation.field_names:
             if self.equation.space_names[field_name] == 'L2':
@@ -216,6 +253,10 @@ class SIQNModel(SIQNModelBase):
 
     @property
     def transport_methods(self):
+        """
+        Returns a list of instances of the DGUpwind transport method class
+        for each of the prognostic fields in the model equation set.
+        """
         _transport_methods = []
         for field_name in self.equation.field_names:
             if self.equation.space_names[field_name] == 'L2':
@@ -246,6 +287,11 @@ class LowestOrderSIQNModel(SIQNModelBase):
 
     @property
     def diffusion_methods(self):
+        """
+        Returns a list of instances of the InteriorPenaltyDiffusion
+        class for each of the prognostic fields in the model equation set that
+        has diffusion options defined.
+        """
         _diffusion_methods = []
         for field, params in self.diffusion_options:
             _diffusion_methods.append(
@@ -255,6 +301,11 @@ class LowestOrderSIQNModel(SIQNModelBase):
 
     @property
     def diffusion_schemes(self):
+        """
+        Returns a list of instances of the Backward Euler timestepping scheme
+        class for each of the prognostic fields in the model equation set that
+        has diffusion options defined.
+        """
         _diffusion_schemes = []
         for field, _ in self.diffusion_options:
             _diffusion_schemes.append(
@@ -264,6 +315,10 @@ class LowestOrderSIQNModel(SIQNModelBase):
 
     @property
     def transported_fields(self):
+        """
+        Returns a list of instances of the SSPRK3 timestepping scheme class
+        for each of the prognostic fields in the model equation set.
+        """
         boundary_methods = {'DG': BoundaryMethod.taylor}
         recovery_spaces = RecoverySpaces(
             self.domain, boundary_methods, use_vector_spaces=True
@@ -295,6 +350,10 @@ class LowestOrderSIQNModel(SIQNModelBase):
 
     @property
     def transport_methods(self):
+        """
+        Returns a list of instances of the DGUpwind transport method class
+        for each of the prognostic fields in the model equation set.
+        """
         _transport_methods = []
         for field_name in self.equation.field_names:
             _transport_methods.append(DGUpwind(self.equation, field_name))
