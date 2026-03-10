@@ -328,7 +328,9 @@ class MeanMixingRatio(Augmentation):
         self.DG1_field = Function(DG1)
         self.rho_field = Function(DG1)
         self.DG0_field = Function(DG0)
-        self.compute_mean_mX = ConservativeProjector(self.rho_field, self.rho_field, self.DG1_field, self.DG0_field)
+
+        # Include subtract_mean?
+        self.compute_mean_mX = ConservativeProjector(self.rho_field, self.rho_field, self.DG1_field, self.DG0_field, subtract_mean=True)
 
         # Create the new mixed function space
         self.fs = MixedFunctionSpace(exist_spaces)
@@ -496,6 +498,16 @@ class MeanMixingRatio(Augmentation):
         for idx in range(self.idx_orig):
             self.x_in.subfunctions[idx].assign(x_in.subfunctions[idx])
 
+        # Print the tracer density:
+        #td = assemble(self.x_in.subfunctions[0]*self.x_in.subfunctions[1]*dx)
+        #XT_diff = abs(20.10619298318064 - td)/20.10619298318064
+
+        #XT_diff = abs(8260898379927.111 - td)/8260898379927.111
+
+        #print('\n Checking difference in tracer density')
+        #print(XT_diff)
+
+
     def post_apply(self, x_out):
         """
         Sets the output fields, i.e. not the mean fields
@@ -506,6 +518,17 @@ class MeanMixingRatio(Augmentation):
 
         for idx in range(self.idx_orig):
             x_out.subfunctions[idx].assign(self.x_out.subfunctions[idx])
+
+        # Print the tracer density:
+        #td = assemble(self.x_out.subfunctions[0]*self.x_out.subfunctions[1]*dx)
+        #XT_diff = abs(20.10619298318064 - td)/20.10619298318064
+
+        #XT_diff = abs(8260898379927.111 - td)/8260898379927.111
+
+        #print('\n Checking difference in tracer density')
+        #print(XT_diff)
+
+        #import sys; sys.exit()
 
     def update(self, x_in_mixed):
         """
@@ -535,6 +558,8 @@ class MeanMixingRatio(Augmentation):
 
             x_in_mixed.subfunctions[self.mean_idxs[i]].assign(self.DG0_field)
 
+            print('updated the mean mixing ratio')
+
     def limit(self, x_in_mixed):
         """
         Limit the mixing ratios using a blended limiter with
@@ -549,12 +574,38 @@ class MeanMixingRatio(Augmentation):
         mX_pre = []
         means = []
 
+        # Update the mean fields first:
+        print('updating mean fields')
+        self.update(x_in_mixed)
+
         for i in range(self.mX_num):
+            print(i)
             mX_pre.append(x_in_mixed.subfunctions[self.mX_idxs[i]])
             means.append(x_in_mixed.subfunctions[self.mean_idxs[i]])
+
+            #print(f'\n min of {self.mX_names[i]} field:')
+            #print(np.min(mX_pre[i].dat.data))
+            #print(f'\n min of {self.mean_names[i]} field:')
+            #print(np.min(means[i].dat.data))
+
+            #old_val = assemble(self.rho_field*mX_pre[i]*dx)
+
+        print('\n Applying the blended limiter')
 
         self.limiters.apply(mX_pre, means)
 
         for i in range(self.mX_num):
-            self.limiters._clip_DG1_field.apply(mX_pre[i], mX_pre[i])
+            #self.limiters._clip_DG1_field.apply(mX_pre[i], mX_pre[i])
             x_in_mixed.subfunctions[self.mX_idxs[i]].assign(mX_pre[i])
+
+            #print(f'\n min of {self.mX_names[i]} field:')
+            #print(np.min(mX_pre[i].dat.data))
+            #print(f'\n min of {self.mean_names[i]} field:')
+            #print(np.min(means[i].dat.data))
+
+            new_val = assemble(self.rho_field*mX_pre[i]*dx)
+
+            #print('td diff is', old_val-new_val)
+
+            #if np.abs(old_val-new_val) > 1e-10:
+            #    import sys;sys.exit()

@@ -6,7 +6,7 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 """
 
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
-                       FiniteElement, TensorProductElement, Constant)
+                       FiniteElement, TensorProductElement, Constant, assemble, dx)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.core.kernels import LimitMidpoints, ClipZero, MeanMixingRatioWeights
 
@@ -309,6 +309,10 @@ class MeanLimiter(object):
         self.mX_field = Function(DG1_equispaced)
         self.mean_field = Function(DG0)
         self.mX_new = Function(DG1_equispaced)
+        self.lamda_comp = Function(DG1_equispaced)
+        self.int1 = Function(DG1_equispaced)
+        self.int2 = Function(DG0)
+        self.ones = Function(DG0)
 
         self._lamda_kernel = MeanMixingRatioWeights(DG1_equispaced)
 
@@ -338,8 +342,35 @@ class MeanLimiter(object):
             self.mX_field.interpolate(mX_fields[i])
             self.mean_field.interpolate(mean_fields[i])
 
+            #print('Min of mx and mean fields in DG1')
+            #print(np.min(mX_fields[i].dat.data))
+            #print(np.min(mean_fields[i].dat.data))
+
+            #print('Min of mx and mean fields after DG1 equispaced projection')
+            #print(np.min(self.mX_field.dat.data))
+            #print(np.min(self.mean_field.dat.data))
+
             # Update the weights based on any negative values
             self._lamda_kernel.apply(self.lamda, self.mX_field, self.mean_field)
+
+        #print('min of lambda field:')
+        #print(np.min(self.lamda.dat.data))
+
+        #print('max of lambda field:')
+        #print(np.max(self.lamda.dat.data))
+
+        #for dat in self.lamda.dat.data:
+        #    if dat > 0.1:
+        #        print(dat)
+            
+        #import sys;sys.exit()
+
+        #if np.max(self.lamda.dat.data) > 1.0:
+        #    raise ValueError("Lamda field is too large")
+
+        #if np.min(self.lamda.dat.data) < 0.0:
+        #    raise ValueError("Lamda field is negative")
+
 
         # Perform blended limiting, with all mixing ratios using
         # the same lambda field to ensure conservation.
@@ -347,5 +378,38 @@ class MeanLimiter(object):
             self.mX_field.interpolate(mX_fields[i])
             self.mean_field.interpolate(mean_fields[i])
 
+            #print('Any difference in mixing ratios?')
+            #print(assemble(self.mX_field*dx))
+            #print(assemble(self.mean_field*dx))
+            #print(assemble(mX_fields[i]*dx))
+            #print(assemble(mean_fields[i]*dx))
+
+            #self.lamda.assign(Constant(0.5))
+            #self.lamda.assign(np.max(self.lamda.dat.data))
+            #self.lamda_comp.interpolate(Constant(1.0) - self.lamda)
+            #self.ones.assign(Constant(1.0))
+
+            # Check the integral of lambda + lambda_comp everywhere is zero.
+            #print(assemble((self.lamda_comp + self.lamda)*dx))
+            #print(assemble(self.ones*dx))
+
+
+            #self.int1.interpolate(self.lamda_comp*self.mX_field)
+            #self.int2.interpolate(self.lamda*self.mean_field)
+
+            #print(assemble(self.int1*dx))
+            #print(assemble(self.int2*dx))
+            #print(assemble(self.int1*dx)+assemble(self.int2*dx))
+            #print(self.int1)
+            #print(self.int2)
+            #self.mX_new.interpolate(self.int1 + self.int2)
+
             self.mX_new.interpolate((Constant(1.0) - self.lamda)*self.mX_field + self.lamda*self.mean_field)
+            #self.mX_new.interpolate(self.lamda_comp*self.mX_field + self.lamda*self.mean_field)
+            #self.mX_new.assign(self.mX_field)
             mX_fields[i].interpolate(self.mX_new)
+
+            #print('What are the values after blending the fields?')
+            #print(assemble((self.int1+self.int2)*dx))
+            #print(assemble(self.mX_new*dx))
+            #print(assemble(mX_fields[i]*dx))
