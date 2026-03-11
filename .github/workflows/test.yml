@@ -78,7 +78,7 @@ jobs:
         if: success() || steps.install-one.conclusion == 'success'
         id: install-two
         run: |
-          pip install 'setuptools<81'
+          pip install 'setuptools==81'
           
           . venv-gusto/bin/activate
           pip uninstall -y netCDF4
