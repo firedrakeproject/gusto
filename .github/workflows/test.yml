@@ -78,14 +78,12 @@ jobs:
         if: success() || steps.install-one.conclusion == 'success'
         id: install-two
         run: |
-          pip install 'setuptools==81'
-          
           . venv-gusto/bin/activate
           pip uninstall -y netCDF4
           : # '--no-build-isolation' has to be passed for mpi4py to be found
           : # but this means that we need to install any extra build
           : # dependencies manually
-          pip install Cython
+          pip install Cython 'setuptools>80'
           pip install --no-binary netCDF4 --no-build-isolation netCDF4
 
       - name: Run tests (nprocs = 1)
