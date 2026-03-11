@@ -78,6 +78,8 @@ jobs:
         if: success() || steps.install-one.conclusion == 'success'
         id: install-two
         run: |
+          pip install 'setuptools<81'
+          
           . venv-gusto/bin/activate
           pip uninstall -y netCDF4
           : # '--no-build-isolation' has to be passed for mpi4py to be found
