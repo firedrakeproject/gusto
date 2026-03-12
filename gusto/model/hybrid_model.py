@@ -151,14 +151,8 @@ class HybridModel(object):
         for i, ic in enumerate(initial_conditions):
             output.dirname = os.path.join(self.data_dir, f"test_train_{i}")
             self.dir_list.append(output.dirname)
-            stepper = pde_model.stepper
-            for field_name, field_ic in ic:
-                field = stepper.fields(field_name)
-                if field_name == "u":
-                    field.project(field_ic)
-                else:
-                    field.interpolate(field_ic)
-            stepper.run(t=0, tmax=ndt*float(pde_model.domain.dt))
+            pde_model.initialise(ic)
+            pde_model.run(t=0, tmax=ndt*float(pde_model.domain.dt))
 
     def process_data(self, ndt=None, dir_list=None):
         """
