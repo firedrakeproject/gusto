@@ -4,17 +4,17 @@ Defines microphysics routines to be used with the moist shallow water equations.
 
 from firedrake import (
     conditional, Function, dx, min_value, max_value, FunctionSpace,
-    assemble, split
+    assemble, split, inner, dot, sqrt
 )
 from firedrake.__future__ import interpolate
 from firedrake.fml import subject
 from gusto.core.logging import logger
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
-from gusto.core.labels import source_label
+from gusto.core.labels import source_label, prognostic
 from types import FunctionType
 
 
-__all__ = ["InstantRain", "SWSaturationAdjustment"]
+__all__ = ["InstantRain", "SWSaturationAdjustment", "Drag"]
 
 
 class InstantRain(PhysicsParametrisation):
@@ -384,3 +384,31 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         # If a source output is provided, assign the source term to it
         if x_out is not None:
             x_out.assign(self.source)
+
+
+class Drag(PhysicsParametrisation):
+
+    def __init__(self, equation, scaling):
+
+        label_name = 'drag'
+        super().__init__(equation, label_name)
+
+        self.u_idx = equation.field_names.index('u')
+        self.D_idx = equation.field_names.index('D')
+        test = equation.tests[self.u_idx]
+        W = equation.function_space
+        Vu = W.subspaces[self.u_idx]
+        VD = W.subspaces[self.D_idx]
+        self.u = Function(Vu)
+        self.D = Function(VD)
+        self.source = Function(W)
+
+        u_mag = sqrt(dot(self.u, self.u))
+        equation.residual -= source_label(
+            self.label(subject(prognostic(
+                inner(test, scaling * u_mag * self.u / self.D) * dx, "u"), self.source), self.evaluate)
+        )
+
+    def evaluate(self, x_in, dt):
+        self.u.assign(x_in.subfunctions[self.u_idx])
+        self.D.assign(x_in.subfunctions[self.D_idx])
