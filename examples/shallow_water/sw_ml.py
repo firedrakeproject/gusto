@@ -3,47 +3,6 @@ from gusto import *
 from numpy import random
 import itertools
 
-Lx = 100
-nx = ny = 10
-mesh = PeriodicSquareMesh(nx, ny, Lx, direction="both", name="mesh")
-dt = 0.02
-
-g = 9.80616
-H = 3e4/g
-
-x, y = SpatialCoordinate(mesh)
-pos = [0.25 * Lx, 0.75 * Lx]
-centres = itertools.product(pos, pos)
-topog_expr = 0.
-a = 0.8 * H
-for xs, ys in centres:
-    topog_expr += a * exp(-((x-xs)**2)/Lx - ((y-ys)**2)/Lx)
-
-
-parameters = ShallowWaterParameters(mesh, H=H, g=g,
-                                    rotation=CoriolisOptions.nonrotating,
-                                    topog_expr=topog_expr)
-
-eqns = ShallowWaterEquations
-
-output = OutputParameters(dirname="sw_ml", dump_vtus=True)
-sw_model = GustoModel(mesh, dt, parameters, eqns, family='BDM')
-subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
-sw_model.setup(output, subcycling_options=subcycling_options)
-Vdg = sw_model.stepper.fields("D").function_space()
-Dbar = Function(Vdg).assign(H)
-sw_model.stepper.set_reference_profiles([("D", Dbar)])
-
-ml_model = PointNN(n_in=5, n_out=3)
-
-ndt = 4
-
-hybrid_model = HybridModel(sw_model, ml_model,
-                           ml_input_fields=["u", "v", "D", "x", "y"],
-                           input_fields=["u", "D"],
-                           fields_to_adjust=["u", "D"],
-                           ndt=ndt,
-                           data_dir="sw_ml")
 
 def generate_initial_conditions(mesh, n_ics, n_gaussians, scale, extent, H):
     """
@@ -71,6 +30,50 @@ def generate_initial_conditions(mesh, n_ics, n_gaussians, scale, extent, H):
             ic += H * gaussian
         ics.append([("D", ic)])
     return ics
+
+
+Lx = 100
+nx = ny = 10
+mesh = PeriodicSquareMesh(nx, ny, Lx, direction="both", name="mesh")
+dt = 0.02
+
+g = 9.80616
+H = 3e4/g
+
+x, y = SpatialCoordinate(mesh)
+pos = [0.25 * Lx, 0.75 * Lx]
+centres = itertools.product(pos, pos)
+topog_expr = 0.
+a = 0.8 * H
+for xs, ys in centres:
+    topog_expr += a * exp(-((x-xs)**2)/Lx - ((y-ys)**2)/Lx)
+
+
+parameters = ShallowWaterParameters(mesh, H=H, g=g,
+                                    rotation=CoriolisOptions.nonrotating,
+                                    topog_expr=topog_expr)
+
+eqns = ShallowWaterEquations
+
+output = OutputParameters(dirname="sw_ml", dump_vtus=True)
+sw_model = Model(mesh, dt, parameters, eqns, element_order=1, family='BDM')
+
+def setup_physics(equations):
+    Drag(equations, scaling=0.01)
+
+sw_model.setup(output, scheme=BackwardEuler, setup_physics=setup_physics)
+
+ndt = 4
+
+ml_model = PointNN(n_in=5, n_out=3)
+
+hybrid_model = HybridModel(sw_model, ml_model,
+                           ml_input_fields=["u", "v", "D", "x", "y"],
+                           input_fields=["u", "D"],
+                           fields_to_adjust=["u", "D"],
+                           ndt=ndt,
+                           data_dir="sw_ml")
+
 
 ics = generate_initial_conditions(mesh, 10, 6, Lx, Lx, H)
 hybrid_model.generate_data(ics, ndt=4)
