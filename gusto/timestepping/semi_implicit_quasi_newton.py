@@ -937,12 +937,6 @@ class QuasiNewtonLinearSolver(object):
             self.equation.update_reference_profiles()
             self.solver.invalidate_jacobian()
 
-            # TODO: Issue #686 is to address this reference profile update bug (pythonPC update not called)
-            # this line forces it to update for now
-            pc = self.solver.snes.getKSP().getPC()
-            if (isinstance(self.equation, CompressibleEulerEquations) and pc.getType() == "python"):
-                pc.getPythonContext().update(pc)
-
     def zero_non_prognostics(self, equation, xrhs, field_names, prognostic_names):
         """
         Zero rhs term F(x) for non-prognostics.

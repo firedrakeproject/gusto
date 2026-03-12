@@ -2,7 +2,7 @@
 
 from firedrake import (dot, jump, dS_h, ds_b, ds_t, ds,
                        FacetNormal, Tensor, AssembledVector,
-                       AuxiliaryOperatorPC, PETSc)
+                       AuxiliaryOperatorPC, PETSc, RieszMap)
 
 from firedrake.preconditioners import PCBase
 from firedrake.matrix_free.operators import ImplicitMatrixContext
@@ -548,6 +548,8 @@ class CompressibleHybridisedSCPC(PCBase):
         self.xrhs = Function(self.W)
         self.y = Function(self.W)
 
+        self.riesz_map = RieszMap(self.W.dual(), solver_parameters=self.cg_ilu_parameters, constant_jacobian=True)
+
         self.y_hybrid = Function(self.W_hyb)
 
         # Split input functions
@@ -753,7 +755,7 @@ class CompressibleHybridisedSCPC(PCBase):
         with self.xstar.dat.vec_wo as xv:
             x.copy(xv)
 
-        self.xrhs.assign(self.xstar.riesz_representation())
+        self.xrhs.assign(self.riesz_map.__call__(self.xstar))
         # Solve hybridized system
         self.hybridized_solver.solve()
 
