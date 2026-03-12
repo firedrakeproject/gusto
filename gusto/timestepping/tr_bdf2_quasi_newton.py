@@ -33,7 +33,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                  bdf_solver=None,
                  diffusion_schemes=None,
                  tr_pre_physics_schemes=None,
-                 tr_outer_loop_phsyics_schemes=None,
+                 tr_outer_loop_physics_schemes=None,
                  bdf_n_pre_physics_schemes=None,
                  bdf_m_pre_physics_schemes=None,
                  bdf_n_outer_loop_physics_schemes=None,
@@ -208,10 +208,10 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         else:
             self.tr_pre_physics_schemes = []
 
-        if tr_outer_loop_phsyics_schemes is not None:
-            self.tr_outer_loop_phsyics_schemes = tr_outer_loop_phsyics_schemes
+        if tr_outer_loop_physics_schemes is not None:
+            self.tr_outer_loop_physics_schemes = tr_outer_loop_physics_schemes
         else:
-            self.tr_outer_loop_phsyics_schemes = []
+            self.tr_outer_loop_physics_schemes = []
 
         if bdf_n_pre_physics_schemes is not None:
             self.bdf_n_pre_physics_schemes = bdf_n_pre_physics_schemes
@@ -244,7 +244,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             self.bdf_post_physics_schemes = []
 
         self.all_physics_schemes = (self.tr_pre_physics_schemes
-                                    + self.tr_outer_loop_phsyics_schemes
+                                    + self.tr_outer_loop_physics_schemes
                                     + self.bdf_n_pre_physics_schemes
                                     + self.bdf_m_pre_physics_schemes
                                     
@@ -417,7 +417,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             logger.info(f'TR-BDF2 TR slow physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
         
         # TR outer loop physics
-        for parametrisation, scheme in self.tr_outer_loop_phsyics_schemes:
+        for parametrisation, scheme in self.tr_outer_loop_physics_schemes:
 
             apply_bcs = True
             dt_scale = 2.0*self.gamma
@@ -470,7 +470,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             scheme.setup(self.equation, apply_bcs, parametrisation.label, dt_scale=dt_scale)
             logger.info(f'BDF m fast physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
 
-        # BDF fast physics 
+        # BDF combined outer loop physics 
         for parametrisation, scheme in self.bdf_combined_outer_loop_physics_schemes:
             apply_bcs = True
             dt_scale = 1.0
@@ -609,10 +609,10 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
             # TR outer loop physics --------------------------------------------
             x_after_tr_transport(fname).assign(xp(fname))
-            if len(self.tr_outer_loop_phsyics_schemes) > 0:
+            if len(self.tr_outer_loop_physics_schemes) > 0:
                 with timed_stage("Fast physics"):
                     logger.info(f'TR-BDF2 Quasi Newton: TR Fast physics {outer}')
-                    for _, scheme in self.tr_outer_loop_phsyics_schemes:
+                    for _, scheme in self.tr_outer_loop_physics_schemes:
                         scheme.apply(x_after_tr_transport(scheme.field_name), x_after_tr_transport(scheme.field_name))
          
             xrhs.assign(0.)  # xrhs is the residual which goes in the linear solve
