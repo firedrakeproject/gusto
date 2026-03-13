@@ -11,11 +11,9 @@ from firedrake import (
     SpatialCoordinate, as_vector, pi, sqrt, min_value, Function
 )
 from gusto import (
-    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    ShallowWaterParameters, ShallowWaterEquations, Sum,
+    OutputParameters, ShallowWaterParameters, ShallowWaterEquations, Sum,
     lonlatr_from_xyz, GeneralIcosahedralSphereMesh, ZonalComponent,
-    MeridionalComponent, RelativeVorticity, RungeKuttaFormulation,
-    SubcyclingOptions
+    MeridionalComponent, RelativeVorticity, SubcyclingOptions, SIQNModel
 )
 
 williamson_5_defaults = {
@@ -49,29 +47,22 @@ def williamson_5(
     phi_c = pi/6.               # latitudinal centre of mountain (rad)
 
     # ------------------------------------------------------------------------ #
-    # Our settings for this set up
-    # ------------------------------------------------------------------------ #
-
-    element_order = 1
-
-    # ------------------------------------------------------------------------ #
     # Set up model objects
     # ------------------------------------------------------------------------ #
 
     # Domain
     mesh = GeneralIcosahedralSphereMesh(radius, ncells_per_edge, degree=2)
-    domain = Domain(mesh, dt, 'BDM', element_order)
-    x, y, z = SpatialCoordinate(mesh)
-    lamda, phi, _ = lonlatr_from_xyz(x, y, z)
 
     # Equation: topography
+    x, y, z = SpatialCoordinate(mesh)
+    lamda, phi, _ = lonlatr_from_xyz(x, y, z)
     rsq = min_value(R0**2, (lamda - lamda_c)**2 + (phi - phi_c)**2)
     r = sqrt(rsq)
     tpexpr = mountain_height * (1 - r/R0)
     parameters = ShallowWaterParameters(mesh, H=mean_depth, g=g,
                                         topog_expr=tpexpr)
 
-    eqns = ShallowWaterEquations(domain, parameters)
+    eqns = ShallowWaterEquations
 
     # I/O
     output = OutputParameters(
@@ -80,31 +71,20 @@ def williamson_5(
     )
     diagnostic_fields = [Sum('D', 'topography'), RelativeVorticity(),
                          MeridionalComponent('u'), ZonalComponent('u')]
-    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     # Transport schemes
     subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
-    transported_fields = [
-        SSPRK3(domain, "u", subcycling_options=subcycling_options),
-        SSPRK3(
-            domain, "D", subcycling_options=subcycling_options,
-            rk_formulation=RungeKuttaFormulation.linear
-        )
-    ]
-    transport_methods = [
-        DGUpwind(eqns, "u"),
-        DGUpwind(eqns, "D", advective_then_flux=True)
-    ]
 
-    # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods, tau_values={'D': 1.0}
-    )
+    model = SIQNModel(mesh, dt, parameters, eqns,
+                      family='BDM')
+    model.setup(output, subcycling_options=subcycling_options,
+                diagnostic_fields=diagnostic_fields)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
+    stepper = model.stepper
     u0 = stepper.fields('u')
     D0 = stepper.fields('D')
     Omega = parameters.Omega
@@ -124,7 +104,7 @@ def williamson_5(
     # Run
     # ------------------------------------------------------------------------ #
 
-    stepper.run(t=0, tmax=tmax)
+    model.run(t=0, tmax=tmax)
 
 # ---------------------------------------------------------------------------- #
 # MAIN
