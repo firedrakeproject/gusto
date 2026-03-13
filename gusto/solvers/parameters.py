@@ -51,6 +51,8 @@ def mass_parameters(V, spaces=None, ignore_vertical=True):
         'sub_pc_type': 'ilu'
     }
 
+    extruded = hasattr(V.mesh, "_base_mesh")
+
     continuous_fields = set()
     for i, Vsub in enumerate(V.subfunctions):
         # field = Vsub.name or str(i)
@@ -63,7 +65,7 @@ def mass_parameters(V, spaces=None, ignore_vertical=True):
 
         # For extruded meshes the continuity is recorded
         # separately for the horizontal and vertical directions.
-        if V.mesh().extruded and spaces is not None:
+        if extruded and spaces is not None:
             if ignore_vertical:
                 continuous = continuous['horizontal']
             else:

@@ -4,7 +4,8 @@ higher-order function space.
 """
 
 from gusto.core.conservative_projection import ConservativeProjector
-from firedrake import (Projector, Function, assemble, interpolate)
+from firedrake import (Projector, Function, assemble)
+from firedrake.__future__ import interpolate
 from .recovery import Recoverer
 
 __all__ = ["ReversibleRecoverer", "ConservativeRecoverer"]

@@ -101,19 +101,19 @@ class Domain(object):
         # Figure out if we're on a sphere
         # WARNING: if we ever wanted to run on other domains (e.g. circle, disk
         # or torus) then the identification of domains would no longer be unique
-        if mesh.extruded and hasattr(mesh._base_mesh, 'geometric_dimension'):
-            self.on_sphere = (mesh._base_mesh.geometric_dimension == 3 and mesh._base_mesh.topological_dimension == 2)
+        if hasattr(mesh, "_base_mesh") and hasattr(mesh._base_mesh, 'geometric_dimension'):
+            self.on_sphere = (mesh._base_mesh.geometric_dimension() == 3 and mesh._base_mesh.topological_dimension() == 2)
         else:
-            self.on_sphere = (mesh.geometric_dimension == 3 and mesh.topological_dimension == 2)
+            self.on_sphere = (mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 2)
 
         #  build the vertical normal and define perp for 2d geometries
-        dim = mesh.topological_dimension
+        dim = mesh.topological_dimension()
         if self.on_sphere:
             x = SpatialCoordinate(mesh)
             R = sqrt(inner(x, x))
             self.k = grad(R)
             if dim == 2:
-                if mesh.extruded:
+                if hasattr(mesh, "_base_mesh"):
                     sphere_degree = mesh._base_mesh.coordinates.function_space().ufl_element().degree()
                 else:
                     if not hasattr(mesh, "_cell_orientations"):
@@ -136,7 +136,7 @@ class Domain(object):
         # -------------------------------------------------------------------- #
 
         if self.on_sphere:
-            spherical_shell_mesh = mesh._base_mesh if mesh.extruded else mesh
+            spherical_shell_mesh = mesh._base_mesh if hasattr(mesh, "_base_mesh") else mesh
             xyz_shell = SpatialCoordinate(spherical_shell_mesh)
             r_shell = sqrt(inner(xyz_shell, xyz_shell))
             CG1 = FunctionSpace(spherical_shell_mesh, "CG", 1)
@@ -157,7 +157,7 @@ class Domain(object):
         self.coords.register_space(self, 'DG1_equispaced')
 
         # Set height above surface (requires coordinates)
-        if mesh.extruded:
+        if hasattr(mesh, "_base_mesh"):
             self.set_height_above_surface()
 
         # -------------------------------------------------------------------- #
@@ -213,17 +213,17 @@ def construct_domain_metadata(mesh, coords, on_sphere):
     metadata = {}
     metadata['extruded'] = mesh.extruded
 
-    if on_sphere and mesh.extruded:
+    if on_sphere and hasattr(mesh, "_base_mesh"):
         metadata['domain_type'] = 'extruded_spherical_shell'
     elif on_sphere:
         metadata['domain_type'] = 'spherical_shell'
-    elif mesh.geometric_dimension == 1 and mesh.topological_dimension == 1:
+    elif mesh.geometric_dimension() == 1 and mesh.topological_dimension() == 1:
         metadata['domain_type'] = 'interval'
-    elif mesh.geometric_dimension == 2 and mesh.topological_dimension == 2 and mesh.extruded:
+    elif mesh.geometric_dimension() == 2 and mesh.topological_dimension() == 2 and mesh.extruded:
         metadata['domain_type'] = 'vertical_slice'
-    elif mesh.geometric_dimension == 2 and mesh.topological_dimension == 2:
+    elif mesh.geometric_dimension() == 2 and mesh.topological_dimension() == 2:
         metadata['domain_type'] = 'plane'
-    elif mesh.geometric_dimension == 3 and mesh.topological_dimension == 3 and mesh.extruded:
+    elif mesh.geometric_dimension() == 3 and mesh.topological_dimension() == 3 and mesh.extruded:
         metadata['domain_type'] = 'extruded_plane'
     else:
         raise ValueError('Unable to determine domain type')

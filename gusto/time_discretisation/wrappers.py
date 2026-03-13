@@ -7,8 +7,9 @@ called.
 from abc import ABCMeta, abstractmethod
 from firedrake import (
     FunctionSpace, Function, BrokenElement, Projector, Constant, as_ufl, dot, grad,
-    TestFunction, MixedFunctionSpace, assemble, interpolate
+    TestFunction, MixedFunctionSpace, assemble
 )
+from firedrake.__future__ import interpolate
 from firedrake.fml import Term
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions, SUPGOptions
 from gusto.recovery import Recoverer, ReversibleRecoverer, ConservativeRecoverer
@@ -336,7 +337,7 @@ class SUPGWrapper(Wrapper):
         # -------------------------------------------------------------------- #
 
         # construct tau, if it is not specified
-        dim = domain.mesh.topological_dimension
+        dim = domain.mesh.topological_dimension()
         if self.options.tau is not None:
             # if tau is provided, check that is has the right size
             self.tau = self.options.tau

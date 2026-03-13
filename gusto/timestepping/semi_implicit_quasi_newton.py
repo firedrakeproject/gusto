@@ -5,10 +5,10 @@ and GungHo dynamical cores.
 
 from firedrake import (
     Function, Constant, TrialFunctions, DirichletBC, div, assemble,
-    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace,
-    action, interpolate,
+    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace, action
 )
 from firedrake.fml import drop, replace_subject, Term
+from firedrake.__future__ import interpolate
 from pyop2.profiling import timed_stage, timed_function
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (

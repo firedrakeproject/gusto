@@ -5,8 +5,9 @@ compressible Euler equations.
 
 from firedrake import (
     conditional, Function, dx, min_value, max_value, Constant, pi,
-    Projector, assemble, split, interpolate
+    Projector, assemble, split
 )
+from firedrake.__future__ import interpolate
 from firedrake.fml import identity, Term, subject
 from gusto.equations import Phases, TracerVariableType
 from gusto.recovery import Recoverer, BoundaryMethod

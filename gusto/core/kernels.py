@@ -185,7 +185,7 @@ class MinKernel():
             The minimum DoF value of the field.
         """
 
-        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=field.comm)
+        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=field._comm)
 
         op2.par_loop(self._kernel, field.dof_dset.set, fmin(MIN), field.dat(READ))
 
@@ -214,7 +214,7 @@ class MaxKernel():
             The maximum DoF value of the field.
         """
 
-        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=field.comm)
+        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=field._comm)
 
         op2.par_loop(self._kernel, field.dof_dset.set, fmax(MAX), field.dat(READ))
 
