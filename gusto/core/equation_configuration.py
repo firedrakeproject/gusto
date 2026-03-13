@@ -130,6 +130,8 @@ class SpongeLayerParameters(EquationParameters):
     H = None
     z_level = None
     mubar = None
+    L = None
+    x_level = None
 
 
 class DiffusionParameters(EquationParameters):

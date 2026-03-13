@@ -242,12 +242,12 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
         if sponge_options is not None:
             W_DG = FunctionSpace(domain.mesh, "DG", 2)
-            x = SpatialCoordinate(domain.mesh)
-            z = x[len(x)-1]
+            xz = SpatialCoordinate(domain.mesh)
+            z = xz[len(xz)-1]
             H = sponge_options.H
             zc = sponge_options.z_level
             assert float(zc) < float(H), \
-                "The sponge level is set above the height the your domain"
+                "The sponge level is set above the height of your domain"
             mubar = sponge_options.mubar
             muexpr = conditional(z <= zc,
                                  0.0,
@@ -256,6 +256,19 @@ class CompressibleEulerEquations(PrognosticEquationSet):
 
             residual += sponge(subject(prognostic(
                 self.mu*inner(w, domain.k)*inner(u, domain.k)*dx_qp, 'u'), self.X))
+            L = sponge_options.L
+            xc = sponge_options.x_level
+            x = xz[0]
+            assert float(xc) < float(L), \
+                "The sponge level is set beyond the width of your domain"
+            mubar = sponge_options.mubar
+            muexpr = conditional(x <= xc,
+                                 0.0,
+                                 mubar*sin((pi/2.)*(x-xc)/(L-xc))**2)
+            self.mu.interpolate(self.mu + muexpr)
+
+            residual += sponge(subject(prognostic(
+                self.mu*inner(w, domain.ivec)*inner(u, domain.ivec)*dx_qp, 'u'), self.X))
 
         if diffusion_options is not None:
             for field, diffusion in diffusion_options:

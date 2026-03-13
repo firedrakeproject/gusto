@@ -127,6 +127,9 @@ class Domain(object):
             kvec = [0.0]*dim
             kvec[dim-1] = 1.0
             self.k = Constant(kvec)
+            ivec = [0.0]*dim
+            ivec[0] = 1.0
+            self.ivec = Constant(ivec)
             if dim == 2:
                 self.perp = perp
                 self.divperp = lambda u: -u[0].dx(1) + u[1].dx(0)
