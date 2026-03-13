@@ -43,7 +43,7 @@ def set_up_function_space(element, mesh):
         family = 'RTE'
         degree = 1
 
-    cell = mesh._base_mesh.ufl_cell().cellname()
+    cell = mesh._base_mesh.ufl_cell().cellname
 
     u_hori = FiniteElement(family, cell, degree)
     w_hori = FiniteElement("CG", cell, 1)

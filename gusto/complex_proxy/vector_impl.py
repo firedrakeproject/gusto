@@ -98,7 +98,7 @@ def split(u, i):
 
     us = fd.split(u)
 
-    ncomponents = len(u.function_space().subfunctions)
+    ncomponents = len(u.function_space().subspaces)
 
     if ncomponents == 1:
         return tuple((us[i],))
