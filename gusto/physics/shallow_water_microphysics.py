@@ -4,8 +4,9 @@ Defines microphysics routines to be used with the moist shallow water equations.
 
 from firedrake import (
     conditional, Function, dx, min_value, max_value, FunctionSpace,
-    assemble, split, interpolate
+    assemble, split
 )
+from firedrake.__future__ import interpolate
 from firedrake.fml import subject
 from gusto.core.logging import logger
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
