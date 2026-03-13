@@ -444,7 +444,7 @@ def precip(parameters, q):
     return conditional(q > qC, mB * (q - q_ut), 0)
 
 
-def evap(parameters, q, saturation_curve, scaling, u=None):
+def evap(parameters, q, saturation_curve, u=None):
     """
     Computes evaporation.
 
@@ -470,13 +470,13 @@ def evap(parameters, q, saturation_curve, scaling, u=None):
         # Return wind-dependant expression for evaporation
         return conditional(
             saturation_curve > q,
-            scaling * sqrt(dot(u, u)) * (saturation_curve - q),
+            sqrt(dot(u, u)) * (saturation_curve - q),
             0)
     else:
         # Return expression for evaporation
         return conditional(
             saturation_curve > q,
-            scaling * (saturation_curve - q),
+            (saturation_curve - q),
             0)
 
 
