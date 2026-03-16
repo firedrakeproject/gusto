@@ -1,7 +1,10 @@
 from firedrake import (
-    pi, atan2, sqrt, cos, sin, logger, OutputParameters, Domain,
-    DiffusionParameters, BackwardEuler, CGDiffusion, IO,
-    Timestepper, PCG64, RandomGenerator, DiffusionEquation
+    pi, atan2, sqrt, cos, sin, PCG64, RandomGenerator
+)
+from gusto import(
+    logger, OutputParameters, Domain, DiffusionParameters,
+    BackwardEuler, CGDiffusion, IO, Timestepper,
+    DiffusionEquation
 )
 import sympy as sp
 import os
