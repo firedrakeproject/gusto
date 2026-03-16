@@ -140,7 +140,7 @@ class InstantRain(PhysicsParametrisation):
         if convective_feedback:
             self.VD_idx = equation.field_names.index("D")
             equation.residual += source_label(
-                self.label(subject(test_D * beta1 * self.source * dx, equation.X), self.evaluate)
+                self.label(subject(test_D * beta1 * self.source_expr * dx, self.source), self.evaluate)
             )
 
         # interpolator does the conversion of vapour to rain
@@ -703,6 +703,7 @@ class Evaporation(PhysicsParametrisation):
         self.q = Function(Vq)
         self.E = Function(Vq)
         self.qs = saturation_curve
+        self.wind_dependant = wind_dependant
 
         equation.residual -= source_label(self.label(
             subject(test_q * scaling * self.E * dx, equation.X),
@@ -724,7 +725,8 @@ class Evaporation(PhysicsParametrisation):
                                                   field to be outputed.
         """
 
-        self.u.assign(x_in.subfunctions[0])
+        if self.wind_dependant:
+            self.u.assign(x_in.subfunctions[0])
         self.q.assign(x_in.subfunctions[self.Vv_idx])
         self.E.interpolate(evap(self.parameters, self.q, self.qs, self.u))
 
