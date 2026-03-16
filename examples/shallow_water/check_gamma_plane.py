@@ -16,7 +16,56 @@ import os
 import shutil
 import sympy as sp
 
-folder_name_suffix = 'step_trap_dginternal'
+def smooth_f_profile(degree, delta, style, rstar, Omega, R, Lx, nx):
+    delta *= Lx/nx
+    r = sp.symbols('r')
+    if style == 'polar':
+        fexpr = 2*Omega*(1-0.5*r**2/R**2)
+        left_val = fexpr.subs(r, rstar-delta)
+        right_val = 2*Omega
+        left_diff_val = sp.diff(fexpr, r).subs(r, rstar-delta)
+        left_diff2_val = sp.diff(fexpr, r, 2).subs(r, rstar-delta)
+    elif style == 'flat':
+        left_val = 2*Omega*(1-0.5*(rstar-delta)**2/R**2)
+        right_val = 2*Omega
+        left_diff_val = 0
+        left_diff2_val = 0
+
+    a = sp.symbols(f'a_0:{degree+1}')
+    P = a[0]
+    for i in range(1, degree+1):
+        P += a[i]*r**i
+
+    if degree == 3:
+        eqns = [
+            P.subs(r, rstar-delta) - left_val,
+            P.subs(r, rstar+delta) - right_val,
+            sp.diff(P, r).subs(r, rstar-delta) - left_diff_val,
+            sp.diff(P, r).subs(r, rstar+delta)
+        ]
+    elif degree == 5:
+        eqns = [
+            P.subs(r, rstar-delta) - left_val,
+            P.subs(r, rstar+delta) - right_val,
+            sp.diff(P, r).subs(r, rstar-delta) - left_diff_val,
+            sp.diff(P, r).subs(r, rstar+delta),
+            sp.diff(P, r, 2).subs(r, rstar-delta) - left_diff2_val,
+            sp.diff(P, r, 2).subs(r, rstar+delta)
+        ]
+    else:
+        print('do not have BCs for this degree')
+
+    sol = sp.solve(eqns, a)
+    coeffs = [sol[sp.Symbol(f'a_{i}')] for i in range(degree+1)]
+    # P_smooth = P.subs(sol)
+    # f_smooth = sp.Piecewise(
+    #     (fexpr, r<rstar-delta),
+    #     (P_smooth, (rstar-delta<=r) & (r<=rstar+delta)),
+    #     (right_val, rstar+delta<r)
+    # )
+    return coeffs
+
+folder_name_suffix = 'smooth-trap-232dg'
 
 nx = 256
 ny = nx
@@ -35,8 +84,11 @@ rm = 1e6
 phi0 = Bu * (f0*rm)**2
 H = phi0/g
 
+smooth_degree = 5
+smooth_delta = 2
+
 dt = 250
-tmax = dt
+tmax = 100*dt
 
 dirname=f'/data/home/sh1293/results/jupiter_sw/check_gamma_plane_{folder_name_suffix}'
 
@@ -65,7 +117,22 @@ fexpr = 2*parameters.Omega * (1 - 0.5 * rmesh**2 / Rsq)
 
 ### rstar and smooth_delta are so the trap can be in the same place as my big script
 
-eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, 2*Omega))
+Omega_num = Omega
+Omega = parameters.Omega
+fexpr = 2*Omega*(1-0.5*rmesh**2/R**2)
+# ftrap = conditional(r < rstar, fexpr, 2*Omega)
+coeffs = smooth_f_profile(degree=smooth_degree, delta=smooth_delta, style='polar', rstar=rstar, Omega=Omega_num, R=R, Lx=Lx, nx=nx)
+fsmooth = float(coeffs[0]) + float(coeffs[1])*rmesh + float(coeffs[2])*rmesh**2 + float(coeffs[3])*rmesh**3
+if smooth_degree == 5:
+    fsmooth += float(coeffs[4])*rmesh**4 + float(coeffs[5])*rmesh**5
+
+# ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
+# ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)#-2*Omega
+
+ftrap = conditional(rmesh<rstar+smooth_delta*Lx/nx, fsmooth, 2*Omega)
+
+# eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, 2*Omega))
+eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap))
 
 diagnostic_fields = [PotentialVorticity()]
 

@@ -7,7 +7,7 @@ import functions as fcs
 # file1 = 'single-new_gamma_plane-shift_fns_Bu1b1p5Rop2_l1dt250df1'
 file1 = 'single-smooth-trap-232dg_Bu1b1p5Rop2_l1dt250df1'
 # file2 = 'single-new_gamma_plane-default-no_trap_Bu1b1p5Rop2_l1dt250df1'
-file2 = 'single-smooth-trap-232cg_Bu1b1p5Rop2_l1dt250df1'
+file2 = 'single-simplephys_radt5cD1gamma3900q05em1xi1em1_Bu1b1p5Rop2_l1dt250df1'
 
 Bu = 1
 f0 = 2 * 1.74e-4

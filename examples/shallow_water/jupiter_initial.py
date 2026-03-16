@@ -461,7 +461,7 @@ t_day = 2*pi/Omega
 ### timing options
 dump_freq = 1    # dump frequency of output
 dt = 250          # timestep (in seconds)
-tmax = 1*t_day       # duration of the simulation (in seconds)
+tmax = 5*t_day       # duration of the simulation (in seconds)
 
 restart = False
 restart_name = 'single_beta3900Lp18q01em2xi1em1_Bu1b1p5Rop2_l200dt250df30_lgnp05'
@@ -517,7 +517,7 @@ raddamp = False
 tau_r = 5  # number of days for timescale 
 
 ### name
-setup = 'single-smooth-trap-232cg'
+setup = 'single-step-trap-232dg'
 
 ##########################################################################
 if coriolisform == 'fplane':
@@ -662,8 +662,8 @@ if moist:
 if thermal:
     eqns = ThermalShallowWaterEquations(domain, parameters, fexpr=ftrap, active_tracers=tracers)
 else:
-    eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap), active_tracers=tracers)
-    # eqns = ShallowWaterEquations(domain, parameters, active_tracers=tracers, coriolis_trap=(rstar-smooth_delta*Lx/nx, 2*Omega))
+    # eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap), active_tracers=tracers)
+    eqns = ShallowWaterEquations(domain, parameters, active_tracers=tracers, coriolis_trap=(rstar-smooth_delta*Lx/nx, 2*Omega))
     # trap_interp = Function(FunctionSpace(mesh, "CG", 1)).interpolate(ftrap)
     # eqns = ShallowWaterEquations(domain, parameters, active_tracers=tracers,
     #          coriolis_trap=(rstar-smooth_delta*Lx/nx, trap_interp))
