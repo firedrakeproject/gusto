@@ -114,16 +114,22 @@ def Tidally_locked(
 
 
 
-    LinearFriction(eqns)
+    lf = LinearFriction(eqns)
 
-    VerticalVelocity(eqns)
+    vv = VerticalVelocity(eqns)
 
-    #Evaporation(eqns, saturation_curve, wind_dependant=True)
+    evap = Evaporation(eqns, saturation_curve, wind_dependant=True)
 
-    Precipitation(eqns)
+    precip = Precipitation(eqns)
 
-    MoistureDescent(eqns)
+    md = MoistureDescent(eqns)
 
+    physics_schemes = [(lf, ForwardEuler(domain)),
+                       (vv, ForwardEuler(domain)),
+                       (evap, ForwardEuler(domain)),
+                       (precip, ForwardEuler(domain)),
+                       (md, ForwardEuler(domain))]
+                       
 
     if siqn:
         # Transport schemes
@@ -132,7 +138,7 @@ def Tidally_locked(
 
         # Time stepper
         stepper = SemiImplicitQuasiNewton(
-            eqns, io, transport_schemes, transport_methods
+            eqns, io, transport_schemes, transport_methods, final_physics_schemes=physics_schemes
         )
     else:
         stepper = Timestepper(eqns, TrapeziumRule(domain), io)
