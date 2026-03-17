@@ -577,7 +577,7 @@ class RIDC(object, metaclass=ABCMeta):
         self.M = M
         self.reduced = reduced
         self.dt = Constant(float(self.dt_coarse)/(self.M))
-        self.base.dt = self.dt
+        self.base.dt = float(self.dt_coarse)/(self.M)
 
         if reduced:
             self.Q = []

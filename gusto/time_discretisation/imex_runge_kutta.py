@@ -149,7 +149,8 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.source = [Function(self.fs) for i in range(self.nStages)]
 
         if self.nonlinear_solver_parameters is None:
-            alpha = self.dt/self.domain.dt
+            alpha = self.dt/float(self.domain.dt)
+            print("Setting up hybridised solver with alpha = %s" % alpha)
             self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True)
         else:
             self.appctx=None

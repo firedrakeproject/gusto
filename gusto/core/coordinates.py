@@ -8,7 +8,8 @@ from gusto.core.logging import logger
 from firedrake import SpatialCoordinate, Function
 import numpy as np
 import pandas as pd
-
+from mpi4py import MPI
+import os
 
 class Coordinates(object):
     """
@@ -89,7 +90,6 @@ class Coordinates(object):
 
         # Use the appropriate scalar function space if the space is vector
         if np.prod(space.value_shape) > 1:
-            # TODO: get scalar space, and only compute coordinates if necessary
             logger.warning(f'Space {space_name} has more than one dimension, '
                            + 'and coordinates used for netCDF output have not '
                            + 'yet been implemented for this.')
@@ -136,7 +136,6 @@ class Coordinates(object):
         # Round data to ensure sorting in dataframe is OK
         # ------------------------------------------------------------------------ #
 
-        # Work out digits to round to, based on number of points and range of coords
         num_points = np.size(coords_X)
         data_range = np.max(coords_X) - np.min(coords_X)
         if data_range > np.finfo(type(data_range)).tiny:
@@ -146,7 +145,6 @@ class Coordinates(object):
         if data_is_3d:
             data_range = np.max(coords_Y) - np.min(coords_Y)
             if data_range > np.finfo(type(data_range)).tiny:
-                # Only round if there is already some range
                 digits = int(np.floor(-np.log10(data_range / num_points)) + 3)
                 coords_Y = coords_Y.round(digits)
 
@@ -159,25 +157,27 @@ class Coordinates(object):
         if coords_Y is not None:
             data_dict['Y'] = coords_Y
 
-        # Put everything into a pandas dataframe
         data = pd.DataFrame(data_dict)
 
         # Sort array by X and Y coordinates
         if data_is_3d:
             data = data.sort_values(by=['X', 'Y', 'Z'])
-            first_X, first_Y = data['X'].values[0], data['Y'].values[0]
-            first_point = data[(np.isclose(data['X'], first_X))
-                               & (np.isclose(data['Y'], first_Y))]
-
         else:
             data = data.sort_values(by=['X', 'Z'])
-            first_X = data['X'].values[0]
-            first_point = data[np.isclose(data['X'], first_X)]
 
-        # Number of levels should correspond to the number of points with the first
-        # coordinate values
-        num_levels = len(first_point)
-        assert len(data) % num_levels == 0, 'Unable to nicely divide data into levels'
+        # Read num_levels directly from the mesh
+        num_levels = field.function_space().mesh().layers
+
+        # MPI safe sanity check on size of data
+        local_ok = int(len(data) % num_levels == 0)
+        comm = field.function_space().mesh().comm
+        rank = comm.rank
+        global_ok = comm.allreduce(local_ok, op=MPI.MIN)
+        if not global_ok:
+            raise RuntimeError(
+                f"Rank {rank}: Unable to nicely divide data into levels "
+                f"(len(data)={len(data)}, num_levels={num_levels})."
+            )
 
         # -------------------------------------------------------------------- #
         # Create new arrays to store structured data
@@ -192,7 +192,7 @@ class Coordinates(object):
         index_data = np.zeros((num_hori_points, num_levels), dtype=int)
 
         # -------------------------------------------------------------------- #
-        # Fill arrays, on the basis of the dataframe already being sorted
+        # Fill arrays
         # -------------------------------------------------------------------- #
 
         for lev_idx in range(num_levels):

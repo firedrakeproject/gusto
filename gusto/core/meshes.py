@@ -447,7 +447,9 @@ def _cubedsphere_cells_and_coords(radius, cells_per_cube_edge):
     # transformation
     dtheta = 2*np.arctan(1.0) / cells_per_cube_edge
     a = 3.0**(-0.5)*radius
-    theta = np.arange(np.arctan(-1.0), np.arctan(1.0)+dtheta, dtheta, dtype=np.double)
+    #theta = np.arange(np.arctan(-1.0), np.arctan(1.0)+dtheta, dtheta, dtype=np.double)
+    #x = np.linspace(-a*np.tan(np.arctan(1.0)), a*np.tan(np.arctan(1.0)), cells_per_cube_edge + 1)
+    theta = np.linspace(np.arctan(-1.0), np.arctan(1.0), cells_per_cube_edge + 1)
     x = a*np.tan(theta)
     Nx = x.size
 
