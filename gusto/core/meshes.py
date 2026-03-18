@@ -445,9 +445,8 @@ def _cubedsphere_cells_and_coords(radius, cells_per_cube_edge):
     # Start by making a grid of local coordinates which we use
     # to map to each panel of the cubed sphere under the gnonomic
     # transformation
-    dtheta = 2*np.arctan(1.0) / cells_per_cube_edge
     a = 3.0**(-0.5)*radius
-    theta = np.arange(np.arctan(-1.0), np.arctan(1.0)+dtheta, dtheta, dtype=np.double)
+    theta = np.linspace(np.arctan(-1.0), np.arctan(1.0), cells_per_cube_edge + 1)
     x = a*np.tan(theta)
     Nx = x.size
 
