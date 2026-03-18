@@ -67,12 +67,71 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # Compressible Euler equations - (u, rho, theta) system. We use a
         # bespoke hybridization preconditioner for this system owing to the
         # nonlinear pressure gradient term.
+        r_tol = 1e-8
+        a_tol = 1e-8
+
+        theta_backsub_settings = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+            'ksp_rtol': r_tol,
+            'ksp_atol': a_tol,
+        }
+
+        exner_ave_settings  = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+            'ksp_rtol': r_tol,
+            'ksp_atol': a_tol,
+        }
+
+        rho_ave_settings = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+            'ksp_rtol': r_tol,
+            'ksp_atol': a_tol,
+        }
+
+        riesz_map_settings = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+            'ksp_rtol': r_tol,
+            'ksp_atol': a_tol,
+        }
+
+        scpc_solve_settings = {
+            'mat_type': 'matfree',
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.SCPC',
+            'pc_sc_eliminate_fields': '0, 1',
+            # The reduced operator is not symmetric
+            'condensed_field': {
+                'ksp_type': 'fgmres',
+                'ksp_rtol': r_tol,
+                'ksp_atol': a_tol,
+                'ksp_max_it': 100,
+                'pc_type': 'gamg',
+                'pc_gamg_sym_graph': None,
+                'mg_levels': {
+                    'ksp_type': 'gmres',
+                    'ksp_max_it': 5,
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu'
+                }
+            }
+        }
+
         settings = {
             'ksp_monitor': None,
             'ksp_type': 'preonly',
             'mat_type': 'matfree',
             'pc_type': 'python',
             'pc_python_type': 'gusto.CompressibleHybridisedSCPC',
+
         }
 
         # We pass the implicit weighting parameter (alpha) and tau_values to the

@@ -20,7 +20,6 @@ from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
 from gusto.solvers.solver_presets import hybridised_solver_parameters
-from gusto.equations.compressible_euler_equations import CompressibleEulerEquations
 
 
 __all__ = ["SemiImplicitQuasiNewton", "Forcing", "QuasiNewtonLinearSolver"]

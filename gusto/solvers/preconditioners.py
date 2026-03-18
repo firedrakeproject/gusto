@@ -460,35 +460,6 @@ class CompressibleHybridisedSCPC(PCBase):
 
     _prefix = "compressible_hybrid_scpc"
 
-    scpc_parameters = {
-        'mat_type': 'matfree',
-        'ksp_type': 'preonly',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.SCPC',
-        'pc_sc_eliminate_fields': '0, 1',
-        # The reduced operator is not symmetric
-        'condensed_field': {
-            'ksp_type': 'fgmres',
-            'ksp_rtol': 1.0e-8,
-            'ksp_atol': 1.0e-8,
-            'ksp_max_it': 100,
-            'pc_type': 'gamg',
-            'pc_gamg_sym_graph': None,
-            'mg_levels': {
-                'ksp_type': 'gmres',
-                'ksp_max_it': 5,
-                'pc_type': 'bjacobi',
-                'sub_pc_type': 'ilu'
-            }
-        }
-    }
-
-    cg_ilu_parameters = {
-        'ksp_type': 'cg',
-        'pc_type': 'bjacobi',
-        'sub_pc_type': 'ilu'
-    }
-
     def initialize(self, pc):
         """
         Set up problem and solver
@@ -512,6 +483,7 @@ class CompressibleHybridisedSCPC(PCBase):
         self.rho_avg_solver_parameters = self.cg_ilu_parameters
         self.theta_solver_parameters = self.cg_ilu_parameters
         self.exner_avg_solver_parameters = self.cg_ilu_parameters
+        self.riesz_map_parameters = self.cg_ilu_parameters
 
         if logger.isEnabledFor(DEBUG):
             self.hybridised_scpc_parameters['ksp_monitor_true_residual'] = None
@@ -548,7 +520,10 @@ class CompressibleHybridisedSCPC(PCBase):
         self.xrhs = Function(self.W)
         self.y = Function(self.W)
 
-        self.riesz_map = RieszMap(self.W.dual(), solver_parameters=self.cg_ilu_parameters, constant_jacobian=True)
+        # Riesz map for the dual of the original function space
+        self.riesz_map = RieszMap(self.W.dual(),
+                                  solver_parameters=self.riesz_map_parameters,
+                                  constant_jacobian=True)
 
         self.y_hybrid = Function(self.W_hyb)
 
