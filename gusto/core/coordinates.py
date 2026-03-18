@@ -3,8 +3,6 @@ This file provides a coordinate object, dependent on the mesh.
 Coordinate fields are stored in specified VectorFunctionSpaces.
 """
 
-from dataclasses import field
-
 from gusto.core.coord_transforms import lonlatr_from_xyz
 from gusto.core.logging import logger
 from firedrake import SpatialCoordinate, Function
