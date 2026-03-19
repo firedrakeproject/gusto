@@ -107,7 +107,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'ksp_type': 'preonly',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.SCPC',
-            'pc_sc_eliminate_fields': '0, 1',
+            'pc_sc_eliminate_fields': '0,1',
             # The reduced operator is not symmetric
             'condensed_field': {
                 'ksp_type': 'fgmres',

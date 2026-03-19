@@ -795,10 +795,11 @@ class CompressibleHybridisedSCPC(PCBase):
         raise NotImplementedError("The transpose application of the PC is not implemented.")
 
     def _get_sub_params(self, opts, prefix):
-        """Extract all PETSc options under a given prefix into a dict."""
         result = {}
         for key, val in opts.getAll().items():
             if key.startswith(prefix):
                 stripped = key[len(prefix):]
+                # Remove leading underscore
+                stripped = stripped.lstrip('_')
                 result[stripped] = val if val != "" else None
         return result
