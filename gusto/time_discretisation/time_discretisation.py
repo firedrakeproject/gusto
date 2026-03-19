@@ -1,4 +1,4 @@
-u"""
+"""
 Objects for discretising time derivatives.
 
 Time discretisation objects discretise ∂y/∂t = F(y), for variable y, time t and
@@ -10,7 +10,7 @@ import math
 
 from firedrake import (Function, TestFunction, TestFunctions, DirichletBC,
                        NonlinearVariationalProblem, NonlinearVariationalSolver,
-                       FunctionSpace)
+                       FunctionSpace, dot)
 from firedrake.fml import (replace_subject, replace_test_function, Term,
                            all_terms, drop)
 from firedrake.formmanipulation import split_form
@@ -91,17 +91,17 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.domain = domain
         self.field_name = field_name
         self.equation = None
-        R = FunctionSpace(domain.mesh, "R", 0)
-        self.dt = Function(R, val=0.0)
+        self.R = FunctionSpace(domain.mesh, "R", 0)
+        self.dt = Function(self.R, val=0.0)
         self.dt.assign(domain.dt)
-        self.original_dt = Function(R, val=0.0)
+        self.original_dt = Function(self.R, val=0.0)
         self.original_dt.assign(self.dt)
         self.options = options
         self.limiter = limiter
         self.courant_max = None
         self.augmentation = augmentation
         self.subcycling_options = subcycling_options
-
+        
         if self.subcycling_options is not None:
             self.subcycling_options.check_options()
 
@@ -144,7 +144,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         else:
             self.solver_parameters = solver_parameters
 
-    def setup(self, equation, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True, *active_labels, dt_scale=None,):
         """
         Set up the time discretisation based on the equation.
 
@@ -157,6 +157,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         """
         self.equation = equation
         self.residual = equation.residual
+
+        if dt_scale is not None:
+            dt_scale_func = Function(self.R).assign(dt_scale)
+            self.dt.assign(self.dt * dt_scale_func)
+            self.original_dt.assign(self.original_dt * dt_scale_func)
 
         if self.field_name is not None and hasattr(equation, "field_names"):
             if isinstance(self.field_name, list):
@@ -494,9 +499,10 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options,
-                         augmentation=augmentation)
+                         augmentation=augmentation
+                         )
 
-    def setup(self, equation, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True,  *active_labels, dt_scale=None):
         """
         Set up the time discretisation based on the equation.
 
@@ -507,7 +513,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, apply_bcs, *active_labels)
+        super().setup(equation, apply_bcs, *active_labels, dt_scale=dt_scale)
 
         # get default solver options if none passed in
         self.solver_parameters.update(mass_parameters(
