@@ -479,14 +479,9 @@ class CompressibleHybridisedSCPC(PCBase):
 
         self._process_context(pc)
         prefix = pc.getOptionsPrefix()
-        opts = PETSc.Options()
 
         # Unpack sub-solver parameters from the options prefix
-        self.theta_solver_parameters = self._get_sub_params(opts, prefix + "theta_backsub")
-        self.exner_avg_solver_parameters = self._get_sub_params(opts, prefix + "exner_ave")
-        self.rho_avg_solver_parameters = self._get_sub_params(opts, prefix + "rho_ave")
-        self.riesz_map_parameters = self._get_sub_params(opts, prefix + "riesz_map")
-        self.scpc_solve_parameters = self._get_sub_params(opts, prefix + "scpc_solve")
+        self.riesz_map_parameters = PETSc.Options(prefix + "riesz_map_").getAll()
 
         if logger.isEnabledFor(DEBUG):
             self.scpc_solve_parameters['ksp_monitor_true_residual'] = None
@@ -612,12 +607,12 @@ class CompressibleHybridisedSCPC(PCBase):
                                                  constant_jacobian=True)
 
         self.rho_avg_solver = LinearVariationalSolver(
-            rho_avg_prb, solver_parameters=self.rho_avg_solver_parameters,
-            options_prefix=pc.getOptionsPrefix()+'rhobar_avg_solver'
+            rho_avg_prb,
+            options_prefix=pc.getOptionsPrefix()+'rhobar_avg'
         )
         self.exner_avg_solver = LinearVariationalSolver(
-            exner_avg_prb, solver_parameters=self.exner_avg_solver_parameters,
-            options_prefix=pc.getOptionsPrefix()+'exnerbar_avg_solver'
+            exner_avg_prb,
+            options_prefix=pc.getOptionsPrefix()+'exnerbar_avg'
         )
 
         # "broken" u, rho, and trace system
@@ -671,8 +666,9 @@ class CompressibleHybridisedSCPC(PCBase):
             aeqn, Leqn, self.y_hybrid, constant_jacobian=True
         )
         self.hybridized_solver = LinearVariationalSolver(
-            hybridized_prb, solver_parameters=self.scpc_solve_parameters,
-            options_prefix=pc.getOptionsPrefix()+self._prefix, appctx=appctx
+            hybridized_prb,
+            options_prefix=pc.getOptionsPrefix()+self._prefix,
+            appctx=appctx
         )
 
         if logger.isEnabledFor(DEBUG):
@@ -705,8 +701,8 @@ class CompressibleHybridisedSCPC(PCBase):
         )
 
         self.theta_solver = LinearVariationalSolver(
-            theta_problem, solver_parameters=self.theta_solver_parameters,
-            options_prefix=pc.getOptionsPrefix()+'thetabacksubstitution'
+            theta_problem,
+            options_prefix=pc.getOptionsPrefix()+'theta_backsub'
         )
 
         if logger.isEnabledFor(DEBUG):
@@ -793,13 +789,3 @@ class CompressibleHybridisedSCPC(PCBase):
         """
 
         raise NotImplementedError("The transpose application of the PC is not implemented.")
-
-    def _get_sub_params(self, opts, prefix):
-        result = {}
-        for key, val in opts.getAll().items():
-            if key.startswith(prefix):
-                stripped = key[len(prefix):]
-                # Remove leading underscore
-                stripped = stripped.lstrip('_')
-                result[stripped] = val if val != "" else None
-        return result

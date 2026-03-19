@@ -78,7 +78,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'ksp_atol': a_tol,
         }
 
-        exner_ave_settings = {
+        exnerbar_avg_settings = {
             'ksp_type': 'cg',
             'pc_type': 'bjacobi',
             'sub_pc_type': 'ilu',
@@ -86,7 +86,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'ksp_atol': a_tol,
         }
 
-        rho_ave_settings = {
+        rhobar_avg_settings = {
             'ksp_type': 'cg',
             'pc_type': 'bjacobi',
             'sub_pc_type': 'ilu',
@@ -132,10 +132,10 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'pc_type': 'python',
             'pc_python_type': 'gusto.CompressibleHybridisedSCPC',
             'theta_backsub': theta_backsub_settings,
-            'exner_ave': exner_ave_settings,
-            'rho_ave': rho_ave_settings,
+            'exnerbar_avg': exnerbar_avg_settings,
+            'rhobar_avg': rhobar_avg_settings,
             'riesz_map': riesz_map_settings,
-            'scpc_solve': scpc_solve_settings,
+            'compressible_hybrid_scpc': scpc_solve_settings,
         }
 
         # We pass the implicit weighting parameter (alpha) and tau_values to the
