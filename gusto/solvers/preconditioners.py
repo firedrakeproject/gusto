@@ -478,16 +478,19 @@ class CompressibleHybridisedSCPC(PCBase):
             raise ValueError("Expecting PC type python")
 
         self._process_context(pc)
+        prefix = pc.getOptionsPrefix()
+        opts = PETSc.Options()
 
-        self.hybridised_scpc_parameters = self.scpc_parameters
-        self.rho_avg_solver_parameters = self.cg_ilu_parameters
-        self.theta_solver_parameters = self.cg_ilu_parameters
-        self.exner_avg_solver_parameters = self.cg_ilu_parameters
-        self.riesz_map_parameters = self.cg_ilu_parameters
+        # Unpack sub-solver parameters from the options prefix
+        self.theta_solver_parameters = self._get_sub_params(opts, prefix + "theta_backsub")
+        self.exner_avg_solver_parameters = self._get_sub_params(opts, prefix + "exner_ave")
+        self.rho_avg_solver_parameters = self._get_sub_params(opts, prefix + "rho_ave")
+        self.riesz_map_parameters = self._get_sub_params(opts, prefix + "riesz_map")
+        self.scpc_solve_parameters = self._get_sub_params(opts, prefix + "scpc_solve")
 
         if logger.isEnabledFor(DEBUG):
-            self.hybridised_scpc_parameters['ksp_monitor_true_residual'] = None
-            self.hybridised_scpc_parameters['ksp_converged_reason'] = None
+            self.scpc_solve_parameters['ksp_monitor_true_residual'] = None
+            self.scpc_solve_parameters['ksp_converged_reason'] = None
 
         # Equations and parameters
         equations = self.equations
@@ -668,7 +671,7 @@ class CompressibleHybridisedSCPC(PCBase):
             aeqn, Leqn, self.y_hybrid, constant_jacobian=True
         )
         self.hybridized_solver = LinearVariationalSolver(
-            hybridized_prb, solver_parameters=self.hybridised_scpc_parameters,
+            hybridized_prb, solver_parameters=self.scpc_solve_parameters,
             options_prefix=pc.getOptionsPrefix()+self._prefix, appctx=appctx
         )
 
@@ -790,3 +793,12 @@ class CompressibleHybridisedSCPC(PCBase):
         """
 
         raise NotImplementedError("The transpose application of the PC is not implemented.")
+
+    def _get_sub_params(self, opts, prefix):
+        """Extract all PETSc options under a given prefix into a dict."""
+        result = {}
+        for key, val in opts.getAll().items():
+            if key.startswith(prefix):
+                stripped = key[len(prefix):]
+                result[stripped] = val if val != "" else None
+        return result
