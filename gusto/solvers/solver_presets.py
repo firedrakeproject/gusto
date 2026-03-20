@@ -183,7 +183,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                     'pc_type': 'python',
                     'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
                     'hybridization': {                              # hybridization PC
-                        'ksp_type': 'cg',
+                        'ksp_type': 'gmres',
+                        'mat_type': 'aij',
                         'pc_type': 'gamg',  # AMG for trace system
                         'ksp_rtol': 1e-8,
                         'mg_levels': {
@@ -247,7 +248,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                         'pc_type': 'python',
                         'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's hybridization PC
                         'hybridization': {
-                            'ksp_type': 'cg',
+                            'ksp_type': 'gmres',
+                            'mat_type': 'aij',
                             'pc_type': 'gamg',  # AMG for trace system
                             'ksp_rtol': 1e-8,
                             'mg_levels': {
@@ -310,7 +312,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                     'pc_type': 'python',
                     'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
                     'hybridization': {                              # hybridization PC
-                        'ksp_type': 'cg',
+                        'ksp_type': 'gmres',
+                        'mat_type': 'aij',
                         'pc_type': 'gamg',  # AMG for trace system
                         'ksp_rtol': 1e-8,
                         'mg_levels': {
@@ -356,7 +359,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                 'pc_type': 'python',
                 'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
                 'hybridization': {                              # hybridization PC
-                    'ksp_type': 'cg',
+                    'ksp_type': 'gmres',
+                    'mat_type': 'aij',
                     'pc_type': 'gamg',  # AMG for trace system
                     'ksp_rtol': 1e-8,
                     'mg_levels': {
@@ -390,7 +394,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'pc_type': 'python',
             'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
             'hybridization': {                              # hybridization PC
-                'ksp_type': 'cg',
+                'ksp_type': 'gmres',
+                'mat_type': 'aij',
                 'pc_type': 'gamg',  # AMG for trace system
                 'ksp_rtol': 1e-8,
                 'mg_levels': {
