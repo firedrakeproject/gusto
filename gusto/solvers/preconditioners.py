@@ -468,6 +468,8 @@ class CompressibleHybridisedSCPC(PCBase):
         'pc_sc_eliminate_fields': '0, 1',
         # The reduced operator is not symmetric
         'condensed_field': {
+            'ksp_converged_reason': None,
+            'ksp_monitor_true_residual': None,
             'ksp_type': 'fgmres',
             'ksp_rtol': 1.0e-8,
             'ksp_atol': 1.0e-8,
@@ -486,7 +488,9 @@ class CompressibleHybridisedSCPC(PCBase):
     cg_ilu_parameters = {
         'ksp_type': 'cg',
         'pc_type': 'bjacobi',
-        'sub_pc_type': 'ilu'
+        'sub_pc_type': 'ilu',
+        'ksp_rtol': 1.0e-8,
+        'ksp_atol': 1.0e-8,
     }
     @timed_function("Gusto:PC_init")
     def initialize(self, pc):
@@ -576,7 +580,10 @@ class CompressibleHybridisedSCPC(PCBase):
 
         # Analytical (approximate) elimination of theta
         k = equations.domain.k       # Upward pointing unit vector
-        theta = -dot(k, u)*dot(k, grad(thetabar))*beta_t + theta_in
+        if self.imex:
+            theta = theta_in
+        else:
+            theta = -dot(k, u)*dot(k, grad(thetabar))*beta_t + theta_in
 
         # Only include theta' (rather than exner') in the vertical
         # component of the gradient
@@ -652,6 +659,18 @@ class CompressibleHybridisedSCPC(PCBase):
         else:
             u_mass = inner(w, (u - u_in))*dx
 
+        if self.imex:
+            rho_adv = (- beta_r*inner(grad(phi), u)*rhobar*dx
+            + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
+            # term added because u.n=0 is enforced weakly via the traces
+            + beta_r*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v))
+            rho_adv = beta_r*phi*div(u)*rhobar*dx
+        else:
+            rho_adv = (- beta_r*inner(grad(phi), u)*rhobar*dx
+            + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
+            # term added because u.n=0 is enforced weakly via the traces
+            + beta_r*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v))
+
         eqn = (
             # momentum equation
             u_mass
@@ -666,10 +685,7 @@ class CompressibleHybridisedSCPC(PCBase):
             + beta_u*cp*jump(thetabar_w*w, n=n)*l0('+')*(dS_v_qp + dS_h_qp)
             + beta_u*cp*dot(thetabar_w*w, n)*l0*(ds_tb_qp + ds_v_qp)
             # mass continuity equation
-            + (phi*(rho - rho_in) - beta_r*inner(grad(phi), u)*rhobar)*dx
-            + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
-            # term added because u.n=0 is enforced weakly via the traces
-            + beta_r*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v)
+            + (phi*(rho - rho_in))*dx + rho_adv
             # constraint equation to enforce continuity of the velocity
             # through the interior facets and weakly impose the no-slip
             # condition
@@ -682,7 +698,7 @@ class CompressibleHybridisedSCPC(PCBase):
         if hasattr(self.equations, "mu"):
             eqn += dt*self.equations.mu*inner(w, k)*inner(u, k)*dx_qp
 
-        if equations.parameters.Omega is not None:
+        if equations.parameters.Omega is not None and not self.imex:
             Omega = as_vector([0, 0, equations.parameters.Omega])
             eqn += beta_u*inner(w, cross(2*Omega, u))*dx
 
@@ -721,8 +737,11 @@ class CompressibleHybridisedSCPC(PCBase):
         gamma = TestFunction(self.Vtheta)
 
         self.theta = Function(self.Vtheta)
-        theta_eqn = gamma*(theta - theta_in
-                           + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta_t)*dx
+        if self.imex:
+            theta_eqn = gamma*(theta - theta_in)*dx
+        else:
+            theta_eqn = gamma*(theta - theta_in
+                            + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta_t)*dx
 
         theta_problem = LinearVariationalProblem(
             lhs(theta_eqn), rhs(theta_eqn), self.theta, constant_jacobian=True
@@ -806,6 +825,8 @@ class CompressibleHybridisedSCPC(PCBase):
         self.tau_values = tau_values if tau_values is not None else {}
 
         self.dt = self.equations.domain.dt
+
+        self.imex = appctx.get('imex', False)
 
     def applyTranspose(self, pc, x, y):
         """

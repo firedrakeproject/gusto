@@ -151,7 +151,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         if self.nonlinear_solver_parameters is None:
             alpha = self.dt/float(self.domain.dt)
             print("Setting up hybridised solver with alpha = %s" % alpha)
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True)
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
         else:
             self.appctx=None
 
@@ -258,6 +258,9 @@ class IMEXRungeKutta(TimeDiscretisation):
         solvers = []
         for stage in range(self.solver_start_stage, self.nStages):
             # setup solver using residual defined in derived class
+            alpha = self.butcher_imp[stage, stage]*self.dt/float(self.domain.dt)
+            print("Setting up hybridised solver with alpha = %s" % alpha)
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
             problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
             solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name))

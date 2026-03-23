@@ -15,7 +15,7 @@ from firedrake import VectorSpaceBasis
 __all__ = ["hybridised_solver_parameters", "monolithic_solver_parameters"]
 
 
-def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_values=None, nonlinear=False):
+def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_values=None, nonlinear=False, imex=False):
     """
     Returns PETSc solver settings for hybridised solver for mixed finite
     element problems.
@@ -81,7 +81,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         appctx = {
             'equations': equation,
             'alpha': alpha,
-            'trace_nullspace': trace_nullsp
+            'trace_nullspace': trace_nullsp,
+            'imex': imex
         }
         if tau_values is not None:
             appctx['tau_values'] = tau_values
@@ -364,6 +365,12 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         settings['snes_atol'] = 1e-4
         settings['snes_rtol'] = 1e-4
         settings['snes_max_it'] = 50
+        settings['snes_lag_jacobian'] = 4
+        settings['snes_lag_preconditioner'] = 4
+        settings['snes_ksp_ew'] = None
+        settings['snes_ksp_ew_rtol'] = 1e-4
+        settings['snes_ksp_ew_threshold'] = 5e-5
+        settings['snes_ksp_ew_version'] = 2
         settings['snes_monitor'] = None
 
     return settings, appctx

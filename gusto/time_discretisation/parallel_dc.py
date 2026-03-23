@@ -11,12 +11,14 @@ and pipelining.
 """
 
 from firedrake import (
-    Function
+    Function, NonlinearVariationalProblem, NonlinearVariationalSolver, Constant
 )
+from firedrake.utils import cached_property
 from gusto.time_discretisation.time_discretisation import wrapper_apply
 from qmat import genQDeltaCoeffs
 from gusto.time_discretisation.deferred_correction import SDC, RIDC
 from gusto.core.logging import logger
+from gusto.solvers.solver_presets import hybridised_solver_parameters
 
 __all__ = ["Parallel_RIDC", "Parallel_SDC"]
 
@@ -288,12 +290,27 @@ class Parallel_SDC(SDC):
                          final_update=final_update,
                          limiter=limiter, initial_guess=initial_guess)
         self.comm = communicator
-
+        self.alpha = Constant(0.0)  # Initial value, will be updated in solver setup
         # Checks for parallel SDC
         if self.comm is None:
             raise ValueError("No communicator provided. Please provide a valid MPI communicator.")
         if self.comm.ensemble_comm.size != self.M:
             raise ValueError("Number of ranks must be equal to the number of nodes M for Parallel SDC.")
+        
+    def setup(self, equation, apply_bcs=True, *active_labels):
+        """
+        Set up the SDC time discretisation based on the equation.
+
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation.
+            apply_bcs (bool, optional): whether to apply the equation's boundary
+                conditions. Defaults to True.
+            *active_labels (:class:`Label`): labels indicating which terms of
+                the equation are active. Defaults to all terms.
+        """
+        super(Parallel_SDC, self).setup(equation, apply_bcs, *active_labels)
+
+        _ = self.solver
 
     def compute_quad(self):
         """
@@ -311,6 +328,60 @@ class Parallel_SDC(SDC):
         x = Function(self.W)
         x.assign(float(self.Qfin[self.comm.ensemble_comm.rank])*self.fUnodes[self.comm.ensemble_comm.rank])
         self.comm.allreduce(x, self.quad_final)
+    
+    @cached_property
+    def solver(self):
+        """Set up a list of solvers for each problem at a node m."""
+        m = self.comm.ensemble_comm.rank
+        # setup solver using residual defined in derived class
+        self.alpha.assign(self.Qdelta_imp[m, m]/float(self.dt_coarse))
+        QD_imp = genQDeltaCoeffs(
+                    self.qdelta_imp_type,
+                    form=self.formulation,
+                    nodes=self.nodes,
+                    Q=self.Q,
+                    nNodes=self.M,
+                    nodeType=self.node_type,
+                    quadType=self.quad_type
+                )
+        alpha = QD_imp[m, m]
+        #print("Setting up hybridised solver with alpha = %s" % alpha)
+        if self.nonlinear_solver_parameters is not None:
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
+        else:
+            self.appctx = None
+        problem = NonlinearVariationalProblem(self.res(m), self.U_DC, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
+        solver = NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name)
+        return solver
+    
+    @cached_property
+    def solvers(self):
+        """Set up a list of solvers for each problem at a node m."""
+        solvers = []
+        for k in range(1, self.maxk+1):
+            # Recompute Implicit Q_delta matrix for each iteration k
+            Qdelta_imp_k = float(self.dt_coarse)*genQDeltaCoeffs(
+                self.qdelta_imp_type,
+                form=self.formulation,
+                nodes=self.nodes,
+                Q=self.Q,
+                nNodes=self.M,
+                nodeType=self.node_type,
+                quadType=self.quad_type,
+                k=k
+            )
+            alpha_k = Qdelta_imp_k[self.comm.ensemble_comm.rank, self.comm.ensemble_comm.rank]/float(self.dt_coarse)
+            if self.nonlinear_solver_parameters is not None:
+                nonlinear_solver_parameters_k, appctx_k = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha_k, tau_values=None, nonlinear=True, imex=True)
+            else:
+                nonlinear_solver_parameters_k = None
+                appctx_k = None
+            problem_k = NonlinearVariationalProblem(self.res(self.comm.ensemble_comm.rank), self.U_DC, bcs=self.bcs)
+            solver_name_k = self.field_name+self.__class__.__name__ + "%s_k%s" % (self.comm.ensemble_comm.rank, k)
+            solver_k = NonlinearVariationalSolver(problem_k, solver_parameters=nonlinear_solver_parameters_k, appctx=appctx_k, options_prefix=solver_name_k)
+            solvers.append(solver_k)
+        return solvers
 
     @wrapper_apply
     def apply(self, x_out, x_in):
@@ -349,6 +420,8 @@ class Parallel_SDC(SDC):
                     quadType=self.quad_type,
                     k=k
                 )
+                self.alpha.assign(self.Qdelta_imp[self.comm.ensemble_comm.rank, self.comm.ensemble_comm.rank]/float(self.dt_coarse))
+                solver = solver_list[k-1]
 
             # Compute for N2N: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
             # for Z2N: sum(j=1,M) (q_mj*F(y_m^k) +  q_mj*S(y_m^k))
@@ -370,7 +443,7 @@ class Parallel_SDC(SDC):
             self.Q_.assign(self.quad[self.comm.ensemble_comm.rank])
 
             # Set initial guess for solver, and pick correct solver
-            self.solver = solver_list[self.comm.ensemble_comm.rank]
+            #self.solver = solver_list[self.comm.ensemble_comm.rank]
             self.U_DC.assign(self.Unodes[self.comm.ensemble_comm.rank+1])
 
             # Compute
