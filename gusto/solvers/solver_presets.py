@@ -68,38 +68,33 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # bespoke hybridization preconditioner for this system owing to the
         # nonlinear pressure gradient term.
         r_tol = 1e-8
-        a_tol = 1e-8
 
         theta_backsub_settings = {
             'ksp_type': 'cg',
             'pc_type': 'bjacobi',
             'sub_pc_type': 'ilu',
-            'ksp_rtol': r_tol,
-            'ksp_atol': a_tol,
+            'ksp_rtol': r_tol
         }
 
         exnerbar_avg_settings = {
             'ksp_type': 'cg',
             'pc_type': 'bjacobi',
             'sub_pc_type': 'ilu',
-            'ksp_rtol': r_tol,
-            'ksp_atol': a_tol,
+            'ksp_rtol': r_tol
         }
 
         rhobar_avg_settings = {
             'ksp_type': 'cg',
             'pc_type': 'bjacobi',
             'sub_pc_type': 'ilu',
-            'ksp_rtol': r_tol,
-            'ksp_atol': a_tol,
+            'ksp_rtol': r_tol
         }
 
         riesz_map_settings = {
             'ksp_type': 'cg',
             'pc_type': 'bjacobi',
             'sub_pc_type': 'ilu',
-            'ksp_rtol': r_tol,
-            'ksp_atol': a_tol,
+            'ksp_rtol': r_tol
         }
 
         scpc_solve_settings = {
@@ -112,7 +107,6 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'condensed_field': {
                 'ksp_type': 'fgmres',
                 'ksp_rtol': r_tol,
-                'ksp_atol': a_tol,
                 'ksp_max_it': 100,
                 'pc_type': 'gamg',
                 'pc_gamg_sym_graph': None,
