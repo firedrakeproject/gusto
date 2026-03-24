@@ -299,116 +299,116 @@ class SDC(object, metaclass=ABCMeta):
         residual_final = a + F_exp + Q
         return residual_final.form
 
-    def res(self, m):
-        """Set up the discretisation's residual for a given node m."""
-        # Add time derivative terms  y^(k+1)_m - y_start for node m. y_start is y_n for Z2N formulation
-        # and y^(k)_m for N2N formulation
-        mass_form = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=drop)
-        residual = mass_form.label_map(all_terms,
-                                       map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
-        residual -= mass_form.label_map(all_terms,
-                                        map_if_true=replace_subject(self.U_start, old_idx=self.idx))
-        # Loop through nodes up to m-1 and calcualte
-        # sum(j=1,m-1) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
-        for i in range(m):
-            r_imp_kp1 = self.residual.label_map(
-                lambda t: t.has_label(implicit),
-                map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
-                map_if_false=drop)
-            r_imp_kp1 = r_imp_kp1.label_map(
-                all_terms,
-                lambda t: Constant(self.Qdelta_imp[m, i])*t)
-            residual += r_imp_kp1
-            r_imp_k = self.residual.label_map(
-                lambda t: t.has_label(implicit),
-                map_if_true=replace_subject(self.Unodes[i+1], old_idx=self.idx),
-                map_if_false=drop)
-            r_imp_k = r_imp_k.label_map(
-                all_terms,
-                lambda t: Constant(self.Qdelta_imp[m, i])*t)
-            residual -= r_imp_k
-        # Loop through nodes up to m-1 and calcualte
-        #  sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-        for i in range(self.M):
-            r_exp_kp1 = self.residual.label_map(
-                lambda t: t.has_label(explicit),
-                map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
-                map_if_false=drop)
-            r_exp_kp1 = r_exp_kp1.label_map(
-                all_terms,
-                lambda t: Constant(self.Qdelta_exp[m, i])*t)
+    # def res(self, m):
+    #     """Set up the discretisation's residual for a given node m."""
+    #     # Add time derivative terms  y^(k+1)_m - y_start for node m. y_start is y_n for Z2N formulation
+    #     # and y^(k)_m for N2N formulation
+    #     mass_form = self.residual.label_map(
+    #         lambda t: t.has_label(time_derivative),
+    #         map_if_false=drop)
+    #     residual = mass_form.label_map(all_terms,
+    #                                    map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
+    #     residual -= mass_form.label_map(all_terms,
+    #                                     map_if_true=replace_subject(self.U_start, old_idx=self.idx))
+    #     # Loop through nodes up to m-1 and calcualte
+    #     # sum(j=1,m-1) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
+    #     for i in range(m):
+    #         r_imp_kp1 = self.residual.label_map(
+    #             lambda t: t.has_label(implicit),
+    #             map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
+    #             map_if_false=drop)
+    #         r_imp_kp1 = r_imp_kp1.label_map(
+    #             all_terms,
+    #             lambda t: Constant(self.Qdelta_imp[m, i])*t)
+    #         residual += r_imp_kp1
+    #         r_imp_k = self.residual.label_map(
+    #             lambda t: t.has_label(implicit),
+    #             map_if_true=replace_subject(self.Unodes[i+1], old_idx=self.idx),
+    #             map_if_false=drop)
+    #         r_imp_k = r_imp_k.label_map(
+    #             all_terms,
+    #             lambda t: Constant(self.Qdelta_imp[m, i])*t)
+    #         residual -= r_imp_k
+    #     # Loop through nodes up to m-1 and calcualte
+    #     #  sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+    #     for i in range(self.M):
+    #         r_exp_kp1 = self.residual.label_map(
+    #             lambda t: t.has_label(explicit),
+    #             map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
+    #             map_if_false=drop)
+    #         r_exp_kp1 = r_exp_kp1.label_map(
+    #             all_terms,
+    #             lambda t: Constant(self.Qdelta_exp[m, i])*t)
 
-            residual += r_exp_kp1
-            r_exp_k = self.residual.label_map(
-                lambda t: t.has_label(explicit),
-                map_if_true=replace_subject(self.Unodes[i+1], old_idx=self.idx),
-                map_if_false=drop)
-            r_exp_k = r_exp_k.label_map(
-                all_terms,
-                lambda t: Constant(self.Qdelta_exp[m, i])*t)
-            residual -= r_exp_k
+    #         residual += r_exp_kp1
+    #         r_exp_k = self.residual.label_map(
+    #             lambda t: t.has_label(explicit),
+    #             map_if_true=replace_subject(self.Unodes[i+1], old_idx=self.idx),
+    #             map_if_false=drop)
+    #         r_exp_k = r_exp_k.label_map(
+    #             all_terms,
+    #             lambda t: Constant(self.Qdelta_exp[m, i])*t)
+    #         residual -= r_exp_k
 
-            # Calculate source terms
-            r_source_kp1 = self.residual.label_map(
-                lambda t: t.has_label(source_label),
-                map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
-                map_if_false=drop)
-            r_source_kp1 = r_source_kp1.label_map(
-                all_terms,
-                lambda t: Constant(self.Qdelta_exp[m, i])*t)
-            residual += r_source_kp1
+    #         # Calculate source terms
+    #         r_source_kp1 = self.residual.label_map(
+    #             lambda t: t.has_label(source_label),
+    #             map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
+    #             map_if_false=drop)
+    #         r_source_kp1 = r_source_kp1.label_map(
+    #             all_terms,
+    #             lambda t: Constant(self.Qdelta_exp[m, i])*t)
+    #         residual += r_source_kp1
 
-            r_source_k = self.residual.label_map(
-                lambda t: t.has_label(source_label),
-                map_if_true=replace_subject(self.source_Uk[i+1], old_idx=self.idx),
-                map_if_false=drop)
-            r_source_k = r_source_k.label_map(
-                all_terms,
-                map_if_true=lambda t: Constant(self.Qdelta_exp[m, i])*t)
-            residual -= r_source_k
+    #         r_source_k = self.residual.label_map(
+    #             lambda t: t.has_label(source_label),
+    #             map_if_true=replace_subject(self.source_Uk[i+1], old_idx=self.idx),
+    #             map_if_false=drop)
+    #         r_source_k = r_source_k.label_map(
+    #             all_terms,
+    #             map_if_true=lambda t: Constant(self.Qdelta_exp[m, i])*t)
+    #         residual -= r_source_k
 
-        # Add on final implicit terms
-        # Qdelta_imp[m,m]*(F(y_(m)^(k+1)) - F(y_(m)^k))
-        r_imp_kp1 = self.residual.label_map(
-            lambda t: t.has_label(implicit),
-            map_if_true=replace_subject(self.U_DC, old_idx=self.idx),
-            map_if_false=drop)
-        r_imp_kp1 = r_imp_kp1.label_map(
-            all_terms,
-            lambda t: Constant(self.Qdelta_imp[m, m])*t)
-        residual += r_imp_kp1
-        r_imp_k = self.residual.label_map(
-            lambda t: t.has_label(implicit),
-            map_if_true=replace_subject(self.Unodes[m+1], old_idx=self.idx),
-            map_if_false=drop)
-        r_imp_k = r_imp_k.label_map(
-            all_terms,
-            lambda t: Constant(self.Qdelta_imp[m, m])*t)
-        residual -= r_imp_k
+    #     # Add on final implicit terms
+    #     # Qdelta_imp[m,m]*(F(y_(m)^(k+1)) - F(y_(m)^k))
+    #     r_imp_kp1 = self.residual.label_map(
+    #         lambda t: t.has_label(implicit),
+    #         map_if_true=replace_subject(self.U_DC, old_idx=self.idx),
+    #         map_if_false=drop)
+    #     r_imp_kp1 = r_imp_kp1.label_map(
+    #         all_terms,
+    #         lambda t: Constant(self.Qdelta_imp[m, m])*t)
+    #     residual += r_imp_kp1
+    #     r_imp_k = self.residual.label_map(
+    #         lambda t: t.has_label(implicit),
+    #         map_if_true=replace_subject(self.Unodes[m+1], old_idx=self.idx),
+    #         map_if_false=drop)
+    #     r_imp_k = r_imp_k.label_map(
+    #         all_terms,
+    #         lambda t: Constant(self.Qdelta_imp[m, m])*t)
+    #     residual -= r_imp_k
 
-        # Add on error term. sum(j=1,M) q_mj*F(y_m^k) for Z2N formulation
-        # and sum(j=1,M) s_mj*F(y_m^k) for N2N formulation, where s_mj = q_mj-q_m-1j
-        # and s1j = q1j.
-        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Q_, old_idx=self.idx),
-                                    drop)
-        residual += Q
-        return residual.form
+    #     # Add on error term. sum(j=1,M) q_mj*F(y_m^k) for Z2N formulation
+    #     # and sum(j=1,M) s_mj*F(y_m^k) for N2N formulation, where s_mj = q_mj-q_m-1j
+    #     # and s1j = q1j.
+    #     Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+    #                                 replace_subject(self.Q_, old_idx=self.idx),
+    #                                 drop)
+    #     residual += Q
+    #     return residual.form
 
     @cached_property
     def solvers(self):
         """Set up a list of solvers for each problem at a node m."""
         solvers = []
-        for m in range(self.M):
-            # setup solver using residual defined in derived class
-            alpha = self.Qdelta_imp[m, m]/self.dt_coarse
-            #print("Setting up hybridised solver with alpha = %s" % alpha)
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
-            problem = NonlinearVariationalProblem(self.res(m), self.U_DC, bcs=self.bcs)
-            solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
-            solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name))
+        # for m in range(self.M):
+        #     # setup solver using residual defined in derived class
+        #     alpha = self.Qdelta_imp[m, m]/self.dt_coarse
+        #     #print("Setting up hybridised solver with alpha = %s" % alpha)
+        #     self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
+        #     problem = NonlinearVariationalProblem(self.res(m), self.U_DC, bcs=self.bcs)
+        #     solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
+        #     solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name))
         return solvers
 
     @cached_property
