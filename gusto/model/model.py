@@ -146,7 +146,6 @@ class TRBDF2ModelBase(ModelBase):
                 _tau[field_name] = 2 * self.gamma
         return _tau
 
-
     @property
     def bdf_tau_values(self):
         _tau = {}
@@ -177,7 +176,6 @@ class TRBDF2ModelBase(ModelBase):
 
         self.subcycling_options = kwargs.pop("subcycling_options", None)
         self.limiters = kwargs.pop("limiters", {})
-
         self.stepper = TRBDF2QuasiNewton(
             self.equation, io, self.transported_fields,
             spatial_methods=self.transport_methods+self.diffusion_methods,
@@ -187,14 +185,15 @@ class TRBDF2ModelBase(ModelBase):
             **kwargs
         )
 
+
 class TRBDF2Model(TRBDF2ModelBase):
     """
-    TRBDF2 model class encapsulating the best settings for next-to-lowest order 
+    TRBDF2 model class encapsulating the best settings for next-to-lowest order
     methods.
     """
-    def __init__(self, mesh, dt, parameters, equations, 
+    def __init__(self, mesh, dt, parameters, equations,
                  family=None, **kwargs):
-         """
+        """
         Args:
             mesh (:class:`Mesh`): the model's mesh.
             dt (float): the model timestep.
@@ -229,10 +228,8 @@ class TRBDF2Model(TRBDF2ModelBase):
                 that encode the metadata for any active tracers to be included
                 in the equations. Defaults to None.
         """
-         super().__init__(mesh , dt, parameters, equations, family=family, 
-                          element_order=1, 
-                          **kwargs)
-         
+        super().__init__(mesh, dt, parameters, equations, family=family,
+                         element_order=1, **kwargs)
 
     @property
     def diffusion_methods(self):
@@ -247,7 +244,7 @@ class TRBDF2Model(TRBDF2ModelBase):
                 InteriorPenaltyDiffusion(self.equation, field, params)
             )
         return _diffusion_methods
-    
+
     @property
     def diffusion_schemes(self):
         """
@@ -261,8 +258,7 @@ class TRBDF2Model(TRBDF2ModelBase):
                 BackwardEuler(self.domain, field)
             )
         return _diffusion_schemes
-    
-    
+
     @property
     def transported_fields(self):
         """
@@ -293,8 +289,7 @@ class TRBDF2Model(TRBDF2ModelBase):
                         limiter=self.limiters.get(field_name))
                 )
         return _transported_fields
-    
-    
+
     @property
     def transport_methods(self):
         """
@@ -313,7 +308,8 @@ class TRBDF2Model(TRBDF2ModelBase):
                     DGUpwind(self.equation, field_name)
                 )
         return _transport_methods
-        
+
+
 class SIQNModelBase(ModelBase):
     """
     Base for model classes using SIQN. Child classes should define the
@@ -397,6 +393,7 @@ class SIQNModelBase(ModelBase):
             tau_values=self.tau_values,
             **kwargs
         )
+
 
 class SIQNModel(SIQNModelBase):
     """
