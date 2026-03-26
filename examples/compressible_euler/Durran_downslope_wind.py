@@ -13,7 +13,8 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from firedrake import (
     as_vector, VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh,
-    SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, Constant
+    SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, Constant,
+    VTKFile
 )
 from gusto import (
     Domain, CompressibleParameters, logger, RungeKuttaFormulation,
@@ -25,7 +26,7 @@ from gusto import (
 )
 
 mountain_nonhydrostatic_defaults = {
-    'ncolumns': 60,
+    'ncolumns': 70,
     'nlayers': 20,
     'dt': 10.0,
     'tmax': 10000.,
@@ -49,7 +50,7 @@ def mountain_nonhydrostatic(
     # Parameters for test case
     # ------------------------------------------------------------------------ #
 
-    domain_width = 180000.   # width of domain in x direction, in m
+    domain_width = 210000.   # width of domain in x direction, in m
     domain_height = 9000.   # height of model top, in m
     a = 10000.                # scale width of mountain, in m
     hm = 600.                  # height of mountain, in m
@@ -57,7 +58,7 @@ def mountain_nonhydrostatic(
     Tsurf = 300.             # temperature of surface, in K
     initial_wind = 20.0      # initial horizontal wind, in m/s
     sponge_depth = 2000.0   # depth of sponge layer, in m
-    sponge_width = 2000.0   # width of sponge layer, in m
+    sponge_width = 12000.0   # width of sponge layer, in m
     g = 9.80665              # acceleration due to gravity, in m/s^2
     cp = 1004.               # specific heat capacity at constant pressure
     mu_dt = 0.15             # parameter for strength of sponge layer, no units
@@ -123,6 +124,8 @@ def mountain_nonhydrostatic(
             u_transport_option=u_eqn_type
         )
 
+    sponge_out = VTKFile("sponge.pvd").write(eqns.prescribed_fields.sponge_vert,
+                                             eqns.prescribed_fields.sponge_horiz)
     # I/O
     # Adjust default directory name
     if hydrostatic and dirname == mountain_nonhydrostatic_defaults['dirname']:

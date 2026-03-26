@@ -252,10 +252,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             muexpr = conditional(z <= zc,
                                  0.0,
                                  mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
-            self.mu = self.prescribed_fields("sponge", W_DG).interpolate(muexpr)
+            self.mu_vert = self.prescribed_fields("sponge_vert", W_DG).interpolate(muexpr)
 
             residual += sponge(subject(prognostic(
-                self.mu*inner(w, domain.k)*inner(u, domain.k)*dx_qp, 'u'), self.X))
+                self.mu_vert*inner(w, domain.k)*inner(u, domain.k)*dx_qp, 'u'), self.X))
             L = sponge_options.L
             xc = sponge_options.x_level
             x = xz[0]
@@ -265,10 +265,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
             muexpr = conditional(x <= xc,
                                  0.0,
                                  mubar*sin((pi/2.)*(x-xc)/(L-xc))**2)
-            self.mu.interpolate(self.mu + muexpr)
+            self.mu_horiz = self.prescribed_fields("sponge_horiz", W_DG).interpolate(muexpr)
 
             residual += sponge(subject(prognostic(
-                self.mu*inner(w, domain.ivec)*inner(u, domain.ivec)*dx_qp, 'u'), self.X))
+                self.mu_horiz*inner(w, domain.ivec)*inner(u, domain.ivec)*dx_qp, 'u'), self.X))
 
         if diffusion_options is not None:
             for field, diffusion in diffusion_options:
