@@ -310,64 +310,64 @@ class SDC(object, metaclass=ABCMeta):
                                        map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.U_start, old_idx=self.idx))
-        # Loop through nodes up to m-1 and calcualte
-        # sum(j=1,m-1) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
-        for i in range(m):
-            r_imp_kp1 = self.residual.label_map(
-                lambda t: t.has_label(implicit),
-                map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
-                map_if_false=drop)
-            r_imp_kp1 = r_imp_kp1.label_map(
-                all_terms,
-                lambda t: Constant(self.Qdelta_imp[m, i])*t)
-            residual += r_imp_kp1
-            r_imp_k = self.residual.label_map(
-                lambda t: t.has_label(implicit),
-                map_if_true=replace_subject(self.Unodes[i+1], old_idx=self.idx),
-                map_if_false=drop)
-            r_imp_k = r_imp_k.label_map(
-                all_terms,
-                lambda t: Constant(self.Qdelta_imp[m, i])*t)
-            residual -= r_imp_k
-        # Loop through nodes up to m-1 and calcualte
-        #  sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-        for i in range(self.M):
-            r_exp_kp1 = self.residual.label_map(
-                lambda t: t.has_label(explicit),
-                map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
-                map_if_false=drop)
-            r_exp_kp1 = r_exp_kp1.label_map(
-                all_terms,
-                lambda t: Constant(self.Qdelta_exp[m, i])*t)
+        # # Loop through nodes up to m-1 and calcualte
+        # # sum(j=1,m-1) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
+        # for i in range(m):
+        #     r_imp_kp1 = self.residual.label_map(
+        #         lambda t: t.has_label(implicit),
+        #         map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
+        #         map_if_false=drop)
+        #     r_imp_kp1 = r_imp_kp1.label_map(
+        #         all_terms,
+        #         lambda t: Constant(self.Qdelta_imp[m, i])*t)
+        #     residual += r_imp_kp1
+        #     r_imp_k = self.residual.label_map(
+        #         lambda t: t.has_label(implicit),
+        #         map_if_true=replace_subject(self.Unodes[i+1], old_idx=self.idx),
+        #         map_if_false=drop)
+        #     r_imp_k = r_imp_k.label_map(
+        #         all_terms,
+        #         lambda t: Constant(self.Qdelta_imp[m, i])*t)
+        #     residual -= r_imp_k
+        # # Loop through nodes up to m-1 and calcualte
+        # #  sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+        # for i in range(self.M):
+        #     r_exp_kp1 = self.residual.label_map(
+        #         lambda t: t.has_label(explicit),
+        #         map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
+        #         map_if_false=drop)
+        #     r_exp_kp1 = r_exp_kp1.label_map(
+        #         all_terms,
+        #         lambda t: Constant(self.Qdelta_exp[m, i])*t)
 
-            residual += r_exp_kp1
-            r_exp_k = self.residual.label_map(
-                lambda t: t.has_label(explicit),
-                map_if_true=replace_subject(self.Unodes[i+1], old_idx=self.idx),
-                map_if_false=drop)
-            r_exp_k = r_exp_k.label_map(
-                all_terms,
-                lambda t: Constant(self.Qdelta_exp[m, i])*t)
-            residual -= r_exp_k
+        #     residual += r_exp_kp1
+        #     r_exp_k = self.residual.label_map(
+        #         lambda t: t.has_label(explicit),
+        #         map_if_true=replace_subject(self.Unodes[i+1], old_idx=self.idx),
+        #         map_if_false=drop)
+        #     r_exp_k = r_exp_k.label_map(
+        #         all_terms,
+        #         lambda t: Constant(self.Qdelta_exp[m, i])*t)
+        #     residual -= r_exp_k
 
-            # Calculate source terms
-            r_source_kp1 = self.residual.label_map(
-                lambda t: t.has_label(source_label),
-                map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
-                map_if_false=drop)
-            r_source_kp1 = r_source_kp1.label_map(
-                all_terms,
-                lambda t: Constant(self.Qdelta_exp[m, i])*t)
-            residual += r_source_kp1
+        #     # Calculate source terms
+        #     r_source_kp1 = self.residual.label_map(
+        #         lambda t: t.has_label(source_label),
+        #         map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
+        #         map_if_false=drop)
+        #     r_source_kp1 = r_source_kp1.label_map(
+        #         all_terms,
+        #         lambda t: Constant(self.Qdelta_exp[m, i])*t)
+        #     residual += r_source_kp1
 
-            r_source_k = self.residual.label_map(
-                lambda t: t.has_label(source_label),
-                map_if_true=replace_subject(self.source_Uk[i+1], old_idx=self.idx),
-                map_if_false=drop)
-            r_source_k = r_source_k.label_map(
-                all_terms,
-                map_if_true=lambda t: Constant(self.Qdelta_exp[m, i])*t)
-            residual -= r_source_k
+        #     r_source_k = self.residual.label_map(
+        #         lambda t: t.has_label(source_label),
+        #         map_if_true=replace_subject(self.source_Uk[i+1], old_idx=self.idx),
+        #         map_if_false=drop)
+        #     r_source_k = r_source_k.label_map(
+        #         all_terms,
+        #         map_if_true=lambda t: Constant(self.Qdelta_exp[m, i])*t)
+        #     residual -= r_source_k
 
         # Add on final implicit terms
         # Qdelta_imp[m,m]*(F(y_(m)^(k+1)) - F(y_(m)^k))

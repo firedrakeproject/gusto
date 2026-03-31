@@ -19,6 +19,10 @@ from qmat import genQDeltaCoeffs
 from gusto.time_discretisation.deferred_correction import SDC, RIDC
 from gusto.core.logging import logger
 from gusto.solvers.solver_presets import hybridised_solver_parameters
+from firedrake.fml import (
+    replace_subject, all_terms, drop, keep
+)
+from gusto.core.labels import (time_derivative, implicit, explicit, source_label)
 
 __all__ = ["Parallel_RIDC", "Parallel_SDC"]
 
@@ -253,7 +257,7 @@ class Parallel_SDC(SDC):
     def __init__(self, base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                  field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
-                 limiter=None, options=None, initial_guess="base", communicator=None):
+                 limiter=None, options=None, initial_guess="base", communicator=None, exp_base_scheme=None):
         """
         Initialise SDC object
         Args:
@@ -296,6 +300,7 @@ class Parallel_SDC(SDC):
             raise ValueError("No communicator provided. Please provide a valid MPI communicator.")
         if self.comm.ensemble_comm.size != self.M:
             raise ValueError("Number of ranks must be equal to the number of nodes M for Parallel SDC.")
+        self.exp_base = exp_base_scheme
         
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -310,7 +315,16 @@ class Parallel_SDC(SDC):
         """
         super(Parallel_SDC, self).setup(equation, apply_bcs, *active_labels)
 
-        _ = self.solver
+        if self.qdelta_imp_type == "MIN-SR-FLEX":
+            _ = self.solvers
+        else:
+            _ = self.solver
+
+        self.Unodes = [Function(self.W) for _ in range(self.M+1)]
+
+        if self.exp_base is not None:
+            exp_eqn = equation.label_map(lambda t: t.has_label(implicit), map_if_true=drop, map_if_false=keep)
+            self.exp_base.setup(exp_eqn, apply_bcs, *active_labels)
 
     def compute_quad(self):
         """
@@ -328,25 +342,190 @@ class Parallel_SDC(SDC):
         x = Function(self.W)
         x.assign(float(self.Qfin[self.comm.ensemble_comm.rank])*self.fUnodes[self.comm.ensemble_comm.rank])
         self.comm.allreduce(x, self.quad_final)
+
+    def res_k(self, k):
+        """Set up the discretisation's residual for a given node m."""
+        # Add time derivative terms  y^(k+1)_m - y_start for node m. y_start is y_n for Z2N formulation
+        # and y^(k)_m for N2N formulation
+        m = self.comm.ensemble_comm.rank
+        dt = float(self.dt_coarse)
+        all_QD = genQDeltaCoeffs(
+                    self.qdelta_imp_type,
+                    nSweeps=self.maxk,
+                    form=self.formulation,
+                    nodes=self.nodes / dt,
+                    Q=self.Q / dt,
+                    nNodes=self.M,
+                    nodeType=self.node_type,
+                    quadType=self.quad_type,
+                )
+        qd_dt = all_QD[k-1][m, m]*dt
+        logger.info(f"MIN-SR-FLEX RES: M={self.M}, rank={self.comm.ensemble_comm.rank}, k={k}, qd={all_QD[k-1][m, m]:.6e}, qd_dt={qd_dt:.6e}")
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
+        residual -= mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.U_start, old_idx=self.idx))
+        # # Loop through nodes up to m-1 and calcualte
+        # # sum(j=1,m-1) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
+        # for i in range(m):
+        #     r_imp_kp1 = self.residual.label_map(
+        #         lambda t: t.has_label(implicit),
+        #         map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
+        #         map_if_false=drop)
+        #     r_imp_kp1 = r_imp_kp1.label_map(
+        #         all_terms,
+        #         lambda t: Constant(self.Qdelta_imp[m, i])*t)
+        #     residual += r_imp_kp1
+        #     r_imp_k = self.residual.label_map(
+        #         lambda t: t.has_label(implicit),
+        #         map_if_true=replace_subject(self.Unodes[i+1], old_idx=self.idx),
+        #         map_if_false=drop)
+        #     r_imp_k = r_imp_k.label_map(
+        #         all_terms,
+        #         lambda t: Constant(self.Qdelta_imp[m, i])*t)
+        #     residual -= r_imp_k
+        # # Loop through nodes up to m-1 and calcualte
+        # #  sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+        # for i in range(self.M):
+        #     r_exp_kp1 = self.residual.label_map(
+        #         lambda t: t.has_label(explicit),
+        #         map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
+        #         map_if_false=drop)
+        #     r_exp_kp1 = r_exp_kp1.label_map(
+        #         all_terms,
+        #         lambda t: Constant(self.Qdelta_exp[m, i])*t)
+
+        #     residual += r_exp_kp1
+        #     r_exp_k = self.residual.label_map(
+        #         lambda t: t.has_label(explicit),
+        #         map_if_true=replace_subject(self.Unodes[i+1], old_idx=self.idx),
+        #         map_if_false=drop)
+        #     r_exp_k = r_exp_k.label_map(
+        #         all_terms,
+        #         lambda t: Constant(self.Qdelta_exp[m, i])*t)
+        #     residual -= r_exp_k
+
+        #     # Calculate source terms
+        #     r_source_kp1 = self.residual.label_map(
+        #         lambda t: t.has_label(source_label),
+        #         map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
+        #         map_if_false=drop)
+        #     r_source_kp1 = r_source_kp1.label_map(
+        #         all_terms,
+        #         lambda t: Constant(self.Qdelta_exp[m, i])*t)
+        #     residual += r_source_kp1
+
+        #     r_source_k = self.residual.label_map(
+        #         lambda t: t.has_label(source_label),
+        #         map_if_true=replace_subject(self.source_Uk[i+1], old_idx=self.idx),
+        #         map_if_false=drop)
+        #     r_source_k = r_source_k.label_map(
+        #         all_terms,
+        #         map_if_true=lambda t: Constant(self.Qdelta_exp[m, i])*t)
+        #     residual -= r_source_k
+
+        # Add on final implicit terms
+        # Qdelta_imp[m,m]*(F(y_(m)^(k+1)) - F(y_(m)^k))
+        r_imp_kp1 = self.residual.label_map(
+            lambda t: t.has_label(implicit),
+            map_if_true=replace_subject(self.U_DC, old_idx=self.idx),
+            map_if_false=drop)
+        r_imp_kp1 = r_imp_kp1.label_map(
+            all_terms,
+            lambda t: Constant(qd_dt)*t)
+        residual += r_imp_kp1
+        r_imp_k = self.residual.label_map(
+            lambda t: t.has_label(implicit),
+            map_if_true=replace_subject(self.Unodes[m+1], old_idx=self.idx),
+            map_if_false=drop)
+        r_imp_k = r_imp_k.label_map(
+            all_terms,
+            lambda t: Constant(qd_dt)*t)
+        residual -= r_imp_k
+
+        # Add on error term. sum(j=1,M) q_mj*F(y_m^k) for Z2N formulation
+        # and sum(j=1,M) s_mj*F(y_m^k) for N2N formulation, where s_mj = q_mj-q_m-1j
+        # and s1j = q1j.
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_, old_idx=self.idx),
+                                    drop)
+        residual += Q
+        return residual.form
+
+    @property
+    def res_rhs_imp(self):
+        """Set up the residual for the calculation of F(y)."""
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs, old_idx=self.idx),
+                                    drop)
+        # F(y)
+        L = self.residual.label_map(lambda t: any(t.has_label(time_derivative, source_label, explicit)),
+                                    drop,
+                                    replace_subject(self.Uin, old_idx=self.idx))
+        L_source = self.residual.label_map(lambda t: t.has_label(source_label),
+                                           replace_subject(self.source_in, old_idx=self.idx),
+                                           drop)
+        residual_rhs = a - (L + L_source)
+        return residual_rhs.form
+
+    @property
+    def res_rhs_exp(self):
+        """Set up the residual for the calculation of F(y)."""
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs, old_idx=self.idx),
+                                    drop)
+        # F(y)
+        L = self.residual.label_map(lambda t: any(t.has_label(time_derivative, source_label, implicit)),
+                                    drop,
+                                    replace_subject(self.Uin, old_idx=self.idx))
+        L_source = self.residual.label_map(lambda t: t.has_label(source_label),
+                                           replace_subject(self.source_in, old_idx=self.idx),
+                                           drop)
+        residual_rhs = a - (L + L_source)
+        return residual_rhs.form
+
+
+    @cached_property
+    def solver_rhs_imp(self):
+        """Set up the problem and the solver for mass matrix inversion."""
+        # setup linear solver using rhs residual defined in derived class
+        prob_rhs = NonlinearVariationalProblem(self.res_rhs_imp, self.Urhs, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_rhs_imp"
+        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
+                                          options_prefix=solver_name)
     
+
+    @cached_property
+    def solver_rhs_exp(self):
+        """Set up the problem and the solver for mass matrix inversion."""
+        # setup linear solver using rhs residual defined in derived class
+        prob_rhs = NonlinearVariationalProblem(self.res_rhs_exp, self.Urhs, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_rhs_exp"
+        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
+                                          options_prefix=solver_name)
+
     @cached_property
     def solver(self):
         """Set up a list of solvers for each problem at a node m."""
         m = self.comm.ensemble_comm.rank
         # setup solver using residual defined in derived class
         self.alpha.assign(self.Qdelta_imp[m, m]/float(self.dt_coarse))
+        dt = float(self.dt_coarse)
         QD_imp = genQDeltaCoeffs(
                     self.qdelta_imp_type,
                     form=self.formulation,
-                    nodes=self.nodes,
-                    Q=self.Q,
+                    nodes=self.nodes/dt,
+                    Q=self.Q/dt,
                     nNodes=self.M,
                     nodeType=self.node_type,
                     quadType=self.quad_type
                 )
         alpha = QD_imp[m, m]
         #print("Setting up hybridised solver with alpha = %s" % alpha)
-        if self.nonlinear_solver_parameters is not None:
+        if self.nonlinear_solver_parameters is None:
             self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
         else:
             self.appctx = None
@@ -359,25 +538,27 @@ class Parallel_SDC(SDC):
     def solvers(self):
         """Set up a list of solvers for each problem at a node m."""
         solvers = []
+        dt = float(self.dt_coarse)
+        all_Qdelta = genQDeltaCoeffs(
+            self.qdelta_imp_type,
+            nSweeps=self.maxk,
+            form=self.formulation,
+            nodes=self.nodes / dt,
+            Q=self.Q / dt,
+            nNodes=self.M,
+            nodeType=self.node_type,
+            quadType=self.quad_type,
+        )
         for k in range(1, self.maxk+1):
-            # Recompute Implicit Q_delta matrix for each iteration k
-            Qdelta_imp_k = float(self.dt_coarse)*genQDeltaCoeffs(
-                self.qdelta_imp_type,
-                form=self.formulation,
-                nodes=self.nodes,
-                Q=self.Q,
-                nNodes=self.M,
-                nodeType=self.node_type,
-                quadType=self.quad_type,
-                k=k
-            )
-            alpha_k = Qdelta_imp_k[self.comm.ensemble_comm.rank, self.comm.ensemble_comm.rank]/float(self.dt_coarse)
-            if self.nonlinear_solver_parameters is not None:
+            Qdelta_imp_k = all_Qdelta[k-1]
+            alpha_k = Qdelta_imp_k[self.comm.ensemble_comm.rank, self.comm.ensemble_comm.rank]
+            logger.info(f"MIN-SR-FLEX: M={self.M}, rank={self.comm.ensemble_comm.rank}, k={k}, alpha_k={alpha_k:.6e}, qd_dt={alpha_k*dt:.6e}")
+            if self.nonlinear_solver_parameters is None:
                 nonlinear_solver_parameters_k, appctx_k = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha_k, tau_values=None, nonlinear=True, imex=True)
             else:
-                nonlinear_solver_parameters_k = None
+                nonlinear_solver_parameters_k = self.nonlinear_solver_parameters
                 appctx_k = None
-            problem_k = NonlinearVariationalProblem(self.res(self.comm.ensemble_comm.rank), self.U_DC, bcs=self.bcs)
+            problem_k = NonlinearVariationalProblem(self.res_k(k), self.U_DC, bcs=self.bcs)
             solver_name_k = self.field_name+self.__class__.__name__ + "%s_k%s" % (self.comm.ensemble_comm.rank, k)
             solver_k = NonlinearVariationalSolver(problem_k, solver_parameters=nonlinear_solver_parameters_k, appctx=appctx_k, options_prefix=solver_name_k)
             solvers.append(solver_k)
@@ -392,10 +573,16 @@ class Parallel_SDC(SDC):
         # Compute initial guess on quadrature nodes with low-order
         # base timestepper
         self.Unodes[0].assign(self.Un)
+        self.Unodes_exp[0].assign(self.Un)
         if (self.base_flag):
             for m in range(self.M):
                 self.base.dt = float(self.dtau[m])
                 self.base.apply(self.Unodes[m+1], self.Unodes[m])
+        elif (self.exp_base is not None):
+            for m in range(self.M):
+                self.exp_base.dt = float(self.dtau[m])
+                self.exp_base.apply(self.Unodes_exp[m+1], self.Unodes_exp[m])
+                self.Unodes[m+1].assign(self.Un)
         else:
             for m in range(self.M):
                 self.Unodes[m+1].assign(self.Un)
@@ -410,27 +597,38 @@ class Parallel_SDC(SDC):
 
             if self.qdelta_imp_type == "MIN-SR-FLEX":
                 # Recompute Implicit Q_delta matrix for each iteration k
-                self.Qdelta_imp = float(self.dt_coarse)*genQDeltaCoeffs(
-                    self.qdelta_imp_type,
-                    form=self.formulation,
-                    nodes=self.nodes,
-                    Q=self.Q,
-                    nNodes=self.M,
-                    nodeType=self.node_type,
-                    quadType=self.quad_type,
-                    k=k
-                )
-                self.alpha.assign(self.Qdelta_imp[self.comm.ensemble_comm.rank, self.comm.ensemble_comm.rank]/float(self.dt_coarse))
+                # self.Qdelta_imp = float(self.dt_coarse)*genQDeltaCoeffs(
+                #     self.qdelta_imp_type,
+                #     form=self.formulation,
+                #     nodes=self.nodes,
+                #     Q=self.Q,
+                #     nNodes=self.M,
+                #     nodeType=self.node_type,
+                #     quadType=self.quad_type,
+                #     k=k
+                # )
+                # self.alpha.assign(self.Qdelta_imp[self.comm.ensemble_comm.rank, self.comm.ensemble_comm.rank]/float(self.dt_coarse))
                 solver = solver_list[k-1]
+            else:
+                solver = self.solver
 
             # Compute for N2N: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
             # for Z2N: sum(j=1,M) (q_mj*F(y_m^k) +  q_mj*S(y_m^k))
-            self.Uin.assign(self.Unodes[self.comm.ensemble_comm.rank+1])
-            # Include source terms
-            for evaluate in self.evaluate_source:
-                evaluate(self.Uin, self.base.dt, x_out=self.source_in)
-            self.solver_rhs.solve()
-            self.fUnodes[self.comm.ensemble_comm.rank].assign(self.Urhs)
+
+            # # Include source terms
+            # for evaluate in self.evaluate_source:
+            #     evaluate(self.Uin, self.base.dt, x_out=self.source_in)
+            if k ==1:
+                self.Uin.assign(self.Unodes_exp[self.comm.ensemble_comm.rank+1])
+                self.solver_rhs_exp.solve()
+                self.fUnodes[self.comm.ensemble_comm.rank].assign(self.Urhs)
+                self.Uin.assign(self.Unodes[self.comm.ensemble_comm.rank+1])
+                self.solver_rhs_imp.solve()
+                self.fUnodes[self.comm.ensemble_comm.rank].assign(self.fUnodes[self.comm.ensemble_comm.rank]+self.Urhs)
+            else:
+                self.Uin.assign(self.Unodes[self.comm.ensemble_comm.rank+1])
+                self.solver_rhs.solve()
+                self.fUnodes[self.comm.ensemble_comm.rank].assign(self.Urhs)
 
             self.compute_quad()
 
@@ -454,7 +652,7 @@ class Parallel_SDC(SDC):
             # for Z2N:
             # y_m^(k+1) = y^n + sum(j=1,m) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
             #             + sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-            self.solver.solve()
+            solver.solve()
             self.Unodes1[self.comm.ensemble_comm.rank+1].assign(self.U_DC)
 
             # Evaluate source terms

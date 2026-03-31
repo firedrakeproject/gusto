@@ -582,6 +582,7 @@ class CompressibleHybridisedSCPC(PCBase):
         k = equations.domain.k       # Upward pointing unit vector
         if self.imex:
             theta = theta_in
+            theta = -dot(k, u)*dot(k, grad(thetabar))*beta_t + theta_in
         else:
             theta = -dot(k, u)*dot(k, grad(thetabar))*beta_t + theta_in
 
@@ -664,7 +665,7 @@ class CompressibleHybridisedSCPC(PCBase):
             + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
             # term added because u.n=0 is enforced weakly via the traces
             + beta_r*phi*dot(u, n)*rhobar_avg*(ds_tb + ds_v))
-            rho_adv = beta_r*phi*div(u)*rhobar*dx
+            #rho_adv = beta_r*phi*div(u)*rhobar*dx
         else:
             rho_adv = (- beta_r*inner(grad(phi), u)*rhobar*dx
             + beta_r*jump(phi*u, n=n)*rhobar_avg('+')*(dS_v + dS_h)
@@ -739,6 +740,8 @@ class CompressibleHybridisedSCPC(PCBase):
         self.theta = Function(self.Vtheta)
         if self.imex:
             theta_eqn = gamma*(theta - theta_in)*dx
+            theta_eqn = gamma*(theta - theta_in
+                            + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta_t)*dx
         else:
             theta_eqn = gamma*(theta - theta_in
                             + dot(k, self.u_hdiv)*dot(k, grad(thetabar))*beta_t)*dx
