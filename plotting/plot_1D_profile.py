@@ -36,9 +36,8 @@ class Plot1DProfile(Plotting):
         idx = []
         for i, p in enumerate(points):
             pq = np.delete(p, [dim])
-            if pq == val:
-                self.px.append(p[dim])
-                idx.append(i)
+            self.px.append(p[dim])
+            idx.append(i)
 
         if len(idx) == 0:
             raise RuntimeError("No points match your requirements")
@@ -51,7 +50,26 @@ class Plot1DProfile(Plotting):
         for i in range(len(self.times)):
             plt.plot(self.px, self.f[i])
             if not same_plot:
-                plt.show()
+                if self.field_name == "PotentialVorticity":
+                    plt.yticks(ticks=None)
+                    plt.ylabel("Potential vorticity [$s^{-1}$]")
+                    plt.legend(["0 days", "50 days", "100 days", "150 days"])
+                    plt.xlabel("Distance from the centre of the vortex [m]")
+                    plt.xlim(-0.75e7, 0.75e7)
+                    plt.ylim(0.6e-8, 1.5e-8)  
+                    plt.tight_layout()
+                    plt.savefig("jv_up_pv_b1_150days.png", dpi=200)
+                    plt.show()
+                elif self.field_name == "RelativeVorticity":
+                    plt.yticks(ticks=None)
+                    plt.ylabel("Relative vorticity [$s^{-1}$]")
+                    plt.legend(["0 days", "50 days", "100 days", "150 days"])
+                    plt.xlabel("Distance from the centre of the vortex [m]")
+                    plt.xlim(-0.75e7, 0.75e7)
+                    plt.ylim(-0.00005, 0.00038)  
+                    plt.tight_layout()
+                    plt.savefig("jv_up_rv_b1_150days.png", dpi=200)
+                    plt.show()
 
         if same_plot:
             plt.show()
