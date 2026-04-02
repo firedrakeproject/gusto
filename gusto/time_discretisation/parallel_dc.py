@@ -11,7 +11,7 @@ and pipelining.
 """
 
 from firedrake import (
-    Function, NonlinearVariationalProblem, NonlinearVariationalSolver, Constant
+    Function, NonlinearVariationalProblem, NonlinearVariationalSolver, Constant, SpatialCoordinate, norm
 )
 from firedrake.utils import cached_property
 from gusto.time_discretisation.time_discretisation import wrapper_apply
@@ -22,7 +22,7 @@ from gusto.solvers.solver_presets import hybridised_solver_parameters
 from firedrake.fml import (
     replace_subject, all_terms, drop, keep
 )
-from gusto.core.labels import (time_derivative, implicit, explicit, source_label)
+from gusto.core.labels import (time_derivative, implicit, explicit, source_label, transporting_velocity)
 
 __all__ = ["Parallel_RIDC", "Parallel_SDC"]
 
@@ -122,8 +122,6 @@ class Parallel_RIDC(RIDC):
             # No flush - predictor should be last timestep's pipeline value
             self.Unodes[0].assign(self.Uprev)
         self.Unodes1[0].assign(x_in)
-        # for evaluate in self.evaluate_source:
-        #     evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
         self.Uin.assign(self.Unodes[0])
         self.solver_rhs.solve()
         self.fUnodes[0].assign(self.Urhs)
@@ -134,22 +132,16 @@ class Parallel_RIDC(RIDC):
             for m in range(self.M):
                 self.base.dt = float(self.dt)
                 self.base.apply(self.Unodes[m+1], self.Unodes[m])
-                # for evaluate in self.evaluate_source:
-                #     evaluate(self.Unodes[m+1], self.base.dt, x_out=self.source_Uk[m+1])
 
                 # Send base guess to k+1 correction
                 self.U_send[m+1].assign(self.Unodes[m+1])
                 self.comm.isend(self.U_send[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
-                # self.comm.send(self.source_Uk[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
         else:
             for m in range(1, self.kval + 1):
                 # Receive and evaluate the stencil of guesses we need to correct
                 self.comm.recv(self.U_send[m], source=self.kval-1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m)*100)
                 self.Unodes[m].assign(self.U_send[m])
-                # self.comm.recv(self.source_Uk[m], source=self.kval-1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
                 self.Uin.assign(self.Unodes[m])
-                # for evaluate in self.evaluate_source:
-                #     evaluate(self.Uin, self.base.dt, x_out=self.source_in)
                 self.solver_rhs.solve()
                 self.fUnodes[m].assign(self.Urhs)
             for m in range(0, self.kval):
@@ -165,10 +157,6 @@ class Parallel_RIDC(RIDC):
                 self.source_Uk_m.assign(self.source_Uk[m])
                 self.U_DC.assign(self.Unodes[m+1])
 
-                # Compute
-                # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
-                #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-                #             + sum(j=1,M) s_mj*(F+S)(y_j^k)
                 self.solver.solve()
                 self.Unodes1[m+1].assign(self.U_DC)
 
@@ -183,16 +171,12 @@ class Parallel_RIDC(RIDC):
                 if self.kval < self.K:
                     self.U_send[m+1].assign(self.Unodes1[m+1])
                     self.comm.isend(self.U_send[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
-                    #self.comm.isend(self.source_Ukp1[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
 
             for m in range(self.kval, self.M):
                 # Receive the guess we need to correct and evaluate the rhs
                 self.comm.recv(self.U_send[m+1], source=self.kval-1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
                 self.Unodes[m+1].assign(self.U_send[m+1])
-                #self.comm.recv(self.source_Uk[m+1], source=self.kval-1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
                 self.Uin.assign(self.Unodes[m+1])
-                # for evaluate in self.evaluate_source:
-                #     evaluate(self.Uin, self.base.dt, x_out=self.source_in)
                 self.solver_rhs.solve()
                 self.fUnodes[m+1].assign(self.Urhs)
 
@@ -208,15 +192,8 @@ class Parallel_RIDC(RIDC):
                 self.source_Uk_m.assign(self.source_Uk[m])
                 self.U_DC.assign(self.Unodes[m+1])
 
-                # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
-                #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-                #             + sum(j=1,M) s_mj*(F+S)(y^k)
                 self.solver.solve()
                 self.Unodes1[m+1].assign(self.U_DC)
-
-                # # Evaluate source terms
-                # for evaluate in self.evaluate_source:
-                #     evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
 
                 # Apply limiter if required
                 if self.limiter is not None:
@@ -226,11 +203,6 @@ class Parallel_RIDC(RIDC):
                 if self.kval < self.K:
                     self.U_send[m+1].assign(self.Unodes1[m+1])
                     self.comm.isend(self.U_send[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
-                    #self.comm.isend(self.source_Ukp1[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
-
-            # for m in range(self.M+1):
-            #     self.Unodes[m].assign(self.Unodes1[m])
-            #     self.source_Uk[m].assign(self.source_Ukp1[m])
 
         if (self.flush_freq > 0 and self.step % self.flush_freq == 0) or self.step == self.J:
             # Flush the pipe to ensure all ranks have the same data
@@ -257,7 +229,8 @@ class Parallel_SDC(SDC):
     def __init__(self, base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                  field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
-                 limiter=None, options=None, initial_guess="base", communicator=None, exp_base_scheme=None):
+                 limiter=None, options=None, initial_guess="base", communicator=None, exp_base_scheme=None,
+                 n_transport_subcycles=10):
         """
         Initialise SDC object
         Args:
@@ -287,6 +260,9 @@ class Parallel_SDC(SDC):
                 the evolving field to enforce monotonicity. Defaults to None.
             initial_guess (str, optional): Initial guess to be base timestepper, or copy
             communicator (MPI communicator, optional): communicator for parallel execution. Defaults to None.
+            exp_base_scheme: unused, kept for API compatibility.
+            n_transport_subcycles (int, optional): number of explicit subcycles for transport.
+                Defaults to 3.
         """
         super().__init__(base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                          formulation="Z2N", field_name=field_name,
@@ -295,13 +271,15 @@ class Parallel_SDC(SDC):
                          limiter=limiter, initial_guess=initial_guess)
         self.comm = communicator
         self.alpha = Constant(0.0)  # Initial value, will be updated in solver setup
+        self.n_transport_subcycles = n_transport_subcycles
         # Checks for parallel SDC
         if self.comm is None:
             raise ValueError("No communicator provided. Please provide a valid MPI communicator.")
         if self.comm.ensemble_comm.size != self.M:
             raise ValueError("Number of ranks must be equal to the number of nodes M for Parallel SDC.")
+        # exp_base_scheme retained for API compatibility but transport is done via solver_rhs_exp
         self.exp_base = exp_base_scheme
-        
+
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the SDC time discretisation based on the equation.
@@ -315,17 +293,44 @@ class Parallel_SDC(SDC):
         """
         super(Parallel_SDC, self).setup(equation, apply_bcs, *active_labels)
 
-        if self.qdelta_imp_type == "MIN-SR-FLEX":
-            _ = self.solvers
-        else:
-            _ = self.solver
+        self.Unodes_exp = [Function(self.W) for _ in range(self.M+1)]
+        u_idx = self.equation.field_names.index('u')
+        self.u_adv_avg = Function(self.W.subfunctions[u_idx])
+        self.adv_inc = Function(self.W)
+        # Reusable buffer for subcycled transport
+        self.u_transport = Function(self.W)
+        self.u_stage = Function(self.W)
 
-        self.Unodes = [Function(self.W) for _ in range(self.M+1)]
-
-        if self.exp_base is not None:
-            exp_eqn = equation.label_map(lambda t: t.has_label(implicit), map_if_true=drop, map_if_false=keep)
-            self.exp_base.setup(exp_eqn, apply_bcs, *active_labels)
-
+    # def _transport_trajectory(self, n_sub, dtau_list):
+    #     u_idx = self.equation.field_names.index('u')
+    #     for m, dtau_m in enumerate(dtau_list):
+    #         # Freeze transporting velocity from current nodal wind
+    #         self.u_adv_avg.assign(self.Unodes[m].subfunctions[u_idx])
+    #         dt_sub = float(dtau_m) / n_sub
+    #         self.u_transport.assign(self.Unodes_exp[m])
+    #         for _ in range(n_sub):
+    #             self.Uin.assign(self.u_transport)
+    #             self.solver_rhs_exp.solve()
+    #             self.u_transport.assign(self.u_transport - dt_sub * self.Urhs)
+    #         self.Unodes_exp[m+1].assign(self.u_transport)
+    def _transport_trajectory(self, n_sub, dtau_list):
+        u_idx = self.equation.field_names.index('u')
+        for m, dtau_m in enumerate(dtau_list):
+            self.u_adv_avg.assign(0.5*(self.Unodes[m].subfunctions[u_idx]+ self.Un.subfunctions[u_idx]))
+            dt_sub = float(dtau_m) / n_sub
+            self.u_transport.assign(self.Unodes_exp[m])
+            for _ in range(n_sub):
+                # Stage 1w
+                self.Uin.assign(self.u_transport)
+                self.solver_rhs_exp.solve()
+                self.u_stage.assign(self.u_transport - dt_sub * self.Urhs)
+                # Stage 2
+                self.Uin.assign(self.u_stage)
+                self.solver_rhs_exp.solve()
+                self.u_transport.assign(
+                    0.5 * self.u_transport + 0.5 * (self.u_stage - dt_sub * self.Urhs)
+                )
+            self.Unodes_exp[m+1].assign(self.u_transport)
     def compute_quad(self):
         """
         Computes integration of F(y) on quadrature nodes
@@ -345,8 +350,6 @@ class Parallel_SDC(SDC):
 
     def res_k(self, k):
         """Set up the discretisation's residual for a given node m."""
-        # Add time derivative terms  y^(k+1)_m - y_start for node m. y_start is y_n for Z2N formulation
-        # and y^(k)_m for N2N formulation
         m = self.comm.ensemble_comm.rank
         dt = float(self.dt_coarse)
         all_QD = genQDeltaCoeffs(
@@ -368,67 +371,8 @@ class Parallel_SDC(SDC):
                                        map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.U_start, old_idx=self.idx))
-        # # Loop through nodes up to m-1 and calcualte
-        # # sum(j=1,m-1) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
-        # for i in range(m):
-        #     r_imp_kp1 = self.residual.label_map(
-        #         lambda t: t.has_label(implicit),
-        #         map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
-        #         map_if_false=drop)
-        #     r_imp_kp1 = r_imp_kp1.label_map(
-        #         all_terms,
-        #         lambda t: Constant(self.Qdelta_imp[m, i])*t)
-        #     residual += r_imp_kp1
-        #     r_imp_k = self.residual.label_map(
-        #         lambda t: t.has_label(implicit),
-        #         map_if_true=replace_subject(self.Unodes[i+1], old_idx=self.idx),
-        #         map_if_false=drop)
-        #     r_imp_k = r_imp_k.label_map(
-        #         all_terms,
-        #         lambda t: Constant(self.Qdelta_imp[m, i])*t)
-        #     residual -= r_imp_k
-        # # Loop through nodes up to m-1 and calcualte
-        # #  sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-        # for i in range(self.M):
-        #     r_exp_kp1 = self.residual.label_map(
-        #         lambda t: t.has_label(explicit),
-        #         map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
-        #         map_if_false=drop)
-        #     r_exp_kp1 = r_exp_kp1.label_map(
-        #         all_terms,
-        #         lambda t: Constant(self.Qdelta_exp[m, i])*t)
-
-        #     residual += r_exp_kp1
-        #     r_exp_k = self.residual.label_map(
-        #         lambda t: t.has_label(explicit),
-        #         map_if_true=replace_subject(self.Unodes[i+1], old_idx=self.idx),
-        #         map_if_false=drop)
-        #     r_exp_k = r_exp_k.label_map(
-        #         all_terms,
-        #         lambda t: Constant(self.Qdelta_exp[m, i])*t)
-        #     residual -= r_exp_k
-
-        #     # Calculate source terms
-        #     r_source_kp1 = self.residual.label_map(
-        #         lambda t: t.has_label(source_label),
-        #         map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
-        #         map_if_false=drop)
-        #     r_source_kp1 = r_source_kp1.label_map(
-        #         all_terms,
-        #         lambda t: Constant(self.Qdelta_exp[m, i])*t)
-        #     residual += r_source_kp1
-
-        #     r_source_k = self.residual.label_map(
-        #         lambda t: t.has_label(source_label),
-        #         map_if_true=replace_subject(self.source_Uk[i+1], old_idx=self.idx),
-        #         map_if_false=drop)
-        #     r_source_k = r_source_k.label_map(
-        #         all_terms,
-        #         map_if_true=lambda t: Constant(self.Qdelta_exp[m, i])*t)
-        #     residual -= r_source_k
 
         # Add on final implicit terms
-        # Qdelta_imp[m,m]*(F(y_(m)^(k+1)) - F(y_(m)^k))
         r_imp_kp1 = self.residual.label_map(
             lambda t: t.has_label(implicit),
             map_if_true=replace_subject(self.U_DC, old_idx=self.idx),
@@ -446,9 +390,6 @@ class Parallel_SDC(SDC):
             lambda t: Constant(qd_dt)*t)
         residual -= r_imp_k
 
-        # Add on error term. sum(j=1,M) q_mj*F(y_m^k) for Z2N formulation
-        # and sum(j=1,M) s_mj*F(y_m^k) for N2N formulation, where s_mj = q_mj-q_m-1j
-        # and s1j = q1j.
         Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Q_, old_idx=self.idx),
                                     drop)
@@ -456,12 +397,26 @@ class Parallel_SDC(SDC):
         return residual.form
 
     @property
+    def res_rhs(self):
+        """Set up the residual for the calculation of F(y)."""
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Urhs, old_idx=self.idx),
+                                    drop)
+        L = self.residual.label_map(lambda t: any(t.has_label(time_derivative, source_label)),
+                                    drop,
+                                    replace_subject(self.Uin, old_idx=self.idx))
+        L_source = self.residual.label_map(lambda t: t.has_label(source_label),
+                                           replace_subject(self.source_in, old_idx=self.idx),
+                                           drop)
+        residual_rhs = a - (L + L_source)
+        return residual_rhs.form
+
+    @property
     def res_rhs_imp(self):
         """Set up the residual for the calculation of F(y)."""
         a = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Urhs, old_idx=self.idx),
                                     drop)
-        # F(y)
         L = self.residual.label_map(lambda t: any(t.has_label(time_derivative, source_label, explicit)),
                                     drop,
                                     replace_subject(self.Uin, old_idx=self.idx))
@@ -473,35 +428,79 @@ class Parallel_SDC(SDC):
 
     @property
     def res_rhs_exp(self):
-        """Set up the residual for the calculation of F(y)."""
         a = self.residual.label_map(lambda t: t.has_label(time_derivative),
                                     replace_subject(self.Urhs, old_idx=self.idx),
                                     drop)
-        # F(y)
-        L = self.residual.label_map(lambda t: any(t.has_label(time_derivative, source_label, implicit)),
+        residual_adv = self.residual.label_map(
+            lambda t: t.has_label(transporting_velocity),
+            lambda t: transporting_velocity.update_value(t, self.u_adv_avg)
+        )
+        L = residual_adv.label_map(lambda t: any(t.has_label(time_derivative, source_label, implicit)),
                                     drop,
                                     replace_subject(self.Uin, old_idx=self.idx))
         L_source = self.residual.label_map(lambda t: t.has_label(source_label),
-                                           replace_subject(self.source_in, old_idx=self.idx),
-                                           drop)
+                                        replace_subject(self.source_in, old_idx=self.idx),
+                                        drop)
         residual_rhs = a - (L + L_source)
         return residual_rhs.form
+    
 
+    def res(self, m):
+        """Set up the discretisation's residual for a given node m."""
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
+        residual -= mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.U_start, old_idx=self.idx))
+        # adv_inc: transport increment from u^n to t^(m), replaces explicit quadrature
+        residual -= mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.adv_inc, old_idx=self.idx))
+
+        # Add on final implicit terms
+        r_imp_kp1 = self.residual.label_map(
+            lambda t: t.has_label(implicit),
+            map_if_true=replace_subject(self.U_DC, old_idx=self.idx),
+            map_if_false=drop)
+        r_imp_kp1 = r_imp_kp1.label_map(
+            all_terms,
+            lambda t: Constant(self.Qdelta_imp[m, m])*t)
+        residual += r_imp_kp1
+        r_imp_k = self.residual.label_map(
+            lambda t: t.has_label(implicit),
+            map_if_true=replace_subject(self.Unodes[m+1], old_idx=self.idx),
+            map_if_false=drop)
+        r_imp_k = r_imp_k.label_map(
+            all_terms,
+            lambda t: Constant(self.Qdelta_imp[m, m])*t)
+        residual -= r_imp_k
+
+        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.Q_, old_idx=self.idx),
+                                    drop)
+        residual += Q
+        return residual.form
+
+    @property
+    def solver_rhs(self):
+        """Set up the problem and the solver for mass matrix inversion."""
+        prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
+        solver_name = self.field_name+self.__class__.__name__+"_rhs"
+        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
+                                          options_prefix=solver_name)
 
     @cached_property
     def solver_rhs_imp(self):
-        """Set up the problem and the solver for mass matrix inversion."""
-        # setup linear solver using rhs residual defined in derived class
+        """Set up the problem and the solver for implicit mass matrix inversion."""
         prob_rhs = NonlinearVariationalProblem(self.res_rhs_imp, self.Urhs, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_rhs_imp"
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
-    
 
     @cached_property
     def solver_rhs_exp(self):
-        """Set up the problem and the solver for mass matrix inversion."""
-        # setup linear solver using rhs residual defined in derived class
+        """Set up the problem and the solver for explicit transport mass matrix inversion."""
         prob_rhs = NonlinearVariationalProblem(self.res_rhs_exp, self.Urhs, bcs=self.bcs)
         solver_name = self.field_name+self.__class__.__name__+"_rhs_exp"
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
@@ -511,7 +510,6 @@ class Parallel_SDC(SDC):
     def solver(self):
         """Set up a list of solvers for each problem at a node m."""
         m = self.comm.ensemble_comm.rank
-        # setup solver using residual defined in derived class
         self.alpha.assign(self.Qdelta_imp[m, m]/float(self.dt_coarse))
         dt = float(self.dt_coarse)
         QD_imp = genQDeltaCoeffs(
@@ -524,7 +522,6 @@ class Parallel_SDC(SDC):
                     quadType=self.quad_type
                 )
         alpha = QD_imp[m, m]
-        #print("Setting up hybridised solver with alpha = %s" % alpha)
         if self.nonlinear_solver_parameters is None:
             self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
         else:
@@ -533,7 +530,7 @@ class Parallel_SDC(SDC):
         solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
         solver = NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name)
         return solver
-    
+
     @cached_property
     def solvers(self):
         """Set up a list of solvers for each problem at a node m."""
@@ -568,67 +565,76 @@ class Parallel_SDC(SDC):
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
         self.U_start.assign(self.Un)
+        #self.u_adv_avg.assign(self.Un.subfunctions[self.equation.field_names.index('u')])
         solver_list = self.solvers
+        u_idx = self.equation.field_names.index('u')
+        n_sub = self.n_transport_subcycles
 
-        # Compute initial guess on quadrature nodes with low-order
-        # base timestepper
+        # --------------------------------------------------------------------
+        # Predictor: compute initial guess on quadrature nodes
+        # --------------------------------------------------------------------
         self.Unodes[0].assign(self.Un)
         self.Unodes_exp[0].assign(self.Un)
-        if (self.base_flag):
+
+        if self.base_flag:
             for m in range(self.M):
                 self.base.dt = float(self.dtau[m])
                 self.base.apply(self.Unodes[m+1], self.Unodes[m])
-        elif (self.exp_base is not None):
+        elif self.exp_base is not None:
+            # Subcycled forward Euler transport from u^n through all nodes
+            self._transport_trajectory(n_sub, self.dtau)
+            # Flat initialisation for implicit nodes (transport increment applied in res)
             for m in range(self.M):
-                self.exp_base.dt = float(self.dtau[m])
-                self.exp_base.apply(self.Unodes_exp[m+1], self.Unodes_exp[m])
                 self.Unodes[m+1].assign(self.Un)
+            # Diagnostic
+            self.adv_inc.assign(self.Unodes_exp[self.M] - self.Un)
+            adv_inc_u_norm = self.adv_inc.subfunctions[u_idx].dat.norm
+            if self.comm.ensemble_comm.rank == 0:
+                logger.info(f"adv_inc u norm start: {adv_inc_u_norm:.6e}")
         else:
             for m in range(self.M):
                 self.Unodes[m+1].assign(self.Un)
+
         for m in range(self.M+1):
             for evaluate in self.evaluate_source:
                 evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
 
-        # Iterate through correction sweeps
+        # --------------------------------------------------------------------
+        # Correction sweeps
+        # --------------------------------------------------------------------
         k = 0
         while k < self.maxk:
             k += 1
 
             if self.qdelta_imp_type == "MIN-SR-FLEX":
-                # Recompute Implicit Q_delta matrix for each iteration k
-                # self.Qdelta_imp = float(self.dt_coarse)*genQDeltaCoeffs(
-                #     self.qdelta_imp_type,
-                #     form=self.formulation,
-                #     nodes=self.nodes,
-                #     Q=self.Q,
-                #     nNodes=self.M,
-                #     nodeType=self.node_type,
-                #     quadType=self.quad_type,
-                #     k=k
-                # )
-                # self.alpha.assign(self.Qdelta_imp[self.comm.ensemble_comm.rank, self.comm.ensemble_comm.rank]/float(self.dt_coarse))
                 solver = solver_list[k-1]
             else:
                 solver = self.solver
 
-            # Compute for N2N: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
-            # for Z2N: sum(j=1,M) (q_mj*F(y_m^k) +  q_mj*S(y_m^k))
-
-            # # Include source terms
-            # for evaluate in self.evaluate_source:
-            #     evaluate(self.Uin, self.base.dt, x_out=self.source_in)
-            if k ==1:
-                self.Uin.assign(self.Unodes_exp[self.comm.ensemble_comm.rank+1])
-                self.solver_rhs_exp.solve()
-                self.fUnodes[self.comm.ensemble_comm.rank].assign(self.Urhs)
+            if self.exp_base is not None:
+                # Compute implicit tendency at current node for quadrature correction
                 self.Uin.assign(self.Unodes[self.comm.ensemble_comm.rank+1])
                 self.solver_rhs_imp.solve()
-                self.fUnodes[self.comm.ensemble_comm.rank].assign(self.fUnodes[self.comm.ensemble_comm.rank]+self.Urhs)
+                self.fUnodes[self.comm.ensemble_comm.rank].assign(self.Urhs)
+
+                # Subcycled forward Euler transport from u^n using current (lagged) winds
+                # Winds come from Unodes[m] which are updated each sweep via bcast
+                self.Unodes_exp[0].assign(self.Un)
+                self._transport_trajectory(n_sub, self.dtau)
+
+                # Transport increment at this rank's node
+                self.adv_inc.assign(
+                    self.Unodes_exp[self.comm.ensemble_comm.rank+1] - self.Un
+                )
+                # Diagnostic
+                adv_inc_u_norm = self.adv_inc.subfunctions[u_idx].dat.norm
+                if self.comm.ensemble_comm.rank == 0:
+                    logger.info(f"adv_inc u norm: {adv_inc_u_norm:.6e}, sweep k={k}")
             else:
                 self.Uin.assign(self.Unodes[self.comm.ensemble_comm.rank+1])
                 self.solver_rhs.solve()
                 self.fUnodes[self.comm.ensemble_comm.rank].assign(self.Urhs)
+                self.adv_inc.assign(Constant(0.0))
 
             self.compute_quad()
 
@@ -640,18 +646,10 @@ class Parallel_SDC(SDC):
             # Set Q or S matrix
             self.Q_.assign(self.quad[self.comm.ensemble_comm.rank])
 
-            # Set initial guess for solver, and pick correct solver
-            #self.solver = solver_list[self.comm.ensemble_comm.rank]
+            # Set initial guess for solver
             self.U_DC.assign(self.Unodes[self.comm.ensemble_comm.rank+1])
 
-            # Compute
-            # for N2N:
-            # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k)
-            #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-            #             + sum(j=1,M) s_mj*(F+S)(y^k)
-            # for Z2N:
-            # y_m^(k+1) = y^n + sum(j=1,m) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
-            #             + sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+            # Implicit solve at this node
             solver.solve()
             self.Unodes1[self.comm.ensemble_comm.rank+1].assign(self.U_DC)
 
@@ -664,32 +662,35 @@ class Parallel_SDC(SDC):
                 self.limiter.apply(self.Unodes1[self.comm.ensemble_comm.rank+1])
 
             self.Unodes[self.comm.ensemble_comm.rank+1].assign(self.Unodes1[self.comm.ensemble_comm.rank+1])
+
+            # Share all updated nodal states across ranks for next sweep's transport
+            for r in range(self.M):
+                self.comm.bcast(self.Unodes[r+1], root=r)
+
             self.source_Uk[self.comm.ensemble_comm.rank+1].assign(self.source_Ukp1[self.comm.ensemble_comm.rank+1])
 
+        # --------------------------------------------------------------------
+        # Final output
+        # --------------------------------------------------------------------
         if self.maxk > 0:
-            # Compute value at dt rather than final quadrature node tau_M
             if self.final_update:
                 self.Uin.assign(self.Unodes1[self.comm.ensemble_comm.rank+1])
                 self.source_in.assign(self.source_Ukp1[self.comm.ensemble_comm.rank+1])
                 self.solver_rhs.solve()
                 self.fUnodes[self.comm.ensemble_comm.rank].assign(self.Urhs)
                 self.compute_quad_final()
-                # Compute y_(n+1) = y_n + sum(j=1,M) q_j*F(y_j)
                 if self.comm.ensemble_comm.rank == self.M-1:
                     self.U_fin.assign(self.Unodes[-1])
                 self.comm.bcast(self.U_fin, self.M-1)
                 self.solver_fin.solve()
-                # Apply limiter if required
                 if self.limiter is not None:
                     self.limiter.apply(self.U_fin)
                 x_out.assign(self.U_fin)
             else:
-                # Take value at final quadrature node dtau_M
                 if self.comm.ensemble_comm.rank == self.M-1:
                     x_out.assign(self.Unodes[-1])
                 self.comm.bcast(x_out, self.M-1)
         else:
-            # Take value at final quadrature node dtau_M
             if self.comm.ensemble_comm.rank == self.M-1:
                 x_out.assign(self.Unodes[-1])
             self.comm.bcast(x_out, self.M-1)
