@@ -41,38 +41,59 @@ def test_diffusion_sensitivity(nu_is_control, tmpdir):
 
     R = FunctionSpace(mesh, "R", 0)
     # We need to define nu as a function in order to have a control variable.
-    nu = Function(R, val=0.0001)
+    nu = Function(R, val=0.2)
     diffusion_params = DiffusionParameters(mesh, kappa=nu)
     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
 
-    diffusion_scheme = BackwardEuler(domain)
+    # Don't risk an inexact solve tanking the Taylor convergence
+    solver_parameters = {
+        'snes_type': 'ksponly',
+        'ksp_type': 'preonly',
+        'pc_type': 'lu'
+    }
+    diffusion_scheme = BackwardEuler(domain, solver_parameters=solver_parameters)
     diffusion_methods = [CGDiffusion(eqn, "f", diffusion_params)]
     timestepper = Timestepper(eqn, diffusion_scheme, io, spatial_methods=diffusion_methods)
 
     x = SpatialCoordinate(mesh)
     fexpr = as_vector((sin(2*pi*x[0]), cos(2*pi*x[1])))
-    timestepper.fields("f").interpolate(fexpr)
+    ic = Function(V).interpolate(fexpr)
 
-    end = 0.1
-    timestepper.run(0., end)
+    # These are the only operations we are interested in rerunning with the tape.
+    with set_working_tape() as tape:
+        # initialise the solution
+        timestepper.fields("f").assign(ic)
 
-    u = timestepper.fields("f")
-    J = assemble(inner(u, u)*dx)
+        # propagate forward
+        end = 0.1
+        timestepper.run(0., end)
 
+        # Make sure we have more than a quadratic nonlinearity so Jhat.hessian isn't exact.
+        u = timestepper.fields("f")
+        J = assemble(inner(u, u)*dx)**2
+
+        if nu_is_control:
+            m = nu
+        else:
+            m = ic
+
+        # the functional as a pure function of the control
+        Jhat = ReducedFunctional(J, Control(m), tape=tape)
+
+    assert np.allclose(J, Jhat(m)), "Functional re-evaluation does not match original evaluation."
+
+    # perturbation direction for taylor test
     if nu_is_control:
-        control = Control(nu)
-        h = Function(R, val=0.0001)  # the direction of the perturbation
+        h = Function(R, val=0.1)
     else:
-        control = Control(u)
-        # the direction of the perturbation
-        h = Function(V).interpolate(fexpr * np.random.rand())
+        h = Function(V).interpolate(as_vector([cos(4*pi*x[1]), sin(4*pi*x[0])]))
 
-    # the functional as a pure function of nu
-    Jhat = ReducedFunctional(J, control)
+    # Check the TLM explicitly before checking the Hessian (which relies on the tlm)
+    assert taylor_test(Jhat, m, h, dJdm=Jhat.tlm(h)) > 1.95, "TLM is not second order accurate."
 
-    if nu_is_control:
-        assert np.allclose(J, Jhat(nu))
-        assert taylor_test(Jhat, nu, h) > 1.95
-    else:
-        assert np.allclose(J, Jhat(u))
-        assert taylor_test(Jhat, u, h) > 1.95
+    taylor = taylor_to_dict(Jhat, m, h)
+
+    # Check the re-evaluation, derivative, and Hessian all converge at the expected rates.
+    assert min(taylor['R0']['Rate']) > 0.95, taylor['R0']
+    assert min(taylor['R1']['Rate']) > 1.95, taylor['R1']
+    assert min(taylor['R2']['Rate']) > 2.95, taylor['R2']
