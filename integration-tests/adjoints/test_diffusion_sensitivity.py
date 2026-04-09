@@ -45,7 +45,7 @@ def test_diffusion_sensitivity(nu_is_control, tmpdir):
     diffusion_params = DiffusionParameters(mesh, kappa=nu)
     eqn = DiffusionEquation(domain, V, "f", diffusion_parameters=diffusion_params)
 
-    # Don't risk an inexact solve tanking the Taylor convergence
+    # Don't let an inexact solve get in the way of a good Taylor test
     solver_parameters = {
         'snes_type': 'ksponly',
         'ksp_type': 'preonly',
@@ -91,9 +91,8 @@ def test_diffusion_sensitivity(nu_is_control, tmpdir):
     # Check the TLM explicitly before checking the Hessian (which relies on the tlm)
     assert taylor_test(Jhat, m, h, dJdm=Jhat.tlm(h)) > 1.95, "TLM is not second order accurate."
 
-    taylor = taylor_to_dict(Jhat, m, h)
-
     # Check the re-evaluation, derivative, and Hessian all converge at the expected rates.
+    taylor = taylor_to_dict(Jhat, m, h)
     assert min(taylor['R0']['Rate']) > 0.95, taylor['R0']
     assert min(taylor['R1']['Rate']) > 1.95, taylor['R1']
     assert min(taylor['R2']['Rate']) > 2.95, taylor['R2']

@@ -150,9 +150,17 @@ def test_moist_thermal_williamson_5_sensitivity(
         DGUpwind(eqns, field_name) for field_name in eqns.field_names
     ]
 
+    # Don't let an inexact solve get in the way of a good Taylor test
+    solver_parameters = {
+        'snes_type': 'ksponly',
+        'ksp_type': 'preonly',
+        'pc_type': 'lu'
+    }
+
     # Timestepper
     stepper = Timestepper(
-        eqns, RK4(domain), io, spatial_methods=transport_methods
+        eqns, RK4(domain, solver_parameters=solver_parameters),
+        io, spatial_methods=transport_methods
     )
 
     # ------------------------------------------------------------------------ #
@@ -188,29 +196,45 @@ def test_moist_thermal_williamson_5_sensitivity(
     # Expression for initial vapour depends on initial saturation
     vexpr = mu2 * q_sat(bexpr, Dexpr)
 
-    # Initialise (cloud and rain initially zero)
-    u0.project(uexpr)
-    D0.interpolate(Dexpr)
-    b0.interpolate(bexpr)
-    v0.interpolate(vexpr)
-    c0.assign(0.0)
-    r0.assign(0.0)
+    # Control
+    m_D = Function(D0.function_space()).interpolate(Dexpr)
 
-    # ----------------------------------------------------------------- #
-    # Run
-    # ----------------------------------------------------------------- #
-    stepper.run(t=0, tmax=dt)
+    with set_working_tape() as tape:
+        # Initialise (cloud and rain initially zero)
+        u0.project(uexpr)
+        D0.interpolate(m_D)
+        b0.interpolate(bexpr)
+        v0.interpolate(vexpr)
+        c0.assign(0.0)
+        r0.assign(0.0)
 
-    u_tf = stepper.fields('u')  # Final velocity field
-    D_tf = stepper.fields('D')  # Final depth field
+        # ----------------------------------------------------------------- #
+        # Run
+        # ----------------------------------------------------------------- #
+        # two timesteps so we hit the codepath for reshuffling data between steps
+        stepper.run(t=0, tmax=2*dt)
 
-    J = assemble(0.5*inner(u_tf, u_tf)*dx + 0.5*g*D_tf**2*dx)
+        u_tf = stepper.fields('u')  # Final velocity field
+        D_tf = stepper.fields('D')  # Final depth field
 
-    Jhat = ReducedFunctional(J, Control(D0))
+        J = assemble(0.5*inner(u_tf, u_tf)*dx + 0.5*g*D_tf**2*dx)
 
-    assert np.allclose(Jhat(D0), J)
-    with stop_annotating():
-        # Stop annotation to perform the Taylor test
-        h0 = Function(D0.function_space())
-        h0.assign(D0 * np.random.rand())
-        assert taylor_test(Jhat, D0, h0) > 1.95
+        Jhat = ReducedFunctional(J, Control(m_D), tape=tape)
+
+    assert np.allclose(Jhat(m_D), J), "Functional re-evaluation does not match original evaluation."
+
+    # perturbation direction for taylor test
+    h_D = Function(D0.function_space())
+    h_D.interpolate(0.1*(Dexpr - (mean_depth - tpexpr)))
+
+    # Check the TLM explicitly before checking the Hessian (which relies on the tlm)
+    assert taylor_test(Jhat, m_D, h_D, dJdm=Jhat.tlm(h_D)) > 1.95, "TLM is not second order accurate."
+
+    assert taylor_test(Jhat, m_D, h_D) > 1.95, "Adjoint derivative is not second order accurate."
+
+    # TODO: AttributeError: 'ZeroBaseForm' object has no attribute 'ufl_shape'??
+    # # Check the re-evaluation, derivative, and Hessian all converge at the expected rates.
+    # taylor = taylor_to_dict(Jhat, m_D, h_D)
+    # assert min(taylor['R0']['Rate']) > 0.95, taylor['R0']
+    # assert min(taylor['R1']['Rate']) > 1.95, taylor['R1']
+    # assert min(taylor['R2']['Rate']) > 2.95, taylor['R2']
