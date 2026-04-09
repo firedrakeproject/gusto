@@ -40,7 +40,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
 
     # Callback function for the nullspace of the trace system
     def trace_nullsp(T):
-        return VectorSpaceBasis(constant=True)
+        return VectorSpaceBasis(constant=True, comm=equation.function_space.mesh().comm)
 
     # Prepare some generic variables to help with logic below ------------------
 
