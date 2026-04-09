@@ -338,15 +338,15 @@ class Parallel_SDC(SDC):
         QD_imp = genQDeltaCoeffs(
                     self.qdelta_imp_type,
                     form=self.formulation,
-                    nodes=self.nodes,
-                    Q=self.Q,
+                    nodes=self.nodes/float(self.dt_coarse),
+                    Q=self.Q/float(self.dt_coarse),
                     nNodes=self.M,
                     nodeType=self.node_type,
                     quadType=self.quad_type
                 )
         alpha = QD_imp[m, m]
         #print("Setting up hybridised solver with alpha = %s" % alpha)
-        if self.nonlinear_solver_parameters is not None:
+        if self.nonlinear_solver_parameters is None:
             self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
         else:
             self.appctx = None
