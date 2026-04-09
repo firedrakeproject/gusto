@@ -26,7 +26,8 @@ def handle_annotation():
         pause_annotation()
 
 
-def test_shallow_water(tmpdir):
+@pytest.mark.parametrize("stepper_type", ["RK4", "SemiImplicitQuasiNewton"])
+def test_shallow_water(tmpdir, stepper_type):
     assert get_working_tape()._blocks == []
     # setup shallow water parameters
     R = 6371220.
@@ -61,9 +62,22 @@ def test_shallow_water(tmpdir):
     transport_methods = [DGUpwind(eqn, "u"), DGUpwind(eqn, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqn, io, transported_fields, transport_methods
-    )
+    if stepper_type == "RK4":
+        # Don't let an inexact solve get in the way of a good Taylor test
+        solver_parameters = {
+            'snes_type': 'ksponly',
+            'ksp_type': 'preonly',
+            'pc_type': 'lu'
+        }
+        stepper = Timestepper(
+            eqn, RK4(domain, solver_parameters=solver_parameters),
+            io, spatial_methods=transport_methods
+        )
+    else:
+        assert stepper_type == "SemiImplicitQuasiNewton"
+        stepper = SemiImplicitQuasiNewton(
+            eqn, io, transported_fields, transport_methods
+        )
 
     u0 = stepper.fields('u')
     D0 = stepper.fields('D')
