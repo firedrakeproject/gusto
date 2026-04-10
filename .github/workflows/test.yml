@@ -62,6 +62,10 @@ jobs:
         run: |
           . venv-gusto/bin/activate
           pip install ./gusto-repo
+
+          : # UNDO ME use UFL branch
+          pip install --force-reinstall git+https://github.com/firedrakeproject/ufl.git@connorjward/base-form-sum-fix
+
           pip list
 
       - name: Test serial-only netCDF
