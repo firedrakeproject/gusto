@@ -45,11 +45,17 @@ def mass_parameters(V, spaces=None, ignore_vertical=True):
             continuity will be considered, e.g. the standard theta space will
             be treated as discontinuous.
     """
+    # debugging adjoint, use exact for now
     return {
-        'ksp_type': 'cg',
-        'pc_type': 'bjacobi',
-        'sub_pc_type': 'ilu'
+        'ksp_type': 'preonly',
+        'pc_type': 'lu',
+        'pc_factor_mat_solver_type': 'mumps',
     }
+    # return {
+    #     'ksp_type': 'cg',
+    #     'pc_type': 'bjacobi',
+    #     'sub_pc_type': 'ilu'
+    # }
 
     continuous_fields = set()
     for i, Vsub in enumerate(V.subfunctions):

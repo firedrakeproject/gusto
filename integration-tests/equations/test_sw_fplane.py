@@ -7,7 +7,28 @@ from os.path import join, abspath, dirname
 from gusto import *
 from firedrake import (PeriodicSquareMesh, SpatialCoordinate, Function,
                        cos, pi, as_vector, sin)
+from firedrake.adjoint import *
 import numpy as np
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def handle_taping():
+    yield
+    tape = get_working_tape()
+    tape.clear_tape()
+
+
+@pytest.fixture(autouse=True, scope="module")
+def handle_annotation():
+    from firedrake.adjoint import annotate_tape, continue_annotation
+    if not annotate_tape():
+        continue_annotation()
+    yield
+    # Ensure annotation is paused when we finish.
+    annotate = annotate_tape()
+    if annotate:
+        pause_annotation()
 
 
 def run_sw_fplane(tmpdir):
@@ -16,9 +37,10 @@ def run_sw_fplane(tmpdir):
     Nx = 32
     Ny = Nx
     Lx = 10
-    mesh = PeriodicSquareMesh(Nx, Ny, Lx, quadrilateral=True, name=mesh_name)
-    dt = 0.01
-    domain = Domain(mesh, dt, 'RTCF', 1)
+    # mesh = PeriodicSquareMesh(Nx, Ny, Lx, quadrilateral=True, name=mesh_name)
+    mesh = PeriodicSquareMesh(Nx, Ny, Lx, name=mesh_name)
+    dt = 0.001
+    domain = Domain(mesh, dt, 'BDM', 1)
 
     # Equation
     H = 2
@@ -38,17 +60,26 @@ def run_sw_fplane(tmpdir):
     io = IO(domain, output, diagnostic_fields=[CourantNumber()])
 
     # Transport schemes
-    vorticity_transport = VorticityTransport(domain, eqns, supg=True)
-    transported_fields = [
-        TrapeziumRule(domain, "u", augmentation=vorticity_transport),
-        SSPRK3(domain, "D")
-    ]
+    # vorticity_transport = VorticityTransport(domain, eqns, supg=True)
+    # transported_fields = [
+    #     TrapeziumRule(domain, "u", augmentation=vorticity_transport),
+    #     SSPRK3(domain, "D")
+    # ]
     transport_methods = [DGUpwind(eqns, "u"), DGUpwind(eqns, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
-                                      transport_methods,
-                                      num_outer=4, num_inner=1)
+    # stepper = SemiImplicitQuasiNewton(eqns, io, transported_fields,
+    #                                   transport_methods,
+    #                                   num_outer=4, num_inner=1)
+    linear_solver_parameters = {
+        'ksp_type': 'preonly',
+        'pc_type': 'lu',
+        'pc_factor_mat_solver_type': 'mumps',
+    }
+    stepper = Timestepper(
+        eqns, RK4(domain, solver_parameters=linear_solver_parameters),
+        io, spatial_methods=transport_methods
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -91,20 +122,65 @@ def run_sw_fplane(tmpdir):
     v2 = A2*(-k2*gamma*s2)
     phi2 = A2*(f0*c2)
 
-    u_expr = as_vector([u1+u2, v1+v2])
+    u_expr = as_vector([u1*10+u2, v1*10+v2])
     D_expr = H + sqrt(H/g)*(phi1+phi2)
 
-    u0.project(u_expr)
-    D0.interpolate(D_expr)
+    # controls m for the initial conditions
+    m_u = Function(u0.function_space()).project(u_expr)
+    m_D = Function(D0.function_space()).interpolate(D_expr)
 
-    Dbar = Function(D0.function_space()).assign(H)
-    stepper.set_reference_profiles([('D', Dbar)])
+    with set_working_tape() as tape:
+        u0.assign(m_u)
+        D0.assign(m_D)
 
-    # ------------------------------------------------------------------------ #
-    # Run
-    # ------------------------------------------------------------------------ #
+        Dbar = Function(D0.function_space()).assign(H)
+        stepper.set_reference_profiles([('D', Dbar)])
 
-    stepper.run(t=0, tmax=10*dt)
+        # ------------------------------------------------------------------------ #
+        # Run
+        # ------------------------------------------------------------------------ #
+
+        stepper.run(t=0, tmax=10*dt)
+
+
+        u_tf = stepper.fields('u')  # Final velocity field
+        D_tf = stepper.fields('D')  # Final depth field
+
+        # J = assemble(u_tf**4*dx + g*D_tf**4*dx)
+        J = assemble(inner(u_tf, u_tf)**2*dx)
+
+        # control = [Control(m_D), Control(m_u)]  # Control variables
+        control = [Control(m_u)]  # Control variables
+        Jhat = ReducedFunctional(J, control, tape=tape)
+
+    # m = [m_D, m_u]
+    m = [m_u]
+    # assert np.allclose(J, Jhat(m)), "Functional re-evaluation does not match original evaluation."
+
+    # perturbation directions for taylor test
+    # h_D = Function(D0.function_space())
+    # h_D.interpolate(D_expr - H)
+
+    h_u = Function(u0.function_space())
+    h_u.project(1e-1*u_expr)
+    #
+    # # h_D.interpolate(1e-100*(Dexpr - (H - bexpr)))
+
+    # h = [h_D, h_u]
+    h = [h_u]
+
+    # # Check the TLM explicitly before checking the Hessian (which relies on the tlm)
+    # assert taylor_test(Jhat, m, h, dJdm=Jhat.tlm(h)) > 1.95, "TLM is not second order accurate."
+    #
+    # assert taylor_test(Jhat, m, h) > 1.95, "Adjoint derivative is not second order accurate."
+
+    # Check the re-evaluation, derivative, and Hessian all converge at the expected rates.
+    taylor = taylor_to_dict(Jhat, m, h)
+    assert min(taylor['R0']['Rate']) > 0.95, taylor['R0']
+    assert min(taylor['R1']['Rate']) > 1.95, taylor['R1']
+    assert min(taylor['R2']['Rate']) > 2.95, taylor['R2']
+
+    breakpoint()
 
     # State for checking checkpoints
     checkpoint_name = 'sw_fplane_chkpt.h5'
