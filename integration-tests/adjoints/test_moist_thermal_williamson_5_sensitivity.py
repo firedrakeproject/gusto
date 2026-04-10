@@ -232,9 +232,8 @@ def test_moist_thermal_williamson_5_sensitivity(
 
     assert taylor_test(Jhat, m_D, h_D) > 1.95, "Adjoint derivative is not second order accurate."
 
-    # TODO: AttributeError: 'ZeroBaseForm' object has no attribute 'ufl_shape'??
     # # Check the re-evaluation, derivative, and Hessian all converge at the expected rates.
-    # taylor = taylor_to_dict(Jhat, m_D, h_D)
-    # assert min(taylor['R0']['Rate']) > 0.95, taylor['R0']
-    # assert min(taylor['R1']['Rate']) > 1.95, taylor['R1']
-    # assert min(taylor['R2']['Rate']) > 2.95, taylor['R2']
+    taylor = taylor_to_dict(Jhat, m_D, h_D)
+    assert min(taylor['R0']['Rate']) > 0.95, taylor['R0']
+    assert min(taylor['R1']['Rate']) > 1.95, taylor['R1']
+    assert min(taylor['R2']['Rate']) > 2.95, taylor['R2']
