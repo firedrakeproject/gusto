@@ -26,18 +26,17 @@ def handle_annotation():
         pause_annotation()
 
 
-# @pytest.mark.parametrize("stepper_type", ["RK4", "SemiImplicitQuasiNewton"])
 # @pytest.mark.parametrize("control", ["u", "D"])
-# def test_shallow_water(tmpdir, control):
-def test_shallow_water(tmpdir):
+@pytest.mark.parametrize("stepper_type", ["BackwardEuler", "RK4", "SemiImplicitQuasiNewton"])
+def test_shallow_water(tmpdir, stepper_type):
     assert get_working_tape()._blocks == []
     # setup shallow water parameters
-    # R = 6371220.
+    R = 1
     H = 1e-5
     dt = 0.01
 
     # Domain
-    mesh = IcosahedralSphereMesh(radius=1, refinement_level=3, degree=2)
+    mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=2)
     x = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, 'BDM', 1)
 
@@ -67,31 +66,29 @@ def test_shallow_water(tmpdir):
     }
     solver_parameters = {
         'snes_rtol': 1e-10,
-        'ksp_type': 'preonly',
-        'pc_type': 'lu',
-        'pc_factor_mat_solver_type': 'mumps',
+        **linear_solver_parameters
     }
 
     # Transport schemes
-    # transported_fields = [TrapeziumRule(domain, "u", solver_parameters=solver_parameters), SSPRK3(domain, "D", solver_parameters=solver_parameters)]
     transport_methods = [DGUpwind(eqn, "u"), DGUpwind(eqn, "D")]
 
-    stepper = Timestepper(
-        eqn, BackwardEuler(domain, solver_parameters=linear_solver_parameters),
-        io, spatial_methods=transport_methods
-    )
-
     # Time stepper
-    # if stepper_type == "RK4":
-    #     stepper = Timestepper(
-    #         eqn, RK4(domain, solver_parameters=linear_solver_parameters),
-    #         io, spatial_methods=transport_methods
-    #     )
-    # else:
-    #     assert stepper_type == "SemiImplicitQuasiNewton"
-    #     stepper = SemiImplicitQuasiNewton(
-    #         eqn, io, transported_fields, transport_methods
-    #     )
+    if stepper_type == "BackwardEuler":
+        stepper = Timestepper(
+            eqn, BackwardEuler(domain, solver_parameters=linear_solver_parameters),
+            io, spatial_methods=transport_methods
+        )
+    elif stepper_type == "RK4":
+        stepper = Timestepper(
+            eqn, RK4(domain, solver_parameters=linear_solver_parameters),
+            io, spatial_methods=transport_methods
+        )
+    else:
+        assert stepper_type == "SemiImplicitQuasiNewton"
+        transported_fields = [TrapeziumRule(domain, "u", solver_parameters=solver_parameters), SSPRK3(domain, "D", solver_parameters=solver_parameters)]
+        stepper = SemiImplicitQuasiNewton(
+            eqn, io, transported_fields, transport_methods
+        )
 
     u0 = stepper.fields('u')
     D0 = stepper.fields('D')
@@ -102,8 +99,7 @@ def test_shallow_water(tmpdir):
     Omega = parameters.Omega
     R = 1
     Rsq = R**2
-    # Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
-    Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g
+    Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
 
     # controls m for the initial conditions
     m_u = Function(u0.function_space()).project(uexpr)
