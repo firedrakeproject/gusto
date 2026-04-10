@@ -42,18 +42,17 @@ def test_shallow_water(tmpdir):
     domain = Domain(mesh, dt, 'BDM', 1)
 
     # Equation
-    # lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
-    # R0 = pi/9.
-    # R0sq = R0**2
-    # lamda_c = -pi/2.
-    # lsq = (lamda - lamda_c)**2
-    # theta_c = pi/6.
-    # thsq = (theta - theta_c)**2
-    # rsq = min_value(R0sq, lsq+thsq)
-    # r = sqrt(rsq)
-    # bexpr = 2000 * (1 - r/R0)
-    # parameters = ShallowWaterParameters(mesh, H=H, topog_expr=bexpr)
-    parameters = ShallowWaterParameters(mesh, H=H)
+    lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
+    R0 = pi/9.
+    R0sq = R0**2
+    lamda_c = -pi/2.
+    lsq = (lamda - lamda_c)**2
+    theta_c = pi/6.
+    thsq = (theta - theta_c)**2
+    rsq = min_value(R0sq, lsq+thsq)
+    r = sqrt(rsq)
+    bexpr = 1e-6 * (1 - r/R0)
+    parameters = ShallowWaterParameters(mesh, H=H, topog_expr=bexpr)
     eqn = ShallowWaterEquations(domain, parameters)
 
     # I/O
