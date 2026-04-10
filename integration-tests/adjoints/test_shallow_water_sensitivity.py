@@ -26,12 +26,14 @@ def handle_annotation():
         pause_annotation()
 
 
-def test_shallow_water(tmpdir):
+@pytest.mark.parametrize("control", ["u", "D"])
+@pytest.mark.parametrize("stepper_type", ["BackwardEuler", "RK4", "SemiImplicitQuasiNewton"])
+def test_shallow_water(tmpdir, control, stepper_type):
     assert get_working_tape()._blocks == []
     # setup shallow water parameters
-    R = 6371220.
-    H = 5960.
-    dt = 900.
+    R = 1
+    H = 1e-5
+    dt = 0.01
 
     # Domain
     mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=2)
@@ -48,7 +50,7 @@ def test_shallow_water(tmpdir):
     thsq = (theta - theta_c)**2
     rsq = min_value(R0sq, lsq+thsq)
     r = sqrt(rsq)
-    bexpr = 2000 * (1 - r/R0)
+    bexpr = 1e-6 * (1 - r/R0)
     parameters = ShallowWaterParameters(mesh, H=H, topog_expr=bexpr)
     eqn = ShallowWaterEquations(domain, parameters)
 
@@ -64,27 +66,38 @@ def test_shallow_water(tmpdir):
     }
     solver_parameters = {
         'snes_rtol': 1e-10,
-        'ksp_type': 'preonly',
-        'pc_type': 'lu',
-        'pc_factor_mat_solver_type': 'mumps',
+        **linear_solver_parameters
     }
 
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u", solver_parameters=solver_parameters), SSPRK3(domain, "D", solver_parameters=solver_parameters)]
     transport_methods = [DGUpwind(eqn, "u"), DGUpwind(eqn, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqn, io, transported_fields, transport_methods, linear_solver_parameters=linear_solver_parameters
-    )
+    if stepper_type == "BackwardEuler":
+        stepper = Timestepper(
+            eqn, BackwardEuler(domain, solver_parameters=linear_solver_parameters),
+            io, spatial_methods=transport_methods
+        )
+    elif stepper_type == "RK4":
+        stepper = Timestepper(
+            eqn, RK4(domain, solver_parameters=linear_solver_parameters),
+            io, spatial_methods=transport_methods
+        )
+    else:
+        assert stepper_type == "SemiImplicitQuasiNewton"
+        transported_fields = [TrapeziumRule(domain, "u", solver_parameters=solver_parameters), SSPRK3(domain, "D", solver_parameters=solver_parameters)]
+        stepper = SemiImplicitQuasiNewton(
+            eqn, io, transported_fields, transport_methods
+        )
 
     u0 = stepper.fields('u')
     D0 = stepper.fields('D')
 
-    u_max = 20.   # Maximum amplitude of the zonal wind (m/s)
-    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
+    u_max = 1e-4
+    uexpr = as_vector([-u_max*x[1], u_max*x[0], 0.0])
     g = parameters.g
     Omega = parameters.Omega
+    R = 1
     Rsq = R**2
     Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
 
@@ -102,27 +115,30 @@ def test_shallow_water(tmpdir):
         D0.assign(m_D)
 
         # propagate forwards
-        stepper.run(0., 2*dt)
+        stepper.run(0., 10*dt)
 
         u_tf = stepper.fields('u')  # Final velocity field
         D_tf = stepper.fields('D')  # Final depth field
 
-        J = assemble(0.5*inner(u_tf, u_tf)*dx + 0.5*g*D_tf**2*dx)
+        J = assemble(inner(u_tf, u_tf)*dx)**2
 
-        control = [Control(m_D), Control(m_u)]  # Control variables
-        Jhat = ReducedFunctional(J, control, tape=tape)
-
-    m = [m_D, m_u]
-    assert np.allclose(J, Jhat(m)), "Functional re-evaluation does not match original evaluation."
+        if control == "u":
+            controls = [Control(m_u)]
+        else:
+            controls = [Control(m_D)]
+        Jhat = ReducedFunctional(J, controls, tape=tape)
 
     # perturbation directions for taylor test
-    h_D = Function(D0.function_space()).zero()
-    h_u = Function(u0.function_space()).zero()
+    h_D = Function(D0.function_space()).interpolate(1e-3*sin(x[0]))
+    h_u = Function(u0.function_space()).interpolate(1e-4*as_vector([cos(4*pi*x[1]), sin(4*pi*x[0]), 0]))
 
-    h_D.interpolate(1e-100*(Dexpr - (H - bexpr)))
-    h_u.project(1e-2*uexpr)
-
-    h = [h_D, h_u]
+    if control == "u":
+        m = [m_u]
+        h = [h_u]
+    else:
+        m = [m_D]
+        h = [h_D]
+    assert np.allclose(J, Jhat(m)), "Functional re-evaluation does not match original evaluation."
 
     # Check the TLM explicitly before checking the Hessian (which relies on the tlm)
     assert taylor_test(Jhat, m, h, dJdm=Jhat.tlm(h)) > 1.95, "TLM is not second order accurate."
