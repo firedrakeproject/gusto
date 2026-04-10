@@ -26,9 +26,9 @@ def handle_annotation():
         pause_annotation()
 
 
-# @pytest.mark.parametrize("control", ["u", "D"])
+@pytest.mark.parametrize("control", ["u", "D"])
 @pytest.mark.parametrize("stepper_type", ["BackwardEuler", "RK4", "SemiImplicitQuasiNewton"])
-def test_shallow_water(tmpdir, stepper_type):
+def test_shallow_water(tmpdir, control, stepper_type):
     assert get_working_tape()._blocks == []
     # setup shallow water parameters
     R = 1
@@ -120,36 +120,30 @@ def test_shallow_water(tmpdir, stepper_type):
         u_tf = stepper.fields('u')  # Final velocity field
         D_tf = stepper.fields('D')  # Final depth field
 
-        # J = assemble(0.5*inner(u_tf, u_tf)*dx + 0.5*g*D_tf**2*dx)
-        # J = assemble(inner(u_tf, u_tf)**2*dx + g*D_tf**4*dx)
         J = assemble(inner(u_tf, u_tf)*dx)**2
 
-        # control = [Control(m_D), Control(m_u)]  # Control variables
-        control = [Control(m_u)]  # Control variables
-        Jhat = ReducedFunctional(J, control, tape=tape)
-
-    # m = [m_D, m_u]
-    m = [m_u]
-    assert np.allclose(J, Jhat(m)), "Functional re-evaluation does not match original evaluation."
+        if control == "u":
+            controls = [Control(m_u)]
+        else:
+            controls = [Control(m_D)]
+        Jhat = ReducedFunctional(J, controls, tape=tape)
 
     # perturbation directions for taylor test
-    # h_D = Function(D0.function_space())
-    # h_D.interpolate(0.01*(Dexpr - (H - bexpr)))
-
+    h_D = Function(D0.function_space()).interpolate(1e-3*sin(x[0]))
     h_u = Function(u0.function_space()).interpolate(1e-4*as_vector([cos(4*pi*x[1]), sin(4*pi*x[0]), 0]))
 
-    # h_D.interpolate(1e-100*(Dexpr - (H - bexpr)))
-    # h_u.project(uexpr + 1e-8*as_tensor([sin(x[0]), sin(x[1]), 0.0]))
-    # h_u.project(1e-8*as_tensor([sin(x[0]), sin(x[1]), 0.0]))
-    # h_u.project(1e-7*uexpr)
-
-    # h = [h_D, h_u]
-    h = [h_u]
+    if control == "u":
+        m = [m_u]
+        h = [h_u]
+    else:
+        m = [m_D]
+        h = [h_D]
+    assert np.allclose(J, Jhat(m)), "Functional re-evaluation does not match original evaluation."
 
     # # Check the TLM explicitly before checking the Hessian (which relies on the tlm)
-    # assert taylor_test(Jhat, m, h, dJdm=Jhat.tlm(h)) > 1.95, "TLM is not second order accurate."
-    #
-    # assert taylor_test(Jhat, m, h) > 1.95, "Adjoint derivative is not second order accurate."
+    assert taylor_test(Jhat, m, h, dJdm=Jhat.tlm(h)) > 1.95, "TLM is not second order accurate."
+
+    assert taylor_test(Jhat, m, h) > 1.95, "Adjoint derivative is not second order accurate."
 
     # Check the re-evaluation, derivative, and Hessian all converge at the expected rates.
     taylor = taylor_to_dict(Jhat, m, h)
