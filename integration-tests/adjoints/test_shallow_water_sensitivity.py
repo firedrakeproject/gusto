@@ -118,7 +118,6 @@ def test_shallow_water(tmpdir, control, stepper_type):
         stepper.run(0., 2*dt)
 
         u_tf = stepper.fields('u')  # Final velocity field
-        D_tf = stepper.fields('D')  # Final depth field
 
         J = assemble(inner(u_tf, u_tf)*dx)**2
 
