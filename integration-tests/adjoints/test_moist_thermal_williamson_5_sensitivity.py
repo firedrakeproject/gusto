@@ -21,7 +21,6 @@ from firedrake import (
     SpatialCoordinate, as_vector, pi, sqrt, min_value, exp, cos, sin, assemble, dx, inner, Function
 )
 from firedrake.adjoint import *
-from pyadjoint import get_working_tape
 from gusto import (
     Domain, IO, OutputParameters, Timestepper, RK4, DGUpwind,
     ShallowWaterParameters, ThermalShallowWaterEquations, lonlatr_from_xyz,

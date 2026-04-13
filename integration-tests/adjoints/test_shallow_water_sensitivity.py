@@ -3,7 +3,6 @@ import numpy as np
 
 from firedrake import *
 from firedrake.adjoint import *
-from pyadjoint import get_working_tape
 from gusto import *
 
 
