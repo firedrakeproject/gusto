@@ -14,7 +14,6 @@ def autouse_set_test_tape(set_test_tape):
 
 @pytest.mark.parametrize("nu_is_control", [True, False])
 def test_diffusion_sensitivity(nu_is_control, tmpdir):
-    assert get_working_tape()._blocks == []
     n = 30
     mesh = PeriodicUnitSquareMesh(n, n)
     output = OutputParameters(dirname=str(tmpdir))
@@ -35,7 +34,8 @@ def test_diffusion_sensitivity(nu_is_control, tmpdir):
     solver_parameters = {
         'snes_type': 'ksponly',
         'ksp_type': 'preonly',
-        'pc_type': 'lu'
+        'pc_type': 'lu',
+        'pc_factor_mat_solver_type': 'mumps',
     }
     diffusion_scheme = BackwardEuler(domain, solver_parameters=solver_parameters)
     diffusion_methods = [CGDiffusion(eqn, "f", diffusion_params)]

@@ -39,7 +39,6 @@ def test_moist_thermal_williamson_5_sensitivity(
         tmpdir, ncells_per_edge=8, dt=600, tmax=50.*24.*60.*60.,
         dumpfreq=2880
 ):
-    assert get_working_tape()._blocks == []
     # ------------------------------------------------------------------------ #
     # Parameters for test case
     # ------------------------------------------------------------------------ #
@@ -140,7 +139,8 @@ def test_moist_thermal_williamson_5_sensitivity(
     solver_parameters = {
         'snes_type': 'ksponly',
         'ksp_type': 'preonly',
-        'pc_type': 'lu'
+        'pc_type': 'lu',
+        'pc_factor_mat_solver_type': 'mumps',
     }
 
     # Timestepper
@@ -191,14 +191,14 @@ def test_moist_thermal_williamson_5_sensitivity(
         D0.interpolate(m_D)
         b0.interpolate(bexpr)
         v0.interpolate(vexpr)
-        c0.assign(0.0)
-        r0.assign(0.0)
+        c0.zero()
+        r0.zero()
 
         # ----------------------------------------------------------------- #
         # Run
         # ----------------------------------------------------------------- #
         # two timesteps so we hit the codepath for reshuffling data between steps
-        stepper.run(t=0, tmax=2*dt)
+        stepper.run(t=0., tmax=2*dt)
 
         u_tf = stepper.fields('u')  # Final velocity field
         D_tf = stepper.fields('D')  # Final depth field

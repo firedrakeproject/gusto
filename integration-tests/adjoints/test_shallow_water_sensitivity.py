@@ -15,7 +15,6 @@ def autouse_set_test_tape(set_test_tape):
 @pytest.mark.parametrize("control", ["u", "D"])
 @pytest.mark.parametrize("stepper_type", ["BackwardEuler", "RK4", "SemiImplicitQuasiNewton"])
 def test_shallow_water(tmpdir, control, stepper_type):
-    assert get_working_tape()._blocks == []
     # setup shallow water parameters
     R = 1
     H = 1e-5
@@ -45,14 +44,26 @@ def test_shallow_water(tmpdir, control, stepper_type):
     io = IO(domain, output)
 
     # Don't let an inexact solve get in the way of a good Taylor test
-    linear_solver_parameters = {
+    lu_parameters = {
         'ksp_type': 'preonly',
         'pc_type': 'lu',
         'pc_factor_mat_solver_type': 'mumps',
     }
-    solver_parameters = {
+    mass_parameters = {
+        'snes_type': 'ksponly',
+        **lu_parameters
+    }
+    snes_parameters = {
+        'snes_type': 'newtonls',
         'snes_rtol': 1e-10,
-        **linear_solver_parameters
+        **lu_parameters
+    }
+    linear_solver_parameters = {
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': lu_parameters
     }
 
     # Transport schemes
@@ -61,19 +72,23 @@ def test_shallow_water(tmpdir, control, stepper_type):
     # Time stepper
     if stepper_type == "BackwardEuler":
         stepper = Timestepper(
-            eqn, BackwardEuler(domain, solver_parameters=linear_solver_parameters),
+            eqn, BackwardEuler(domain, solver_parameters=snes_parameters),
             io, spatial_methods=transport_methods
         )
     elif stepper_type == "RK4":
         stepper = Timestepper(
-            eqn, RK4(domain, solver_parameters=linear_solver_parameters),
+            eqn, RK4(domain, solver_parameters=mass_parameters),
             io, spatial_methods=transport_methods
         )
     else:
         assert stepper_type == "SemiImplicitQuasiNewton"
-        transported_fields = [TrapeziumRule(domain, "u", solver_parameters=solver_parameters), SSPRK3(domain, "D", solver_parameters=solver_parameters)]
+        transported_fields = [
+            TrapeziumRule(domain, "u", solver_parameters=snes_parameters),
+            SSPRK3(domain, "D", solver_parameters=mass_parameters)
+        ]
         stepper = SemiImplicitQuasiNewton(
-            eqn, io, transported_fields, transport_methods
+            eqn, io, transported_fields, transport_methods,
+            linear_solver_parameters=linear_solver_parameters
         )
 
     u0 = stepper.fields('u')
@@ -91,6 +106,11 @@ def test_shallow_water(tmpdir, control, stepper_type):
     m_u = Function(u0.function_space()).project(uexpr)
     m_D = Function(D0.function_space()).interpolate(Dexpr)
 
+    if control == "u":
+        m = m_u
+    else:
+        m = m_D
+
     Dbar = Function(D0.function_space()).assign(H)
     stepper.set_reference_profiles([('D', Dbar)])
 
@@ -107,28 +127,18 @@ def test_shallow_water(tmpdir, control, stepper_type):
 
         J = assemble(inner(u_tf, u_tf)*dx)**2
 
-        if control == "u":
-            controls = [Control(m_u)]
-        else:
-            controls = [Control(m_D)]
-        Jhat = ReducedFunctional(J, controls, tape=tape)
+        Jhat = ReducedFunctional(J, Control(m), tape=tape)
 
     # perturbation directions for taylor test
-    h_D = Function(D0.function_space()).interpolate(1e-3*sin(x[0]))
-    h_u = Function(u0.function_space()).interpolate(1e-4*as_vector([cos(4*pi*x[1]), sin(4*pi*x[0]), 0]))
-
     if control == "u":
-        m = [m_u]
-        h = [h_u]
+        h = Function(u0.function_space()).interpolate(1e-4*as_vector([cos(4*pi*x[1]), sin(4*pi*x[0]), 0]))
     else:
-        m = [m_D]
-        h = [h_D]
+        h = Function(D0.function_space()).interpolate(1e-3*sin(x[0]))
+
     assert np.allclose(J, Jhat(m)), "Functional re-evaluation does not match original evaluation."
 
     # Check the TLM explicitly before checking the Hessian (which relies on the tlm)
     assert taylor_test(Jhat, m, h, dJdm=Jhat.tlm(h)) > 1.95, "TLM is not second order accurate."
-
-    assert taylor_test(Jhat, m, h) > 1.95, "Adjoint derivative is not second order accurate."
 
     # Check the re-evaluation, derivative, and Hessian all converge at the expected rates.
     taylor = taylor_to_dict(Jhat, m, h)

@@ -346,7 +346,7 @@ class VerticalHybridizationPC(PCBase):
 
             unbroken_res_hdiv = self.unbroken_residual.subfunctions[self.vidx]
             broken_res_hdiv = self.broken_residual.subfunctions[self.vidx]
-            broken_res_hdiv.assign(0)
+            broken_res_hdiv.zero()
             self.average_kernel.apply(broken_res_hdiv, self.weight, unbroken_res_hdiv)
 
             # Compute the rhs for the multiplier system
@@ -374,7 +374,7 @@ class VerticalHybridizationPC(PCBase):
             # Compute the hdiv projection of the broken hdiv solution
             broken_hdiv = self.broken_solution.subfunctions[self.vidx]
             unbroken_hdiv = self.unbroken_solution.subfunctions[self.vidx]
-            unbroken_hdiv.assign(0)
+            unbroken_hdiv.zero()
 
             self.average_kernel.apply(unbroken_hdiv, self.weight, broken_hdiv)
 
@@ -759,7 +759,7 @@ class CompressibleHybridisedSCPC(PCBase):
 
         # Recover broken u and rho
         u_broken, rho, l = self.y_hybrid.subfunctions
-        self.u_hdiv.assign(0)
+        self.u_hdiv.zero()
         self._average_kernel.apply(self.u_hdiv, self._weight, u_broken)
         for bc in self.bcs:
             bc.zero(self.u_hdiv)
@@ -769,7 +769,7 @@ class CompressibleHybridisedSCPC(PCBase):
         self.y.subfunctions[1].assign(rho)
 
         # Recover theta
-        self.theta.assign(0)
+        self.theta.zero()
         self.theta_solver.solve()
         self.y.subfunctions[2].assign(self.theta)
 
