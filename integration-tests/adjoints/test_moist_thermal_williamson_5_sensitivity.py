@@ -31,22 +31,8 @@ from gusto import (
 
 
 @pytest.fixture(autouse=True)
-def handle_taping():
-    yield
-    tape = get_working_tape()
-    tape.clear_tape()
-
-
-@pytest.fixture(autouse=True, scope="module")
-def handle_annotation():
-    from firedrake.adjoint import annotate_tape, continue_annotation
-    if not annotate_tape():
-        continue_annotation()
-    yield
-    # Ensure annotation is paused when we finish.
-    annotate = annotate_tape()
-    if annotate:
-        pause_annotation()
+def autouse_set_test_tape(set_test_tape):
+    pass
 
 
 def test_moist_thermal_williamson_5_sensitivity(
