@@ -56,9 +56,9 @@ class ModelBase(object, metaclass=ABCMeta):
         if family is None:
             extruded_mesh = hasattr(mesh, "_base_mesh")
             if extruded_mesh:
-                cell = mesh._base_mesh.ufl_cell().cellname()
+                cell = mesh._base_mesh.ufl_cell().cellname
             else:
-                cell = mesh.ufl_cell().cellname()
+                cell = mesh.ufl_cell().cellname
             if cell == "interval":
                 family = "CG"
             elif cell == "quadrilateral":
