@@ -268,7 +268,7 @@ class BoundaryGaussianElimination(object):
             DG1 (:class:`FunctionSpace`): The equispaced DG1 function space.
         """
         shapes = {"nDOFs": DG1.finat_element.space_dimension(),
-                  "dim": DG1.mesh().topological_dimension()}
+                  "dim": DG1.mesh().topological_dimension}
 
         # EFF_COORDS are the effective coordinates
         # ACT_COORDS are the actual coordinates
