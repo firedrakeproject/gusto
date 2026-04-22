@@ -484,7 +484,7 @@ class IO(object):
                             raise ValueError("Expecting a MeshSequenceGeometry")
                         if len(set(V.parent.mesh().meshes)) > 1:
                             raise ValueError("Expecting a single mesh")
-                        parent = functionspaceimpl.WithGeometry.create(
+                        parent = functionspaceimpl.WithGeometry(
                             V.parent.topological,
                             MeshSequenceGeometry(
                                 tuple(mesh_ll for _ in V.parent.mesh().meshes),
@@ -493,7 +493,7 @@ class IO(object):
                     else:
                         parent = None
                     field = Function(
-                        functionspaceimpl.WithGeometry.create(
+                        functionspaceimpl.WithGeometry(
                             V.topological, mesh_ll, parent=parent,
                         ),
                         val=f.topological,
@@ -501,7 +501,7 @@ class IO(object):
                     )
                 except ImportError:  # firedrake release
                     field = Function(
-                        functionspaceimpl.WithGeometry.create(
+                        functionspaceimpl.WithGeometry(
                             V.topological, mesh_ll,
                         ),
                         val=f.topological,

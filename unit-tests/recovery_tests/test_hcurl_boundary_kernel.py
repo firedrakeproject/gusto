@@ -124,6 +124,7 @@ def test_hcurl_recovery_kernels(element):
     kernel = BoundaryRecoveryHCurl(V)
     kernel.apply(new_field, initial_field)
 
-    tolerance = 1e-8
+    # Abs tol rather than relative, since field could contain zeros
+    tolerance = 1e-6
     assert np.allclose(true_field.dat.data, new_field.dat.data, tolerance), \
         f'HCurl boundary recovery incorrect for {element} elements'

@@ -91,7 +91,7 @@ def test_sum_of_gaussian_approx():
 # ------------------------------------------------------------------------ #
 
 
-@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+@pytest.mark.parametrize("coefficients", ["haut", "caliari"])
 def test_gaussian_approx(coefficients):
     params = RexiParameters(coefficients=coefficients)
     for x in range(10):
@@ -106,7 +106,7 @@ def test_gaussian_approx(coefficients):
 # ------------------------------------------------------------------------ #
 
 
-@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+@pytest.mark.parametrize("coefficients", ["haut", "caliari"])
 def test_exponential_approx(coefficients):
     params = RexiParameters(coefficients=coefficients)
     h = params.h
@@ -122,7 +122,7 @@ def test_exponential_approx(coefficients):
 # ------------------------------------------------------------------------ #
 
 
-@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+@pytest.mark.parametrize("coefficients", ["haut", "caliari"])
 def test_rexi_exponential_approx(coefficients):
     params = RexiParameters(coefficients=coefficients)
     h = params.h
