@@ -1,5 +1,4 @@
 import pytest
-import numpy as np
 
 from firedrake import *
 from firedrake.adjoint import *
@@ -15,17 +14,19 @@ def autouse_set_test_tape(set_test_tape):
 @pytest.mark.parametrize("stepper_type", ["BackwardEuler", "RK4", "SemiImplicitQuasiNewton"])
 def test_shallow_water(tmpdir, control, stepper_type):
     # setup shallow water parameters
-    R = 1
-    H = 1e-5
-    dt = 0.01
+    R = 6371220.
+    H = 5960.
+    mountain = 2000.
+    dt = 300.
+    u_max = 20.
 
     # Domain
-    mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=2)
-    x = SpatialCoordinate(mesh)
+    mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=1)
+    x, y, z = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, 'BDM', 1)
 
     # Equation
-    lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
+    lamda, theta, _ = lonlatr_from_xyz(x, y, z)
     R0 = pi/9.
     R0sq = R0**2
     lamda_c = -pi/2.
@@ -34,8 +35,9 @@ def test_shallow_water(tmpdir, control, stepper_type):
     thsq = (theta - theta_c)**2
     rsq = min_value(R0sq, lsq+thsq)
     r = sqrt(rsq)
-    bexpr = 1e-6 * (1 - r/R0)
-    parameters = ShallowWaterParameters(mesh, H=H, topog_expr=bexpr)
+    bexpr = mountain * (1 - r/R0)
+    b = Function(domain.spaces("DG")).interpolate(bexpr)
+    parameters = ShallowWaterParameters(mesh, H=H, topog_expr=b)
     eqn = ShallowWaterEquations(domain, parameters)
 
     # I/O
@@ -50,19 +52,23 @@ def test_shallow_water(tmpdir, control, stepper_type):
     }
     mass_parameters = {
         'snes_type': 'ksponly',
-        **lu_parameters
+        **lu_parameters,
+        'ksp_reuse_preconditioner': None,
     }
     snes_parameters = {
+        'snes_monitor': None,
+        'snes_converged_reason': None,
         'snes_type': 'newtonls',
+        'snes_stol': 0,
         'snes_rtol': 1e-10,
-        **lu_parameters
+        **lu_parameters,
     }
     linear_solver_parameters = {
         'mat_type': 'matfree',
         'ksp_type': 'preonly',
         'pc_type': 'python',
         'pc_python_type': 'firedrake.HybridizationPC',
-        'hybridization': lu_parameters
+        'hybridization': lu_parameters,
     }
 
     # Transport schemes
@@ -83,7 +89,7 @@ def test_shallow_water(tmpdir, control, stepper_type):
         assert stepper_type == "SemiImplicitQuasiNewton"
         transported_fields = [
             TrapeziumRule(domain, "u", solver_parameters=snes_parameters),
-            SSPRK3(domain, "D", solver_parameters=mass_parameters)
+            SSPRK3(domain, "D", solver_parameters=mass_parameters),
         ]
         stepper = SemiImplicitQuasiNewton(
             eqn, io, transported_fields, transport_methods,
@@ -93,13 +99,11 @@ def test_shallow_water(tmpdir, control, stepper_type):
     u0 = stepper.fields('u')
     D0 = stepper.fields('D')
 
-    u_max = 1e-4
-    uexpr = as_vector([-u_max*x[1], u_max*x[0], 0.0])
+    uexpr = as_vector([-u_max*y/R, u_max*x/R, 0.0])
     g = parameters.g
     Omega = parameters.Omega
-    R = 1
     Rsq = R**2
-    Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
+    Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*z**2/Rsq)/g - bexpr
 
     # controls m for the initial conditions
     m_u = Function(u0.function_space()).project(uexpr)
@@ -122,19 +126,25 @@ def test_shallow_water(tmpdir, control, stepper_type):
         # propagate forwards
         stepper.run(0., 2*dt)
 
-        u_tf = stepper.fields('u')  # Final velocity field
-
-        J = assemble(inner(u_tf, u_tf)*dx)**2
+        if control == "u":
+            u_tf = stepper.fields('u')
+            J = assemble(inner(u_tf, u_tf)*dx)**2
+        else:
+            D_tf = stepper.fields('D')
+            dD = D_tf - (H - b)
+            J = assemble(0.5*g*inner(dD, dD)*dx)**2
 
         Jhat = ReducedFunctional(J, Control(m), tape=tape)
 
-    # perturbation directions for taylor test
+    # Perturbation directions for taylor test
+    # pyadjoint will multiply h by 1e-2, 1e-4 etc so we pre-multiply by 10
     if control == "u":
-        h = Function(u0.function_space()).interpolate(1e-4*as_vector([cos(4*pi*x[1]), sin(4*pi*x[0]), 0]))
+        h = Function(u0.function_space()).interpolate(
+            10.0*u_max*as_vector([cos(2*pi*y/R), 0.0, 1 + cos(pi*z/R)*sin(4*pi*x/R)]))
     else:
-        h = Function(D0.function_space()).interpolate(1e-3*sin(x[0]))
+        h = Function(D0.function_space()).interpolate(1.0*(Dexpr - (H - b))*cos(pi*z/R))
 
-    assert np.allclose(J, Jhat(m)), "Functional re-evaluation does not match original evaluation."
+    assert abs(float(J) - float(Jhat(m))) < 1e-10, "Functional re-evaluation does not match original evaluation."
 
     # Check the TLM explicitly before checking the Hessian (which relies on the tlm)
     assert taylor_test(Jhat, m, h, dJdm=Jhat.tlm(h)) > 1.95, "TLM is not second order accurate."
