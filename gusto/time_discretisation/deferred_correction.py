@@ -74,6 +74,7 @@ Key choices in RIDC:
 """
 
 from abc import ABCMeta
+from functools import cached_property
 import numpy as np
 from firedrake import (
     Function, NonlinearVariationalProblem, NonlinearVariationalSolver, Constant
@@ -81,7 +82,6 @@ from firedrake import (
 from firedrake.fml import (
     replace_subject, all_terms, drop
 )
-from firedrake.utils import cached_property
 from gusto.time_discretisation.time_discretisation import wrapper_apply
 from gusto.core.labels import (time_derivative, implicit, explicit, source_label)
 from qmat import genQCoeffs, genQDeltaCoeffs

@@ -127,9 +127,9 @@ def test_mixed_function_space(mesh, mixed_element):
     V = fd.FunctionSpace(mesh, mixed_element)
     W = cpx.FunctionSpace(V)
 
-    assert len(W.subfunctions) == len(V.subfunctions), "The complex space should have the same number of components as the real space"
+    assert len(W.subspaces) == len(V.subspaces), "The complex space should have the same number of components as the real space"
 
-    for wcpt, vcpt in zip(W.subfunctions, V.subfunctions):
+    for wcpt, vcpt in zip(W.subspaces, V.subspaces):
         assert wcpt == cpx.FunctionSpace(vcpt), "Each component of the complex space should be the complex space of the component of the real space"
 
 

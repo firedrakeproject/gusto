@@ -143,7 +143,7 @@ class InteriorPenaltyDiffusion(DiffusionMethod):
 
         super().__init__(equation, variable)
 
-        if equation.domain.mesh.topological_dimension() == 1:
+        if equation.domain.mesh.topological_dimension == 1:
             self.form = interior_penalty_diffusion_form_1d(
                 equation.domain, self.test, self.field, diffusion_parameters)
         else:
@@ -157,7 +157,7 @@ class CGDiffusion(DiffusionMethod):
 
         super().__init__(equation, variable)
 
-        if equation.domain.mesh.topological_dimension() == 1:
+        if equation.domain.mesh.topological_dimension == 1:
             kappa = diffusion_parameters.kappa
             self.form = diffusion(kappa * self.test.dx(0) * self.field.dx(0) * dx)
         else:
