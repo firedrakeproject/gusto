@@ -771,6 +771,11 @@ class IO(object):
             else:
                 if output.multichkpt:
                     chkpt_mode = 'a'
+                    # Check if file exists already, if not then create the file
+                    # and then close it
+                    if not path.isfile(self.chkpt_path):
+                        with CheckpointFile(self.chkpt_path, 'w', self.mesh.comm) as chk:
+                            pass
                 else:
                     chkpt_mode = 'w'
                 with CheckpointFile(self.chkpt_path, chkpt_mode, self.mesh.comm) as chk:
