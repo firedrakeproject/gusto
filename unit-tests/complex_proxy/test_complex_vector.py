@@ -519,10 +519,7 @@ def test_mixed_linear_solve(mesh, bc_type):
     if bc_type == "nobc":
         bcs = []
     elif bc_type == "dirichletbc":
-        bcs = [
-            fd.DirichletBC(V.sub(1), 0, 3),
-            fd.DirichletBC(V.sub(1), 0, 4)
-        ]
+        bcs = [fd.DirichletBC(V.sub(0), 0, 1)]
     else:
         raise ValueError(f"Unrecognised boundary condition type: {bc_type}")
 
