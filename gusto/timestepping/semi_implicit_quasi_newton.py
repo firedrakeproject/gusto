@@ -20,7 +20,6 @@ from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
 from gusto.solvers.solver_presets import hybridised_solver_parameters
-from gusto.equations.compressible_euler_equations import CompressibleEulerEquations
 
 
 __all__ = ["SemiImplicitQuasiNewton", "Forcing", "QuasiNewtonLinearSolver"]
@@ -936,12 +935,6 @@ class QuasiNewtonLinearSolver(object):
         if self.reference_dependent:
             self.equation.update_reference_profiles()
             self.solver.invalidate_jacobian()
-
-            # TODO: Issue #686 is to address this reference profile update bug (pythonPC update not called)
-            # this line forces it to update for now
-            pc = self.solver.snes.getKSP().getPC()
-            if (isinstance(self.equation, CompressibleEulerEquations) and pc.getType() == "python"):
-                pc.getPythonContext().update(pc)
 
     def zero_non_prognostics(self, equation, xrhs, field_names, prognostic_names):
         """
