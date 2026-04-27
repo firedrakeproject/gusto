@@ -97,27 +97,27 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'ksp_rtol': r_tol
         }
 
-        scpc_solve_settings = {
-            'mat_type': 'matfree',
-            'ksp_type': 'preonly',
-            'pc_type': 'python',
-            'pc_python_type': 'firedrake.SCPC',
-            'pc_sc_eliminate_fields': '0,1',
-            # The reduced operator is not symmetric
-            'condensed_field': {
-                'ksp_type': 'fgmres',
-                'ksp_rtol': r_tol,
-                'ksp_max_it': 100,
-                'pc_type': 'gamg',
-                'pc_gamg_sym_graph': None,
-                'mg_levels': {
-                    'ksp_type': 'gmres',
-                    'ksp_max_it': 5,
-                    'pc_type': 'bjacobi',
-                    'sub_pc_type': 'ilu'
-                }
-            }
-        }
+        # scpc_solve_settings = {
+        #    'mat_type': 'matfree',
+        #    'ksp_type': 'preonly',
+        #    'pc_type': 'python',
+        #    'pc_python_type': 'firedrake.SCPC',
+        #    'pc_sc_eliminate_fields': '0,1',
+        #    # The reduced operator is not symmetric
+        #    'condensed_field': {
+        #        'ksp_type': 'fgmres',
+        #        'ksp_rtol': r_tol,
+        #        'ksp_max_it': 100,
+        #        'pc_type': 'gamg',
+        #        'pc_gamg_sym_graph': None,
+        #        'mg_levels': {
+        #            'ksp_type': 'gmres',
+        #            'ksp_max_it': 5,
+        #            'pc_type': 'bjacobi',
+        #            'sub_pc_type': 'ilu'
+        #        }
+        #    }
+        # }
 
         trace_params = {
             'pc_type': 'ksp',
@@ -176,7 +176,6 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'riesz_map': riesz_map_settings,
             'compressible_hybrid_scpc': slate_schur_params
         }
-
 
         # We pass the implicit weighting parameter (alpha) and tau_values to the
         # preconditioner, and the equation to construct the hybridized system.
