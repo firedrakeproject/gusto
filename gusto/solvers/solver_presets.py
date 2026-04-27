@@ -119,6 +119,51 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             }
         }
 
+        trace_params = {
+            'pc_type': 'ksp',
+            'ksp': {
+                # 'ksp_converged_rate': None,
+                'ksp_rtol': 1e-10,
+                'ksp_type': 'gmres',
+                'pc_type': 'gamg',
+                'mg_levels': {
+                    'ksp_type': 'chebyshev',
+                    'ksp_chebyshev_esteig': None,
+                    'ksp_max_it': 3,
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu',
+                },
+                'mg_coarse': {
+                    'pc_type': 'lu',
+                    'pc_factor_mat_solver_type': 'mumps',
+                }
+            }
+        }
+
+        slate_schur_params = {
+            'mat_type': 'matfree',
+            'ksp_type': 'preonly',
+            'pc_type': 'fieldsplit',
+            'pc_fieldsplit_type': 'schur',
+            'pc_fieldsplit_schur_fact_type': 'full',
+            'pc_fieldsplit_0_fields': '0,1',
+            'pc_fieldsplit_1_fields': '2',
+            'fieldsplit_0': {
+                'ksp_type': 'preonly',
+                'pc_type': 'python',
+                'pc_python_type': 'firedrake.AssembledPC',
+                'assembled_pc_type': 'ilu',
+            },
+            'fieldsplit_1': {
+                'ksp_type': 'preonly',
+                'pc_type': 'python',
+                'pc_python_type': 'gusto.SlateSchurPC',
+                'slate_schur_nfields0': 2,
+                # 'slate_schur_pc_type': 'lu',
+                'slate_schur': trace_params,
+            }
+        }
+
         settings = {
             'ksp_monitor': None,
             'ksp_type': 'preonly',
@@ -129,8 +174,9 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'exnerbar_avg': exnerbar_avg_settings,
             'rhobar_avg': rhobar_avg_settings,
             'riesz_map': riesz_map_settings,
-            'compressible_hybrid_scpc': scpc_solve_settings,
+            'compressible_hybrid_scpc': slate_schur_params
         }
+
 
         # We pass the implicit weighting parameter (alpha) and tau_values to the
         # preconditioner, and the equation to construct the hybridized system.
