@@ -12,7 +12,7 @@ from pyop2.profiling import timed_region, timed_function
 from functools import partial
 
 
-__all__ = ["VerticalHybridizationPC", "AuxiliaryPC", "CompressibleHybridisedSCPC"]
+__all__ = ["VerticalHybridizationPC", "AuxiliaryPC", "CompressibleHybridisedSCPC", "SlateSchurPC"]
 
 
 class AuxiliaryPC(AuxiliaryOperatorPC):
@@ -665,6 +665,7 @@ class CompressibleHybridisedSCPC(PCBase):
         hybridized_prb = LinearVariationalProblem(
             aeqn, Leqn, self.y_hybrid, constant_jacobian=True
         )
+
         self.hybridized_solver = LinearVariationalSolver(
             hybridized_prb,
             options_prefix=pc.getOptionsPrefix()+self._prefix,
@@ -789,3 +790,32 @@ class CompressibleHybridisedSCPC(PCBase):
         """
 
         raise NotImplementedError("The transpose application of the PC is not implemented.")
+
+
+class SlateSchurPC(AuxiliaryOperatorPC):
+    _prefix = "slate_schur_"
+
+    def form(self, pc, test, trial):
+        appctx = self.get_appctx(pc)
+
+        aform = appctx['slateschur_form']
+
+        prefix = pc.getOptionsPrefix() + self._prefix
+        nf0 = PETSc.Options().getInt(prefix + 'nfields0', 1)
+
+        a = Tensor(aform)
+        a00 = a.blocks[:nf0, :nf0]
+        a10 = a.blocks[nf0, :nf0]
+        a01 = a.blocks[:nf0, nf0]
+        a11 = a.blocks[nf0, nf0]
+
+        schur_comp = a11 - a10*a00.inv*a01
+
+        return (schur_comp, None)
+
+    def view(self, pc, viewer=None):
+        super().view(pc, viewer)
+        if hasattr(self, "pc"):
+            msg = "PC to approximate Schur complement using Slate.\n"
+            viewer.printfASCII(msg)
+            self.pc.view(viewer)
