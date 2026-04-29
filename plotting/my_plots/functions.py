@@ -9,12 +9,12 @@ from tomplot import (extract_gusto_field, extract_gusto_coords,
                         regrid_horizontal_slice)
 
 
-def make_structured(filepath, field_name):
+def make_structured(filepath, field_name, folder='jupiter_sw'):
 
     # f1, dumpfreq = filepath.split('df')
     # f2, dt = f1.split('dt')
 
-    results_dir = f'/data/home/sh1293/results/jupiter_sw/{filepath}'
+    results_dir = f'/data/home/sh1293/results/{folder}/{filepath}'
     results_file_name = f'{results_dir}/field_output.nc'
     data_file = Dataset(results_file_name, 'r')
     times = np.array(data_file['time'])
