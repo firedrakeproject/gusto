@@ -415,7 +415,7 @@ def diffusion_noise_generation(mesh, Lx):
     return timestepper.fields("f")
 
 ### options changed in Cheng Li 2020
-Bu = 1
+Bu = 10
 b = 1.5
 Ro = 0.2
 
@@ -459,13 +459,13 @@ H = phi0/g
 t_day = 2*pi/Omega
 
 ### timing options
-dump_freq = 1    # dump frequency of output
+dump_freq = 10    # dump frequency of output
 dt = 250          # timestep (in seconds)
-tmax = 5*t_day       # duration of the simulation (in seconds)
+tmax = 100*t_day       # duration of the simulation (in seconds)
 
-restart = False
-restart_name = 'single_beta3900Lp18q01em2xi1em1_Bu1b1p5Rop2_l200dt250df30_lgnp05'
-t0 = 200*t_day
+restart = True
+restart_name = 'single-step_trap_radt5beta390000q01em2xi1em1_Bu10b1p5Rop2_l10dt250df10'
+t0 = 10*t_day
 
 ### vortex locations
 south_lat_deg = [90.]#, 83., 83., 83., 83., 83.]#, 70.]
@@ -499,25 +499,25 @@ extract_res = 2
 ac = False
 
 ### moist setup?
-moist = False
+moist = True
 ### which version of convective, thermal, convective thermal to pick
-convective = False
+convective = True
 thermal = False
 
 ### moist variables
 epsilon = 1./165.  # 1/T0 where T0 is standard reference temperature
 xi = 1e-1   # how far below saturation we start
 q0 = 1e-2  # scaling such that max(q0*H/D*exp(20*theta))=atmospheric specific humidity in kg/kg
-beta1 = 3900 # calculated from formula
+beta1 = 390000 # calculated from formula
 Lp = 18   # pseudo Latent heat as in Z&A
 beta2 = g*Lp
 
 ### radiative damping
-raddamp = False
+raddamp = True
 tau_r = 5  # number of days for timescale 
 
 ### name
-setup = 'single-step-trap-232dg'
+setup = 'single-step_trap'
 
 ##########################################################################
 if coriolisform == 'fplane':
@@ -660,13 +660,10 @@ if moist:
     ]
     
 if thermal:
-    eqns = ThermalShallowWaterEquations(domain, parameters, fexpr=ftrap, active_tracers=tracers)
+    eqns = ThermalShallowWaterEquations(domain, parameters, active_tracers=tracers, coriolis_trap=(rstar-smooth_delta*Lx/nx, 2*Omega))
 else:
     # eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap), active_tracers=tracers)
     eqns = ShallowWaterEquations(domain, parameters, active_tracers=tracers, coriolis_trap=(rstar-smooth_delta*Lx/nx, 2*Omega))
-    # trap_interp = Function(FunctionSpace(mesh, "CG", 1)).interpolate(ftrap)
-    # eqns = ShallowWaterEquations(domain, parameters, active_tracers=tracers,
-    #          coriolis_trap=(rstar-smooth_delta*Lx/nx, trap_interp))
 logger.info(f'Estimated number of cores = {eqns.X.function_space().dim() / 50000} \n mpiexec -n nprocs python script.py')
 
 Ld = sqrt(H*g)/f0

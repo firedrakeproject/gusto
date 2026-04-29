@@ -8,7 +8,9 @@ from gusto import (
     Function, WaterVapour, Rain, DG1Limiter, ForwardEuler, ZeroLimiter,
     MixedFSLimiter, SWHeightRelax, MoistConvectiveSWRelativeHumidity,
     xy_from_rtheta, rtheta_from_xy, rtheta_from_lonlat,
-    lonlat_from_rtheta, CoriolisOptions, InstantRain, Evaporation
+    lonlat_from_rtheta, CoriolisOptions, InstantRain, Evaporation,
+    DiffusionParameters, DiffusionEquation, BackwardEuler, CGDiffusion,
+    Timestepper
 )
 from firedrake import (
     SpatialCoordinate, as_vector, pi, interpolate, exp, sqrt,
@@ -238,13 +240,13 @@ H = phi0/g
 t_day = 2*pi/Omega
 
 ### timing options
-dump_freq = 1
+dump_freq = 10
 dt = 250
-tmax = 100*t_day
+tmax = 50*t_day
 
 restart = False
-restart_name = ''
-t0 = 200*t_day
+restart_name = 'single-step_trap-qg_tophat_cD1em3gamma390000q05em1xi1em1_Bu1b1p5Rop2_l10dt250df10'
+t0 = 10*t_day
 
 ### vortex locations
 south_lat_deg = [90.]#, 83., 83., 83., 83., 83.]#, 70.]
@@ -257,7 +259,7 @@ noise_amp = 0.05
 
 ### noise on moisture
 moist_noise = False
-moist_noise_amp = 0.01
+moist_noise_amp = 0.01   # as multiple of initial qsat
 
 ### coriolis form
 coriolisform = 'fulltrap'
@@ -267,18 +269,19 @@ L = 2.4e6    # latent heat (V+P)
 Rgas = 3745    # gas constant (V+P)
 T0 = 165   # reference temperature
 alpha = L/(Rgas*T0)   # V+P saturation function constant
-gamma = 3900   # V+P condensation feedback term (=Nell's beta1)
+gamma = 390000   # V+P condensation feedback term (=Nell's beta1)
 xi = 0.1   # how far below saturation we start
-evap_scale = 1    # scaling term for evaporation
+evap_scale = 1e-3    # scaling term for evaporation
 q0 = 0.5   # scaling such that q0*exp(-alpha)=atmospheric specific humidity in kg/kg=1e-2
 qg = 5e-3  # value of ground moisture - evap occurs if q<qg
+qg_tophat = True
 
 ### radiative damping
-raddamp = True
+raddamp = False
 tau_r = 5 # timescale in Jovian days
 
 ### name
-setup = 'single-step_trap' 
+setup = 'single-step_trap-qg_tophat' 
 
 ###############################################################
 tmin = np.ceil(t0/dump_freq)*dump_freq
@@ -288,7 +291,7 @@ bint, bdec = split_number(b)
 Roint, Rodec = split_number(Ro)
 Buint, Budec = split_number(Bu)
 taurint, taurdec = split_number(tau_r)
-cDint, cDdec = split_number(evap_scale)
+# cDint, cDdec = split_number(evap_scale)
 if xi < 0:
     xiprefix = 'm'
 else:
@@ -305,6 +308,12 @@ xi2i = int(xi2)
 if xi2i < 0:
     xi2i = f'm{abs(xi2i)}'
 xi1fint, xi1fdec = split_number(xi1f)
+cD1, cD2 = f'{abs(evap_scale):.2e}'.split('e')
+cD1f = float(cD1)
+cD2i = int(cD2)
+if cD2i < 0:
+    cD2i = f'm{abs(cD2i)}'
+cD1fint, cD1fdec = split_number(cD1f)
 
 if setup != '':
     setup = f'{setup}_'
@@ -322,7 +331,7 @@ if moist_noise:
     moist_noise_name = f'_qn{moist_noiseint}{moist_noisedec}'
 else:
     moist_noise_name = ''
-moist_name = f'cD{cDint}{cDdec}gamma{gamma}q0{q01fint}{q01fdec}e{q02i}xi{xiprefix}{xi1fint}{xi1fdec}e{xi2i}_'
+moist_name = f'cD{cD1fint}{cD1fdec}e{cD2i}gamma{gamma}q0{q01fint}{q01fdec}e{q02i}xi{xiprefix}{xi1fint}{xi1fdec}e{xi2i}_'
 if raddamp:
     rad_name = f'radt{taurint}{taurdec}'
 else:
@@ -335,7 +344,7 @@ dirnameold=f'/data/home/sh1293/results/vp20_moist_jupiter/{restart_name}'
 # Set up the mesh
 if not restart:
     mesh = PeriodicRectangleMesh(nx=nx, ny=ny, Lx=Lx, Ly=Ly, quadrilateral=True)
-    output = OutputParameters(dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}', dumpfreq=dump_freq, dump_nc=True, checkpoint=True)
+    output = OutputParameters(dirname=f'/data/home/sh1293/results/vp20_moist_jupiter/{folder_name}', dumpfreq=dump_freq, dump_nc=True, checkpoint=True)
 elif restart:
     create_restart_nc(dirname=dirname, dirnameold=dirnameold)
     output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=dump_freq, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5')
@@ -410,20 +419,34 @@ transported_fields = [TrapeziumRule(domain, "u"),
                         SSPRK3(domain, "water_vapour", limiter=DG1limiter)]
 
 ### physics schemes
-height_relax = SWHeightRelax(eqns, H_rel=H, tau_r=tau_r*t_day)
+if raddamp:
+    height_relax = SWHeightRelax(eqns, H_rel=H, tau_r=tau_r*t_day)
 
 instant_rain = InstantRain(eqns, sat_func_phys, time_varying_saturation=True,
                             vapour_name='water_vapour',
                            rain_name='rain', convective_feedback=True,
                            beta1=gamma)
 
-evaporation = Evaporation(eqns, qg, scaling=evap_scale)
+if qg_tophat:
+    coeffs = smooth_tophat(degree=smooth_degree, delta=smooth_delta, rstar=rstar, Lx=Lx, nx=nx)
+    hatsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
+    if smooth_degree == 5:
+        hatsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
+    tophat1 = conditional(r<rstar-smooth_delta*Lx/nx, 1, hatsmooth)
+    tophat = conditional(r<rstar+smooth_delta*Lx/nx, tophat1, 0)
+evaporation = Evaporation(eqns, qg*tophat, scaling=evap_scale)
 
-physics_schemes = [
-    (height_relax, ForwardEuler(domain)),
-    (instant_rain, ForwardEuler(domain)),
-    (evaporation, ForwardEuler(domain))
-]
+if raddamp:
+    physics_schemes = [
+        (height_relax, ForwardEuler(domain)),
+        (instant_rain, ForwardEuler(domain)),
+        (evaporation, ForwardEuler(domain))
+    ]
+else:
+    physics_schemes = [
+        (instant_rain, ForwardEuler(domain)),
+        (evaporation, ForwardEuler(domain))
+    ]
 
 stepper = SemiImplicitQuasiNewton(
     eqns, io,
@@ -437,6 +460,7 @@ D0 = stepper.fields("D")
 wv0 = stepper.fields("water_vapour")
 if moist_noise:
     qnoise = Function(wv0.function_space())
+    qs0 = Function(wv0.function_space())
 
 south_lat = np.deg2rad(south_lat_deg)
 south_lon = np.deg2rad(south_lon_deg)
@@ -484,8 +508,14 @@ if not restart:
 
     uexpr = as_vector([u_veloc, v_veloc])
 
-    u0.project(uexpr)
-    D0.interpolate(Dfinal)
+    if len(south_lat)>0:
+        u0.project(uexpr)
+        D0.interpolate(Dfinal)
+    else:
+        logger.info('No cyclone initialised, set u=0 and D=H, before noise')
+        u0.assign(0)
+        D0.assign(H)
+
     if noise:
         if not large_noise:
             pcg = PCG64()
@@ -508,8 +538,9 @@ if not restart:
     wvexpr = (1-xi) * initial_msat * tophat
     wv0.interpolate(wvexpr)
     if moist_noise:
+        qs0.interpolate(initial_msat)
         noise = diffusion_noise_generation(mesh, Lx)
-        scaled_noise = noise*moist_noise_amp*10/np.max(abs(noise.dat.data)) * tophat
+        scaled_noise = noise*moist_noise_amp*np.max(abs(qs0.dat.data))/np.max(abs(noise.dat.data)) * tophat
         qnoise.interpolate(scaled_noise)
         wv0 += qnoise
     
