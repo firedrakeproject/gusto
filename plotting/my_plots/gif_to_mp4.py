@@ -61,8 +61,8 @@ ff = ffmpy.FFmpeg(
             )})
 ff.run()
 
-file = name.split('jupiter_sw/')[1]
+# file = name.split('jupiter_sw/')[1]
 
-print(f'Filename for moving file:\n{file}.mp4')
+# print(f'Filename for moving file:\n{file}.mp4')
 
 print(f'Animation made:\n {name}.mp4')

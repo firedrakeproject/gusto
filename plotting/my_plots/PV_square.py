@@ -26,31 +26,30 @@ def colourbar(mappable, extend):
 # field_name = 'RelativeHumidity'
 # folder = 'RelativeHumidity'
 
-if len(sys.argv) != 3:
+if len(sys.argv) != 4:
     print('Wrong number of arguments')
     print(len(sys.argv))
     sys.exit(1)
 
 filepath = sys.argv[1]
 field_name = sys.argv[2]
-folder = field_name
+folder = sys.argv[3]
 
 
 diff = False
 if field_name == 'cloud_water_diff':
     diff = True
     field_name = 'cloud_water'
-    folder = 'cloud_water'
 
 extend = 'both'
 
-plot_dir = f'/data/home/sh1293/results/jupiter_sw/{filepath}/Plots/{folder}'
+plot_dir = f'/data/home/sh1293/results/{folder}/{filepath}/Plots/{field_name}'
 if diff:
-    plot_dir = f'/data/home/sh1293/results/jupiter_sw/{filepath}/Plots/{folder}_diff'
+    plot_dir = f'/data/home/sh1293/results/{folder}/{filepath}/Plots/{field_name}_diff'
 if not os.path.exists(plot_dir):
     os.makedirs(plot_dir)
 
-PV_structured, times = fcs.make_structured(filepath, field_name)
+PV_structured, times = fcs.make_structured(filepath, field_name, folder=folder)
 
 # breakpoint()
 
