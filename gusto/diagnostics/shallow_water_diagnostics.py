@@ -3,9 +3,11 @@
 
 from firedrake import (
     dx, TestFunction, TrialFunction, grad, inner, curl, Function, assemble,
-    LinearVariationalProblem, LinearVariationalSolver, conditional, interpolate
+    LinearVariationalProblem, LinearVariationalSolver, conditional, interpolate,
+    Projector
 )
 from gusto.diagnostics.diagnostics import DiagnosticField, Energy
+from gusto.core.function_spaces import is_cg
 
 __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
            "ShallowWaterPotentialEnstrophy", "PotentialVorticity",
@@ -159,7 +161,23 @@ class Vorticity(DiagnosticField):
             raise ValueError(f"vorticity type must be one of {vorticity_types}, not {vorticity_type}")
         space = domain.spaces("H1")
 
-        u = state_fields("u")
+        # Work out continuity requirements of space
+        if self.space is None or not is_cg(self.space):
+            # Using DG, calculate u in HCurl space as intermediary
+            self.hcurl_intermediary = True
+            assert self.method != 'solve', (
+                'vorticity diagnostics can only be output in L2 space when '
+                + 'not using "solve" method'
+            )
+            space = domain.spaces("L2")
+            u_hdiv = state_fields("u")
+            self.u_hcurl = Function(domain.spaces("HCurl"))
+            u = self.u_hcurl  # Point u to u_hcurl
+        else:
+            # Using CG, calculate vorticity directly from HDiv u
+            self.hcurl_intermediary = False
+            u = state_fields("u")
+
         if vorticity_type in ["absolute", "potential"]:
             f = state_fields("coriolis")
         if vorticity_type == "potential":
@@ -195,6 +213,15 @@ class Vorticity(DiagnosticField):
             problem = LinearVariationalProblem(a, L, self.field,
                                                constant_jacobian=constant_jacobian)
             self.evaluator = LinearVariationalSolver(problem, solver_parameters={"ksp_type": "cg"})
+
+        elif self.hcurl_intermediary:
+            self.hcurl_projection = Projector(u_hdiv, self.u_hcurl)
+
+    def compute(self):
+        """Compute the vorticity, possibly via velocity in HCurl space."""
+        if self.hcurl_intermediary:
+            self.hcurl_projection.project()
+        super().compute()
 
 
 class PotentialVorticity(Vorticity):
