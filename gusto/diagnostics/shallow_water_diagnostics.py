@@ -172,11 +172,14 @@ class Vorticity(DiagnosticField):
             space = domain.spaces("L2")
             u_hdiv = state_fields("u")
             self.u_hcurl = Function(domain.spaces("HCurl"))
-            u = self.u_hcurl  # Point u to u_hcurl
+            u = self.u_hcurl
+            curl_operator = domain.divperp
+
         else:
             # Using CG, calculate vorticity directly from HDiv u
             self.hcurl_intermediary = False
             u = state_fields("u")
+            curl_operator = curl
 
         if vorticity_type in ["absolute", "potential"]:
             f = state_fields("coriolis")
@@ -185,11 +188,11 @@ class Vorticity(DiagnosticField):
 
         if self.method != 'solve':
             if vorticity_type == "potential":
-                self.expr = (curl(u) + f) / D
+                self.expr = (curl_operator(u) + f) / D
             elif vorticity_type == "absolute":
-                self.expr = curl(u) + f
+                self.expr = curl_operator(u) + f
             elif vorticity_type == "relative":
-                self.expr = curl(u)
+                self.expr = curl_operator(u)
 
         super().setup(domain, state_fields, space=space)
 
@@ -233,10 +236,15 @@ class PotentialVorticity(Vorticity):
         Args:
             space (:class:`FunctionSpace`, optional): the function space to
                 evaluate the diagnostic field in. Defaults to None, in which
-                case a default space will be chosen for this diagnostic.
+                case a default space will be chosen for this diagnostic, which
+                is the H1 space. Note that if the diagnostic is in the L2 space,
+                it should be evaluated with the 'interpolate' or 'project'
+                method, and will project the velocity into the HCurl space as
+                an intermediary step.
             method (str, optional): a string specifying the method of evaluation
                 for this diagnostic. Valid options are 'interpolate', 'project',
-                'assign' and 'solve'. Defaults to 'solve'.
+                'assign' and 'solve'. Defaults to 'solve'. Note that the 'solve'
+                method is only available when the diagnostic is in the H1 space.
         """
         self.solve_implemented = True
         super().__init__(space=space, method=method,
@@ -262,10 +270,15 @@ class AbsoluteVorticity(Vorticity):
         Args:
             space (:class:`FunctionSpace`, optional): the function space to
                 evaluate the diagnostic field in. Defaults to None, in which
-                case a default space will be chosen for this diagnostic.
+                case a default space will be chosen for this diagnostic, which
+                is the H1 space. Note that if the diagnostic is in the L2 space,
+                it should be evaluated with the 'interpolate' or 'project'
+                method, and will project the velocity into the HCurl space as
+                an intermediary step.
             method (str, optional): a string specifying the method of evaluation
                 for this diagnostic. Valid options are 'interpolate', 'project',
-                'assign' and 'solve'. Defaults to 'solve'.
+                'assign' and 'solve'. Defaults to 'solve'. Note that the 'solve'
+                method is only available when the diagnostic is in the H1 space.
         """
         self.solve_implemented = True
         super().__init__(space=space, method=method, required_fields=('u', 'coriolis'))
@@ -290,10 +303,15 @@ class RelativeVorticity(Vorticity):
         Args:
             space (:class:`FunctionSpace`, optional): the function space to
                 evaluate the diagnostic field in. Defaults to None, in which
-                case a default space will be chosen for this diagnostic.
+                case a default space will be chosen for this diagnostic, which
+                is the H1 space. Note that if the diagnostic is in the L2 space,
+                it should be evaluated with the 'interpolate' or 'project'
+                method, and will project the velocity into the HCurl space as
+                an intermediary step.
             method (str, optional): a string specifying the method of evaluation
                 for this diagnostic. Valid options are 'interpolate', 'project',
-                'assign' and 'solve'. Defaults to 'solve'.
+                'assign' and 'solve'. Defaults to 'solve'. Note that the 'solve'
+                method is only available when the diagnostic is in the H1 space.
         """
         self.solve_implemented = True
         super().__init__(space=space, method=method, required_fields=('u',))
