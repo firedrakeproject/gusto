@@ -415,7 +415,7 @@ def diffusion_noise_generation(mesh, Lx):
     return timestepper.fields("f")
 
 ### options changed in Cheng Li 2020
-Bu = 10
+Bu = 1
 b = 1.5
 Ro = 0.2
 
@@ -463,8 +463,8 @@ dump_freq = 10    # dump frequency of output
 dt = 250          # timestep (in seconds)
 tmax = 100*t_day       # duration of the simulation (in seconds)
 
-restart = True
-restart_name = 'single-step_trap_radt5beta390000q01em2xi1em1_Bu10b1p5Rop2_l10dt250df10'
+restart = False
+restart_name = 'single-step_trap_radt5beta390000q01em2xi1em1_Bu1b1p5Rop2_l10dt250df10'
 t0 = 10*t_day
 
 ### vortex locations
@@ -514,7 +514,7 @@ beta2 = g*Lp
 
 ### radiative damping
 raddamp = True
-tau_r = 5  # number of days for timescale 
+tau_r = 10  # number of days for timescale 
 
 ### name
 setup = 'single-step_trap'
