@@ -55,7 +55,7 @@ class RichardsonNumber(DiagnosticField):
         gradu = state_fields("u_gradient")
 
         denom = 0.
-        z_dim = domain.mesh.geometric_dimension() - 1
+        z_dim = domain.mesh.geometric_dimension - 1
         u_dim = state_fields("u").ufl_shape[0]
         for i in range(u_dim-1):
             denom += gradu[i, z_dim]**2

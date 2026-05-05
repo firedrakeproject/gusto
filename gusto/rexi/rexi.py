@@ -19,7 +19,7 @@ class RexiParameters(Configuration):
     h = 0.2
     M = 64
     reduce_to_half = False
-    coefficients = "Haut"
+    coefficients = "haut"
 
 
 class Rexi(object):

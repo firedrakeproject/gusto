@@ -47,7 +47,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            x (:class:`Configuration`, optional): an object containing
+            parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
             sponge_options (:class:`SpongeLayerParameters`, optional): any
                 parameters for applying a sponge layer to the upper boundary.

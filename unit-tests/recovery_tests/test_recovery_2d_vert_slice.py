@@ -58,7 +58,7 @@ def expr(geometry, mesh):
 def test_vertical_slice_recovery(geometry, mesh, expr):
 
     # horizontal base spaces
-    cell = mesh._base_mesh.ufl_cell().cellname()
+    cell = mesh._base_mesh.ufl_cell().cellname
     u_hori = FiniteElement("CG", cell, 1)
     w_hori = FiniteElement("DG", cell, 0)
 
