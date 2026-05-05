@@ -48,55 +48,20 @@ folder = 'jupiter_sw'
 
 limited_area = False
 
-short = False
+files = ['single-step_trap_radt5beta390000q01em2xi1em1_Bu1b1p5Rop2_l100dt250df10',
+         'single-step_trap_radt5beta390000q01em2xi1em1_Bu10b1p5Rop2_l100dt250df10',
+         'single-step_trap_radt1beta390000q01em2xi1em1_Bu1b1p5Rop2_l100dt250df10']
 
-rad = True
+labels = ['rad=5, Bu=1',
+          'rad=5, Bu=10',
+          'rad=1, Bu=1']
 
-Bu10 = False
-
-if folder == 'vp20_moist_jupiter':
-    files_short = ['single-step_trap-qg_tophat_cD1em3gamma3900q05em1xi1em1_Bu1b1p5Rop2_l10dt250df10',
-                   'single-step_trap-qg_tophat_cD1em3gamma39000q05em1xi1em1_Bu1b1p5Rop2_l10dt250df10',
-                   'single-step_trap-qg_tophat_cD1em3gamma390000q05em1xi1em1_Bu1b1p5Rop2_l10dt250df10']
-    files_rad = ['single-step_trap-qg_tophat_radt5cD1em3gamma3900q05em1xi1em1_Bu1b1p5Rop2_l10dt250df10',
-                 'single-step_trap-qg_tophat_radt5cD1em3gamma39000q05em1xi1em1_Bu1b1p5Rop2_l10dt250df10',
-                 'single-step_trap-qg_tophat_radt5cD1em3gamma390000q05em1xi1em1_Bu1b1p5Rop2_l10dt250df10']
-    files = ['single-step_trap-qg_tophat_radt5cD1em3gamma3900q05em1xi1em1_Bu1b1p5Rop2_l200dt250df30',
-             'single-step_trap-qg_tophat_radt5cD1em3gamma39000q05em1xi1em1_Bu1b1p5Rop2_l200dt250df30', 
-            'single-step_trap-qg_tophat_radt5cD1em3gamma390000q05em1xi1em1_Bu1b1p5Rop2_l200dt250df30']
-elif folder == 'jupiter_sw':
-    files_short = ['single-step_trap_beta3900q01em2xi1em1_Bu1b1p5Rop2_l10dt250df10',
-             'single-step_trap_beta39000q01em2xi1em1_Bu1b1p5Rop2_l10dt250df10',
-             'single-step_trap_beta390000q01em2xi1em1_Bu1b1p5Rop2_l10dt250df10']
-    files_rad = ['single-step_trap_radt5beta3900q01em2xi1em1_Bu1b1p5Rop2_l10dt250df10',
-                 'single-step_trap_radt5beta39000q01em2xi1em1_Bu1b1p5Rop2_l10dt250df10',
-                 'single-step_trap_radt5beta390000q01em2xi1em1_Bu1b1p5Rop2_l10dt250df10']
-    files = ['single-step_trap_beta3900q01em2xi1em1_Bu1b1p5Rop2_l200dt250df30',
-             'single-step_trap_beta39000q01em2xi1em1_Bu1b1p5Rop2_l200dt250df30',
-             'single-step_trap_beta390000q01em2xi1em1_Bu1b1p5Rop2_l200dt250df30']
-    files_Bu10 = ['single-step_trap_radt5beta3900q01em2xi1em1_Bu10b1p5Rop2_l10dt250df10',
-                  'single-step_trap_radt5beta39000q01em2xi1em1_Bu10b1p5Rop2_l10dt250df10',
-                  'single-step_trap_radt5beta390000q01em2xi1em1_Bu10b1p5Rop2_l10dt250df10']
-
-if short:
-    files = files_short
-if rad:
-    files = files_rad
-if Bu10:
-    files = files_Bu10
-if rad and not short:
-    raise ValueError("Incorrect combination: 'rad' must be used with 'short'")
-if Bu10 and not rad:
-    raise ValueError("Bu10 must be with rad")
-if Bu10 and not short:
-    raise ValueError("Bu10 must be with short")
+name = 'Bu-rad-relation'
 
 if len(files)==3:
-    betas = [3900, 39000, 390000]
     colours = ['aqua', 'dodgerblue', 'midnightblue']
     alphas = [1, 0.7, 0.55]
 else:
-    betas = [3900, 39000]#, 390000]
     colours = ['aqua', 'dodgerblue']#, 'midnightblue']
     alphas = [1, 0.7]#, 0.55] 
 
@@ -118,7 +83,7 @@ path = f'/data/home/sh1293/results/{folder}'
 fig, axs = plt.subplots(2,2, figsize=(12,12))
 for i in range(len(files)):
     file = files[i]
-    beta = betas[i]
+    label = labels[i]
     colour = colours[i]
     alpha = alphas[i]
     # pv, times = field_domain_integral(file, 'PotentialVorticity', rlim, L)
@@ -135,16 +100,16 @@ for i in range(len(files)):
         cloud, _ = field_domain_integral(file, 'cloud_water', rlim, L)
     D_L2, _ = field_domain_L2_error_integral(file, 'D', rlim, L)
 
-    # pv.plot(ax=axs[0,0], color=colour, label=f'{beta}', alpha=alpha, linestyle='-' if i==0 else '--' if i==1 else ':')
-    # (avlPE+qE).plot(ax=axs[0,1], color=colour, label=f'{beta} wet', alpha=alpha)
-    # (avlPE).plot(ax=axs[0,1], color=colour, label=f'{beta} dry', linestyle='--', alpha=alpha)
-    q.plot(ax=axs[0,0], color=colour, label=f'{beta}', alpha=alpha)
-    (RHmax).plot(ax=axs[0,1], color=colour, label=f'{beta}', alpha=alpha)
+    # pv.plot(ax=axs[0,0], color=colour, label=f'{label}', alpha=alpha, linestyle='-' if i==0 else '--' if i==1 else ':')
+    # (avlPE+qE).plot(ax=axs[0,1], color=colour, label=f'{label} wet', alpha=alpha)
+    # (avlPE).plot(ax=axs[0,1], color=colour, label=f'{label} dry', linestyle='--', alpha=alpha)
+    q.plot(ax=axs[0,0], color=colour, label=f'{label}', alpha=alpha)
+    (RHmax).plot(ax=axs[0,1], color=colour, label=f'{label}', alpha=alpha)
     if folder == 'vp20_moist_jupiter':
-        rain_diff.plot(ax=axs[1,0], color=colour, label=f'{beta}', alpha=alpha)
+        rain_diff.plot(ax=axs[1,0], color=colour, label=f'{label}', alpha=alpha)
     else:
-        cloud.plot(ax=axs[1,0], color=colour, label=f'{beta}', alpha=alpha)
-    D_L2.plot(ax=axs[1,1], color=colour, label=f'{beta}', alpha=alpha)
+        cloud.plot(ax=axs[1,0], color=colour, label=f'{label}', alpha=alpha)
+    D_L2.plot(ax=axs[1,1], color=colour, label=f'{label}', alpha=alpha)
 
 
 
@@ -163,15 +128,9 @@ axs[1,1].set_yscale('log')
 # axs[2,0].set_title('Available PE')
 
 if not limited_area:
-    extra_name = f'_full'
+    extra_name = f'_{name}_full'
 else:
-    extra_name = ''
-if short:
-    extra_name = f'{extra_name}_short'
-if rad:
-    extra_name = f'{extra_name}_rad'
-if Bu10:
-    extra_name = f'{extra_name}_Bu10'
+    extra_name = f'_{name}'
 
 plt.savefig(f'{path}/integral_timeseries{extra_name}.pdf')
 print(f'Plot made:\n{path}/integral_timeseries{extra_name}.pdf')
