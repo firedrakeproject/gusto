@@ -3,6 +3,7 @@ import numpy as np
 import functions as fcs
 import os                        
 import time
+from matplotlib.colors import LogNorm
 
 
 file = 'int_Bu10b1p5Rop23_l1000dt250df30'
@@ -23,7 +24,7 @@ f0 = 2*Omega
 
 field_structured, times = fcs.make_structured(file, field_name)
 
-fig, axs = plt.subplots(3,2, figsize=(8,12))
+fig, axs = plt.subplots(3,2, figsize=(7.5,12))
 vmin = 0
 # vmax = np.max(field_structured[:,:,0])
 vmax = f0
@@ -51,6 +52,7 @@ cbar_ax = fig.add_axes([
 cb = fig.colorbar(pcolor, cax=cbar_ax, orientation='horizontal', extend='both', ticks=([0,0.25*f0, 0.5*f0, 0.75*f0, f0]))
 cb.set_ticklabels([r'$0$', r'$f_0/4$', r'$f_0/2$', r'$3f_0/4$', f'$f_0$'])
 cb.set_label('Relative Vorticity')
+fig.tight_layout(rect=[0, 0.1, 1, 1])
 
 plt.savefig(f'{plot_dir}/comic_strip.pdf', bbox_inches='tight')
 plt.close()
