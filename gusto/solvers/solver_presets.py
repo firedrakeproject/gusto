@@ -105,7 +105,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                 'ksp_type': 'fgmres',
                 'pc_type': 'gamg',
                 'mg_levels': {
-                    'ksp_type': 'gmres'
+                    'ksp_type': 'gmres',
                     'ksp_max_it': 5,
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
