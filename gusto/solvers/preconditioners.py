@@ -2,7 +2,7 @@
 
 from firedrake import (dot, jump, dS_h, ds_b, ds_t, ds,
                        FacetNormal, Tensor, AssembledVector,
-                       AuxiliaryOperatorPC, PETSc, AssembledPC, RieszMap)
+                       AuxiliaryOperatorPC, PETSc, RieszMap)
 
 from firedrake.preconditioners import PCBase
 from firedrake.matrix_free.operators import ImplicitMatrixContext
@@ -814,7 +814,7 @@ class SlateSchurPC(AuxiliaryOperatorPC):
         return (schur_comp, None)
 
     def view(self, pc, viewer=None):
-        super(AssembledPC, self).view(pc, viewer)
+        super().view(pc, viewer)
         if hasattr(self, "pc"):
             msg = "PC to approximate Schur complement using Slate.\n"
             viewer.printfASCII(msg)
