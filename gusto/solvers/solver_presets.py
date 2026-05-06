@@ -97,46 +97,19 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'ksp_rtol': r_tol
         }
 
-        # scpc_solve_settings = {
-        #    'mat_type': 'matfree',
-        #    'ksp_type': 'preonly',
-        #    'pc_type': 'python',
-        #    'pc_python_type': 'firedrake.SCPC',
-        #    'pc_sc_eliminate_fields': '0,1',
-        #    # The reduced operator is not symmetric
-        #    'condensed_field': {
-        #        'ksp_type': 'fgmres',
-        #        'ksp_rtol': r_tol,
-        #        'ksp_max_it': 100,
-        #        'pc_type': 'gamg',
-        #        'pc_gamg_sym_graph': None,
-        #        'mg_levels': {
-        #            'ksp_type': 'gmres',
-        #            'ksp_max_it': 5,
-        #            'pc_type': 'bjacobi',
-        #            'sub_pc_type': 'ilu'
-        #        }
-        #    }
-        # }
-
         trace_params = {
             'pc_type': 'ksp',
             'ksp': {
                 # 'ksp_converged_rate': None,
-                'ksp_rtol': 1e-10,
-                'ksp_type': 'gmres',
+                'ksp_rtol': r_tol,
+                'ksp_type': 'fgmres',
                 'pc_type': 'gamg',
                 'mg_levels': {
-                    'ksp_type': 'chebyshev',
-                    'ksp_chebyshev_esteig': None,
-                    'ksp_max_it': 3,
+                    'ksp_type': 'gmres'
+                    'ksp_max_it': 5,
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
                 },
-                'mg_coarse': {
-                    'pc_type': 'lu',
-                    'pc_factor_mat_solver_type': 'mumps',
-                }
             }
         }
 
@@ -159,7 +132,6 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                 'pc_type': 'python',
                 'pc_python_type': 'gusto.SlateSchurPC',
                 'slate_schur_nfields0': 2,
-                # 'slate_schur_pc_type': 'lu',
                 'slate_schur': trace_params,
             }
         }
