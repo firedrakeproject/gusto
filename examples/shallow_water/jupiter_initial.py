@@ -51,142 +51,6 @@ def create_restart_nc(dirname, dirnameold):#, groups):
     # output_file = f'{dirname}/field_output.nc'
     # new_groups(input_file, output_file, groups, 'D')
 
-# def rtheta_from_xy(x, y, Lx, Ly, angle_units='rad'):
-#     """
-#     Returns the r, theta coordinates (where theta is measured anticlockwise from horizontal) from the planar
-#     Cartesian x, y coordinates.
-
-#     Args:
-#         x (:class:`np.ndarray` or :class:`ufl.Expr`): x-coordinate.
-#         y (:class:`np.ndarray` or :class:`ufl.Expr`): y-coordinate.
-#         angle_units (str, optional): the units to use for the angle. Valid
-#             options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
-
-#     Returns:
-#         tuple of :class`np.ndarray` or tuple of :class:`ufl.Expr`: the tuple
-#             of (r, theta) coordinates in the appropriate form given the
-#             provided arguments.
-#     """
-
-#     if angle_units not in ['rad', 'deg']:
-#         raise ValueError(f'angle_units arg {angle_units} not valid')
-
-#     if angle_units == 'deg':
-#         unit_factor = 180./pi
-#     if angle_units == 'rad':
-#         unit_factor = 1.0
-    
-#     x_shift = x-Lx/2
-#     y_shift = y-Ly/2
-
-#     theta = atan2(y_shift, x_shift)
-#     r = sqrt(x_shift**2 + y_shift**2)
-
-#     return r, theta*unit_factor
-
-# def lonlat_from_rtheta(r, theta, R, angle_units='rad', pole='north'):
-#     """
-#     Returns the lon lat coordinates from the polar r theta coordinates
-
-#     Args:
-#         r (:class:`np.ndarray` or :class:`ufl.Expr`): r-coordinate.
-#         theta (:class:`np.ndarray` or :class:`ufl.Expr`): theta-coordinate.
-#         angle_units (str, optional): the units to use for the angle. Valid
-#             options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
-
-#     Returns:
-#         tuple of :class`np.ndarray` or tuple of :class:`ufl.Expr`: the tuple
-#             of (lon, lat) coordinates in the appropriate form given the
-#             provided arguments.
-#     """
-
-#     if angle_units not in ['rad', 'deg']:
-#         raise ValueError(f'angle_units arg {angle_units} not valid')
-
-#     if angle_units == 'deg':
-#         unit_factor = 180./pi
-#     if angle_units == 'rad':
-#         unit_factor = 1.0
-
-#     theta_scaled = theta/unit_factor
-    
-#     lon = pi/2-theta_scaled
-#     lat = pi/2 - r/R
-#     if pole == 'south':
-#         lat*=-1
-
-#     return lon*unit_factor, lat*unit_factor
-
-# def rtheta_from_lonlat(lon, lat, R, angle_units='rad', pole='north'):
-#     """
-#     Returns the polar r theta coordinates from the lon lat coordinates
-
-#     Args:
-#         lon (:class:`np.ndarray` or :class:`ufl.Expr`): lon-coordinate.
-#         lat (:class:`np.ndarray` or :class:`ufl.Expr`): lat-coordinate.
-#         angle_units (str, optional): the units to use for the angle. Valid
-#             options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
-
-#     Returns:
-#         tuple of :class`np.ndarray` or tuple of :class:`ufl.Expr`: the tuple
-#             of (r, theta) coordinates in the appropriate form given the
-#             provided arguments.
-#     """
-
-#     if angle_units not in ['rad', 'deg']:
-#         raise ValueError(f'angle_units arg {angle_units} not valid')
-
-#     if angle_units == 'deg':
-#         unit_factor = 180./pi
-#     if angle_units == 'rad':
-#         unit_factor = 1.0
-    
-#     if pole == 'south':
-#         lat*=-1
-
-#     lon_scaled = lon/unit_factor
-#     lat_scaled = lat/unit_factor
-
-#     theta = pi/2-lon_scaled
-#     r = R*(pi/2-lat_scaled)
-    
-#     return r, theta*unit_factor
-
-# def xy_from_rtheta(r, theta, Lx, Ly, angle_units='rad'):
-#     """
-#     Returns the planar cartsian x, y coordinates from the
-#     r, theta coordinates
-
-#     Args:
-#         r (:class:`np.ndarray` or :class:`ufl.Expr`): r-coordinate.
-#         theta (:class:`np.ndarray` or :class:`ufl.Expr`): theta-coordinate.
-#         angle_units (str, optional): the units to use for the angle. Valid
-#             options are 'rad' (radians) or 'deg' (degrees). Defaults to 'rad'.
-
-#     Returns:
-#         tuple of :class`np.ndarray` or tuple of :class:`ufl.Expr`: the tuple
-#             of (x, y) coordinates in the appropriate form given the
-#             provided arguments.
-#     """
-
-#     if angle_units not in ['rad', 'deg']:
-#         raise ValueError(f'angle_units arg {angle_units} not valid')
-
-#     if angle_units == 'deg':
-#         unit_factor = 180./pi
-#     if angle_units == 'rad':
-#         unit_factor = 1.0
-    
-#     theta = theta/unit_factor
-
-#     x = r * cos(theta)
-#     y = r * sin(theta)
-
-#     x_shift = x+Lx/2
-#     y_shift = y+Ly/2
-
-#     return x_shift, y_shift
-
 def smooth_f_profile(degree, delta, style, rstar, Omega, R, Lx, nx):
     delta *= Lx/nx
     r = sp.symbols('r')
@@ -419,10 +283,6 @@ Bu = 1
 b = 1.5
 Ro = 0.2
 
-### specify Ld (Laura's setup)
-Laurasetup = False
-Ld = 3060e3
-
 ### setup grid parameters
 nx = 256
 ny = nx
@@ -448,20 +308,14 @@ f0 = 2 * Omega        # Planetary vorticity
 rm = 1e6              # Radius of vortex (m)
 vm = Ro * f0 * rm     # Calculate speed with Ro
 
-if Laurasetup:
-    Bu = (Ld/rm)**2
-    Buf = Decimal(str(Bu))
-    Bu2dp = Buf.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    Bu = float(Bu2dp)
-
 phi0 = Bu * (f0*rm)**2
 H = phi0/g
 t_day = 2*pi/Omega
 
 ### timing options
-dump_freq = 10    # dump frequency of output
+dump_freq = 1    # dump frequency of output
 dt = 250          # timestep (in seconds)
-tmax = 100*t_day       # duration of the simulation (in seconds)
+tmax = 10*t_day       # duration of the simulation (in seconds)
 
 restart = False
 restart_name = 'single-step_trap_radt5beta390000q01em2xi1em1_Bu1b1p5Rop2_l10dt250df10'
@@ -479,7 +333,6 @@ noise_amp = 0.05
 ### add noise to initial moist profile?
 moist_noise = False
 moist_noise_amp = 0.01
-
 
 ### include available potential energy diagnostic or no?
 avlpe_diag = True
@@ -508,16 +361,17 @@ thermal = False
 epsilon = 1./165.  # 1/T0 where T0 is standard reference temperature
 xi = 1e-1   # how far below saturation we start
 q0 = 1e-2  # scaling such that max(q0*H/D*exp(20*theta))=atmospheric specific humidity in kg/kg
-beta1 = 390000 # calculated from formula
-Lp = 18   # pseudo Latent heat as in Z&A
-beta2 = g*Lp
+mu = 1   # scaling that goes into beta, beta=5750*Bu*mu
+beta1 = 5750*Bu*mu # calculated from formula
+# Lp = 18   # pseudo Latent heat as in Z&A
+# beta2 = g*Lp
 
 ### radiative damping
 raddamp = True
 tau_r = 10  # number of days for timescale 
 
 ### name
-setup = 'single-step_trap'
+setup = 'single'
 
 ##########################################################################
 if coriolisform == 'fplane':
@@ -600,7 +454,7 @@ dirnameold=f'/data/home/sh1293/results/jupiter_sw/{restart_name}'
 # Set up the mesh
 if not restart:
     mesh = PeriodicRectangleMesh(nx=nx, ny=ny, Lx=Lx, Ly=Ly, quadrilateral=True)
-    output = OutputParameters(dirname=f'/data/home/sh1293/results/jupiter_sw/{folder_name}', dumpfreq=dump_freq, dump_nc=True, checkpoint=True)
+    output = OutputParameters(dirname=dirname, dumpfreq=dump_freq, dump_nc=True, checkpoint=True)
 elif restart:
     create_restart_nc(dirname=dirname, dirnameold=dirnameold)
     output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=dump_freq, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5')
