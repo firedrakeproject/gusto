@@ -307,12 +307,6 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         # Saturation adjustment expression, adjusted to stop negative values
         self.water_v = Function(Vv)
         self.cloud = Function(Vc)
-        sat_adj_expr = (self.water_v - self.saturation_curve) / self.tau
-        sat_adj_expr = conditional(sat_adj_expr < 0,
-                                   max_value(sat_adj_expr,
-                                             -self.cloud / self.tau),
-                                   min_value(sat_adj_expr,
-                                             self.water_v / self.tau))
 
         # If gamma_v depends on variables
         if self.time_varying_gamma_v:
@@ -326,13 +320,16 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             assert not isinstance(gamma_v, FunctionType), "If time_varying_thermal_feedback is not True then gamma_v cannot be a Python function."
             self.gamma_v = gamma_v
 
+        sat_adj_expr = self.gamma_v * (self.water_v - self.saturation_curve) / self.tau
+        sat_adj_expr = max_value(sat_adj_expr, -self.cloud / self.tau)
+
         # Factors for multiplying source for different variables
         # the order matches the order in V_idx (vapour, cloud, depth, buoyancy)
-        factors = [self.gamma_v, -1*self.gamma_v]
+        factors = [1, -1]
         if convective_feedback:
-            factors.append(self.gamma_v*beta1)
+            factors.append(beta1)
         if thermal_feedback:
-            factors.append(self.gamma_v*beta2)
+            factors.append(beta2)
 
         # Add terms to equations and make interpolators
         # sources have the same order as V_idxs and factors
