@@ -344,7 +344,7 @@ dirnameold=f'/data/home/sh1293/results/vp20_moist_jupiter/{restart_name}'
 # Set up the mesh
 if not restart:
     mesh = PeriodicRectangleMesh(nx=nx, ny=ny, Lx=Lx, Ly=Ly, quadrilateral=True)
-    output = OutputParameters(dirname=f'/data/home/sh1293/results/vp20_moist_jupiter/{folder_name}', dumpfreq=dump_freq, dump_nc=True, checkpoint=True)
+    output = OutputParameters(dirname=dirname, dumpfreq=dump_freq, dump_nc=True, checkpoint=True)
 elif restart:
     create_restart_nc(dirname=dirname, dirnameold=dirnameold)
     output = OutputParameters(dirname=dirname, dump_nc=True, dumpfreq=dump_freq, checkpoint=True, checkpoint_pickup_filename=f'{dirnameold}/chkpt.h5')
