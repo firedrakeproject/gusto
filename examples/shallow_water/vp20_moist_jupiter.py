@@ -125,10 +125,10 @@ def initialise_D(X, idx):
 
 def sat_func_phys(x_in):
     D = x_in.subfunctions[1]
-    return q0*exp(-alpha*D/H)
+    return q0*exp(-alpha*(D-H)/H)
 
 def sat_func(D):
-    return q0*exp(-alpha*D/H)
+    return q0*exp(-alpha*(D-H)/H)
 
 def smooth_tophat(degree, delta, rstar, Lx, nx):
     delta *= Lx/nx
@@ -265,23 +265,21 @@ moist_noise_amp = 0.01   # as multiple of initial qsat
 coriolisform = 'fulltrap'
 
 ### moist variables
-L = 2.4e6    # latent heat (V+P)
-Rgas = 3745    # gas constant (V+P)
-T0 = 165   # reference temperature
-alpha = L/(Rgas*T0)   # V+P saturation function constant
-gamma = 390000   # V+P condensation feedback term (=Nell's beta1)
+alpha = 30   # V+P saturation function constant
+mu = 1     # scaling for beta/gamma
+gamma = 5750*Bu*mu   # V+P condensation feedback term (=Nell's beta1)
 xi = 0.1   # how far below saturation we start
 evap_scale = 1e-3    # scaling term for evaporation
-q0 = 0.5   # scaling such that q0*exp(-alpha)=atmospheric specific humidity in kg/kg=1e-2
+q0 = 1e-2   # scaling such that q0*exp(-alpha)=atmospheric specific humidity in kg/kg=1e-2
 qg = 5e-3  # value of ground moisture - evap occurs if q<qg
-qg_tophat = True
+qg_tophat = False
 
 ### radiative damping
 raddamp = False
 tau_r = 5 # timescale in Jovian days
 
 ### name
-setup = 'single-step_trap-qg_tophat' 
+setup = 'single-qg_tuning' 
 
 ###############################################################
 tmin = np.ceil(t0/dump_freq)*dump_freq
@@ -331,7 +329,7 @@ if moist_noise:
     moist_noise_name = f'_qn{moist_noiseint}{moist_noisedec}'
 else:
     moist_noise_name = ''
-moist_name = f'cD{cD1fint}{cD1fdec}e{cD2i}gamma{gamma}q0{q01fint}{q01fdec}e{q02i}xi{xiprefix}{xi1fint}{xi1fdec}e{xi2i}_'
+moist_name = f'cD{cD1fint}{cD1fdec}e{cD2i}gamma{gamma}q0{q01fint}{q01fdec}e{q02i}xi{xiprefix}{xi1fint}{xi1fdec}e{xi2i}alpha{alpha}_'
 if raddamp:
     rad_name = f'radt{taurint}{taurdec}'
 else:
