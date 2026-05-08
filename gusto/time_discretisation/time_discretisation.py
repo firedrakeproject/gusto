@@ -14,7 +14,7 @@ from firedrake import (Function, TestFunction, TestFunctions, DirichletBC,
 from firedrake.fml import (replace_subject, replace_test_function, Term,
                            all_terms, drop)
 from firedrake.formmanipulation import split_form
-from firedrake.utils import cached_property
+from functools import cached_property
 
 from gusto.core.configuration import EmbeddedDGOptions, RecoveryOptions
 from gusto.core.labels import (
