@@ -371,7 +371,7 @@ raddamp = True
 tau_r = 10  # number of days for timescale 
 
 ### name
-setup = 'single'
+setup = 'single-revert'
 
 ##########################################################################
 if coriolisform == 'fplane':
