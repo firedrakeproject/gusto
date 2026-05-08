@@ -224,13 +224,13 @@ class Spaces(object):
         """
 
         if self.extruded_mesh:
-            cell = self.mesh._base_mesh.ufl_cell().cellname()
+            cell = self.mesh._base_mesh.ufl_cell
             hori_elt = FiniteElement('DG', cell, 1, variant='equispaced')
             vert_elt = FiniteElement('DG', interval, 1, variant='equispaced')
             V_elt = TensorProductElement(hori_elt, vert_elt)
             continuity = {'horizontal': False, 'vertical': False}
         else:
-            cell = self.mesh.ufl_cell().cellname()
+            cell = self.mesh.ufl_cell
             V_elt = FiniteElement('DG', cell, 1, variant='equispaced')
             continuity = False
 
@@ -284,10 +284,8 @@ class DeRhamComplex(object):
                 vertical part of the L2 space. Defaults to None.
         """
 
-        if self.extruded_mesh:
-            cell = self.mesh._base_mesh.ufl_cell().cellname()
-        else:
-            cell = self.mesh.ufl_cell().cellname()
+        base_mesh = self.mesh._base_mesh or self.mesh
+        cell = base_mesh.ufl_cell
 
         hdiv_family = hcurl_hdiv_dict[family]
         hcurl_family = hdiv_hcurl_dict[family]
