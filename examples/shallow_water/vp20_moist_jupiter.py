@@ -240,9 +240,9 @@ H = phi0/g
 t_day = 2*pi/Omega
 
 ### timing options
-dump_freq = 10
+dump_freq = 1
 dt = 250
-tmax = 50*t_day
+tmax = 10*t_day
 
 restart = False
 restart_name = 'single-step_trap-qg_tophat_cD1em3gamma390000q05em1xi1em1_Bu1b1p5Rop2_l10dt250df10'
@@ -432,7 +432,9 @@ if qg_tophat:
         hatsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
     tophat1 = conditional(r<rstar-smooth_delta*Lx/nx, 1, hatsmooth)
     tophat = conditional(r<rstar+smooth_delta*Lx/nx, tophat1, 0)
-evaporation = Evaporation(eqns, qg*tophat, scaling=evap_scale)
+    evaporation = Evaporation(eqns, qg*tophat, scaling=evap_scale)
+else:
+    evaporation = Evaporation(eqns, qg, scaling=evap_scale)
 
 if raddamp:
     physics_schemes = [

@@ -315,7 +315,7 @@ t_day = 2*pi/Omega
 ### timing options
 dump_freq = 1    # dump frequency of output
 dt = 250          # timestep (in seconds)
-tmax = 10*t_day       # duration of the simulation (in seconds)
+tmax = 1*t_day       # duration of the simulation (in seconds)
 
 restart = False
 restart_name = 'single-step_trap_radt5beta390000q01em2xi1em1_Bu1b1p5Rop2_l10dt250df10'
@@ -368,7 +368,7 @@ beta1 = 5750*Bu*mu # calculated from formula
 
 ### radiative damping
 raddamp = True
-tau_r = 10  # number of days for timescale 
+tau_r = 5  # number of days for timescale 
 
 ### name
 setup = 'single'
