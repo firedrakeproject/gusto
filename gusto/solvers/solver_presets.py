@@ -100,7 +100,6 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         trace_params = {
             'pc_type': 'ksp',
             'ksp': {
-                # 'ksp_converged_rate': None,
                 'ksp_rtol': r_tol,
                 'ksp_type': 'fgmres',
                 'pc_type': 'gamg',
