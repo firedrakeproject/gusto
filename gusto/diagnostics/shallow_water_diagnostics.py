@@ -159,17 +159,19 @@ class Vorticity(DiagnosticField):
         vorticity_types = ["relative", "absolute", "potential"]
         if vorticity_type not in vorticity_types:
             raise ValueError(f"vorticity type must be one of {vorticity_types}, not {vorticity_type}")
-        space = domain.spaces("H1")
+
+        # Set default space
+        if self.space is None:
+            self.space = domain.spaces("H1")
 
         # Work out continuity requirements of space
-        if self.space is None or not is_cg(self.space):
+        if not is_cg(self.space):
             # Using DG, calculate u in HCurl space as intermediary
             self.hcurl_intermediary = True
             assert self.method != 'solve', (
                 'vorticity diagnostics can only be output in L2 space when '
                 + 'not using "solve" method'
             )
-            space = domain.spaces("L2")
             u_hdiv = state_fields("u")
             self.u_hcurl = Function(domain.spaces("HCurl"))
             u = self.u_hcurl
@@ -194,12 +196,12 @@ class Vorticity(DiagnosticField):
             elif vorticity_type == "relative":
                 self.expr = curl_operator(u)
 
-        super().setup(domain, state_fields, space=space)
+        super().setup(domain, state_fields, space=self.space)
 
         # Set up problem now that self.field has been set up
         if self.method == 'solve':
-            gamma = TestFunction(space)
-            q = TrialFunction(space)
+            gamma = TestFunction(self.space)
+            q = TrialFunction(self.space)
 
             if vorticity_type == "potential":
                 a = q*gamma*D*dx
