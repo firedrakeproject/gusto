@@ -414,7 +414,7 @@ class IO(object):
             # Gather errors from each rank and raise appropriate error everywhere
             # This allreduce also ensures that all ranks are in sync wrt the results dir
             raise_exception = self.mesh.comm.allreduce(raise_parallel_exception, op=MPI.MAX)
-            if raise_exception == 1:
+            if raise_exception == 1 and not self.output.overwrite_files:
                 raise GustoIOError(f'results directory {self.dumpdir} already exists')
             elif raise_exception == 2:
                 if error:
