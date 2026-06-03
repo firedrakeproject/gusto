@@ -119,6 +119,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'pc_fieldsplit_type': 'schur',
             'pc_fieldsplit_schur_fact_type': 'full',
             'pc_fieldsplit_0_fields': '0,1',
+            # The reduced operator is not symmetric
             'pc_fieldsplit_1_fields': '2',
             'fieldsplit_0': {
                 'ksp_type': 'preonly',
