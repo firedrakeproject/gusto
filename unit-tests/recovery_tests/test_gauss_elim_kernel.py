@@ -91,7 +91,7 @@ def set_val_at_point_DG(coord_field, coords, field=None, new_value=None):
 @pytest.mark.parametrize("geometry", ["1D", "2D"])
 def test_gaussian_elimination(geometry, mesh):
 
-    cell = mesh.ufl_cell().cellname()
+    cell = mesh.ufl_cell().cellname
     DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
     DG1 = FunctionSpace(mesh, DG1_elt)
     vec_DG1 = VectorFunctionSpace(mesh, DG1_elt)

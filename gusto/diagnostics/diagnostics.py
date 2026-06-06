@@ -7,9 +7,8 @@ from firedrake import (dot, dx, Function, sqrt, TestFunction,
                        ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, pi,
                        TensorFunctionSpace, SpatialCoordinate, as_vector,
                        Projector, assemble, FunctionSpace, FiniteElement,
-                       TensorProductElement, CellVolume, Cofunction)
+                       TensorProductElement, CellVolume, Cofunction, interpolate)
 from firedrake.assign import Assigner
-from firedrake.__future__ import interpolate
 from ufl.domain import extract_unique_domain
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -446,9 +445,7 @@ class CourantNumber(DiagnosticField):
         self.cell_flux_form = 2*avg(un*test)*dS_calc + un*test*ds_calc
 
         # Final Courant number expression
-        cell_flux = self.cell_flux.riesz_representation(
-            'l2', solver_options={'function_space': V}
-        )
+        cell_flux = Function(V, val=self.cell_flux.dat)
         self.expr = cell_flux * domain.dt / cell_volume
 
         super().setup(domain, state_fields)
@@ -492,7 +489,7 @@ class Gradient(DiagnosticField):
         """
         f = state_fields(self.fname)
 
-        mesh_dim = domain.mesh.geometric_dimension()
+        mesh_dim = domain.mesh.geometric_dimension
         try:
             field_dim = state_fields(self.fname).ufl_shape[0]
         except IndexError:
@@ -602,7 +599,7 @@ class XComponent(VectorComponent):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        dim = domain.mesh.topological_dimension()
+        dim = domain.mesh.topological_dimension
         e_x = as_vector([Constant(1.0)]+[Constant(0.0)]*(dim-1))
         super().setup(domain, state_fields, e_x)
 
@@ -624,7 +621,7 @@ class YComponent(VectorComponent):
         """
         assert domain.metadata['domain_type'] not in ['interval', 'vertical_slice'], \
             f'Y-component diagnostic cannot be used with domain {domain.metadata["domain_type"]}'
-        dim = domain.mesh.topological_dimension()
+        dim = domain.mesh.topological_dimension
         e_y = as_vector([Constant(0.0), Constant(1.0)]+[Constant(0.0)]*(dim-2))
         super().setup(domain, state_fields, e_y)
 
@@ -646,21 +643,17 @@ class ZComponent(VectorComponent):
         """
         assert domain.metadata['domain_type'] not in ['interval', 'plane'], \
             f'Z-component diagnostic cannot be used with domain {domain.metadata["domain_type"]}'
-        dim = domain.mesh.topological_dimension()
+        dim = domain.mesh.topological_dimension
         e_x = as_vector([Constant(0.0)]*(dim-1)+[Constant(1.0)])
         super().setup(domain, state_fields, e_x)
 
 
 class SphericalComponent(VectorComponent):
     """Base diagnostic for computing spherical-polar components of fields."""
-    def __init__(self, name, rotated_pole=None, space=None, method='interpolate'):
+    def __init__(self, name, space=None, method='interpolate'):
         """
         Args:
             name (str): name of the field to compute the component of.
-            rotated_pole (tuple of floats, optional): a tuple of floats
-                (lon, lat) of the new pole, in the original coordinate system.
-                The longitude and latitude must be expressed in radians.
-                Defaults to None, corresponding to a pole of (0, pi/2).
             space (:class:`FunctionSpace`, optional): the function space to
                 evaluate the diagnostic field in. Defaults to None, in which
                 case the default space is the domain's DG space.
@@ -668,7 +661,6 @@ class SphericalComponent(VectorComponent):
                 for this diagnostic. Valid options are 'interpolate', 'project',
                 'assign' and 'solve'. Defaults to 'interpolate'.
         """
-        self.rotated_pole = (0.0, pi/2) if rotated_pole is None else rotated_pole
         super().__init__(name=name, space=space, method=method)
 
     def _check_args(self, domain, field):
@@ -682,7 +674,7 @@ class SphericalComponent(VectorComponent):
         """
 
         # check geometric dimension is 3D
-        if domain.mesh.geometric_dimension() != 3:
+        if domain.mesh.geometric_dimension != 3:
             raise ValueError('Spherical components only work when the geometric dimension is 3!')
 
         if np.prod(field.ufl_shape) != 3:
@@ -707,7 +699,8 @@ class MeridionalComponent(SphericalComponent):
         f = state_fields(self.fname)
         self._check_args(domain, f)
         xyz = SpatialCoordinate(domain.mesh)
-        _, e_lat, _ = rotated_lonlatr_vectors(xyz, self.rotated_pole)
+        pole = (0.0, pi/2)
+        _, e_lat, _ = rotated_lonlatr_vectors(xyz, pole)
         super().setup(domain, state_fields, e_lat)
 
 
@@ -729,7 +722,8 @@ class ZonalComponent(SphericalComponent):
         f = state_fields(self.fname)
         self._check_args(domain, f)
         xyz = SpatialCoordinate(domain.mesh)
-        e_lon, _, _ = rotated_lonlatr_vectors(xyz, self.rotated_pole)
+        pole = (0.0, pi/2)
+        e_lon, _, _ = rotated_lonlatr_vectors(xyz, pole)
         super().setup(domain, state_fields, e_lon)
 
 
@@ -751,7 +745,8 @@ class RadialComponent(SphericalComponent):
         f = state_fields(self.fname)
         self._check_args(domain, f)
         xyz = SpatialCoordinate(domain.mesh)
-        _, _, e_r = rotated_lonlatr_vectors(xyz, self.rotated_pole)
+        pole = (0.0, pi/2)
+        _, _, e_r = rotated_lonlatr_vectors(xyz, pole)
         super().setup(domain, state_fields, e_r)
 
 
@@ -1032,18 +1027,18 @@ class TracerDensity(DiagnosticField):
             m_X_space = m_X.function_space()
             rho_d_space = rho_d.function_space()
 
-            if domain.spaces.extruded_mesh:
+            if domain.spaces.mesh.extruded:
                 # Extract the base horizontal and vertical elements
                 # for the mixing ratio and density.
-                m_X_horiz = m_X_space.ufl_element().sub_elements[0]
-                m_X_vert = m_X_space.ufl_element().sub_elements[1]
-                rho_d_horiz = rho_d_space.ufl_element().sub_elements[0]
-                rho_d_vert = rho_d_space.ufl_element().sub_elements[1]
+                m_X_horiz = m_X_space.ufl_element().factor_elements[0]
+                m_X_vert = m_X_space.ufl_element().factor_elements[1]
+                rho_d_horiz = rho_d_space.ufl_element().factor_elements[0]
+                rho_d_vert = rho_d_space.ufl_element().factor_elements[1]
 
                 horiz_degree = m_X_horiz.degree() + rho_d_horiz.degree()
                 vert_degree = m_X_vert.degree() + rho_d_vert.degree()
 
-                cell = domain.mesh._base_mesh.ufl_cell().cellname()
+                cell = domain.mesh._base_mesh.ufl_cell().cellname
                 horiz_elt = FiniteElement('DG', cell, horiz_degree)
                 vert_elt = FiniteElement('DG', cell, vert_degree)
                 elt = TensorProductElement(horiz_elt, vert_elt)
@@ -1052,7 +1047,7 @@ class TracerDensity(DiagnosticField):
                 rho_d_degree = rho_d_space.ufl_element().degree()
                 degree = m_X_degree + rho_d_degree
 
-                cell = domain.mesh.ufl_cell().cellname()
+                cell = domain.mesh.ufl_cell().cellname
                 elt = FiniteElement('DG', cell, degree)
 
             tracer_density_space = FunctionSpace(domain.mesh, elt, name='tracer_density_space')

@@ -12,9 +12,10 @@ from gusto import (Domain, IO, PrescribedTransport, AdvectionEquation,
                    ZComponent, MeridionalComponent, ZonalComponent,
                    RadialComponent, DGUpwind)
 from mpi4py import MPI
-from netCDF4 import Dataset, chartostring
+from netCDF4 import Dataset
 import pytest
 from pytest_mpi import parallel_assert
+import numpy as np
 
 
 def make_dirname(test_name, suffix=""):
@@ -169,6 +170,17 @@ def test_nc_outputting(geometry, domain_and_mesh_details):
                 return output_data[metadata_key][0] - output_value < 1e-14
         else:
             def assertion():
-                return str(chartostring(output_data[metadata_key][0])) == output_value
+                var = output_data[metadata_key]
+                row = var[0, :] if getattr(var, 'ndim', None) == 2 else var[:]
+                arr = np.array(row)
+
+                if arr.dtype.kind == 'S':                        # bytes-like chars
+                    decoded = b''.join(arr.tolist()).decode('utf-8').rstrip('\x00')
+                elif arr.dtype.kind in ('U', 'O'):               # already text
+                    decoded = ''.join(arr.tolist()).rstrip('\x00')
+                else:                                            # fallback
+                    decoded = b''.join(arr.view('S1').tolist()).decode('utf-8').rstrip('\x00')
+
+                return decoded == output_value
 
         parallel_assert(assertion, participating=output_data is not None, msg=error_message)

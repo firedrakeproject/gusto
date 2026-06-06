@@ -213,6 +213,16 @@ class SplitPhysicsTimestepper(Timestepper):
 
     def setup_scheme(self):
         self.setup_equation(self.equation)
+
+        if self.scheme.augmentation is not None:
+            if hasattr(self.scheme.augmentation, 'setup_residual') and callable(self.scheme.augmentation.setup_residual):
+                # In the augmentation residual,
+                dynamics = Label('dynamics')
+                self.scheme.augmentation.residual = self.scheme.augmentation.residual.label_map(
+                    lambda t: not any(t.has_label(time_derivative, physics_label)),
+                    map_if_true=lambda t: dynamics(t)
+                )
+
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
         self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics_label)), dynamics)
@@ -297,11 +307,24 @@ class SplitPrescribedTransport(Timestepper):
 
     def setup_scheme(self):
         self.setup_equation(self.equation)
+
+        if self.scheme.augmentation is not None:
+            if hasattr(self.scheme.augmentation, 'setup_residual') and callable(self.scheme.augmentation.setup_residual):
+                # In the augmentation residual,
+                # go through and label all non-physics terms with a "dynamics" label
+                dynamics = Label('dynamics')
+                self.scheme.augmentation.residual = self.scheme.augmentation.residual.label_map(
+                    lambda t: not any(t.has_label(time_derivative, physics_label)),
+                    map_if_true=lambda t: dynamics(t)
+                )
+
         # Go through and label all non-physics terms with a "dynamics" label
         dynamics = Label('dynamics')
         self.equation.label_terms(lambda t: not any(t.has_label(time_derivative, physics_label)), dynamics)
+
         apply_bcs = True
         self.scheme.setup(self.equation, apply_bcs, dynamics)
+
         self.setup_transporting_velocity(self.scheme)
         if self.io.output.log_courant:
             self.scheme.courant_max = self.io.courant_max

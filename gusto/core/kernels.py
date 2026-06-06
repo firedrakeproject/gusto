@@ -10,7 +10,7 @@ tested.
 """
 
 from firedrake import dx
-from firedrake.parloops import par_loop, READ, WRITE, MIN, MAX, op2
+from firedrake.parloops import par_loop, READ, WRITE, INC, MIN, MAX, op2
 import numpy as np
 
 
@@ -114,6 +114,55 @@ class ClipZero():
                   "field_in": (field_in, READ)})
 
 
+class MeanMixingRatioWeights():
+    """
+    Finds the lambda values for blending a mixing ratio and its
+    mean DG0 field in the MeanLimiter.
+
+    The minimum value in each cell is identified.
+    If the value is negative, then a lamda weight is computed
+    that will ensure non-negativity in the limiting step.
+    """
+
+    def __init__(self, V_DG1):
+        """
+        Args:
+            V (:class:`FunctionSpace`): The space of the field for the mean
+            mixing ratio, which should be DG0.
+        """
+
+        shapes = {'nDOFs_DG1': V_DG1.finat_element.space_dimension()}
+        domain = "{{[i]: 0 <= i < {nDOFs_DG1}}}".format(**shapes)
+
+        instrs = ("""
+                  <float64> min_value = 0.0
+
+                  for i
+                      min_value = fmin(min_value, mX_field[i])
+                  end
+
+                  if min_value < 0.0
+                    lamda[0] = fmax(lamda[0],-min_value/(mean_field[0] - min_value))
+                  end
+
+                  """)
+
+        self._kernel = (domain, instrs)
+
+    def apply(self, lamda, mX_field, mean_field):
+        """
+        Performs the par loop.
+
+        Args:
+            w (:class:`Function`): the field in which to store the weights. This
+                lives in the continuous target space.
+        """
+        par_loop(self._kernel, dx,
+                 {"lamda": (lamda, INC),
+                  "mX_field": (mX_field, READ),
+                  "mean_field": (mean_field, READ)})
+
+
 class MinKernel():
     """Finds the minimum DoF value of a field."""
 
@@ -136,7 +185,7 @@ class MinKernel():
             The minimum DoF value of the field.
         """
 
-        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=field._comm)
+        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=field.comm)
 
         op2.par_loop(self._kernel, field.dof_dset.set, fmin(MIN), field.dat(READ))
 
@@ -165,7 +214,7 @@ class MaxKernel():
             The maximum DoF value of the field.
         """
 
-        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=field._comm)
+        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=field.comm)
 
         op2.par_loop(self._kernel, field.dof_dset.set, fmax(MAX), field.dat(READ))
 

@@ -4,9 +4,8 @@ Defines microphysics routines to be used with the moist shallow water equations.
 
 from firedrake import (
     conditional, Function, dx, min_value, max_value, FunctionSpace,
-    assemble, split
+    assemble, split, interpolate
 )
-from firedrake.__future__ import interpolate
 from firedrake.fml import subject
 from gusto.core.logging import logger
 from gusto.physics.physics_parametrisation import PhysicsParametrisation
@@ -337,7 +336,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         self.source = Function(W)
         self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
         self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
-        self.source_interpolate = [interpolate(sat_adj_expr*factor, source)
+        self.source_interpolate = [interpolate(sat_adj_expr*factor, source.function_space())
                                    for source, factor in zip(self.source_int, factors)]
 
         # test functions have the same order as factors and sources (vapour,

@@ -53,7 +53,7 @@ def test_dg_transport_scalar(tmpdir, geometry, equation_form, tracer_setup):
 def test_dg_transport_vector(tmpdir, geometry, equation_form, tracer_setup):
     setup = tracer_setup(tmpdir, geometry)
     domain = setup.domain
-    gdim = domain.mesh.geometric_dimension()
+    gdim = domain.mesh.geometric_dimension
     f_init = as_vector([setup.f_init]*gdim)
     V = VectorFunctionSpace(domain.mesh, "DG", 1)
     if equation_form == "advective":

@@ -13,11 +13,9 @@ from firedrake import (
     LinearVariationalProblem, LinearVariationalSolver
 )
 from gusto import (
-    Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
-    RecoverySpaces, BoundaryMethod, Perturbation, CompressibleParameters,
-    CompressibleEulerEquations, CompressibleSolver,
-    compressible_hydrostatic_balance, TRBDF2QuasiNewton, EmbeddedDGOptions,
-    SubcyclingOptions, RungeKuttaFormulation
+    OutputParameters, LowestOrderSIQNModel,
+    Perturbation, CompressibleParameters,
+    CompressibleEulerEquations, compressible_hydrostatic_balance
 )
 
 dry_bryan_fritsch_defaults = {
@@ -54,7 +52,6 @@ def dry_bryan_fritsch(
     # Our settings for this set up
     # ------------------------------------------------------------------------ #
 
-    element_order = 1
     u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
@@ -64,14 +61,15 @@ def dry_bryan_fritsch(
     # Domain
     base_mesh = IntervalMesh(ncolumns, domain_width)
     mesh = ExtrudedMesh(base_mesh, nlayers, layer_height=domain_height/nlayers)
-    domain = Domain(mesh, dt, "CG", element_order)
 
     # Equation
     params = CompressibleParameters(mesh)
-    eqns = CompressibleEulerEquations(
-        domain, params, u_transport_option=u_eqn_type,
-        no_normal_flow_bc_ids=[1, 2]
-    )
+    eqns = CompressibleEulerEquations
+
+    # Model
+    model = LowestOrderSIQNModel(mesh, dt, params, eqns,
+                                 u_transport_option=u_eqn_type,
+                                 family="CG", no_normal_flow_bc_ids=[1, 2])
 
     # I/O
     output = OutputParameters(
@@ -79,64 +77,32 @@ def dry_bryan_fritsch(
         dumplist=['rho']
     )
     diagnostic_fields = [Perturbation('theta')]
-    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    # Transport schemes
-    theta_opts = EmbeddedDGOptions()
-    subcycling_options = None
-    transported_fields = [
-        SSPRK3(domain, "u", subcycling_options=subcycling_options),
-        SSPRK3(
-            domain, "rho", subcycling_options=subcycling_options,
-            rk_formulation=RungeKuttaFormulation.linear
-        ),
-        SSPRK3(
-            domain, "theta", subcycling_options=subcycling_options,
-            options=theta_opts
-        )
-    ]
-    transport_methods = [
-        DGUpwind(eqns, "u"),
-        DGUpwind(eqns, "rho", advective_then_flux=True),
-        DGUpwind(eqns, "theta")
-    ]
-
-    # Linear solver
-    tau_values = {'rho': 1.0, 'theta': 1.0}
-    gamma = (1-sqrt(2)/2)
-    gamma2 = (1 - 2*float(gamma))/(2 - 2*float(gamma))
-    tr_solver = CompressibleSolver(eqns, alpha=gamma, tau_values=tau_values)
-    bdf_solver = CompressibleSolver(eqns, alpha=gamma2, tau_values=tau_values)
-
-    # Time stepper
-    stepper = TRBDF2QuasiNewton(
-        eqns, io, transported_fields, transport_methods,
-        gamma=gamma, tr_solver=tr_solver, bdf_solver=bdf_solver,
-        alt_formulation=True, num_inner_tr=1, num_inner_bdf=1
-    )
+    model.setup(output, diagnostic_fields=diagnostic_fields)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
+    stepper = model.stepper
     u0 = stepper.fields("u")
     rho0 = stepper.fields("rho")
     theta0 = stepper.fields("theta")
 
     # spaces
-    Vt = domain.spaces("theta")
-    Vr = domain.spaces("DG")
+    Vt = model.domain.spaces("theta")
+    Vr = model.domain.spaces("DG")
     x, z = SpatialCoordinate(mesh)
 
     # Define constant theta_e and water_t
     theta_b = Function(Vt).interpolate(Constant(Tsurf))
 
     # Set initial wind to be zero
-    zero = Constant(0.0, domain=mesh)
+    zero = Constant(0.0)
     u0.project(as_vector([zero, zero]))
 
     # Calculate hydrostatic fields
-    compressible_hydrostatic_balance(eqns, theta_b, rho0, solve_for_rho=True)
+    compressible_hydrostatic_balance(model.equation, theta_b, rho0, solve_for_rho=True)
 
     # make mean fields
     rho_b = Function(Vr).assign(rho0)
@@ -170,7 +136,7 @@ def dry_bryan_fritsch(
     # Run
     # ------------------------------------------------------------------------ #
 
-    stepper.run(t=0, tmax=tmax)
+    model.run(t=0, tmax=tmax)
 
 # ---------------------------------------------------------------------------- #
 # MAIN

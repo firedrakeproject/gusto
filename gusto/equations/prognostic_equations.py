@@ -175,6 +175,10 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
 
         return mass_form
 
+    def update_reference_profiles(self):
+        """Update the reference profiles used in the equation set. Default is to do nothing."""
+        pass
+
     # ======================================================================== #
     # Linearisation Routines
     # ======================================================================== #

@@ -1,8 +1,8 @@
 """Defines variants of the compressible Euler equations."""
 
 from firedrake import (
-    sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg, dS_v,
-    conditional, SpatialCoordinate, split, Constant, as_vector
+    sin, pi, inner, dx, div, cross, FunctionSpace, FacetNormal, jump, avg,
+    conditional, SpatialCoordinate, split, Constant, as_vector, dS_v
 )
 from firedrake.fml import subject, replace_subject, all_terms
 from gusto.core.labels import (
@@ -34,6 +34,8 @@ class CompressibleEulerEquations(PrognosticEquationSet):
     pressure.
     """
 
+    name = "CompressibleEulerEquations"
+
     def __init__(self, domain, parameters, sponge_options=None,
                  extra_terms=None, space_names=None,
                  linearisation_map=all_terms,
@@ -45,7 +47,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            x (:class:`Configuration`, optional): an object containing
+            parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
             sponge_options (:class:`SpongeLayerParameters`, optional): any
                 parameters for applying a sponge layer to the upper boundary.

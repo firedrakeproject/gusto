@@ -5,9 +5,8 @@ compressible Euler equations.
 
 from firedrake import (
     conditional, Function, dx, min_value, max_value, Constant, pi,
-    Projector, assemble, split
+    Projector, assemble, split, interpolate
 )
-from firedrake.__future__ import interpolate
 from firedrake.fml import identity, Term, subject
 from gusto.equations import Phases, TracerVariableType
 from gusto.recovery import Recoverer, BoundaryMethod
@@ -645,7 +644,7 @@ class EvaporationOfRain(PhysicsParametrisation):
         self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
         self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
         self.source_interpolate = [
-            interpolate(evap_rate * factor, source)
+            interpolate(evap_rate * factor, source.function_space())
             for source, factor in zip(self.source_int, factors)
         ]
 

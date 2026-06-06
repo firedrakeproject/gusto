@@ -8,6 +8,10 @@ from firedrake import (IcosahedralSphereMesh, PeriodicIntervalMesh,
 from gusto import *
 from collections import namedtuple
 import pytest
+from pyadjoint.tape import (
+    annotate_tape, get_working_tape, set_working_tape,
+    continue_annotation, pause_annotation
+)
 
 opts = ('domain', 'tmax', 'io', 'f_init', 'f_end', 'degree',
         'uexpr', 'umax', 'radius', 'tol')
@@ -17,9 +21,13 @@ TracerSetup.__new__.__defaults__ = (None,)*len(opts)
 
 def tracer_sphere(tmpdir, degree, small_dt):
     radius = 1
-    mesh = IcosahedralSphereMesh(radius=radius,
-                                 refinement_level=3,
-                                 degree=1)
+
+    dirname = str(tmpdir)
+    mesh = IcosahedralSphereMesh(
+        radius=radius,
+        refinement_level=3,
+        degree=1
+    )
     x = SpatialCoordinate(mesh)
 
     # Parameters chosen so that dt != 1
@@ -30,7 +38,7 @@ def tracer_sphere(tmpdir, degree, small_dt):
     else:
         dt = pi/3. * 0.02
 
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=15)
+    output = OutputParameters(dirname=dirname, dumpfreq=15)
     domain = Domain(mesh, dt, family="BDM", degree=degree)
     io = IO(domain, output)
 
@@ -49,6 +57,8 @@ def tracer_sphere(tmpdir, degree, small_dt):
 
 def tracer_slice(tmpdir, degree, small_dt):
     n = 30 if degree == 0 else 15
+
+    dirname = str(tmpdir)
     m = PeriodicIntervalMesh(n, 1.)
     mesh = ExtrudedMesh(m, layers=n, layer_height=1./n)
 
@@ -61,7 +71,7 @@ def tracer_slice(tmpdir, degree, small_dt):
     else:
         dt = 0.01
     tmax = 0.75
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
+    output = OutputParameters(dirname=dirname, dumpfreq=25)
     domain = Domain(mesh, dt, family="CG", degree=degree)
     io = IO(domain, output)
 
@@ -89,10 +99,11 @@ def tracer_blob_slice(tmpdir, degree, small_dt):
     else:
         dt = 0.01
     L = 10.
+    dirname = str(tmpdir)
     m = PeriodicIntervalMesh(10, L)
     mesh = ExtrudedMesh(m, layers=10, layer_height=1.)
 
-    output = OutputParameters(dirname=str(tmpdir), dumpfreq=25)
+    output = OutputParameters(dirname=dirname, dumpfreq=25)
     domain = Domain(mesh, dt, family="CG", degree=degree)
     io = IO(domain, output)
 
@@ -117,3 +128,29 @@ def tracer_setup():
                 return tracer_slice(tmpdir, degree, small_dt)
 
     return _tracer_setup
+
+
+@pytest.fixture(scope="module", autouse=True)
+def check_empty_tape(request):
+    """Check that the tape is empty at the end of each module.
+    """
+    def finalizer():
+        # make sure taping is switched off
+        assert not annotate_tape()
+
+        # make sure the tape is empty
+        tape = get_working_tape()
+        if tape is not None:
+            assert len(tape.get_blocks()) == 0
+
+    request.addfinalizer(finalizer)
+
+
+@pytest.fixture
+def set_test_tape():
+    """Set a new working tape specifically for this test.
+    """
+    continue_annotation()
+    with set_working_tape():
+        yield
+    pause_annotation()

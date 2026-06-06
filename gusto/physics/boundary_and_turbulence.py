@@ -5,9 +5,8 @@ drag and turbulence."""
 from firedrake import (
     conditional, Function, dx, sqrt, dot, Constant, grad,
     TestFunctions, split, inner, Projector, exp, avg, outer, FacetNormal,
-    SpatialCoordinate, dS_v, FunctionSpace, assemble
+    SpatialCoordinate, dS_v, FunctionSpace, assemble, interpolate
 )
-from firedrake.__future__ import interpolate
 from firedrake.fml import subject
 from gusto.core.equation_configuration import BoundaryLayerParameters
 from gusto.recovery import Recoverer, BoundaryMethod
@@ -143,7 +142,9 @@ class SurfaceFluxes(PhysicsParametrisation):
                 source_mv_expr = test_m_v * self.source_mv * dx
 
                 self.source_interpolators.append(
-                    lambda: assemble(interpolate(dmv_expr, self.source_mv_int), tensor=self.source_mv_int)
+                    lambda: assemble(
+                        interpolate(dmv_expr, self.source_mv_int.function_space()),
+                        tensor=self.source_mv_int)
                 )
                 equation.residual -= source_label(
                     self.label(subject(prognostic(source_mv_expr, vapour_name), self.source), self.evaluate)
@@ -163,7 +164,9 @@ class SurfaceFluxes(PhysicsParametrisation):
             dtheta_vd_expr = surface_expr * (theta_np1_expr - theta_vd) / self.dt
             source_theta_expr = test_theta * self.source_theta_vd * dx
             self.source_interpolators.append(
-                lambda: assemble(interpolate(dtheta_vd_expr, self.source_theta_vd_int), tensor=self.source_theta_vd_int)
+                lambda: assemble(
+                    interpolate(dtheta_vd_expr, self.source_theta_vd_int.function_space()),
+                    tensor=self.source_theta_vd_int)
             )
             equation.residual -= source_label(
                 self.label(subject(prognostic(source_theta_expr, 'theta'), self.source), self.evaluate)

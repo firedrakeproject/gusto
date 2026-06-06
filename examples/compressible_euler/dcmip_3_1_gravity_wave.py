@@ -15,7 +15,7 @@ from firedrake import (
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, SUPGOptions, lonlatr_from_xyz, CompressibleParameters,
-    CompressibleEulerEquations, CompressibleSolver, ZonalComponent,
+    CompressibleEulerEquations, ZonalComponent,
     compressible_hydrostatic_balance, Perturbation, GeneralCubedSphereMesh,
     SubcyclingOptions
 )
@@ -105,13 +105,9 @@ def dcmip_3_1_gravity_wave(
         DGUpwind(eqns, field) for field in ["u", "rho", "theta"]
     ]
 
-    # Linear solver
-    linear_solver = CompressibleSolver(eqns)
-
     # Time stepper
     stepper = SemiImplicitQuasiNewton(
-        eqns, io, transported_fields, transport_methods,
-        linear_solver=linear_solver
+        eqns, io, transported_fields, transport_methods
     )
 
     # ------------------------------------------------------------------------ #
