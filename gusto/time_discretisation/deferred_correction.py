@@ -95,7 +95,7 @@ class SDC(object, metaclass=ABCMeta):
     def __init__(self, base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                  formulation="N2N", field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
-                 limiter=None, initial_guess="base"):
+                 limiter=None, initial_guess="base", sweep_tols=None):
         """
         Initialise SDC object
         Args:
@@ -193,6 +193,9 @@ class SDC(object, metaclass=ABCMeta):
             self.base_flag = True
         else:
             self.base_flag = False
+        
+        self.total_ksp_its = 0
+        self.sweep_tols = sweep_tols
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -493,7 +496,21 @@ class SDC(object, metaclass=ABCMeta):
                     self.U_start.assign(self.Unodes1[m-1])
                 self.solver = solver_list[m-1]
                 self.U_DC.assign(self.Unodes[m])
+                # if self.sweep_rtols is not None:
+                #     ksp = self.solver.snes.ksp
+                #     ksp.setTolerances(rtol=self.sweep_rtols[k-1])
 
+                tol = self.sweep_tols[k-1]
+
+                self.solver.snes.ksp.setTolerances(
+                    atol=tol["ksp_atol"],
+                    rtol=tol["ksp_rtol"]
+                )
+
+                self.solver.snes.setTolerances(
+                    atol=tol["snes_atol"],
+                    rtol=tol["snes_rtol"]
+                )
                 # Compute
                 # for N2N:
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k)
@@ -502,8 +519,11 @@ class SDC(object, metaclass=ABCMeta):
                 # for Z2N:
                 # y_m^(k+1) = y^n + sum(j=1,m) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
                 #             + sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+                # rtol, atol, _, _ = ksp.getTolerances()
+                # PETSc.Sys.Print(f"sweep {k}, node {m}, rtol={rtol}")
                 self.solver.solve()
                 self.Unodes1[m].assign(self.U_DC)
+                self.total_ksp_its += self.solver.snes.ksp.getIterationNumber()
 
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:

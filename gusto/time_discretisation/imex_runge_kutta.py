@@ -118,6 +118,8 @@ class IMEXRungeKutta(TimeDiscretisation):
                                                 'sub_pc_type': 'ilu'}
         else:
             self.nonlinear_solver_parameters = nonlinear_solver_parameters
+        
+        self.total_ksp_its = 0
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -266,11 +268,13 @@ class IMEXRungeKutta(TimeDiscretisation):
 
             self.solver = solver_list[stage-self.solver_start_stage]
             # Set initial solver guess
-            self.x_out.assign(self.xs[stage-1])
+            if stage != 0:
+                self.x_out.assign(self.xs[stage-1])
             # Evaluate source terms
             for evaluate in self.evaluate_source:
                 evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
             self.solver.solve()
+            self.total_ksp_its += self.solver.snes.ksp.getIterationNumber()
 
             # Apply limiter
             if self.limiter is not None:
