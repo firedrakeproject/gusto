@@ -368,10 +368,10 @@ beta1 = 5750*Bu*mu # calculated from formula
 
 ### radiative damping
 raddamp = True
-tau_r = 5  # number of days for timescale 
+tau_r = 10  # number of days for timescale 
 
 ### name
-setup = 'single'
+setup = 'single_240fexpr_cg1'
 
 ##########################################################################
 if coriolisform == 'fplane':
