@@ -322,7 +322,7 @@ class SWSaturationAdjustment(PhysicsParametrisation):
 
         # Factors for multiplying source for different variables
         # the order matches the order in V_idx (vapour, cloud, depth, buoyancy)
-        factors = [1, -1]
+        factors = [Constant(1.0), Constant(-1.0)]
         if convective_feedback:
             factors.append(beta1)
         if thermal_feedback:
