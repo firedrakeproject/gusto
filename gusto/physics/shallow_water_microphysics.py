@@ -318,7 +318,8 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             self.gamma_v = gamma_v
 
         sat_adj_expr = self.gamma_v * (self.water_v - self.saturation_curve) / self.tau
-        sat_adj_expr = max_value(sat_adj_expr, -self.cloud / self.tau)
+        # Clip the increment to avoid generating negative values
+        sat_adj_expr = max_value(min_value(sat_adj_expr, self.water_v / self.tau), -self.cloud / self.tau)
 
         # Factors for multiplying source for different variables
         # the order matches the order in V_idx (vapour, cloud, depth, buoyancy)
