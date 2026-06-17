@@ -3,7 +3,7 @@ from gusto import(
     logger, PotentialVorticity, IO, SubcyclingOptions, TrapeziumRule,
     SSPRK3, DGUpwind, SemiImplicitQuasiNewton, Function,
     xy_from_rtheta, rtheta_from_xy, rtheta_from_lonlat, lonlat_from_rtheta,
-    CoriolisOptions
+    CoriolisOptions, RelativeVorticity
 )
 from firedrake import (
     SpatialCoordinate, VertexOnlyMesh, as_vector, pi, interpolate, exp, sqrt,
@@ -65,7 +65,9 @@ def smooth_f_profile(degree, delta, style, rstar, Omega, R, Lx, nx):
     # )
     return coeffs
 
-folder_name_suffix = 'smooth-trap-232dg'
+file_name_suffix = ''
+if file_name_suffix != '':
+    file_name_suffix = f'_{file_name_suffix}'
 
 nx = 256
 ny = nx
@@ -76,7 +78,7 @@ rstar = Lx/2-3*Lx/nx
 smooth_delta = 2
 
 Bu = 1
-g=24.79
+g = 24.79
 Omega = 1.74e-4
 R = 71.4e6
 f0 = 2 * Omega
@@ -88,9 +90,9 @@ smooth_degree = 5
 smooth_delta = 2
 
 dt = 250
-tmax = 100*dt
+tmax = 10*dt
 
-dirname=f'/data/home/sh1293/results/jupiter_sw/check_gamma_plane_{folder_name_suffix}'
+dirname=f'~/results/jupiter_sw/check_gamma_plane{file_name_suffix}'
 
 mesh = PeriodicRectangleMesh(nx=nx, ny=ny, Lx=Lx, Ly=Ly, quadrilateral=True)
 output = OutputParameters(dirname=f'{dirname}', dumpfreq=1, dump_nc=True)
@@ -102,11 +104,9 @@ domain = Domain(mesh, dt, "RTCF", 1)
 
 
 x, y = SpatialCoordinate(mesh)
-Lxmesh = mesh.coordinates.dat.data[:, 0].max()
-Lymesh = mesh.coordinates.dat.data[:, 1].max()
-rmesh, _ = rtheta_from_xy(x, y, Lxmesh/2, Lymesh/2)
+r, _ = rtheta_from_xy(x, y, Lx/2, Ly/2)
 Rsq = parameters.R**2
-fexpr = 2*parameters.Omega * (1 - 0.5 * rmesh**2 / Rsq)
+# fexpr = 2*parameters.Omega * (1 - 0.5 * r**2 / Rsq)
 # from firedrake import FunctionSpace
 # Vcg = FunctionSpace(domain.mesh, "DG", 1)
 # rfunc = Function(Vcg).interpolate(fexpr)
@@ -119,22 +119,23 @@ fexpr = 2*parameters.Omega * (1 - 0.5 * rmesh**2 / Rsq)
 
 Omega_num = Omega
 Omega = parameters.Omega
-fexpr = 2*Omega*(1-0.5*rmesh**2/R**2)
+fexpr = 2*Omega*(1-0.5*r*2/R**2)
 # ftrap = conditional(r < rstar, fexpr, 2*Omega)
 coeffs = smooth_f_profile(degree=smooth_degree, delta=smooth_delta, style='polar', rstar=rstar, Omega=Omega_num, R=R, Lx=Lx, nx=nx)
-fsmooth = float(coeffs[0]) + float(coeffs[1])*rmesh + float(coeffs[2])*rmesh**2 + float(coeffs[3])*rmesh**3
+fsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
 if smooth_degree == 5:
-    fsmooth += float(coeffs[4])*rmesh**4 + float(coeffs[5])*rmesh**5
+    fsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
 
 # ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
 # ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)#-2*Omega
 
-ftrap = conditional(rmesh<rstar+smooth_delta*Lx/nx, fsmooth, 2*Omega)
+ftrap = conditional(r<rstar+smooth_delta*Lx/nx, fsmooth, 2*Omega)
 
-# eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, 2*Omega))
-eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap))
+# first option (ftrap) is smoothed option, second (2*Omega) is step edge
+# eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap))
+eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, 2*Omega))
 
-diagnostic_fields = [PotentialVorticity()]
+diagnostic_fields = [PotentialVorticity(), RelativeVorticity()]
 
 io = IO(domain, output=output, diagnostic_fields=diagnostic_fields)
 
@@ -162,4 +163,4 @@ stepper.set_reference_profiles([('D', Dbar)])
 
 stepper.run(t=0, tmax=tmax)
 
-logger.info(f'File produced:\ncheck_gamma_plane_{folder_name_suffix}')
+logger.info(f'File produced:\n~/results/jupiter_sw/check_gamma_plane{file_name_suffix}')
