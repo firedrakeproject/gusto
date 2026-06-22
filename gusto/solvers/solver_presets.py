@@ -97,25 +97,43 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'ksp_rtol': r_tol
         }
 
-        scpc_solve_settings = {
-            'mat_type': 'matfree',
-            'ksp_type': 'preonly',
-            'pc_type': 'python',
-            'pc_python_type': 'firedrake.SCPC',
-            'pc_sc_eliminate_fields': '0,1',
-            # The reduced operator is not symmetric
-            'condensed_field': {
-                'ksp_type': 'fgmres',
+        trace_params = {
+            'pc_type': 'ksp',
+            'ksp': {
                 'ksp_rtol': r_tol,
-                'ksp_max_it': 100,
+                'ksp_type': 'fgmres',
                 'pc_type': 'gamg',
-                'pc_gamg_sym_graph': None,
                 'mg_levels': {
                     'ksp_type': 'gmres',
                     'ksp_max_it': 5,
                     'pc_type': 'bjacobi',
-                    'sub_pc_type': 'ilu'
-                }
+                    'sub_pc_type': 'ilu',
+                },
+            }
+        }
+
+        slate_schur_params = {
+            'mat_type': 'matfree',
+            'ksp_type': 'preonly',
+            'pc_type': 'fieldsplit',
+            'pc_fieldsplit_type': 'schur',
+            'pc_fieldsplit_schur_fact_type': 'full',
+            'pc_fieldsplit_0_fields': '0,1',
+            # The reduced operator is not symmetric
+            'pc_fieldsplit_1_fields': '2',
+            'fieldsplit_0': {
+                'ksp_type': 'preonly',
+                'pc_type': 'python',
+                'pc_python_type': 'firedrake.AssembledPC',
+                'assembled_pc_type': 'bjacobi',
+                'assembled_sub_pc_type': 'ilu',
+            },
+            'fieldsplit_1': {
+                'ksp_type': 'preonly',
+                'pc_type': 'python',
+                'pc_python_type': 'gusto.SlateSchurPC',
+                'slate_schur_nfields0': 2,
+                'slate_schur': trace_params,
             }
         }
 
@@ -129,7 +147,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'exnerbar_avg': exnerbar_avg_settings,
             'rhobar_avg': rhobar_avg_settings,
             'riesz_map': riesz_map_settings,
-            'compressible_hybrid_scpc': scpc_solve_settings,
+            'compressible_hybrid_scpc': slate_schur_params
         }
 
         # We pass the implicit weighting parameter (alpha) and tau_values to the
