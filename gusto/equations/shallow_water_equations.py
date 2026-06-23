@@ -5,6 +5,7 @@ from firedrake import (inner, dx, div, FunctionSpace, FacetNormal, jump, avg, Di
                        SpatialCoordinate, Constant, TrialFunctions, TestFunctions, dot, grad,
                        interpolate, assemble)
 from firedrake.fml import subject, drop, all_terms
+from gusto.core.coord_transforms import rtheta_from_xy
 from gusto.core.labels import (
     linearisation, pressure_gradient, coriolis, prognostic
 )
@@ -39,6 +40,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
     def __init__(self, domain, parameters,
                  space_names=None, linearisation_map=all_terms,
                  u_transport_option='vector_invariant_form',
+                 coriolis_trap=None,
                  no_normal_flow_bc_ids=None, active_tracers=None):
         """
         Args:
@@ -60,6 +62,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 'vector_invariant_form', 'vector_advection_form', and
                 'circulation_form'.
                 Defaults to 'vector_invariant_form'.
+            coriolis_trap (tuple, optional): (r_edge, f_trap) specifies a
+                distance r_edge and `trap' function f_trap such that the
+                Coriolis parameter is set to f_trap(r) for r>r_edge. For use
+                with gamma-plane setup only. Defaults to None.
             no_normal_flow_bc_ids (list, optional): a list of IDs of domain
                 boundaries at which no normal flow will be enforced. Defaults to
                 None.
@@ -82,6 +88,10 @@ class ShallowWaterEquations(PrognosticEquationSet):
         self.parameters = parameters
         self.domain = domain
         self.active_tracers = active_tracers
+
+        if coriolis_trap is not None:
+            assert self.parameters.rotation is CoriolisOptions.gammaplane, "coriolis_trap option is only for use with gamma-plane setup"
+        self.coriolis_trap = coriolis_trap
 
         self._setup_residual(u_transport_option)
 
@@ -201,7 +211,16 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 fexpr = self.parameters.f0
             elif rotation is CoriolisOptions.betaplane:
                 xyz = SpatialCoordinate(self.domain.mesh)
-                fexpr = self.parameters.f0 + self.parameters.beta * xyz[1]
+                fexpr = self.parameters.f0 + self.parameters.beta * (
+                    xyz[1] - self.parameters.y0)
+            elif rotation is CoriolisOptions.gammaplane:
+                x, y = SpatialCoordinate(self.domain.mesh)
+                r, _ = rtheta_from_xy(x, y)
+                Rsq = self.parameters.R**2
+                fexpr = 2*self.parameters.Omega * (1 - 0.5 * r**2 / Rsq)
+                if self.coriolis_trap is not None:
+                    r_edge, f_trap = self.coriolis_trap
+                    fexpr = conditional(r < r_edge, fexpr, f_trap)
             else:
                 raise NotImplementedError('Coriolis option is not implemented')
             self.prescribed_fields('coriolis', CG1).interpolate(fexpr)
