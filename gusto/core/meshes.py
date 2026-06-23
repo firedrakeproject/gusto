@@ -4,7 +4,7 @@ This file provides some specialised meshes not provided by Firedrake
 
 from firedrake import (FiniteElement, VectorFunctionSpace, interval,
                        TensorProductElement, functionspace, function, mesh,
-                       Function, op2, Mesh)
+                       Function, Mesh)
 from firedrake.petsc import PETSc
 import numpy as np
 import ufl
@@ -639,7 +639,9 @@ def get_flat_latlon_mesh(mesh):
 
 # We need to ensure that all points in a cell are on the same side of the branch cut in longitude coords
 # This kernel amends the longitude coords so that all longitudes in one cell are close together
-    kernel = op2.Kernel("""
+    kernel = op3.Function.from_c_string(
+        "splat_coords",
+        """\
 #define PI 3.141592653589793
 #define TWO_PI 6.283185307179586
 void splat_coords(double *coords) {{
@@ -662,9 +664,13 @@ void splat_coords(double *coords) {{
             }}
         }}
     }}
-}}
-""".format(**shapes), "splat_coords")
+}}""".format(**shapes),
+        [("coords", "double", op3.RW)],
+    )
 
-    op2.par_loop(kernel, coords_latlon.cell_set,
-                 coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))
+    op3.loop(
+        c := mesh.cells.owned.iter(),
+        kernel(pack(coords_latlon, c)),
+        eager=True
+    )
     return Mesh(coords_latlon)

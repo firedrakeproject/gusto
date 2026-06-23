@@ -10,7 +10,7 @@ tested.
 """
 
 from firedrake import dx
-from firedrake.parloops import par_loop, READ, WRITE, INC, MIN, MAX, op2
+from firedrake.parloops import par_loop, READ, WRITE, INC, MIN, MAX
 import numpy as np
 
 
@@ -166,17 +166,9 @@ class MeanMixingRatioWeights():
 class MinKernel():
     """Finds the minimum DoF value of a field."""
 
-    def __init__(self):
-
-        self._kernel = op2.Kernel("""
-            static void minify(double *a, double *b) {
-                a[0] = a[0] > b[0] ? b[0] : a[0];
-            }
-            """, "minify")
-
     def apply(self, field):
         """
-        Performs the par loop.
+        Find the min value.
 
         Args:
             field (:class:`Function`): The field to take the minimum of.
@@ -184,28 +176,16 @@ class MinKernel():
         Returns:
             The minimum DoF value of the field.
         """
-
-        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=field.comm)
-
-        op2.par_loop(self._kernel, field.dof_dset.set, fmin(MIN), field.dat(READ))
-
-        return fmin.data[0]
+        with field.dat.vec_ro as vec:
+            return vec.min()
 
 
 class MaxKernel():
     """Finds the maximum DoF value of a field."""
 
-    def __init__(self):
-
-        self._kernel = op2.Kernel("""
-            static void maxify(double *a, double *b) {
-                a[0] = a[0] < b[0] ? b[0] : a[0];
-            }
-            """, "maxify")
-
     def apply(self, field):
         """
-        Performs the par loop.
+        Find the max value.
 
         Args:
             field (:class:`Function`): The field to take the maximum of.
@@ -213,9 +193,5 @@ class MaxKernel():
         Returns:
             The maximum DoF value of the field.
         """
-
-        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=field.comm)
-
-        op2.par_loop(self._kernel, field.dof_dset.set, fmax(MAX), field.dat(READ))
-
-        return fmax.data[0]
+        with field.dat.vec_ro as vec:
+            return vec.max()
