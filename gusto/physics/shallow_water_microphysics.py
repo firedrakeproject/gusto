@@ -4,7 +4,7 @@ Defines microphysics routines to be used with the moist shallow water equations.
 
 from firedrake import (
     conditional, Function, dx, min_value, max_value, FunctionSpace,
-    assemble, split, interpolate
+    assemble, split, interpolate, Constant
 )
 from firedrake.fml import subject
 from gusto.core.logging import logger
@@ -304,12 +304,6 @@ class SWSaturationAdjustment(PhysicsParametrisation):
         # Saturation adjustment expression, adjusted to stop negative values
         self.water_v = Function(Vv)
         self.cloud = Function(Vc)
-        sat_adj_expr = (self.water_v - self.saturation_curve) / self.tau
-        sat_adj_expr = conditional(sat_adj_expr < 0,
-                                   max_value(sat_adj_expr,
-                                             -self.cloud / self.tau),
-                                   min_value(sat_adj_expr,
-                                             self.water_v / self.tau))
 
         # If gamma_v depends on variables
         if self.time_varying_gamma_v:
@@ -323,13 +317,17 @@ class SWSaturationAdjustment(PhysicsParametrisation):
             assert not isinstance(gamma_v, FunctionType), "If time_varying_thermal_feedback is not True then gamma_v cannot be a Python function."
             self.gamma_v = gamma_v
 
+        sat_adj_expr = self.gamma_v * (self.water_v - self.saturation_curve) / self.tau
+        # Clip the increment to avoid generating negative values
+        sat_adj_expr = max_value(min_value(sat_adj_expr, self.water_v / self.tau), -self.cloud / self.tau)
+
         # Factors for multiplying source for different variables
         # the order matches the order in V_idx (vapour, cloud, depth, buoyancy)
-        factors = [self.gamma_v, -self.gamma_v]
+        factors = [Constant(1.0), Constant(-1.0)]
         if convective_feedback:
-            factors.append(self.gamma_v*beta1)
+            factors.append(beta1)
         if thermal_feedback:
-            factors.append(self.gamma_v*beta2)
+            factors.append(beta2)
 
         # Add terms to equations and make interpolators
         # sources have the same order as V_idxs and factors
