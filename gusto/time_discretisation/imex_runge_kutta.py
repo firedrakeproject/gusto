@@ -1,8 +1,8 @@
 """Implementations of IMEX Runge-Kutta time discretisations."""
 
 from functools import cached_property
-from firedrake import (Function, Constant, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver)
+from firedrake import (Cofunction, Function, Constant, NonlinearVariationalProblem,
+                       NonlinearVariationalSolver, assemble, derivative)
 from firedrake.fml import replace_subject, all_terms, drop
 from gusto.core.labels import time_derivative, implicit, explicit, source_label
 from gusto.time_discretisation.time_discretisation import (
@@ -61,7 +61,7 @@ class IMEXRungeKutta(TimeDiscretisation):
 
     def __init__(self, domain, butcher_imp, butcher_exp, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None):
+                 limiter=None, options=None, augmentation=None, old_solver=False):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -92,6 +92,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.butcher_imp = butcher_imp
         self.butcher_exp = butcher_exp
         self.nStages = int(np.shape(self.butcher_imp)[1])
+        self.old_solver = old_solver
 
         # Some butcher tableaus have zero first stage, if so, we don't need to do an
         # initial solve and can copy across x_in to x_s[0]
@@ -139,8 +140,10 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
         self.source = [Function(self.fs) for i in range(self.nStages)]
-
-    def res(self, stage):
+        self.b = Cofunction(self.fs.dual())
+        self.alpha = Constant(self.butcher_imp[self.nStages-1, self.nStages-1])
+    
+    def res_old(self, stage):
         """Set up the discretisation's residual for a given stage."""
         # Add time derivative terms  y_s - y^n for stage s
         mass_form = self.residual.label_map(
@@ -194,6 +197,96 @@ class IMEXRungeKutta(TimeDiscretisation):
         residual += r_imp
         return residual.form
 
+    def res(self, stage):
+        """Set up the discretisation's residual for a given stage."""
+        # Add time derivative terms  y_s - y^n for stage s
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        # residual = mass_form.label_map(all_terms,
+        #                                map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual = -mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        # Loop through stages up to s-1 and calcualte/sum
+        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
+        # and
+        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
+        for i in range(stage):
+            r_exp = self.residual.label_map(
+                lambda t: t.has_label(explicit),
+                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_exp = r_exp.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.butcher_exp[stage, i])*self.dt*t)
+            r_imp = self.residual.label_map(
+                lambda t: t.has_label(implicit),
+                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_imp = r_imp.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.butcher_imp[stage, i])*self.dt*t)
+            residual += r_imp
+            residual += r_exp
+
+            # Calculate source terms
+            r_source = self.residual.label_map(
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_source = r_source.label_map(
+                all_terms,
+                map_if_true=lambda t: Constant(self.butcher_exp[stage, i]) * self.dt * t
+            )
+            residual += r_source
+
+        # Calculate and add on dt*a_ss*F(y_s)
+        # r_imp = self.residual.label_map(
+        #     lambda t: t.has_label(implicit),
+        #     map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+        #     map_if_false=drop)
+        # r_imp = r_imp.label_map(
+        #     lambda t: t.has_label(time_derivative),
+        #     map_if_false=lambda t: Constant(self.butcher_imp[stage, stage])*self.dt*t)
+        #residual += r_imp
+        return residual.form
+
+    @cached_property
+    def stage_rhs(self):
+        """Cached stage RHS forms.
+
+        The form *structure* is fixed once; the coefficients it references
+        (self.x1, self.xs[i], self.source[i]) are updated in place by .assign
+        each step, so the cached forms stay valid across timesteps. Removes the
+        per-step label_map/replace_subject rebuild that res(stage) otherwise
+        repeats every apply().
+        """
+        return [self.res(stage)
+                for stage in range(self.solver_start_stage, self.nStages)]
+    
+    def resval(self):
+        """Set up the discretisation's residual for a given stage."""
+        # Add time derivative terms  y_s - y^n for stage s
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        # Calculate and add on dt*a_ss*F(y_s)
+        r_imp = self.residual.label_map(
+            lambda t: t.has_label(implicit),
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+            map_if_false=drop)
+        r_imp = r_imp.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: self.alpha*self.dt*t)
+        residual += r_imp
+
+
+        return residual.form
+        
+
     @property
     def final_res(self):
         """Set up the discretisation's final residual."""
@@ -242,11 +335,22 @@ class IMEXRungeKutta(TimeDiscretisation):
         solvers = []
         for stage in range(self.solver_start_stage, self.nStages):
             # setup solver using residual defined in derived class
-            problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
+            problem = NonlinearVariationalProblem(self.res_old(stage), self.x_out, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
             solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
         return solvers
-
+    
+    @cached_property
+    def solver(self):
+        F = self.resval() + self.b     # Form - Cofunction (RHS only)
+        J = derivative(self.resval(), self.x_out)   # explicit Jacobian
+        problem = NonlinearVariationalProblem(F, self.x_out, bcs=self.bcs, J=J)
+        name = self.field_name + self.__class__.__name__ + "_stage"
+        problem._constant_jacobian = True
+        solver = NonlinearVariationalSolver(
+            problem, solver_parameters=self.nonlinear_solver_parameters,
+            options_prefix=name)
+        return solver
     @cached_property
     def final_solver(self):
         """Set up a solver for the final solve to evaluate time level n+1."""
@@ -257,32 +361,43 @@ class IMEXRungeKutta(TimeDiscretisation):
 
     @wrapper_apply
     def apply(self, x_out, x_in):
+        from firedrake.petsc import PETSc
+        from firedrake.dmhooks import get_appctx
         self.x1.assign(x_in)
         self.x_out.assign(x_in)
-        solver_list = self.solvers
         self.xs[0].assign(x_in)
+        self.solver._ctx._jacobian_assembled = False
+
+        if self.old_solver:
+            solvers_list = self.solvers
 
         for stage in range(self.solver_start_stage, self.nStages):
-
-            self.solver = solver_list[stage-self.solver_start_stage]
             # Set initial solver guess
-            self.x_out.assign(self.xs[stage-1])
+            if stage != self.solver_start_stage:
+                self.x_out.assign(self.xs[stage-1])
             # Evaluate source terms
             for evaluate in self.evaluate_source:
                 evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
-            self.solver.solve()
+            # Assemble cached RHS form into b (coefficients update in place)
+            if self.old_solver:
+                solvers_list[stage-self.solver_start_stage].solve()
+            else:
+                assemble(self.stage_rhs[stage-self.solver_start_stage], tensor=self.b)
+                # self.solver._ctx._jacobian_assembled = False
+                with PETSc.Log.Stage("imex_stage_solve"):
+                    print("Before solve:", self.solver._ctx._jacobian_assembled)
+                    self.solver.solve()
+                    print("After solve:", self.solver._ctx._jacobian_assembled)
 
-            # Apply limiter
             if self.limiter is not None:
                 self.limiter.apply(self.x_out)
             self.xs[stage].assign(self.x_out)
 
-        # Solve final stage
+        # Final solve
         for evaluate in self.evaluate_source:
             evaluate(self.xs[-1], self.dt, x_out=self.source[-1])
         self.final_solver.solve()
 
-        # Apply limiter
         if self.limiter is not None:
             self.limiter.apply(self.x_out)
         x_out.assign(self.x_out)
