@@ -14,7 +14,7 @@ from tomplot import (
     extract_gusto_coords, extract_gusto_field, reshape_gusto_data
 )
 
-test = 'schaer_mountain'
+test = 'schaer_mountain_june29_4_nometric'
 
 # ---------------------------------------------------------------------------- #
 # Directory for results and plots
@@ -115,7 +115,7 @@ xlims_zoom = [30., 70.]
 ylims_zoom = [0., 12.]
 
 fig, axarray = plt.subplots(2, 2, figsize=(18, 12), sharex='row', sharey='row')
-time_idx = 1
+time_idx = -1
 
 for i, (ax, field_name, colour_scheme, field_label, contours) in \
         enumerate(zip(

@@ -6,7 +6,7 @@ and GungHo dynamical cores.
 from firedrake import (
     Function, Constant, TrialFunctions, DirichletBC, div, assemble,
     LinearVariationalProblem, LinearVariationalSolver, FunctionSpace,
-    action, interpolate,
+    action, interpolate, dot, SpatialCoordinate, grad, sqrt, Projector
 )
 from firedrake.fml import drop, replace_subject, Term
 from pyop2.profiling import timed_stage, timed_function
@@ -45,7 +45,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
                  num_outer=2, num_inner=2, accelerator=True,
                  predictor=None, reference_update_freq=None,
                  spinup_steps=0, solver_prognostics=None,
-                 linear_solver_parameters=None,
+                 linear_solver_parameters=None, consistent_metric=False,
                  appctx=None):
         """
         Args:
@@ -133,6 +133,8 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             linear_solver_parameters (dict, optional): contains the options to
                 be passed to the underlying :class:`LinearVariationalSolver`.
                 Defaults to None.
+            consistent_metric (bool, optional): whether to use the consistent
+                metric term for transporting potential temperature.
             appctx (dict, optional): a dictionary of application context for the
                 underlying :class:`LinearVariationalSolver`.
                 Defaults to None.
@@ -147,6 +149,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         self.predictor = predictor
         self.accelerator = accelerator
         self.implicit_terms = [incompressible, sponge]
+        self.consistent_metric = consistent_metric
 
         # default is to not offcentre transporting velocity but if it
         # is offcentred then use the same value as alpha
@@ -232,6 +235,19 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         # Flag for if we have simultaneous transport of tracers
         self.simult = False
+
+        # Consistent metric term
+        if self.consistent_metric:
+            # Check that potential temperature is a variable
+            if 'theta' not in equation_set.field_names:
+                raise ValueError(
+                    "Cannot use consistent metric term for transporting theta "
+                    + "if theta is not a prognostic variable"
+                )
+            # Set up adv_z term
+            self.adv_z = Function(equation_set.domain.spaces('theta'), name='adv_z')
+            self.true_adv_z = Function(equation_set.domain.spaces('theta'), name='true_adv_z')
+            self.consistent_wind = Function(equation_set.domain.spaces('HDiv'), name='consistent_wind')
 
         self.active_transport = []
         for scheme in transport_schemes:
@@ -344,6 +360,31 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.predictor_interpolate = interpolate(
                 self.x.star(predictor)*div_factor, V_DG)
 
+        # Consistent metric term -- things that need setting up afterwards as
+        # the state fields need to be created first
+        if self.consistent_metric:
+            ubar = self.transporting_velocity
+            k = self.equation.domain.k
+            x = SpatialCoordinate(self.equation.domain.mesh)
+            z = dot(k, x)
+            CG2 = FunctionSpace(self.equation.domain.mesh, "CG", 2)
+            self.z = Function(CG2).interpolate(z)
+            eta_hat = self.equation.domain.eta_hat
+            true_adv_z_expr = dot(ubar - eta_hat*dot(ubar, eta_hat), grad(z))
+            self.true_adv_z_projection = Projector(true_adv_z_expr, self.true_adv_z)
+            # # Method 0:
+            # expr = ubar + k*(dot(ubar, grad(z)) - self.adv_z) / dot(k, grad(z))
+            # Method 1:
+            expr = ubar + k*dot(ubar, k) - k*self.adv_z
+            # Method 2:
+            # expr = ubar + k*(self.true_adv_z - self.adv_z)
+            # # Method 3:
+            # eta_hat = self.equation.domain.eta_hat
+            # ut = ubar - eta_hat*dot(ubar, eta_hat) / dot(eta_hat, eta_hat)
+            # expr = ubar + k*dot(k, ut) - k*self.adv_z
+
+            self.consistent_wind_projection = Projector(expr, self.consistent_wind) #, bcs=equation_set.bcs['u'])
+
     def _apply_bcs(self):
         """
         Set the zero boundary conditions in the velocity.
@@ -360,6 +401,25 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         xnp1 = self.x.np1
         # computes ubar from un and unp1
         return xn('u') + self.alpha_u*(xnp1('u')-xn('u'))
+
+    @property
+    def consistent_metric_velocity(self):
+        """Computes ubar + k(ubar.grad(z_arr) - ubar.grad(z_dep))"""
+        return self.consistent_wind
+
+    @property
+    def terrain_following_velocity(self):
+        """Computes the terrain-following component of ubar"""
+        ubar = self.transporting_velocity
+        # Method 1
+        ut = ubar
+        # Method 2
+        # k = self.equation.domain.k
+        # ut = ubar - k*dot(ubar, k) / dot(k, k)
+        # # Method 3
+        # eta_hat = self.equation.domain.eta_hat
+        # ut = ubar - eta_hat*dot(ubar, eta_hat) / dot(eta_hat, eta_hat)
+        return ut
 
     def setup_fields(self):
         """Sets up time levels n, star, p and np1"""
@@ -385,9 +445,15 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # tests with KGOs fail
         apply_bcs = True
         self.setup_equation(self.equation)
-        for _, scheme in self.active_transport:
+        for field_name, scheme in self.active_transport:
             scheme.setup(self.equation, apply_bcs, transport)
-            self.setup_transporting_velocity(scheme)
+            # Set up transporting velocity
+            if self.consistent_metric and field_name in ['theta']:
+                self.setup_transporting_velocity(scheme, self.consistent_metric_velocity)
+            elif self.consistent_metric and field_name == 'z':
+                self.setup_transporting_velocity(scheme, self.terrain_following_velocity)
+            else:
+                self.setup_transporting_velocity(scheme)
             if self.io.output.log_courant:
                 scheme.courant_max = self.io.courant_max
 
@@ -447,9 +513,45 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                     # xp is xstar plus the increment from the transported predictor
                     xp(name).assign(xstar(name) + field_out - self.predictor_field_in)
+
+                elif self.consistent_metric and name == 'z':
+                    # Reset z to z
+                    k = self.equation.domain.k
+                    x = SpatialCoordinate(self.equation.domain.mesh)
+                    xstar('z').interpolate(dot(k, x))
+                    self.true_adv_z_projection.project()
+                    # Apply transport
+                    scheme.apply(xp(name), xstar(name))
+                    # Compute adv_z
+                    self.adv_z.interpolate((xstar('z') - xp('z'))/self.dt)
+                    self.consistent_wind_projection.project()
+
+                    # from firedrake.output import VTKFile
+                    # output = VTKFile(f'consistent_metric_{self.step:02d}_{self.outer}.pvd')
+                    # xstar_z = Function(self.equation.domain.spaces('theta'), name='xstar_z').assign(xstar('z'))
+                    # xp_z = Function(self.equation.domain.spaces('theta'), name='xp_z').assign(xp('z'))
+                    # ubar = Function(self.equation.domain.spaces('HDiv'), name='ubar').project(self.transporting_velocity)
+
+                    # # Test transport with consistent wind...
+                    # adv_z_2 = Function(self.equation.domain.spaces('theta'), name='adv_z_2')
+                    # z_bef = Function(self.equation.domain.spaces('theta'), name='z_bef').assign(xstar('z'))
+                    # z_aft = Function(self.equation.domain.spaces('theta'), name='z_aft')
+                    # self.active_transport[3][1].apply(z_aft, z_bef)
+                    # adv_z_2.interpolate((z_bef - z_aft)/self.dt)
+
+                    # output.write(xstar_z, xp_z, z_aft, z_bef, self.adv_z, adv_z_2, ubar, self.consistent_wind)
+
+                elif name == 'theta_diag':
+                    # Reset theta_diag to theta
+                    xstar('theta_diag').assign(xstar('theta'))
+                    # Apply transport
+                    scheme.apply(xp(name), xstar(name))
+
                 else:
                     # Standard transport
                     scheme.apply(xp(name), xstar(name))
+                    # if name == 'theta':
+                    #     import pdb; pdb.set_trace()
 
     def update_reference_profiles(self):
         """
@@ -556,6 +658,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         # OUTER ----------------------------------------------------------------
         for outer in range(self.num_outer):
+            self.outer = outer
 
             # Transport --------------------------------------------------------
             with timed_stage("Transport"):

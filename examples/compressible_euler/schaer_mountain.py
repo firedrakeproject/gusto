@@ -12,14 +12,16 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from firedrake import (
     as_vector, VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh,
-    SpatialCoordinate, exp, pi, cos, Function, Mesh, Constant
+    SpatialCoordinate, exp, pi, cos, Function, Mesh, Constant, grad, dot, sqrt,
+    FiniteElement, TensorProductElement, interval
 )
 from gusto import (
-    CompressibleParameters, logger,
-    OutputParameters, SIQNModel,
+    Domain, CompressibleParameters, logger,
+    OutputParameters, IO, SSPRK3, DGUpwind, SemiImplicitQuasiNewton,
     compressible_hydrostatic_balance, SpongeLayerParameters, Exner, ZComponent,
-    Perturbation, MaxKernel, MinKernel,
-    CompressibleEulerEquations, SubcyclingOptions
+    Perturbation, SUPGOptions, MaxKernel, MinKernel, ForwardEuler,
+    CompressibleEulerEquations, RungeKuttaFormulation,
+    ActiveTracer, TransportEquationType
 )
 
 schaer_mountain_defaults = {
@@ -64,9 +66,10 @@ def schaer_mountain(
     # Our settings for this set up
     # ------------------------------------------------------------------------ #
 
-    spinup_steps = 5  # Not necessary but helps balance initial conditions
+    spinup_steps = 0  # Not necessary but helps balance initial conditions
     alpha = 0.51      # Necessary to absorb grid scale waves
-    u_eqn_type = 'vector_invariant_form'
+    element_order = 1
+    u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -78,33 +81,51 @@ def schaer_mountain(
     ext_mesh = ExtrudedMesh(
         base_mesh, layers=nlayers, layer_height=domain_height/nlayers
     )
-    Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
+    cell = base_mesh.ufl_cell().cellname
+    hori_elt = FiniteElement('DG', cell, 2, variant='equispaced')
+    vert_elt = FiniteElement('DG', interval, 2, variant='equispaced')
+    dg_elt = TensorProductElement(hori_elt, vert_elt)
+    Vc = VectorFunctionSpace(ext_mesh, dg_elt)
 
     # Describe the mountain
     xc = domain_width/2.
     x, z = SpatialCoordinate(ext_mesh)
     zs = hm * exp(-((x - xc)/a)**2) * (cos(pi*(x - xc)/lamda))**2
-    xexpr = as_vector(
-        [x, z + ((domain_height - z) / domain_height) * zs]
-    )
+    eta = z + ((domain_height - z) / domain_height) * zs
+    xexpr = as_vector([x, eta])
 
     # Make new mesh
     new_coords = Function(Vc).interpolate(xexpr)
     mesh = Mesh(new_coords)
     mesh._base_mesh = base_mesh  # Force new mesh to inherit original base mesh
+    domain = Domain(mesh, dt, "CG", element_order)
+    Vc = VectorFunctionSpace(mesh, "CG", 2)
+    eta_hat = Function(Vc, name='eta_hat').interpolate(grad(eta) / sqrt(dot(grad(eta), grad(eta))))
+    domain.eta_hat = eta_hat
+
+    # Tracer for consistent metric term
+    tracers = [
+        # ActiveTracer(
+        #     'z', space='theta',
+        #     variable_type=0,  # a random number
+        #     transport_eqn=TransportEquationType.advective
+        # ),
+        # ActiveTracer(
+        #     'theta_diag', space='theta',
+        #     variable_type=0,  # a random number
+        #     transport_eqn=TransportEquationType.advective
+        # )
+    ]
 
     # Equation
     parameters = CompressibleParameters(mesh, g=g, cp=cp)
     sponge_params = SpongeLayerParameters(
         mesh, H=domain_height, z_level=domain_height-sponge_depth, mubar=mu_dt/dt
     )
-    eqns = CompressibleEulerEquations
-
-    # Model
-    model = SIQNModel(mesh, dt, parameters, eqns,
-                      u_transport_option=u_eqn_type,
-                      sponge_options=sponge_params,
-                      family="CG")
+    eqns = CompressibleEulerEquations(
+        domain, parameters, sponge_options=sponge_params,
+        u_transport_option=u_eqn_type, active_tracers=tracers
+    )
 
     # I/O
     output = OutputParameters(
@@ -114,25 +135,47 @@ def schaer_mountain(
         Exner(parameters), ZComponent('u'), Perturbation('theta'),
         Perturbation('rho')
     ]
+    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
-    # Setup model
-    subcycling_opts = SubcyclingOptions(subcycle_by_courant=0.25)
-    model.setup(output, subcycling_options=subcycling_opts,
-                diagnostic_fields=diagnostic_fields,
-                alpha=alpha, spinup_steps=spinup_steps)
+    # Transport schemes
+    u_opts = SUPGOptions()
+    theta_opts = SUPGOptions()
+    transported_fields = [
+        # ForwardEuler(domain, "z", options=theta_opts),
+        SSPRK3(domain, "u", options=u_opts),
+        SSPRK3(
+            domain, "rho", rk_formulation=RungeKuttaFormulation.linear,
+        ),
+        # SSPRK3(domain, "theta_diag", options=theta_opts),
+        SSPRK3(domain, "theta", options=theta_opts)
+    ]
+    transport_methods = [
+        # DGUpwind(eqns, "z"),
+        DGUpwind(eqns, "u", ibp=theta_opts.ibp),
+        DGUpwind(eqns, "rho", advective_then_flux=True),
+        # DGUpwind(eqns, "theta_diag"),
+        DGUpwind(eqns, "theta", ibp=theta_opts.ibp)
+    ]
+
+    # Time stepper
+    tau_values = {'rho': 1.0, 'theta': 1.0}
+    stepper = SemiImplicitQuasiNewton(
+        eqns, io, transported_fields, transport_methods,
+        alpha=alpha, tau_values=tau_values, spinup_steps=spinup_steps,
+        # consistent_metric=True, reference_update_freq=1
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
-    stepper = model.stepper
     u0 = stepper.fields("u")
     rho0 = stepper.fields("rho")
     theta0 = stepper.fields("theta")
 
     # spaces
-    Vt = model.domain.spaces("theta")
-    Vr = model.domain.spaces("DG")
+    Vt = domain.spaces("theta")
+    Vr = domain.spaces("DG")
 
     # Thermodynamic constants required for setting initial conditions
     # and reference profiles
@@ -156,64 +199,62 @@ def schaer_mountain(
     bottom_boundary = Constant(exner_surf)
     logger.info(f'Solving hydrostatic with bottom Exner of {exner_surf}')
     compressible_hydrostatic_balance(
-        model.equation, theta_b, rho_b, exner, top=False,
-        exner_boundary=bottom_boundary, solve_for_rho=True
+        eqns, theta_b, rho_b, exner, top=False, exner_boundary=bottom_boundary,
+        solve_for_rho=True
     )
 
-    # Solve hydrostatic balance again, but now use minimum value from first
-    # solve as the *top* boundary condition for Exner
-    top_value = min_kernel.apply(exner)
-    top_boundary = Constant(top_value)
-    logger.info(f'Solving hydrostatic with top Exner of {top_value}')
-    compressible_hydrostatic_balance(
-        model.equation, theta_b, rho_b, exner, top=True,
-        exner_boundary=top_boundary
-    )
+    # # Solve hydrostatic balance again, but now use minimum value from first
+    # # solve as the *top* boundary condition for Exner
+    # top_value = min_kernel.apply(exner)
+    # top_boundary = Constant(top_value)
+    # logger.info(f'Solving hydrostatic with top Exner of {top_value}')
+    # compressible_hydrostatic_balance(
+    #     eqns, theta_b, rho_b, exner, top=True, exner_boundary=top_boundary
+    # )
 
-    max_bottom_value = max_kernel.apply(exner)
+    # max_bottom_value = max_kernel.apply(exner)
 
-    # Now we iterate, adjusting the top boundary condition, until this gives
-    # a maximum value of 1.0 at the surface
-    lower_top_guess = 0.9*top_value
-    upper_top_guess = 1.2*top_value
-    for i in range(max_iterations):
-        # If max bottom Exner value is equal to desired value, stop iteration
-        if abs(max_bottom_value - exner_surf) < tolerance:
-            break
+    # # Now we iterate, adjusting the top boundary condition, until this gives
+    # # a maximum value of 1.0 at the surface
+    # lower_top_guess = 0.9*top_value
+    # upper_top_guess = 1.2*top_value
+    # for i in range(max_iterations):
+    #     # If max bottom Exner value is equal to desired value, stop iteration
+    #     if abs(max_bottom_value - exner_surf) < tolerance:
+    #         break
 
-        # Make new guess by average of previous guesses
-        top_guess = 0.5*(lower_top_guess + upper_top_guess)
-        top_boundary.assign(top_guess)
+    #     # Make new guess by average of previous guesses
+    #     top_guess = 0.5*(lower_top_guess + upper_top_guess)
+    #     top_boundary.assign(top_guess)
 
-        logger.info(
-            f'Solving hydrostatic balance iteration {i}, with top Exner value '
-            + f'of {top_guess}'
-        )
+    #     logger.info(
+    #         f'Solving hydrostatic balance iteration {i}, with top Exner value '
+    #         + f'of {top_guess}'
+    #     )
 
-        compressible_hydrostatic_balance(
-            model.equation, theta_b, rho_b, exner, top=True,
-            exner_boundary=top_boundary
-        )
+    #     compressible_hydrostatic_balance(
+    #         eqns, theta_b, rho_b, exner, top=True, exner_boundary=top_boundary
+    #     )
 
-        max_bottom_value = max_kernel.apply(exner)
+    #     max_bottom_value = max_kernel.apply(exner)
 
-        # Adjust guesses based on new value
-        if max_bottom_value < exner_surf:
-            lower_top_guess = top_guess
-        else:
-            upper_top_guess = top_guess
+    #     # Adjust guesses based on new value
+    #     if max_bottom_value < exner_surf:
+    #         lower_top_guess = top_guess
+    #     else:
+    #         upper_top_guess = top_guess
 
-    logger.info(f'Final max bottom Exner value of {max_bottom_value}')
+    # logger.info(f'Final max bottom Exner value of {max_bottom_value}')
 
-    # Perform a final solve to obtain hydrostatically balanced rho
-    compressible_hydrostatic_balance(
-        model.equation, theta_b, rho_b, exner, top=True,
-        exner_boundary=top_boundary, solve_for_rho=True
-    )
+    # # Perform a final solve to obtain hydrostatically balanced rho
+    # compressible_hydrostatic_balance(
+    #     eqns, theta_b, rho_b, exner, top=True, exner_boundary=top_boundary,
+    #     solve_for_rho=True
+    # )
 
     theta0.assign(theta_b)
     rho0.assign(rho_b)
-    u0.project(as_vector([initial_wind, 0.0]))
+    u0.project(as_vector([initial_wind, 0.0]), bcs=eqns.bcs["u"])
 
     stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
@@ -221,7 +262,7 @@ def schaer_mountain(
     # Run
     # ------------------------------------------------------------------------ #
 
-    model.run(t=0, tmax=tmax)
+    stepper.run(t=0, tmax=tmax)
 
 # ---------------------------------------------------------------------------- #
 # MAIN

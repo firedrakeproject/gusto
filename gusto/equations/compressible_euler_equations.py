@@ -18,6 +18,7 @@ from gusto.equations.common_forms import (
 )
 from gusto.equations.active_tracers import Phases, TracerVariableType
 from gusto.equations.prognostic_equations import PrognosticEquationSet
+from gusto.core.logging import logger
 __all__ = ["CompressibleEulerEquations", "HydrostaticCompressibleEulerEquations"]
 
 
@@ -181,7 +182,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 idx = self.field_names.index(tracer.name)
                 tracer_mr_total += split(self.X)[idx]
             else:
-                raise NotImplementedError('Only mixing ratio tracers are implemented')
+                logger.warning(
+                    f'Tracer {tracer.name} is not a mixing ratio, so will not '
+                    + 'contribute to virtual dry potential temperature'
+                )
         theta_v = theta / (Constant(1.0) + tracer_mr_total)
 
         pressure_gradient_form = pressure_gradient(subject(prognostic(
@@ -221,7 +225,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                         elif tracer.phase == Phases.liquid:
                             mr_l += split(self.X)[idx]
                     else:
-                        raise NotImplementedError('Only mixing ratio tracers are implemented')
+                        logger.warning(
+                            f'Tracer {tracer.name} is not a moisture mixing'
+                            + 'ratio, so will not contribute to heat capacities'
+                        )
 
             c_vml = cv + mr_v * c_vv + mr_l * c_pl
             c_pml = cp + mr_v * c_pv + mr_l * c_pl
