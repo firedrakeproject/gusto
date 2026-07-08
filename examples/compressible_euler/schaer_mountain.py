@@ -12,7 +12,8 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from firedrake import (
     as_vector, VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh,
-    SpatialCoordinate, exp, pi, cos, Function, Mesh, Constant
+    SpatialCoordinate, exp, pi, cos, Function, Mesh, Constant, interval,
+    FiniteElement, TensorProductElement
 )
 from gusto import (
     CompressibleParameters, logger,
@@ -65,8 +66,8 @@ def schaer_mountain(
     # ------------------------------------------------------------------------ #
 
     spinup_steps = 5  # Not necessary but helps balance initial conditions
-    alpha = 0.51      # Necessary to absorb grid scale waves
-    u_eqn_type = 'vector_invariant_form'
+    alpha = 0.51
+    u_eqn_type = 'vector_advection_form'
 
     # ------------------------------------------------------------------------ #
     # Set up model objects
@@ -78,7 +79,14 @@ def schaer_mountain(
     ext_mesh = ExtrudedMesh(
         base_mesh, layers=nlayers, layer_height=domain_height/nlayers
     )
-    Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
+
+    # Used equispaced DG elements to describe the mountain to ensure that
+    # the resulting profile is smooth
+    cell = base_mesh.ufl_cell().cellname
+    hori_elt = FiniteElement('DG', cell, 2, variant='equispaced')
+    vert_elt = FiniteElement('DG', interval, 2, variant='equispaced')
+    dg_elt = TensorProductElement(hori_elt, vert_elt)
+    Vc = VectorFunctionSpace(ext_mesh, dg_elt)
 
     # Describe the mountain
     xc = domain_width/2.
@@ -101,10 +109,10 @@ def schaer_mountain(
     eqns = CompressibleEulerEquations
 
     # Model
-    model = SIQNModel(mesh, dt, parameters, eqns,
-                      u_transport_option=u_eqn_type,
-                      sponge_options=sponge_params,
-                      family="CG")
+    model = SIQNModel(
+        mesh, dt, parameters, eqns, u_transport_option=u_eqn_type,
+        sponge_options=sponge_params, family="CG", consistent_metric=True
+    )
 
     # I/O
     output = OutputParameters(
@@ -117,9 +125,11 @@ def schaer_mountain(
 
     # Setup model
     subcycling_opts = SubcyclingOptions(subcycle_by_courant=0.25)
-    model.setup(output, subcycling_options=subcycling_opts,
-                diagnostic_fields=diagnostic_fields,
-                alpha=alpha, spinup_steps=spinup_steps)
+    model.setup(
+        output, subcycling_options=subcycling_opts,
+        diagnostic_fields=diagnostic_fields, alpha=alpha,
+        spinup_steps=spinup_steps, consistent_metric=True
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
@@ -213,7 +223,7 @@ def schaer_mountain(
 
     theta0.assign(theta_b)
     rho0.assign(rho_b)
-    u0.project(as_vector([initial_wind, 0.0]))
+    u0.project(as_vector([initial_wind, 0.0]), bcs=model.equation.bcs["u"])
 
     stepper.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 
