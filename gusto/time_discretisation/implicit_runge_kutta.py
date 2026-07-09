@@ -90,7 +90,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
         self.nStages = int(np.shape(self.butcher_matrix)[1])
         self.rk_formulation = rk_formulation
 
-    def setup(self, equation, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True, *active_labels, dt_scale=None):
         """
         Set up the time discretisation based on the equation.
 
@@ -100,7 +100,7 @@ class ImplicitRungeKutta(TimeDiscretisation):
                 the equation to include.
         """
 
-        super().setup(equation, apply_bcs, *active_labels)
+        super().setup(equation, apply_bcs, *active_labels, dt_scale=dt_scale)
 
         self.k = [Function(self.fs) for i in range(self.nStages)]
 
