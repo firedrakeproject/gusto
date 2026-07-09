@@ -126,7 +126,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
         self.nStages = int(np.shape(self.butcher_matrix)[0])
         self.rk_formulation = rk_formulation
 
-    def setup(self, equation, apply_bcs=True, *active_labels):
+    def setup(self, equation, apply_bcs=True, *active_labels, dt_scale=None,):
         """
         Set up the time discretisation based on the equation.
 
@@ -135,7 +135,7 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             *active_labels (:class:`Label`): labels indicating which terms of
                 the equation to include.
         """
-        super().setup(equation, apply_bcs, *active_labels)
+        super().setup(equation, apply_bcs, *active_labels, dt_scale=dt_scale)
 
         if self.rk_formulation == RungeKuttaFormulation.predictor:
             self.field_i = [Function(self.fs) for _ in range(self.nStages+1)]
@@ -448,7 +448,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             self.limiter.apply(x_in)
 
         self.x1.assign(x_in)
-
         for i in range(self.nStages):
             self.solve_stage(x_in, i)
         x_out.assign(self.x1)
@@ -501,7 +500,8 @@ class ForwardEuler(ExplicitRungeKutta):
                          rk_formulation=rk_formulation,
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options,
-                         augmentation=augmentation)
+                         augmentation=augmentation
+                         )
 
 
 class SSPRK2(ExplicitRungeKutta):
