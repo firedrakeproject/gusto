@@ -400,6 +400,7 @@ class LowestOrderSIQNModel(SIQNModelBase):
         super().__init__(mesh, dt, parameters, equation,
                          family=family, element_order=0,
                          **kwargs)
+        self.consistent_metric = kwargs.get("consistent_metric", False)
 
     @property
     def diffusion_methods(self):
