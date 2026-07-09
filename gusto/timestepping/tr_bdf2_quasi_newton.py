@@ -247,7 +247,6 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                                     + self.tr_outer_loop_physics_schemes
                                     + self.bdf_n_pre_physics_schemes
                                     + self.bdf_m_pre_physics_schemes
-                                    
                                     + self.bdf_combined_outer_loop_physics_schemes
                                     + self.bdf_n_outer_loop_physics_schemes
                                     + self.bdf_m_outer_loop_physics_schemes
@@ -434,7 +433,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 dt_scale = 1.0
             scheme.setup(self.equation, apply_bcs, parametrisation.label,
                          dt_scale=dt_scale)
-            logger.info(f'TR-BDF2 Xi2 physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
+            logger.info(f'TR-BDF2 pre BDF n physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
         
         # bdf pre m physics
         for parametrisation, scheme in self.bdf_m_pre_physics_schemes:
@@ -448,10 +447,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                     dt_scale = (1 - 2*self.gamma) / self.gamma3
             else:
                 dt_scale = 1.0 
-
             scheme.setup(self.equation, apply_bcs, parametrisation.label,
                          dt_scale=dt_scale)
-            logger.info(f'TR-BDF2 Xi3 physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
+            logger.info(f'TR-BDF2 pre BDF m physics: Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
 
         # BDF n outer loop physics
         for parametrisation, scheme in self.bdf_n_outer_loop_physics_schemes:
@@ -486,7 +484,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             else:
                 dt_scale = 1.0
             scheme.setup(self.equation, apply_bcs, parametrisation.label)
-            logger.info(f'Intialising {parametrisation.label.label} with dt {scheme.dt.dat.data}')
+            logger.info(f'Intialising  Final physics {parametrisation.label.label} with dt {scheme.dt.dat.data}')
         
 
     def copy_active_tracers(self, x_in, x_out):
@@ -650,16 +648,16 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         # BDF n pre physics 
         x_after_n_pre_bdf(fname).assign(xn(fname))
         if len(self.bdf_n_pre_physics_schemes) > 0:
-            with timed_stage("Xi2 physics"):
-                logger.info('TR-BDF2 Quasi Newton: Xi2 physics')
+            with timed_stage("BDF n pre physics"):
+                logger.info('TR-BDF2 Quasi Newton: BDF n pre physics')
                 for _, scheme in self.bdf_n_pre_physics_schemes:
                     scheme.apply(x_after_n_pre_bdf(scheme.field_name), x_after_n_pre_bdf(scheme.field_name))
 
         # BDF m pre physics 
         x_after_m_pre_bdf(fname).assign(xm(fname))
         if len(self.bdf_m_pre_physics_schemes) > 0:
-            with timed_stage("Xi3 physics"):
-                logger.info('TR-BDF2 Quasi Newton: Xi3 physics')
+            with timed_stage("BDF m pre physics"):
+                logger.info('TR-BDF2 Quasi Newton: BDF m pre physics')
                 for _, scheme in self.bdf_m_pre_physics_schemes:
                     scheme.apply(x_after_m_pre_bdf(scheme.field_name), x_after_m_pre_bdf(scheme.field_name))
 
