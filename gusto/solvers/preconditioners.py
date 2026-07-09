@@ -12,7 +12,7 @@ from pyop2.profiling import timed_region, timed_function
 from functools import partial
 
 
-__all__ = ["VerticalHybridizationPC", "AuxiliaryPC", "CompressibleHybridisedSCPC"]
+__all__ = ["VerticalHybridizationPC", "AuxiliaryPC", "CompressibleHybridisedSCPC", "SlateSchurPC"]
 
 
 class AuxiliaryPC(AuxiliaryOperatorPC):
@@ -346,7 +346,7 @@ class VerticalHybridizationPC(PCBase):
 
             unbroken_res_hdiv = self.unbroken_residual.subfunctions[self.vidx]
             broken_res_hdiv = self.broken_residual.subfunctions[self.vidx]
-            broken_res_hdiv.assign(0)
+            broken_res_hdiv.zero()
             self.average_kernel.apply(broken_res_hdiv, self.weight, unbroken_res_hdiv)
 
             # Compute the rhs for the multiplier system
@@ -374,7 +374,7 @@ class VerticalHybridizationPC(PCBase):
             # Compute the hdiv projection of the broken hdiv solution
             broken_hdiv = self.broken_solution.subfunctions[self.vidx]
             unbroken_hdiv = self.unbroken_solution.subfunctions[self.vidx]
-            unbroken_hdiv.assign(0)
+            unbroken_hdiv.zero()
 
             self.average_kernel.apply(unbroken_hdiv, self.weight, broken_hdiv)
 
@@ -665,6 +665,7 @@ class CompressibleHybridisedSCPC(PCBase):
         hybridized_prb = LinearVariationalProblem(
             aeqn, Leqn, self.y_hybrid, constant_jacobian=True
         )
+
         self.hybridized_solver = LinearVariationalSolver(
             hybridized_prb,
             options_prefix=pc.getOptionsPrefix()+self._prefix,
@@ -735,7 +736,7 @@ class CompressibleHybridisedSCPC(PCBase):
 
         # Recover broken u and rho
         u_broken, rho, l = self.y_hybrid.subfunctions
-        self.u_hdiv.assign(0)
+        self.u_hdiv.zero()
         self._average_kernel.apply(self.u_hdiv, self._weight, u_broken)
         for bc in self.bcs:
             bc.zero(self.u_hdiv)
@@ -745,7 +746,7 @@ class CompressibleHybridisedSCPC(PCBase):
         self.y.subfunctions[1].assign(rho)
 
         # Recover theta
-        self.theta.assign(0)
+        self.theta.zero()
         self.theta_solver.solve()
         self.y.subfunctions[2].assign(self.theta)
 
@@ -789,3 +790,32 @@ class CompressibleHybridisedSCPC(PCBase):
         """
 
         raise NotImplementedError("The transpose application of the PC is not implemented.")
+
+
+class SlateSchurPC(AuxiliaryOperatorPC):
+    _prefix = "slate_schur_"
+
+    def form(self, pc, test, trial):
+        appctx = self.get_appctx(pc)
+
+        aform = appctx['slateschur_form']
+
+        prefix = pc.getOptionsPrefix() + self._prefix
+        nf0 = PETSc.Options().getInt(prefix + 'nfields0', 1)
+
+        a = Tensor(aform)
+        a00 = a.blocks[:nf0, :nf0]
+        a10 = a.blocks[nf0, :nf0]
+        a01 = a.blocks[:nf0, nf0]
+        a11 = a.blocks[nf0, nf0]
+
+        schur_comp = a11 - a10*a00.inv*a01
+
+        return (schur_comp, None)
+
+    def view(self, pc, viewer=None):
+        super().view(pc, viewer)
+        if hasattr(self, "pc"):
+            msg = "PC to approximate Schur complement using Slate.\n"
+            viewer.printfASCII(msg)
+            self.pc.view(viewer)

@@ -217,7 +217,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         topog_expr = self.parameters.topog_expr
         if topog_expr is not None:
-            self.prescribed_fields('topography', self.domain.spaces('DG')).interpolate(topog_expr)
+            self.prescribed_fields('topography', self.domain.spaces('DG')).project(topog_expr)
             topography_form = subject(prognostic
                                       (-g*div(w)*topog_expr*dx(degree=quad), 'u'),
                                       self.X)
@@ -496,7 +496,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         topog_expr = self.parameters.topog_expr
         if topog_expr is not None:
             topog = self.prescribed_fields(
-                'topography', self.domain.spaces('DG')).interpolate(topog_expr)
+                'topography', self.domain.spaces('DG')).project(topog_expr)
             if self.equivalent_buoyancy:
                 topography_form = subject(prognostic(
                     - topog * div(b*w) * dx

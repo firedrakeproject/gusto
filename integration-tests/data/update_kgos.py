@@ -33,6 +33,8 @@ from equations.test_linear_sw_wave import run_linear_sw_wave
 from equations.test_moist_compressible import run_moist_compressible
 from equations.test_sw_fplane import run_sw_fplane
 from model.test_simultaneous_SIQN import run_simult_SIQN
+from rexi.test_linear_compressible_boussinesq import run_rexi_linear_boussinesq
+from rexi.test_linear_sw import run_rexi_sw
 
 # ---------------------------------------------------------------------------- #
 # List all test cases
@@ -49,6 +51,12 @@ test_dict = {
     'dry_compressible': run_dry_compressible,
     'linear_sw_wave': run_linear_sw_wave,
     'moist_compressible': run_moist_compressible,
+    'linear_compressible_boussinesq_haut': partial(run_rexi_linear_boussinesq,
+                                                   coefficients="haut"),
+    'linear_compressible_boussinesq_caliari': partial(run_rexi_linear_boussinesq,
+                                                      coefficients="caliari"),
+    'linear_sw_haut': partial(run_rexi_sw, coefficients="haut"),
+    'linear_sw_caliari': partial(run_rexi_sw, coefficients="caliari"),
     'sw_fplane': run_sw_fplane,
     'simult_SIQN_order0': partial(run_simult_SIQN, order=0),
     'simult_SIQN_order1': partial(run_simult_SIQN, order=1)

@@ -62,7 +62,7 @@ def test_conservative_recovery(geometry, mesh, configuration):
     rho_expr, m_expr = expr(geometry, mesh, configuration)
 
     # construct theta elemnt
-    cell = mesh._base_mesh.ufl_cell().cellname()
+    cell = mesh._base_mesh.ufl_cell().cellname
     w_hori = FiniteElement("DG", cell, 0)
     w_vert = FiniteElement("CG", interval, 1)
     theta_element = TensorProductElement(w_hori, w_vert)

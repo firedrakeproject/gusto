@@ -85,7 +85,7 @@ def test_extruded_recovery_kernels(boundary):
     m = IntervalMesh(3, 3)
     mesh = ExtrudedMesh(m, layers=3, layer_height=1.0)
 
-    cell = m.ufl_cell().cellname()
+    cell = m.ufl_cell().cellname
     hori_elt = FiniteElement("DG", cell, 0)
     vert_elt = FiniteElement("CG", interval, 1)
     theta_elt = TensorProductElement(hori_elt, vert_elt)
