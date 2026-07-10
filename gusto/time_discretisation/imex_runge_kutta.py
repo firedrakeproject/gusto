@@ -266,9 +266,6 @@ class IMEXRungeKutta(TimeDiscretisation):
 
             self.solver = solver_list[stage-self.solver_start_stage]
             # Set initial solver guess
-            if stage != self.solver_start_stage:
-                self.x_out.assign(self.xs[stage-1])
-
             # Evaluate source terms
             for evaluate in self.evaluate_source:
                 evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
