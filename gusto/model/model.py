@@ -1,10 +1,12 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from gusto.core import (Domain, IO, EmbeddedDGOptions)
+from gusto.core import Domain, IO, EmbeddedDGOptions, TransportEquationType
 from gusto.recovery import BoundaryMethod, RecoverySpaces
 from gusto.spatial_methods import DGUpwind, InteriorPenaltyDiffusion
-from gusto.time_discretisation import (SSPRK3, RungeKuttaFormulation,
-                                       BackwardEuler)
+from gusto.time_discretisation import (
+    SSPRK3, RungeKuttaFormulation, BackwardEuler, ForwardEuler
+)
 from gusto.timestepping import SemiImplicitQuasiNewton
+from gusto.equations import ActiveTracer
 
 
 class ModelBase(object, metaclass=ABCMeta):
@@ -73,8 +75,24 @@ class ModelBase(object, metaclass=ABCMeta):
         # create domain
         self.domain = Domain(mesh, dt, family, element_order)
 
+        # If consistent metric term is required, add a tracer for it
+        if kwargs.get("consistent_metric", False):
+            tracers = kwargs.get("active_tracers", [])
+            tracers.append(
+                ActiveTracer(
+                    'z', space='theta',
+                    variable_type=0,  # a random number
+                    transport_eqn=TransportEquationType.advective
+                )
+            )
+            kwargs["active_tracers"] = tracers
+
+        # Remove consistent metric term from kwargs as this is actually
+        # not a kwarg for the equation class
+        eqn_kwargs = {k: v for k, v in kwargs.items() if k != "consistent_metric"}
+
         # set up prognostic equations
-        self.equation = equation(self.domain, parameters, **kwargs)
+        self.equation = equation(self.domain, parameters, **eqn_kwargs)
 
         # store diffusions options as needed to set up spatial methods
         # and diffusion schemes - default is an empty list
@@ -228,6 +246,7 @@ class SIQNModel(SIQNModelBase):
         super().__init__(mesh, dt, parameters, equation,
                          family=family, element_order=1,
                          **kwargs)
+        self.consistent_metric = kwargs.get("consistent_metric", False)
 
     @property
     def diffusion_methods(self):
@@ -264,27 +283,46 @@ class SIQNModel(SIQNModelBase):
         for each of the prognostic fields in the model equation set.
         """
         _transported_fields = []
+
+        # Add consistent metric first
+        if self.consistent_metric:
+            _transported_fields.append(
+                ForwardEuler(
+                    self.domain, "z",
+                    subcycling_options=self.subcycling_options,
+                    options=EmbeddedDGOptions()
+                )
+            )
+
+        # Add standard fields
         for field_name in self.equation.field_names:
             if self.equation.space_names[field_name] == 'L2':
                 _transported_fields.append(
-                    SSPRK3(self.domain, field_name,
-                           subcycling_options=self.subcycling_options,
-                           rk_formulation=RungeKuttaFormulation.linear,
-                           limiter=self.limiters.get(field_name))
+                    SSPRK3(
+                        self.domain, field_name,
+                        subcycling_options=self.subcycling_options,
+                        rk_formulation=RungeKuttaFormulation.linear,
+                        limiter=self.limiters.get(field_name)
+                    )
                 )
             elif self.equation.space_names[field_name] == 'theta':
                 _transported_fields.append(
-                    SSPRK3(self.domain, field_name,
-                           subcycling_options=self.subcycling_options,
-                           options=EmbeddedDGOptions(),
-                           limiter=self.limiters.get(field_name))
+                    SSPRK3(
+                        self.domain, field_name,
+                        subcycling_options=self.subcycling_options,
+                        options=EmbeddedDGOptions(),
+                        limiter=self.limiters.get(field_name)
+                    )
                 )
+            elif self.consistent_metric and field_name == "z":
+                continue  # already added above
             else:
                 _transported_fields.append(
                     SSPRK3(
                         self.domain, field_name,
                         subcycling_options=self.subcycling_options,
-                        limiter=self.limiters.get(field_name))
+                        limiter=self.limiters.get(field_name)
+                    )
                 )
         return _transported_fields
 
@@ -295,12 +333,20 @@ class SIQNModel(SIQNModelBase):
         for each of the prognostic fields in the model equation set.
         """
         _transport_methods = []
+
+        # Add consistent metric first
+        if self.consistent_metric:
+            _transport_methods.append(DGUpwind(self.equation, "z"))
+
         for field_name in self.equation.field_names:
             if self.equation.space_names[field_name] == 'L2':
                 _transport_methods.append(
-                    DGUpwind(self.equation, field_name,
-                             advective_then_flux=True)
+                    DGUpwind(
+                        self.equation, field_name, advective_then_flux=True
+                    )
                 )
+            elif self.consistent_metric and field_name == "z":
+                continue  # already added above
             else:
                 _transport_methods.append(
                     DGUpwind(self.equation, field_name)
@@ -354,6 +400,7 @@ class LowestOrderSIQNModel(SIQNModelBase):
         super().__init__(mesh, dt, parameters, equation,
                          family=family, element_order=0,
                          **kwargs)
+        self.consistent_metric = kwargs.get("consistent_metric", False)
 
     @property
     def diffusion_methods(self):
@@ -410,27 +457,45 @@ class LowestOrderSIQNModel(SIQNModelBase):
             self.domain, boundary_methods, use_vector_spaces=True
         )
         _transported_fields = []
+
+        if self.consistent_metric:
+            _transported_fields.append(
+                ForwardEuler(
+                    self.domain, "z",
+                    subcycling_options=self.subcycling_options,
+                    options=recovery_spaces.theta_options
+                )
+            )
+
         for field_name in self.equation.field_names:
             if self.equation.space_names[field_name] == 'HDiv':
                 _transported_fields.append(
-                    SSPRK3(self.domain, field_name,
-                           subcycling_options=self.subcycling_options,
-                           options=recovery_spaces.HDiv_options,
-                           limiter=self.limiters.get(field_name))
+                    SSPRK3(
+                        self.domain, field_name,
+                        subcycling_options=self.subcycling_options,
+                        options=recovery_spaces.HDiv_options,
+                        limiter=self.limiters.get(field_name)
+                    )
                 )
             elif self.equation.space_names[field_name] == 'L2':
                 _transported_fields.append(
-                    SSPRK3(self.domain, field_name,
-                           subcycling_options=self.subcycling_options,
-                           options=recovery_spaces.DG_options,
-                           limiter=self.limiters.get(field_name))
+                    SSPRK3(
+                        self.domain, field_name,
+                        subcycling_options=self.subcycling_options,
+                        options=recovery_spaces.DG_options,
+                        limiter=self.limiters.get(field_name)
+                    )
                 )
+            elif self.consistent_metric and field_name == "z":
+                continue  # already added above
             elif self.equation.space_names[field_name] == 'theta':
                 _transported_fields.append(
-                    SSPRK3(self.domain, field_name,
-                           subcycling_options=self.subcycling_options,
-                           options=recovery_spaces.theta_options,
-                           limiter=self.limiters.get(field_name))
+                    SSPRK3(
+                        self.domain, field_name,
+                        subcycling_options=self.subcycling_options,
+                        options=recovery_spaces.theta_options,
+                        limiter=self.limiters.get(field_name)
+                    )
                 )
         return _transported_fields
 
@@ -441,6 +506,14 @@ class LowestOrderSIQNModel(SIQNModelBase):
         for each of the prognostic fields in the model equation set.
         """
         _transport_methods = []
+
+        # Add consistent metric first
+        if self.consistent_metric:
+            _transport_methods.append(DGUpwind(self.equation, "z"))
+
         for field_name in self.equation.field_names:
-            _transport_methods.append(DGUpwind(self.equation, field_name))
+            if self.consistent_metric and field_name == "z":
+                continue  # already added above
+            else:
+                _transport_methods.append(DGUpwind(self.equation, field_name))
         return _transport_methods
