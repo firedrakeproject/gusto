@@ -1,8 +1,8 @@
 """Implementations of IMEX Runge-Kutta time discretisations."""
 
 from functools import cached_property
-from firedrake import (Function, Constant, NonlinearVariationalProblem,
-                       NonlinearVariationalSolver)
+from firedrake import (Cofunction, Function, Constant, NonlinearVariationalProblem,
+                       NonlinearVariationalSolver, assemble, derivative)
 from firedrake.fml import replace_subject, all_terms, drop
 from gusto.core.labels import time_derivative, implicit, explicit, source_label
 from gusto.time_discretisation.time_discretisation import (
@@ -60,8 +60,8 @@ class IMEXRungeKutta(TimeDiscretisation):
     # --------------------------------------------------------------------------
 
     def __init__(self, domain, butcher_imp, butcher_exp, field_name=None,
-                 linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None):
+             linear_solver_parameters=None, nonlinear_solver_parameters=None,
+             limiter=None, options=None, augmentation=None, multiple_solvers=False):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -85,6 +85,8 @@ class IMEXRungeKutta(TimeDiscretisation):
             augmentation (:class:`Augmentation`): allows the equation solved in
                 this time discretisation to be augmented, for instances with
                 extra terms of another auxiliary variable. Defaults to None.
+            multiple_solvers (bool, optional): If True, use a separate solver for
+                each stage. If False, use a single solver for all stages.
         """
         super().__init__(domain, field_name=field_name,
                          solver_parameters=nonlinear_solver_parameters,
@@ -119,7 +121,20 @@ class IMEXRungeKutta(TimeDiscretisation):
         else:
             self.nonlinear_solver_parameters = nonlinear_solver_parameters
         
+
+        self.multiple_solvers = multiple_solvers
         self.total_ksp_its = 0
+        self._step_count = 1
+        self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
+        if self.lag_rebuild_freq is not None:
+            if self.lag_rebuild_freq < 1:
+                raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be >= 1")
+            elif not isinstance(self.lag_rebuild_freq, int):
+                raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be an integer")
+            else:
+                from gusto import logger
+                logger.info(f"IMEXRungeKutta: lag_rebuild_freq set to {self.lag_rebuild_freq}. "
+                            "Jacobian will be rebuilt every lag_rebuild_freq timesteps.")
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -141,8 +156,32 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         self.xs = [Function(self.fs) for i in range(self.nStages)]
         self.source = [Function(self.fs) for i in range(self.nStages)]
+        self.b = Cofunction(self.fs.dual())
+        # Check whether the implicit diagonal is constant. The single shared
+        # solver reuses one operator (I - alpha*dt*F) across all stages, which is
+        # only valid if every implicit stage has the same diagonal coefficient.
+        diag = np.diag(self.butcher_imp[:self.nStages, :self.nStages])
+        nz = diag[diag != 0.0]
+        self._constant_diag = (nz.size == 0) or bool(np.allclose(nz, nz[0]))
 
-    def res(self, stage):
+        if not self._constant_diag and not self.multiple_solvers:
+            from gusto import logger
+            logger.warning(
+                "IMEXRungeKutta: implicit diagonal is not constant "
+                f"(diag={diag}); the shared single-solver path is invalid. "
+                "Falling back to multiple per-stage solvers.")
+            self.multiple_solvers = True
+
+        self.alpha = Constant(self.butcher_imp[self.nStages-1, self.nStages-1])
+
+    def _lag_reset(self, solvers):
+        if self.lag_rebuild_freq is None:
+            return
+        rebuild = ((self._step_count - 1) % self.lag_rebuild_freq == 0)
+        for s in solvers:
+            s._ctx._jacobian_assembled = not rebuild
+    
+    def res_old(self, stage):
         """Set up the discretisation's residual for a given stage."""
         # Add time derivative terms  y_s - y^n for stage s
         mass_form = self.residual.label_map(
@@ -196,6 +235,96 @@ class IMEXRungeKutta(TimeDiscretisation):
         residual += r_imp
         return residual.form
 
+    def res(self, stage):
+        """Set up the discretisation's residual for a given stage."""
+        # Add time derivative terms  y_s - y^n for stage s
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        # residual = mass_form.label_map(all_terms,
+        #                                map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        residual = -mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        # Loop through stages up to s-1 and calcualte/sum
+        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
+        # and
+        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
+        for i in range(stage):
+            r_exp = self.residual.label_map(
+                lambda t: t.has_label(explicit),
+                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_exp = r_exp.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.butcher_exp[stage, i])*self.dt*t)
+            r_imp = self.residual.label_map(
+                lambda t: t.has_label(implicit),
+                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_imp = r_imp.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.butcher_imp[stage, i])*self.dt*t)
+            residual += r_imp
+            residual += r_exp
+
+            # Calculate source terms
+            r_source = self.residual.label_map(
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_source = r_source.label_map(
+                all_terms,
+                map_if_true=lambda t: Constant(self.butcher_exp[stage, i]) * self.dt * t
+            )
+            residual += r_source
+
+        # Calculate and add on dt*a_ss*F(y_s)
+        # r_imp = self.residual.label_map(
+        #     lambda t: t.has_label(implicit),
+        #     map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+        #     map_if_false=drop)
+        # r_imp = r_imp.label_map(
+        #     lambda t: t.has_label(time_derivative),
+        #     map_if_false=lambda t: Constant(self.butcher_imp[stage, stage])*self.dt*t)
+        #residual += r_imp
+        return residual.form
+
+    @cached_property
+    def stage_rhs(self):
+        """Cached stage RHS forms.
+
+        The form *structure* is fixed once; the coefficients it references
+        (self.x1, self.xs[i], self.source[i]) are updated in place by .assign
+        each step, so the cached forms stay valid across timesteps. Removes the
+        per-step label_map/replace_subject rebuild that res(stage) otherwise
+        repeats every apply().
+        """
+        return [self.res(stage)
+                for stage in range(self.solver_start_stage, self.nStages)]
+    
+    def resval(self):
+        """Set up the discretisation's residual for a given stage."""
+        # Add time derivative terms  y_s - y^n for stage s
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+
+        residual = mass_form.label_map(all_terms,
+                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
+        # Calculate and add on dt*a_ss*F(y_s)
+        r_imp = self.residual.label_map(
+            lambda t: t.has_label(implicit),
+            map_if_true=replace_subject(self.x_out, old_idx=self.idx),
+            map_if_false=drop)
+        r_imp = r_imp.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=lambda t: self.alpha*self.dt*t)
+        residual += r_imp
+
+
+        return residual.form
+        
+
     @property
     def final_res(self):
         """Set up the discretisation's final residual."""
@@ -244,11 +373,26 @@ class IMEXRungeKutta(TimeDiscretisation):
         solvers = []
         for stage in range(self.solver_start_stage, self.nStages):
             # setup solver using residual defined in derived class
-            problem = NonlinearVariationalProblem(self.res(stage), self.x_out, bcs=self.bcs)
+            problem = NonlinearVariationalProblem(self.res_old(stage), self.x_out, bcs=self.bcs)
+            problem._constant_jacobian = True
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
             solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
         return solvers
+    
+    @cached_property
+    def solver(self):   
+        """Set up a solver for the shared problem at a stage."""
+        F = self.resval() + self.b
+        J = derivative(self.resval(), self.x_out)
+        problem = NonlinearVariationalProblem(F, self.x_out, bcs=self.bcs, J=J)
+        if self.lag_rebuild_freq is not None:
+            problem._constant_jacobian = True
+        name = self.field_name + self.__class__.__name__ + "shared"
+        solver = NonlinearVariationalSolver(
+            problem, solver_parameters=self.nonlinear_solver_parameters,
+            options_prefix=name)
 
+        return solver
     @cached_property
     def final_solver(self):
         """Set up a solver for the final solve to evaluate time level n+1."""
@@ -259,37 +403,45 @@ class IMEXRungeKutta(TimeDiscretisation):
 
     @wrapper_apply
     def apply(self, x_out, x_in):
+        from firedrake import PETSc
         self.x1.assign(x_in)
         self.x_out.assign(x_in)
-        solver_list = self.solvers
         self.xs[0].assign(x_in)
 
-        for stage in range(self.solver_start_stage, self.nStages):
+        if self.multiple_solvers:
+            solvers_list = self.solvers
+        else:
+            solvers_list = [self.solver]
 
-            self.solver = solver_list[stage-self.solver_start_stage]
-            # Set initial solver guess
-            if stage != 0:
+        self._lag_reset(solvers_list)
+
+        for stage in range(self.solver_start_stage, self.nStages):
+            if stage != self.solver_start_stage:
                 self.x_out.assign(self.xs[stage-1])
-            # Evaluate source terms
             for evaluate in self.evaluate_source:
                 evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
-            self.solver.solve()
-            self.total_ksp_its += self.solver.snes.ksp.getIterationNumber()
 
-            # Apply limiter
+            if self.multiple_solvers:
+                solver = solvers_list[stage-self.solver_start_stage]
+                solver.solve()
+                self.total_ksp_its += solver.snes.getLinearSolveIterations()
+            else:
+                assemble(self.stage_rhs[stage-self.solver_start_stage], tensor=self.b)
+                self.solver.solve()
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
+
             if self.limiter is not None:
                 self.limiter.apply(self.x_out)
             self.xs[stage].assign(self.x_out)
 
-        # Solve final stage
         for evaluate in self.evaluate_source:
             evaluate(self.xs[-1], self.dt, x_out=self.source[-1])
         self.final_solver.solve()
 
-        # Apply limiter
         if self.limiter is not None:
             self.limiter.apply(self.x_out)
         x_out.assign(self.x_out)
+        self._step_count = self._step_count + 1
 
 
 class IMEX_Euler(IMEXRungeKutta):

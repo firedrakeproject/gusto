@@ -85,6 +85,7 @@ from firedrake.fml import (
 from gusto.time_discretisation.time_discretisation import wrapper_apply
 from gusto.core.labels import (time_derivative, implicit, explicit, source_label)
 from qmat import genQCoeffs, genQDeltaCoeffs
+from qmat.qdelta.diag import MIN_SR_FLEX
 
 __all__ = ["SDC", "RIDC"]
 
@@ -110,7 +111,7 @@ class SDC(object, metaclass=ABCMeta):
             node_type (str): Node type to be used. Options are
                 EQUID, LEGENDRE, CHEBY-1, CHEBY-2, CHEBY-3 and CHEBY-4
             qdelta_imp (str): Implicit Qdelta matrix to be used. Options are
-                BE, LU, TRAP, EXACT, PIC, OPT, WEIRD, MIN-SR-NS, MIN-SR-S
+                BE, LU, TRAP, EXACT, PIC, OPT, WEIRD, MIN-SR-NS, MIN-SR-S, MIN-SR-FLEX
             qdelta_exp (str): Explicit Qdelta matrix to be used. Options are
                 FE, EXACT, PIC
             formulation (str, optional): Whether to use node-to-node or zero-to-node
@@ -196,6 +197,17 @@ class SDC(object, metaclass=ABCMeta):
         
         self.total_ksp_its = 0
         self.sweep_tols = sweep_tols
+        self._step_count = 1
+        self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
+        if self.lag_rebuild_freq is not None:
+            if self.lag_rebuild_freq < 1:
+                raise ValueError("DeferredCorrection: td_lag_rebuild must be >= 1")
+            elif not isinstance(self.lag_rebuild_freq, int):
+                raise ValueError("DeferredCorrection: td_lag_rebuild must be an integer")
+            else:
+                from gusto import logger
+                logger.info(f"DeferredCorrection: td_lag_rebuild set to {self.lag_rebuild_freq}. "
+                            "Jacobian will be rebuilt every td_lag_rebuild timesteps.")
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -247,6 +259,29 @@ class SDC(object, metaclass=ABCMeta):
         self.Urhs = Function(W)
         self.Uin = Function(W)
         self.source_in = Function(W)
+
+        # Persistent Constants for the diagonal of Qdelta_imp. Referencing
+        # these (rather than wrapping self.Qdelta_imp[m, m] in a fresh
+        # Constant() inside res()) means later `.assign()` calls actually
+        # reach the cached solvers' residual forms. Off-diagonal entries are
+        # not made persistent: for every Qdelta_imp option currently
+        # supported here they are either always zero (diagonal
+        # preconditioners: MIN-SR-NS/S/FLEX) or fixed for the run (LU, TRAP,
+        # BE, ...), so they don't need to vary sweep-to-sweep.
+        self.Qdelta_imp_diag = [Constant(self.Qdelta_imp[m, m]) for m in range(self.M)]
+
+        if self.qdelta_imp_type == "MIN-SR-FLEX":
+            from gusto.core.logging import logger
+            logger.warning(
+                "SDC: MIN-SR-FLEX recomputes Qdelta_imp each sweep, so cross-sweep "
+                "Jacobian/preconditioner reuse is disabled (operator changes per sweep).")
+            # genQDeltaCoeffs does not pass k through to computeQDelta, so it
+            # always returns the k=1 matrix regardless of the k kwarg given
+            # to it. Bypass it and call MIN_SR_FLEX directly instead, which
+            # gives diag(nodes/k) for sweep k <= M and MIN-SR-S for sweep
+            # k > M (Caklovic et al.).
+            self._min_sr_flex_gen = MIN_SR_FLEX(
+                nNodes=self.M, nodeType=self.node_type, quadType=self.quad_type)
 
     @property
     def nlevels(self):
@@ -379,13 +414,16 @@ class SDC(object, metaclass=ABCMeta):
 
         # Add on final implicit terms
         # Qdelta_imp[m,m]*(F(y_(m)^(k+1)) - F(y_(m)^k))
+        # NOTE: uses the persistent self.Qdelta_imp_diag[m] Constant, not a
+        # fresh Constant(self.Qdelta_imp[m, m]), so that MIN-SR-FLEX's
+        # per-sweep .assign() (see apply()) actually reaches this form.
         r_imp_kp1 = self.residual.label_map(
             lambda t: t.has_label(implicit),
             map_if_true=replace_subject(self.U_DC, old_idx=self.idx),
             map_if_false=drop)
         r_imp_kp1 = r_imp_kp1.label_map(
             all_terms,
-            lambda t: Constant(self.Qdelta_imp[m, m])*t)
+            lambda t: self.Qdelta_imp_diag[m]*t)
         residual += r_imp_kp1
         r_imp_k = self.residual.label_map(
             lambda t: t.has_label(implicit),
@@ -393,7 +431,7 @@ class SDC(object, metaclass=ABCMeta):
             map_if_false=drop)
         r_imp_k = r_imp_k.label_map(
             all_terms,
-            lambda t: Constant(self.Qdelta_imp[m, m])*t)
+            lambda t: self.Qdelta_imp_diag[m]*t)
         residual -= r_imp_k
 
         # Add on error term. sum(j=1,M) q_mj*F(y_m^k) for Z2N formulation
@@ -407,13 +445,18 @@ class SDC(object, metaclass=ABCMeta):
 
     @cached_property
     def solvers(self):
-        """Set up a list of solvers for each problem at a node m."""
+        from firedrake import PETSc
         solvers = []
         for m in range(self.M):
-            # setup solver using residual defined in derived class
             problem = NonlinearVariationalProblem(self.res(m), self.U_DC, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
-            solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, options_prefix=solver_name))
+            if self.lag_rebuild_freq is not None:
+                problem._constant_jacobian = True
+            solver = NonlinearVariationalSolver(
+                problem, solver_parameters=self.nonlinear_solver_parameters,
+                options_prefix=solver_name)
+
+            solvers.append(solver)
         return solvers
 
     @cached_property
@@ -433,12 +476,23 @@ class SDC(object, metaclass=ABCMeta):
         solver_name = self.field_name+self.__class__.__name__+"_rhs"
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
+    
+    def _lag_reset(self, solvers):
+        if self.lag_rebuild_freq is None:
+            return
+        rebuild = ((self._step_count - 1)% self.lag_rebuild_freq == 0)
+
+        for s in solvers:
+            s._ctx._jacobian_assembled = not rebuild
 
     @wrapper_apply
     def apply(self, x_out, x_in):
+        from firedrake import PETSc
         self.Un.assign(x_in)
         self.U_start.assign(self.Un)
         solver_list = self.solvers
+
+        self._lag_reset(solver_list)
 
         # Compute initial guess on quadrature nodes with low-order
         # base timestepper
@@ -460,17 +514,20 @@ class SDC(object, metaclass=ABCMeta):
             k += 1
 
             if self.qdelta_imp_type == "MIN-SR-FLEX":
-                # Recompute Implicit Q_delta matrix for each iteration k
-                self.Qdelta_imp = float(self.dt_coarse)*genQDeltaCoeffs(
-                    self.qdelta_imp_type,
-                    form=self.formulation,
-                    nodes=self.nodes,
-                    Q=self.Q,
-                    nNodes=self.M,
-                    nodeType=self.node_type,
-                    quadType=self.quad_type,
-                    k=k
-                )
+                # Recompute the implicit Qdelta diagonal for sweep k, calling
+                # MIN_SR_FLEX.computeQDelta directly (genQDeltaCoeffs drops
+                # the k kwarg before it reaches computeQDelta, so it cannot
+                # be used here - see setup()).
+                new_diag = self._min_sr_flex_gen.computeQDelta(k=k)
+                for m in range(self.M):
+                    self.Qdelta_imp_diag[m].assign(float(self.dt_coarse) * new_diag[m, m])
+                # The diagonal coefficient just changed, so any cached
+                # Jacobian/preconditioner built against the previous sweep's
+                # value is stale. Force reassembly this sweep regardless of
+                # td_lag_rebuild (which governs cross-timestep, not
+                # cross-sweep, reuse).
+                for s in solver_list:
+                    s._ctx._jacobian_assembled = False
 
             # Compute for N2N: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
             # for Z2N: sum(j=1,M) (q_mj*F(y_m^k) +  q_mj*S(y_m^k))
@@ -494,23 +551,33 @@ class SDC(object, metaclass=ABCMeta):
                 # Set initial guess for solver, and pick correct solver
                 if (self.formulation == "N2N"):
                     self.U_start.assign(self.Unodes1[m-1])
+                # inside the `while k < self.maxk` loop, after `self.solver = solver_list[m-1]`:
                 self.solver = solver_list[m-1]
                 self.U_DC.assign(self.Unodes[m])
-                # if self.sweep_rtols is not None:
-                #     ksp = self.solver.snes.ksp
-                #     ksp.setTolerances(rtol=self.sweep_rtols[k-1])
 
-                tol = self.sweep_tols[k-1]
+                # # Lag across sweeps: rebuild on first sweep, reuse on later sweeps
+                # if self._lag_jac or self._lag_pc:
+                #     lag = -2 if k == 1 else -1
+                #     prefix = self.solver.options_prefix
+                #     opts = PETSc.Options()
+                #     if self._lag_jac:
+                #         opts[prefix + "snes_lag_jacobian"] = lag
+                #     if self._lag_pc:
+                #         opts[prefix + "snes_lag_preconditioner"] = lag
+                #     self.solver.snes.setFromOptions()
 
-                self.solver.snes.ksp.setTolerances(
-                    atol=tol["ksp_atol"],
-                    rtol=tol["ksp_rtol"]
-                )
+                if self.sweep_tols is not None:
+                    tol = self.sweep_tols[k-1]
 
-                self.solver.snes.setTolerances(
-                    atol=tol["snes_atol"],
-                    rtol=tol["snes_rtol"]
-                )
+                    self.solver.snes.ksp.setTolerances(
+                        atol=tol["ksp_atol"],
+                        rtol=tol["ksp_rtol"]
+                    )
+
+                    self.solver.snes.setTolerances(
+                        atol=tol["snes_atol"],
+                        rtol=tol["snes_rtol"]
+                    )
                 # Compute
                 # for N2N:
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k)
@@ -523,7 +590,7 @@ class SDC(object, metaclass=ABCMeta):
                 # PETSc.Sys.Print(f"sweep {k}, node {m}, rtol={rtol}")
                 self.solver.solve()
                 self.Unodes1[m].assign(self.U_DC)
-                self.total_ksp_its += self.solver.snes.ksp.getIterationNumber()
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
 
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:
@@ -558,6 +625,8 @@ class SDC(object, metaclass=ABCMeta):
                 x_out.assign(self.Unodes[-1])
         else:
             x_out.assign(self.Unodes[-1])
+
+        self._step_count = self._step_count + 1
 
 
 class RIDC(object, metaclass=ABCMeta):
