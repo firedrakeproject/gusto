@@ -6,7 +6,7 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 """
 
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
-                       FiniteElement, TensorProductElement, Constant, assemble)
+                       FiniteElement, TensorProductElement, Constant)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
 from gusto.core.kernels import LimitMidpoints, ClipZero, MeanMixingRatioWeights
 
@@ -303,7 +303,6 @@ class MeanLimiter(object):
 
         DG1_equispaced = FunctionSpace(mesh, DG1_element)
         DG0 = FunctionSpace(mesh, 'DG', 0)
-        DG1 = FunctionSpace(mesh, 'DG', 1)
 
         self.lamda = Function(DG0)
         self.mX_field = Function(DG1_equispaced)
@@ -311,6 +310,11 @@ class MeanLimiter(object):
         self.mX_new = Function(DG1_equispaced)
 
         self._lamda_kernel = MeanMixingRatioWeights(DG1_equispaced)
+
+        # Also construct a kernels to clip any very small negatives
+        # that arise from numerical error when computing the
+        # mean mixing ratio.
+        self._clip_means_kernel = ClipZero(DG0)
 
     def apply(self, mX_fields, mean_fields):
         """

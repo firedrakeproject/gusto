@@ -11,13 +11,10 @@ from firedrake import (
     transpose, nabla_grad, outer, dS, dS_h, dS_v, sign, jump, div,
     Constant, sqrt, cross, curl, FunctionSpace, assemble, DirichletBC
 )
-from firedrake.fml import (
-    subject, all_terms, replace_subject, replace_test_function,
-    drop, Term, LabelledForm
-)
+from firedrake.fml import subject
 from gusto import (
     time_derivative, transport, transporting_velocity, TransportEquationType,
-    logger, prognostic, mass_weighted
+    logger
 )
 from gusto.spatial_methods.limiters import MeanLimiter
 from gusto.core.conservative_projection import ConservativeProjector
@@ -259,7 +256,7 @@ class MeanMixingRatio(Augmentation):
     """
     This augments a transport problem involving a k=1 mixing ratio, by adding
     a mean mixing ratio field. This enables posivity to be
-    ensured after each conservative transport step by blending the k=1 and 
+    ensured after each conservative transport step by blending the k=1 and
     mean fields.
 
     Args:
@@ -276,26 +273,21 @@ class MeanMixingRatio(Augmentation):
         self.name = 'mean_mixing_ratio'
         self.mX_names = mX_names
         self.mX_num = len(mX_names)
-        self.orig_spaces = []
 
         # Store information about original equation set
         self.field_names = []
+        self.orig_spaces = []
         for i in np.arange(len(eqns.field_names)):
             self.field_names.append(eqns.field_names[i])
             self.orig_spaces.append(eqns.spaces[i])
 
-        self.eqn_orig = eqns
         self.domain = domain
-        orig_spaces = eqns.spaces
-        exist_spaces = eqns.spaces
-        self.idx_orig = len(exist_spaces)
+        self.idx_orig = len(self.orig_spaces)
 
         DG0 = FunctionSpace(domain.mesh, "DG", 0)
         DG1 = FunctionSpace(domain.mesh, "DG", 1)
 
         # Set up fields and names for each mixing ratio
-        self.mean_names = []
-        self.mean_idxs = []
         self.mX_idxs = []
         mX_spaces = []
         mean_spaces = []
@@ -303,12 +295,7 @@ class MeanMixingRatio(Augmentation):
 
         for i in range(self.mX_num):
             mX_name = mX_names[i]
-            self.mean_names.append('mean_'+mX_name)
-            self.field_names.append(self.mean_names[-1])
             mean_spaces.append(DG0)
-            exist_spaces.append(DG0)
-
-            self.mean_idxs.append(self.idx_orig + i)
 
             # Extract the mixing ratio in question:
             mX_idx = eqns.field_names.index(mX_name)
@@ -317,45 +304,37 @@ class MeanMixingRatio(Augmentation):
 
             # Determine if this is a conservatively transported tracer.
             # If so, extract the corresponding density name, if not
-            # set this to None.
+            # raise an error as this limiter shouldn't be used.
             for tracer in eqns.active_tracers:
                 if tracer.name == mX_name:
                     if tracer.density_name is not None:
                         self.rho_idxs.append(eqns.field_names.index(tracer.density_name))
                     else:
-                        self.rho_idxs.append('None')
+                        raise ValueError("Mean mixing ratio can't be used for non-conservatively "
+                                         + f"transported mixing ratio {mX_name}")
 
         # Define a limiter using the mean mixing ratios
         self.limiters = MeanLimiter(mX_spaces)
 
         # Projector for computing the mean mixing ratios
-        self.DG1_field = Function(DG1) 
-        self.rho_field = Function(DG1) 
-        self.DG0_field = Function(DG0) 
+        self.DG1_field = Function(DG1)
+        self.rho_field = Function(DG1)
+        self.DG0_field = Function(DG0)
 
-        # Compute the mean mixing ratios using a conservative, consistent, projection.
+        # Construct a conservative, consistent, projection operator for computing
+        # the mean mixing ratios.
         self.compute_mean_mX = ConservativeProjector(self.rho_field, self.rho_field, self.DG1_field, self.DG0_field, subtract_mean=True)
 
-        # Create the new mixed function space
-        #self.fs = MixedFunctionSpace(exist_spaces)
-
-        #self.X = Function(self.fs)
-        #self.tests = TestFunctions(self.fs)
-        #self.x_in = Function(self.fs)
-        #self.x_out = Function(self.fs)
-
-        self.bcs = None
-
-
-        # Leave the residual unmodified, as we update
-        # the mean mixing ratios separately.
-        # Also, leave the function spaces as the same
+        # Set up the function space and residual as
+        # per the original equation set
         self.residual = eqns.residual
         self.X = eqns.X
         self.tests = eqns.tests
         self.fs = MixedFunctionSpace(self.orig_spaces)
         self.x_in = Function(self.fs)
         self.x_out = Function(self.fs)
+
+        self.bcs = None
 
         # Make mean fields
         mean_fs = MixedFunctionSpace(mean_spaces)
@@ -369,7 +348,6 @@ class MeanMixingRatio(Augmentation):
             equation (:class:`PrognosticEquationSet`): The overarching equation set.
             Note, this does not include the mean mixing ratios.
         """
-
         # Copy the existing residual
         self.residual = equation.residual
 
@@ -380,9 +358,7 @@ class MeanMixingRatio(Augmentation):
         Args:
             x_in (:class:`Function`): The input fields
         """
-
-        for idx in range(self.idx_orig):
-            self.x_in.subfunctions[idx].assign(x_in.subfunctions[idx])
+        self.x_in.assign(x_in)
 
     def post_apply(self, x_out):
         """
@@ -391,8 +367,7 @@ class MeanMixingRatio(Augmentation):
         Args:
             x_out (:class:`Function`): The output fields
         """
-        for idx in range(self.idx_orig):
-            x_out.subfunctions[idx].assign(self.x_out.subfunctions[idx])
+        x_out.assign(self.x_out)
 
     def update(self, x_in_mixed):
         """
@@ -404,7 +379,6 @@ class MeanMixingRatio(Augmentation):
             x_in_mixed (:class:`Function`): The mixed function, containing
             mean fields to update.
         """
-
         pass
 
     def limit(self, x_in_mixed):
@@ -429,26 +403,19 @@ class MeanMixingRatio(Augmentation):
             self.DG1_field.assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
             self.compute_mean_mX.project()
 
+            # Clip any minuscule negative values in the mean mixing ratio
+            # that arise from numerical error
+            self.limiters._clip_means_kernel.apply(self.DG0_field, self.DG0_field)
+
             self.mean_fields.subfunctions[i].assign(self.DG0_field)
 
             mX_pre.append(x_in_mixed.subfunctions[self.mX_idxs[i]])
             means.append(self.mean_fields.subfunctions[i])
 
+        # Limit all mixing ratios at the same time to have
+        # the same blending weights.
         self.limiters.apply(mX_pre, means)
 
         # Update the mixing ratios with the limited version
         for i in range(self.mX_num):
             x_in_mixed.subfunctions[self.mX_idxs[i]].assign(mX_pre[i])
-
-            
-
-        #for i in range(self.mX_num):
-        #    mX_pre.append(x_in_mixed.subfunctions[self.mX_idxs[i]])
-        #    means.append(x_in_mixed.subfunctions[self.mean_idxs[i]])
-
-        #self.limiters.apply(mX_pre, means)
-
-        #for i in range(self.mX_num):
-            # SHouldn't need to do any clipping either ...
-            #self.limiters._clip_DG1_field.apply(mX_pre[i], mX_pre[i])
-        #    x_in_mixed.subfunctions[self.mX_idxs[i]].assign(mX_pre[i])
