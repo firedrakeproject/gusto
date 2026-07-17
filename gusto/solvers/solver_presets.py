@@ -323,11 +323,14 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # No elimination via Schur complement, just hybridization of the
         # full system.
         settings = {
+            'snes_type': 'ksponly',
             'ksp_type': 'preonly',
             'mat_type': 'matfree',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
             'hybridization': {                              # hybridization PC
+                'ksp_converged_reason': None,
+                'ksp_monitor_true_residual': None,
                 'ksp_type': 'gmres',
                 'pc_type': 'gamg',  # AMG for trace system
                 'ksp_rtol': 1e-8,
