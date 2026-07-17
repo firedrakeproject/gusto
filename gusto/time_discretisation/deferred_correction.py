@@ -86,6 +86,8 @@ from gusto.time_discretisation.time_discretisation import wrapper_apply
 from gusto.core.labels import (time_derivative, implicit, explicit, source_label)
 from qmat import genQCoeffs, genQDeltaCoeffs
 from gusto.solvers.solver_presets import hybridised_solver_parameters
+from qmat.qdelta.diag import MIN_SR_FLEX
+from gusto.core.logging import logger
 
 __all__ = ["SDC", "RIDC"]
 
@@ -96,7 +98,7 @@ class SDC(object, metaclass=ABCMeta):
     def __init__(self, base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                  formulation="N2N", field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
-                 limiter=None, initial_guess="base"):
+                 limiter=None, initial_guess="base", sweep_tols=None):
         """
         Initialise SDC object
         Args:
@@ -111,7 +113,7 @@ class SDC(object, metaclass=ABCMeta):
             node_type (str): Node type to be used. Options are
                 EQUID, LEGENDRE, CHEBY-1, CHEBY-2, CHEBY-3 and CHEBY-4
             qdelta_imp (str): Implicit Qdelta matrix to be used. Options are
-                BE, LU, TRAP, EXACT, PIC, OPT, WEIRD, MIN-SR-NS, MIN-SR-S
+                BE, LU, TRAP, EXACT, PIC, OPT, WEIRD, MIN-SR-NS, MIN-SR-S, MIN-SR-FLEX
             qdelta_exp (str): Explicit Qdelta matrix to be used. Options are
                 FE, EXACT, PIC
             formulation (str, optional): Whether to use node-to-node or zero-to-node
@@ -127,6 +129,7 @@ class SDC(object, metaclass=ABCMeta):
             limiter (:class:`Limiter` object, optional): a limiter to apply to
                 the evolving field to enforce monotonicity. Defaults to None.
             initial_guess (str, optional): Initial guess to be base timestepper, or copy
+            sweep_tols (list of dict, optional): list of tolerances for each sweep. Defaults to None.
         """
         # Check the configuration options
         if (not (formulation == "N2N" or formulation == "Z2N")):
@@ -181,6 +184,22 @@ class SDC(object, metaclass=ABCMeta):
             self.linear_solver_parameters = linear_solver_parameters
 
         self.nonlinear_solver_parameters = nonlinear_solver_parameters
+        self.appctx = None
+
+        self.lag_rebuild_freq = None
+        self._solver_call_count = 0
+        if self.nonlinear_solver_parameters is not None:
+            self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
+        if self.lag_rebuild_freq is not None:
+            if self.lag_rebuild_freq < 1:
+                raise ValueError("RIDC: td_lag_rebuild must be >= 1")
+            elif not isinstance(self.lag_rebuild_freq, int):
+                raise ValueError("RIDC: td_lag_rebuild must be an integer")
+            else:
+                logger.info(f"RIDC: td_lag_rebuild set to {self.lag_rebuild_freq}. "
+                            "Jacobian will be rebuilt every td_lag_rebuild solver calls.")
+
+        self.appctx = None
 
         # Flag to check wheter initial guess is generated using base time discretisation
         # (i.e. Forward Euler)
@@ -188,6 +207,20 @@ class SDC(object, metaclass=ABCMeta):
             self.base_flag = True
         else:
             self.base_flag = False
+        
+        self.total_ksp_its = 0
+        self.sweep_tols = sweep_tols
+        self._step_count = 1
+        self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
+        if self.lag_rebuild_freq is not None:
+            if self.lag_rebuild_freq < 1:
+                raise ValueError("DeferredCorrection: td_lag_rebuild must be >= 1")
+            elif not isinstance(self.lag_rebuild_freq, int):
+                raise ValueError("DeferredCorrection: td_lag_rebuild must be an integer")
+            else:
+                from gusto import logger
+                logger.info(f"DeferredCorrection: td_lag_rebuild set to {self.lag_rebuild_freq}. "
+                            "Jacobian will be rebuilt every td_lag_rebuild timesteps.")
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -239,6 +272,27 @@ class SDC(object, metaclass=ABCMeta):
         self.Urhs = Function(W)
         self.Uin = Function(W)
         self.source_in = Function(W)
+
+        # Persistent Constants for the diagonal of Qdelta_imp
+        if self.qdelta_imp_type == "MIN-SR-FLEX":
+            logger.info(
+                "SDC: MIN-SR-FLEX diagonal is precomputed per (node, sweep) "
+                "so that td_lag_rebuild can be honoured across timesteps; "
+                "this builds maxk*M solver contexts instead of M.")
+            # genQDeltaCoeffs does not pass k through to computeQDelta, so it
+            # always returns the k=1 matrix regardless of the k kwarg given
+            # to it. Bypass it and call MIN_SR_FLEX directly instead, which
+            # gives diag(nodes/k) for sweep k <= M and MIN-SR-S for sweep
+            # k > M (Caklovic et al.).
+            self._min_sr_flex_gen = MIN_SR_FLEX(
+                nNodes=self.M, nodeType=self.node_type, quadType=self.quad_type)
+            self.Qdelta_imp_diag_k = []
+            for k in range(1, self.maxk + 1):
+                diag_k = self._min_sr_flex_gen.computeQDelta(k=k)
+                self.Qdelta_imp_diag_k.append(
+                    [Constant(float(self.dt_coarse) * diag_k[m, m]) for m in range(self.M)])
+        else:
+            self.Qdelta_imp_diag = [Constant(self.Qdelta_imp[m, m]) for m in range(self.M)]
 
     @property
     def nlevels(self):
@@ -299,8 +353,17 @@ class SDC(object, metaclass=ABCMeta):
         residual_final = a + F_exp + Q
         return residual_final.form
 
-    def res(self, m):
-        """Set up the discretisation's residual for a given node m."""
+    def res(self, m, k=None):
+        """
+        Set up the discretisation's residual for a given node m.
+
+        Args:
+            m (int): quadrature node index.
+            k (int, optional): sweep number (1-indexed). Only used for
+                MIN-SR-FLEX, to select the fixed per-(node, sweep) diagonal
+                Constant built in setup(). Ignored for all other Qdelta_imp
+                choices, which use a single per-node Constant.
+        """
         # Add time derivative terms  y^(k+1)_m - y_start for node m. y_start is y_n for Z2N formulation
         # and y^(k)_m for N2N formulation
         mass_form = self.residual.label_map(
@@ -371,13 +434,18 @@ class SDC(object, metaclass=ABCMeta):
 
         # Add on final implicit terms
         # Qdelta_imp[m,m]*(F(y_(m)^(k+1)) - F(y_(m)^k))
+        # NOTE: uses a persistent Constant (self.Qdelta_imp_diag[m] for
+        # non-FLEX, or self.Qdelta_imp_diag_k[k-1][m] for MIN-SR-FLEX)
+        diag_m = (self.Qdelta_imp_diag_k[k-1][m]
+                  if self.qdelta_imp_type == "MIN-SR-FLEX"
+                  else self.Qdelta_imp_diag[m])
         r_imp_kp1 = self.residual.label_map(
             lambda t: t.has_label(implicit),
             map_if_true=replace_subject(self.U_DC, old_idx=self.idx),
             map_if_false=drop)
         r_imp_kp1 = r_imp_kp1.label_map(
             all_terms,
-            lambda t: Constant(self.Qdelta_imp[m, m])*t)
+            lambda t: diag_m*t)
         residual += r_imp_kp1
         r_imp_k = self.residual.label_map(
             lambda t: t.has_label(implicit),
@@ -385,7 +453,7 @@ class SDC(object, metaclass=ABCMeta):
             map_if_false=drop)
         r_imp_k = r_imp_k.label_map(
             all_terms,
-            lambda t: Constant(self.Qdelta_imp[m, m])*t)
+            lambda t: diag_m*t)
         residual -= r_imp_k
 
         # Add on error term. sum(j=1,M) q_mj*F(y_m^k) for Z2N formulation
@@ -397,19 +465,43 @@ class SDC(object, metaclass=ABCMeta):
         residual += Q
         return residual.form
 
+    def _build_solver(self, m, k=None):
+        """
+        Build a single NonlinearVariationalSolver for node m (and, for
+        MIN-SR-FLEX, sweep k).
+
+        Args:
+            m (int): quadrature node index.
+            k (int, optional): sweep number (1-indexed). Only relevant for
+                MIN-SR-FLEX; ignored (and omitted from the solver name)
+                otherwise.
+        """
+        problem = NonlinearVariationalProblem(self.res(m, k), self.U_DC, bcs=self.bcs)
+        suffix = f"{m}_k{k}" if k is not None else f"{m}"
+        solver_name = self.field_name + self.__class__.__name__ + suffix
+        if self.nonlinear_solver_parameters is None:
+            # Use hybridised solver as default
+            alpha = self.Qdelta_imp[m, m]/self.dt_coarse
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
+        if self.lag_rebuild_freq is not None:
+            problem._constant_jacobian = True
+        return NonlinearVariationalSolver(
+            problem, solver_parameters=self.nonlinear_solver_parameters,
+            options_prefix=solver_name)
+
     @cached_property
     def solvers(self):
-        """Set up a list of solvers for each problem at a node m."""
-        solvers = []
-        for m in range(self.M):
-            # setup solver using residual defined in derived class
-            alpha = self.Qdelta_imp[m, m]/self.dt_coarse
-            #print("Setting up hybridised solver with alpha = %s" % alpha)
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
-            problem = NonlinearVariationalProblem(self.res(m), self.U_DC, bcs=self.bcs)
-            solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
-            solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name))
-        return solvers
+        """
+        Solvers for each quadrature node (and, for MIN-SR-FLEX, each
+        sweep). For MIN-SR-FLEX this returns a list-of-lists indexed
+        [k-1][m], since the diagonal Qdelta_imp entry depends on the sweep
+        number k; for all other Qdelta_imp choices it returns a flat list
+        indexed [m].
+        """
+        if self.qdelta_imp_type == "MIN-SR-FLEX":
+            return [[self._build_solver(m, k) for m in range(self.M)]
+                    for k in range(1, self.maxk + 1)]
+        return [self._build_solver(m) for m in range(self.M)]
 
     @cached_property
     def solver_fin(self):
@@ -429,11 +521,28 @@ class SDC(object, metaclass=ABCMeta):
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
 
+    def _lag_reset(self, solvers):
+        if self.lag_rebuild_freq is None:
+            return
+        rebuild = ((self._step_count - 1) % self.lag_rebuild_freq == 0)
+
+        # For MIN-SR-FLEX, `solvers` is a list-of-lists indexed [k-1][m];
+        # flatten it so every (node, sweep) solver context gets the same
+        # rebuild/reuse decision for this timestep.
+        flat_solvers = (
+            [s for group in solvers for s in group]
+            if self.qdelta_imp_type == "MIN-SR-FLEX" else solvers)
+
+        for s in flat_solvers:
+            s._ctx._jacobian_assembled = not rebuild
+
     @wrapper_apply
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
         self.U_start.assign(self.Un)
         solver_list = self.solvers
+
+        self._lag_reset(solver_list)
 
         # Compute initial guess on quadrature nodes with low-order
         # base timestepper
@@ -453,19 +562,6 @@ class SDC(object, metaclass=ABCMeta):
         k = 0
         while k < self.maxk:
             k += 1
-
-            if self.qdelta_imp_type == "MIN-SR-FLEX":
-                # Recompute Implicit Q_delta matrix for each iteration k
-                self.Qdelta_imp = float(self.dt_coarse)*genQDeltaCoeffs(
-                    self.qdelta_imp_type,
-                    form=self.formulation,
-                    nodes=self.nodes,
-                    Q=self.Q,
-                    nNodes=self.M,
-                    nodeType=self.node_type,
-                    quadType=self.quad_type,
-                    k=k
-                )
 
             # Compute for N2N: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
             # for Z2N: sum(j=1,M) (q_mj*F(y_m^k) +  q_mj*S(y_m^k))
@@ -489,9 +585,26 @@ class SDC(object, metaclass=ABCMeta):
                 # Set initial guess for solver, and pick correct solver
                 if (self.formulation == "N2N"):
                     self.U_start.assign(self.Unodes1[m-1])
-                self.solver = solver_list[m-1]
+                # MIN-SR-FLEX has a dedicated solver per (node, sweep),
+                # since its diagonal Qdelta_imp entry depends on k; all
+                # other Qdelta_imp choices use a single solver per node.
+                self.solver = (solver_list[k-1][m-1]
+                               if self.qdelta_imp_type == "MIN-SR-FLEX"
+                               else solver_list[m-1])
                 self.U_DC.assign(self.Unodes[m])
 
+                if self.sweep_tols is not None:
+                    tol = self.sweep_tols[k-1]
+
+                    self.solver.snes.ksp.setTolerances(
+                        atol=tol["ksp_atol"],
+                        rtol=tol["ksp_rtol"]
+                    )
+
+                    self.solver.snes.setTolerances(
+                        atol=tol["snes_atol"],
+                        rtol=tol["snes_rtol"]
+                    )
                 # Compute
                 # for N2N:
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k)
@@ -502,6 +615,7 @@ class SDC(object, metaclass=ABCMeta):
                 #             + sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 self.solver.solve()
                 self.Unodes1[m].assign(self.U_DC)
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
 
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:
@@ -536,6 +650,8 @@ class SDC(object, metaclass=ABCMeta):
                 x_out.assign(self.Unodes[-1])
         else:
             x_out.assign(self.Unodes[-1])
+
+        self._step_count = self._step_count + 1
 
 
 class RIDC(object, metaclass=ABCMeta):
@@ -607,7 +723,7 @@ class RIDC(object, metaclass=ABCMeta):
                                              'sub_pc_type': 'ilu'}
         else:
             self.linear_solver_parameters = linear_solver_parameters
-
+        
         self.nonlinear_solver_parameters = nonlinear_solver_parameters
 
 
@@ -628,13 +744,6 @@ class RIDC(object, metaclass=ABCMeta):
         self.equation = self.base.equation
         self.residual = self.base.residual
         self.evaluate_source = self.base.evaluate_source
-        if self.nonlinear_solver_parameters is None:
-            alpha = float(self.dt)//float(self.dt_coarse)
-            alpha = self.dt/self.domain.dt
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
-        else:
-            self.appctx=None
-        print(self.nonlinear_solver_parameters)
 
         for t in self.residual:
             # Check all terms are labeled implicit or explicit
@@ -799,9 +908,22 @@ class RIDC(object, metaclass=ABCMeta):
         """Set up the problem and the solver for the nonlinear solve."""
         # setup solver using residual defined in derived class
         problem = NonlinearVariationalProblem(self.res, self.U_DC, bcs=self.bcs)
+        if self.lag_rebuild_freq is not None:
+            problem._constant_jacobian = True
         solver_name = self.field_name+self.__class__.__name__
         solver = NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name)
         return solver
+
+    def _lag_reset_solver(self):
+        if self.lag_rebuild_freq is None:
+            return
+        rebuild = (self._solver_call_count % self.lag_rebuild_freq == 0)
+        self.solver._ctx._jacobian_assembled = not rebuild
+
+    def _lag_note_solver_call(self):
+        if self.lag_rebuild_freq is None:
+            return
+        self._solver_call_count = self._solver_call_count + 1
 
     @cached_property
     def solver_rhs(self):
@@ -866,7 +988,9 @@ class RIDC(object, metaclass=ABCMeta):
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
+                self._lag_reset_solver()
                 self.solver.solve()
+                self._lag_note_solver_call()
                 self.Unodes1[m+1].assign(self.U_DC)
 
                 # Evaluate source terms
@@ -896,7 +1020,9 @@ class RIDC(object, metaclass=ABCMeta):
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
+                self._lag_reset_solver()
                 self.solver.solve()
+                self._lag_note_solver_call()
                 self.Unodes1[m+1].assign(self.U_DC)
 
                 # Evaluate source terms

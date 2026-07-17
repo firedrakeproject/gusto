@@ -10,15 +10,11 @@ while RIDC parallelises across the correction iterations by using a reduced sten
 and pipelining.
 """
 
-from firedrake import (
-    Function, NonlinearVariationalProblem, NonlinearVariationalSolver, Constant
-)
+from firedrake import Function
 from firedrake.utils import cached_property
 from gusto.time_discretisation.time_discretisation import wrapper_apply
-from qmat import genQDeltaCoeffs
 from gusto.time_discretisation.deferred_correction import SDC, RIDC
 from gusto.core.logging import logger
-from gusto.solvers.solver_presets import hybridised_solver_parameters
 
 __all__ = ["Parallel_RIDC", "Parallel_SDC"]
 
@@ -161,11 +157,25 @@ class Parallel_RIDC(RIDC):
                 self.source_Uk_m.assign(self.source_Uk[m])
                 self.U_DC.assign(self.Unodes[m+1])
 
+                if self.sweep_tols is not None:
+                    tol = self.sweep_tols[k-1]
+
+                    self.solver.snes.ksp.setTolerances(
+                        atol=tol["ksp_atol"],
+                        rtol=tol["ksp_rtol"]
+                    )
+
+                    self.solver.snes.setTolerances(
+                        atol=tol["snes_atol"],
+                        rtol=tol["snes_rtol"]
+                    )
                 # Compute
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y_j^k)
+                self._lag_reset_solver()
                 self.solver.solve()
+                self._lag_note_solver_call()
                 self.Unodes1[m+1].assign(self.U_DC)
 
                 # Evaluate source terms
@@ -207,7 +217,9 @@ class Parallel_RIDC(RIDC):
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
+                self._lag_reset_solver()
                 self.solver.solve()
+                self._lag_note_solver_call()
                 self.Unodes1[m+1].assign(self.U_DC)
 
                 # # Evaluate source terms
@@ -253,7 +265,7 @@ class Parallel_SDC(SDC):
     def __init__(self, base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                  field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
-                 limiter=None, options=None, initial_guess="base", communicator=None):
+                 limiter=None, options=None, initial_guess="base", communicator=None, sweep_tols=None):
         """
         Initialise SDC object
         Args:
@@ -283,14 +295,14 @@ class Parallel_SDC(SDC):
                 the evolving field to enforce monotonicity. Defaults to None.
             initial_guess (str, optional): Initial guess to be base timestepper, or copy
             communicator (MPI communicator, optional): communicator for parallel execution. Defaults to None.
+            sweep_tols (list of dict, optional): list of tolerances for each sweep. Defaults to None.
         """
         super().__init__(base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                          formulation="Z2N", field_name=field_name,
                          linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters,
                          final_update=final_update,
-                         limiter=limiter, initial_guess=initial_guess)
+                         limiter=limiter, initial_guess=initial_guess, sweep_tols=sweep_tols)
         self.comm = communicator
-        self.alpha = Constant(0.0)  # Initial value, will be updated in solver setup
         # Checks for parallel SDC
         if self.comm is None:
             raise ValueError("No communicator provided. Please provide a valid MPI communicator.")
@@ -310,7 +322,7 @@ class Parallel_SDC(SDC):
         """
         super(Parallel_SDC, self).setup(equation, apply_bcs, *active_labels)
 
-        _ = self.solver
+        _ = self.solvers
 
     def compute_quad(self):
         """
@@ -330,64 +342,21 @@ class Parallel_SDC(SDC):
         self.comm.allreduce(x, self.quad_final)
     
     @cached_property
-    def solver(self):
-        """Set up a list of solvers for each problem at a node m."""
-        m = self.comm.ensemble_comm.rank
-        # setup solver using residual defined in derived class
-        self.alpha.assign(self.Qdelta_imp[m, m]/float(self.dt_coarse))
-        QD_imp = genQDeltaCoeffs(
-                    self.qdelta_imp_type,
-                    form=self.formulation,
-                    nodes=self.nodes/float(self.dt_coarse),
-                    Q=self.Q/float(self.dt_coarse),
-                    nNodes=self.M,
-                    nodeType=self.node_type,
-                    quadType=self.quad_type
-                )
-        alpha = QD_imp[m, m]
-        #print("Setting up hybridised solver with alpha = %s" % alpha)
-        if self.nonlinear_solver_parameters is None:
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
-        else:
-            self.appctx = None
-        problem = NonlinearVariationalProblem(self.res(m), self.U_DC, bcs=self.bcs)
-        solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
-        solver = NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name)
-        return solver
-    
-    @cached_property
     def solvers(self):
-        """Set up a list of solvers for each problem at a node m."""
-        solvers = []
-        for k in range(1, self.maxk+1):
-            # Recompute Implicit Q_delta matrix for each iteration k
-            Qdelta_imp_k = float(self.dt_coarse)*genQDeltaCoeffs(
-                self.qdelta_imp_type,
-                form=self.formulation,
-                nodes=self.nodes,
-                Q=self.Q,
-                nNodes=self.M,
-                nodeType=self.node_type,
-                quadType=self.quad_type,
-                k=k
-            )
-            alpha_k = Qdelta_imp_k[self.comm.ensemble_comm.rank, self.comm.ensemble_comm.rank]/float(self.dt_coarse)
-            if self.nonlinear_solver_parameters is not None:
-                nonlinear_solver_parameters_k, appctx_k = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha_k, tau_values=None, nonlinear=True, imex=True)
-            else:
-                nonlinear_solver_parameters_k = None
-                appctx_k = None
-            problem_k = NonlinearVariationalProblem(self.res(self.comm.ensemble_comm.rank), self.U_DC, bcs=self.bcs)
-            solver_name_k = self.field_name+self.__class__.__name__ + "%s_k%s" % (self.comm.ensemble_comm.rank, k)
-            solver_k = NonlinearVariationalSolver(problem_k, solver_parameters=nonlinear_solver_parameters_k, appctx=appctx_k, options_prefix=solver_name_k)
-            solvers.append(solver_k)
-        return solvers
+        """Build rank-local SDC solvers: one per rank, or one per sweep for MIN-SR-FLEX."""
+        m = self.comm.ensemble_comm.rank
+        if self.qdelta_imp_type == "MIN-SR-FLEX":
+            return [self._build_solver(m, k) for k in range(1, self.maxk + 1)]
+        return self._build_solver(m)
 
     @wrapper_apply
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
         self.U_start.assign(self.Un)
         solver_list = self.solvers
+
+        # Keep SDC lag-rebuild behaviour with rank-local solver containers.
+        self._lag_reset([solver_list])
 
         # Compute initial guess on quadrature nodes with low-order
         # base timestepper
@@ -408,20 +377,7 @@ class Parallel_SDC(SDC):
         while k < self.maxk:
             k += 1
 
-            if self.qdelta_imp_type == "MIN-SR-FLEX":
-                # Recompute Implicit Q_delta matrix for each iteration k
-                self.Qdelta_imp = float(self.dt_coarse)*genQDeltaCoeffs(
-                    self.qdelta_imp_type,
-                    form=self.formulation,
-                    nodes=self.nodes,
-                    Q=self.Q,
-                    nNodes=self.M,
-                    nodeType=self.node_type,
-                    quadType=self.quad_type,
-                    k=k
-                )
-                self.alpha.assign(self.Qdelta_imp[self.comm.ensemble_comm.rank, self.comm.ensemble_comm.rank]/float(self.dt_coarse))
-                solver = solver_list[k-1]
+            solver = solver_list[k-1] if self.qdelta_imp_type == "MIN-SR-FLEX" else solver_list
 
             # Compute for N2N: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
             # for Z2N: sum(j=1,M) (q_mj*F(y_m^k) +  q_mj*S(y_m^k))
@@ -446,6 +402,19 @@ class Parallel_SDC(SDC):
             #self.solver = solver_list[self.comm.ensemble_comm.rank]
             self.U_DC.assign(self.Unodes[self.comm.ensemble_comm.rank+1])
 
+            if self.sweep_tols is not None:
+                tol = self.sweep_tols[k-1]
+
+                solver.snes.ksp.setTolerances(
+                    atol=tol["ksp_atol"],
+                    rtol=tol["ksp_rtol"]
+                )
+
+                solver.snes.setTolerances(
+                    atol=tol["snes_atol"],
+                    rtol=tol["snes_rtol"]
+                )
+
             # Compute
             # for N2N:
             # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k)
@@ -454,7 +423,7 @@ class Parallel_SDC(SDC):
             # for Z2N:
             # y_m^(k+1) = y^n + sum(j=1,m) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
             #             + sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-            self.solver.solve()
+            solver.solve()
             self.Unodes1[self.comm.ensemble_comm.rank+1].assign(self.U_DC)
 
             # Evaluate source terms
@@ -495,3 +464,5 @@ class Parallel_SDC(SDC):
             if self.comm.ensemble_comm.rank == self.M-1:
                 x_out.assign(self.Unodes[-1])
             self.comm.bcast(x_out, self.M-1)
+
+        self._step_count = self._step_count + 1
