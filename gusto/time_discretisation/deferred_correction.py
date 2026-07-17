@@ -260,21 +260,41 @@ class SDC(object, metaclass=ABCMeta):
         self.Uin = Function(W)
         self.source_in = Function(W)
 
-        # Persistent Constants for the diagonal of Qdelta_imp. Referencing
-        # these (rather than wrapping self.Qdelta_imp[m, m] in a fresh
-        # Constant() inside res()) means later `.assign()` calls actually
-        # reach the cached solvers' residual forms. Off-diagonal entries are
-        # not made persistent: for every Qdelta_imp option currently
-        # supported here they are either always zero (diagonal
-        # preconditioners: MIN-SR-NS/S/FLEX) or fixed for the run (LU, TRAP,
-        # BE, ...), so they don't need to vary sweep-to-sweep.
-        self.Qdelta_imp_diag = [Constant(self.Qdelta_imp[m, m]) for m in range(self.M)]
-
+        # Persistent Constants for the diagonal of Qdelta_imp.
+        #
+        # For all non-FLEX Qdelta_imp choices (BE, LU, TRAP, MIN-SR-NS,
+        # MIN-SR-S, ...) the diagonal is fixed for the whole run, so a
+        # single Constant per node m is created here and referenced (rather
+        # than wrapping self.Qdelta_imp[m, m] in a fresh Constant() inside
+        # res()) so that later `.assign()` calls actually reach the cached
+        # solvers' residual forms. Off-diagonal entries are not made
+        # persistent: for every Qdelta_imp option currently supported here
+        # they are either always zero (diagonal preconditioners) or fixed
+        # for the run, so they don't need to vary sweep-to-sweep.
+        #
+        # MIN-SR-FLEX is different: its diagonal genuinely depends on the
+        # sweep number k (Caklovic et al.), so a single per-node Constant
+        # re-assigned every sweep would make the operator change from sweep
+        # to sweep. That's fine as long as the Jacobian/PC is rebuilt every
+        # sweep - but it means `td_lag_rebuild` (which lags rebuilds across
+        # *timesteps*) can never be honoured for FLEX, since every sweep
+        # already forces a rebuild regardless of the requested frequency.
+        #
+        # Instead, since Qdelta_imp_diag(m, k) for MIN-SR-FLEX is a fixed,
+        # deterministic function of (m, k) only (not of the timestep or the
+        # solution), we precompute one *fixed* Constant per (node, sweep)
+        # pair up front, each attached to its own dedicated solver context
+        # in `solvers` below. This lets the normal `_constant_jacobian` /
+        # `_lag_reset` machinery apply to FLEX exactly as it does for any
+        # other Qdelta_imp, allowing td_lag_rebuild to be honoured. The
+        # tradeoff is maxk*M solver contexts instead of M - fine for modest
+        # M/maxk, but worth checking memory for large sweep/node counts.
         if self.qdelta_imp_type == "MIN-SR-FLEX":
             from gusto.core.logging import logger
-            logger.warning(
-                "SDC: MIN-SR-FLEX recomputes Qdelta_imp each sweep, so cross-sweep "
-                "Jacobian/preconditioner reuse is disabled (operator changes per sweep).")
+            logger.info(
+                "SDC: MIN-SR-FLEX diagonal is precomputed per (node, sweep) "
+                "so that td_lag_rebuild can be honoured across timesteps; "
+                "this builds maxk*M solver contexts instead of M.")
             # genQDeltaCoeffs does not pass k through to computeQDelta, so it
             # always returns the k=1 matrix regardless of the k kwarg given
             # to it. Bypass it and call MIN_SR_FLEX directly instead, which
@@ -282,6 +302,13 @@ class SDC(object, metaclass=ABCMeta):
             # k > M (Caklovic et al.).
             self._min_sr_flex_gen = MIN_SR_FLEX(
                 nNodes=self.M, nodeType=self.node_type, quadType=self.quad_type)
+            self.Qdelta_imp_diag_k = []
+            for k in range(1, self.maxk + 1):
+                diag_k = self._min_sr_flex_gen.computeQDelta(k=k)
+                self.Qdelta_imp_diag_k.append(
+                    [Constant(float(self.dt_coarse) * diag_k[m, m]) for m in range(self.M)])
+        else:
+            self.Qdelta_imp_diag = [Constant(self.Qdelta_imp[m, m]) for m in range(self.M)]
 
     @property
     def nlevels(self):
@@ -342,8 +369,17 @@ class SDC(object, metaclass=ABCMeta):
         residual_final = a + F_exp + Q
         return residual_final.form
 
-    def res(self, m):
-        """Set up the discretisation's residual for a given node m."""
+    def res(self, m, k=None):
+        """
+        Set up the discretisation's residual for a given node m.
+
+        Args:
+            m (int): quadrature node index.
+            k (int, optional): sweep number (1-indexed). Only used for
+                MIN-SR-FLEX, to select the fixed per-(node, sweep) diagonal
+                Constant built in setup(). Ignored for all other Qdelta_imp
+                choices, which use a single per-node Constant.
+        """
         # Add time derivative terms  y^(k+1)_m - y_start for node m. y_start is y_n for Z2N formulation
         # and y^(k)_m for N2N formulation
         mass_form = self.residual.label_map(
@@ -414,16 +450,20 @@ class SDC(object, metaclass=ABCMeta):
 
         # Add on final implicit terms
         # Qdelta_imp[m,m]*(F(y_(m)^(k+1)) - F(y_(m)^k))
-        # NOTE: uses the persistent self.Qdelta_imp_diag[m] Constant, not a
-        # fresh Constant(self.Qdelta_imp[m, m]), so that MIN-SR-FLEX's
-        # per-sweep .assign() (see apply()) actually reaches this form.
+        # NOTE: uses a persistent Constant (self.Qdelta_imp_diag[m] for
+        # non-FLEX, or self.Qdelta_imp_diag_k[k-1][m] for MIN-SR-FLEX), not
+        # a fresh Constant(self.Qdelta_imp[m, m]), so that it actually
+        # reaches the cached solvers' residual forms.
+        diag_m = (self.Qdelta_imp_diag_k[k-1][m]
+                  if self.qdelta_imp_type == "MIN-SR-FLEX"
+                  else self.Qdelta_imp_diag[m])
         r_imp_kp1 = self.residual.label_map(
             lambda t: t.has_label(implicit),
             map_if_true=replace_subject(self.U_DC, old_idx=self.idx),
             map_if_false=drop)
         r_imp_kp1 = r_imp_kp1.label_map(
             all_terms,
-            lambda t: self.Qdelta_imp_diag[m]*t)
+            lambda t: diag_m*t)
         residual += r_imp_kp1
         r_imp_k = self.residual.label_map(
             lambda t: t.has_label(implicit),
@@ -431,7 +471,7 @@ class SDC(object, metaclass=ABCMeta):
             map_if_false=drop)
         r_imp_k = r_imp_k.label_map(
             all_terms,
-            lambda t: self.Qdelta_imp_diag[m]*t)
+            lambda t: diag_m*t)
         residual -= r_imp_k
 
         # Add on error term. sum(j=1,M) q_mj*F(y_m^k) for Z2N formulation
@@ -443,21 +483,39 @@ class SDC(object, metaclass=ABCMeta):
         residual += Q
         return residual.form
 
+    def _build_solver(self, m, k=None):
+        """
+        Build a single NonlinearVariationalSolver for node m (and, for
+        MIN-SR-FLEX, sweep k).
+
+        Args:
+            m (int): quadrature node index.
+            k (int, optional): sweep number (1-indexed). Only relevant for
+                MIN-SR-FLEX; ignored (and omitted from the solver name)
+                otherwise.
+        """
+        problem = NonlinearVariationalProblem(self.res(m, k), self.U_DC, bcs=self.bcs)
+        suffix = f"{m}_k{k}" if k is not None else f"{m}"
+        solver_name = self.field_name + self.__class__.__name__ + suffix
+        if self.lag_rebuild_freq is not None:
+            problem._constant_jacobian = True
+        return NonlinearVariationalSolver(
+            problem, solver_parameters=self.nonlinear_solver_parameters,
+            options_prefix=solver_name)
+
     @cached_property
     def solvers(self):
-        from firedrake import PETSc
-        solvers = []
-        for m in range(self.M):
-            problem = NonlinearVariationalProblem(self.res(m), self.U_DC, bcs=self.bcs)
-            solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
-            if self.lag_rebuild_freq is not None:
-                problem._constant_jacobian = True
-            solver = NonlinearVariationalSolver(
-                problem, solver_parameters=self.nonlinear_solver_parameters,
-                options_prefix=solver_name)
-
-            solvers.append(solver)
-        return solvers
+        """
+        Solvers for each quadrature node (and, for MIN-SR-FLEX, each
+        sweep). For MIN-SR-FLEX this returns a list-of-lists indexed
+        [k-1][m], since the diagonal Qdelta_imp entry depends on the sweep
+        number k; for all other Qdelta_imp choices it returns a flat list
+        indexed [m].
+        """
+        if self.qdelta_imp_type == "MIN-SR-FLEX":
+            return [[self._build_solver(m, k) for m in range(self.M)]
+                    for k in range(1, self.maxk + 1)]
+        return [self._build_solver(m) for m in range(self.M)]
 
     @cached_property
     def solver_fin(self):
@@ -476,18 +534,24 @@ class SDC(object, metaclass=ABCMeta):
         solver_name = self.field_name+self.__class__.__name__+"_rhs"
         return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
-    
+
     def _lag_reset(self, solvers):
         if self.lag_rebuild_freq is None:
             return
-        rebuild = ((self._step_count - 1)% self.lag_rebuild_freq == 0)
+        rebuild = ((self._step_count - 1) % self.lag_rebuild_freq == 0)
 
-        for s in solvers:
+        # For MIN-SR-FLEX, `solvers` is a list-of-lists indexed [k-1][m];
+        # flatten it so every (node, sweep) solver context gets the same
+        # rebuild/reuse decision for this timestep.
+        flat_solvers = (
+            [s for group in solvers for s in group]
+            if self.qdelta_imp_type == "MIN-SR-FLEX" else solvers)
+
+        for s in flat_solvers:
             s._ctx._jacobian_assembled = not rebuild
 
     @wrapper_apply
     def apply(self, x_out, x_in):
-        from firedrake import PETSc
         self.Un.assign(x_in)
         self.U_start.assign(self.Un)
         solver_list = self.solvers
@@ -513,22 +577,6 @@ class SDC(object, metaclass=ABCMeta):
         while k < self.maxk:
             k += 1
 
-            if self.qdelta_imp_type == "MIN-SR-FLEX":
-                # Recompute the implicit Qdelta diagonal for sweep k, calling
-                # MIN_SR_FLEX.computeQDelta directly (genQDeltaCoeffs drops
-                # the k kwarg before it reaches computeQDelta, so it cannot
-                # be used here - see setup()).
-                new_diag = self._min_sr_flex_gen.computeQDelta(k=k)
-                for m in range(self.M):
-                    self.Qdelta_imp_diag[m].assign(float(self.dt_coarse) * new_diag[m, m])
-                # The diagonal coefficient just changed, so any cached
-                # Jacobian/preconditioner built against the previous sweep's
-                # value is stale. Force reassembly this sweep regardless of
-                # td_lag_rebuild (which governs cross-timestep, not
-                # cross-sweep, reuse).
-                for s in solver_list:
-                    s._ctx._jacobian_assembled = False
-
             # Compute for N2N: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
             # for Z2N: sum(j=1,M) (q_mj*F(y_m^k) +  q_mj*S(y_m^k))
             for m in range(1, self.M+1):
@@ -551,20 +599,13 @@ class SDC(object, metaclass=ABCMeta):
                 # Set initial guess for solver, and pick correct solver
                 if (self.formulation == "N2N"):
                     self.U_start.assign(self.Unodes1[m-1])
-                # inside the `while k < self.maxk` loop, after `self.solver = solver_list[m-1]`:
-                self.solver = solver_list[m-1]
+                # MIN-SR-FLEX has a dedicated solver per (node, sweep),
+                # since its diagonal Qdelta_imp entry depends on k; all
+                # other Qdelta_imp choices use a single solver per node.
+                self.solver = (solver_list[k-1][m-1]
+                               if self.qdelta_imp_type == "MIN-SR-FLEX"
+                               else solver_list[m-1])
                 self.U_DC.assign(self.Unodes[m])
-
-                # # Lag across sweeps: rebuild on first sweep, reuse on later sweeps
-                # if self._lag_jac or self._lag_pc:
-                #     lag = -2 if k == 1 else -1
-                #     prefix = self.solver.options_prefix
-                #     opts = PETSc.Options()
-                #     if self._lag_jac:
-                #         opts[prefix + "snes_lag_jacobian"] = lag
-                #     if self._lag_pc:
-                #         opts[prefix + "snes_lag_preconditioner"] = lag
-                #     self.solver.snes.setFromOptions()
 
                 if self.sweep_tols is not None:
                     tol = self.sweep_tols[k-1]
@@ -586,8 +627,6 @@ class SDC(object, metaclass=ABCMeta):
                 # for Z2N:
                 # y_m^(k+1) = y^n + sum(j=1,m) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
                 #             + sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-                # rtol, atol, _, _ = ksp.getTolerances()
-                # PETSc.Sys.Print(f"sweep {k}, node {m}, rtol={rtol}")
                 self.solver.solve()
                 self.Unodes1[m].assign(self.U_DC)
                 self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
