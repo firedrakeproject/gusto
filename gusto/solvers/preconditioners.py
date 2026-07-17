@@ -12,7 +12,7 @@ from pyop2.profiling import timed_region, timed_function
 from functools import partial
 
 
-__all__ = ["VerticalHybridizationPC", "AuxiliaryPC", "CompressibleHybridisedSCPC"]
+__all__ = ["VerticalHybridizationPC", "AuxiliaryPC", "CompressibleHybridisedSCPC", "SlateSchurPC"]
 
 
 class AuxiliaryPC(AuxiliaryOperatorPC):
@@ -346,7 +346,7 @@ class VerticalHybridizationPC(PCBase):
 
             unbroken_res_hdiv = self.unbroken_residual.subfunctions[self.vidx]
             broken_res_hdiv = self.broken_residual.subfunctions[self.vidx]
-            broken_res_hdiv.assign(0)
+            broken_res_hdiv.zero()
             self.average_kernel.apply(broken_res_hdiv, self.weight, unbroken_res_hdiv)
 
             # Compute the rhs for the multiplier system
@@ -374,7 +374,7 @@ class VerticalHybridizationPC(PCBase):
             # Compute the hdiv projection of the broken hdiv solution
             broken_hdiv = self.broken_solution.subfunctions[self.vidx]
             unbroken_hdiv = self.unbroken_solution.subfunctions[self.vidx]
-            unbroken_hdiv.assign(0)
+            unbroken_hdiv.zero()
 
             self.average_kernel.apply(unbroken_hdiv, self.weight, broken_hdiv)
 
@@ -460,39 +460,6 @@ class CompressibleHybridisedSCPC(PCBase):
 
     _prefix = "compressible_hybrid_scpc"
 
-    scpc_parameters = {
-        'mat_type': 'matfree',
-        'ksp_type': 'preonly',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.SCPC',
-        'pc_sc_eliminate_fields': '0, 1',
-        # The reduced operator is not symmetric
-        'condensed_field': {
-            'ksp_converged_reason': None,
-            'ksp_monitor_true_residual': None,
-            'ksp_type': 'fgmres',
-            'ksp_rtol': 1.0e-8,
-            'ksp_atol': 1.0e-8,
-            'ksp_max_it': 100,
-            'pc_type': 'gamg',
-            'pc_gamg_sym_graph': None,
-            'mg_levels': {
-                'ksp_type': 'gmres',
-                'ksp_max_it': 5,
-                'pc_type': 'bjacobi',
-                'sub_pc_type': 'ilu'
-            }
-        }
-    }
-
-    cg_ilu_parameters = {
-        'ksp_type': 'cg',
-        'pc_type': 'bjacobi',
-        'sub_pc_type': 'ilu',
-        'ksp_rtol': 1.0e-8,
-        'ksp_atol': 1.0e-8,
-    }
-    @timed_function("Gusto:PC_init")
     def initialize(self, pc):
         """
         Set up problem and solver
@@ -513,15 +480,14 @@ class CompressibleHybridisedSCPC(PCBase):
             return
 
         self._process_context(pc)
+        prefix = pc.getOptionsPrefix()
 
-        self.hybridised_scpc_parameters = self.scpc_parameters
-        self.rho_avg_solver_parameters = self.cg_ilu_parameters
-        self.theta_solver_parameters = self.cg_ilu_parameters
-        self.exner_avg_solver_parameters = self.cg_ilu_parameters
+        # Unpack sub-solver parameters from the options prefix
+        self.riesz_map_parameters = PETSc.Options(prefix + "riesz_map_").getAll()
 
         if logger.isEnabledFor(DEBUG):
-            self.hybridised_scpc_parameters['ksp_monitor_true_residual'] = None
-            self.hybridised_scpc_parameters['ksp_converged_reason'] = None
+            self.scpc_solve_parameters['ksp_monitor_true_residual'] = None
+            self.scpc_solve_parameters['ksp_converged_reason'] = None
 
         # Equations and parameters
         equations = self.equations
@@ -554,7 +520,10 @@ class CompressibleHybridisedSCPC(PCBase):
         self.xrhs = Function(self.W)
         self.y = Function(self.W)
 
-        self.Riesz_map = RieszMap(self.W.dual(), solver_parameters=self.cg_ilu_parameters, constant_jacobian=True)
+        # Riesz map for the dual of the original function space
+        self.riesz_map = RieszMap(self.W.dual(),
+                                  solver_parameters=self.riesz_map_parameters,
+                                  constant_jacobian=True)
 
         self.y_hybrid = Function(self.W_hyb)
 
@@ -643,12 +612,12 @@ class CompressibleHybridisedSCPC(PCBase):
                                                  constant_jacobian=True)
 
         self.rho_avg_solver = LinearVariationalSolver(
-            rho_avg_prb, solver_parameters=self.rho_avg_solver_parameters,
-            options_prefix=pc.getOptionsPrefix()+'rhobar_avg_solver'
+            rho_avg_prb,
+            options_prefix=pc.getOptionsPrefix()+'rhobar_avg'
         )
         self.exner_avg_solver = LinearVariationalSolver(
-            exner_avg_prb, solver_parameters=self.exner_avg_solver_parameters,
-            options_prefix=pc.getOptionsPrefix()+'exnerbar_avg_solver'
+            exner_avg_prb,
+            options_prefix=pc.getOptionsPrefix()+'exnerbar_avg'
         )
 
         # "broken" u, rho, and trace system
@@ -710,9 +679,11 @@ class CompressibleHybridisedSCPC(PCBase):
         hybridized_prb = LinearVariationalProblem(
             aeqn, Leqn, self.y_hybrid, constant_jacobian=True
         )
+
         self.hybridized_solver = LinearVariationalSolver(
-            hybridized_prb, solver_parameters=self.hybridised_scpc_parameters,
-            options_prefix=pc.getOptionsPrefix()+self._prefix, appctx=appctx
+            hybridized_prb,
+            options_prefix=pc.getOptionsPrefix()+self._prefix,
+            appctx=appctx
         )
 
         if logger.isEnabledFor(DEBUG):
@@ -748,8 +719,8 @@ class CompressibleHybridisedSCPC(PCBase):
         )
 
         self.theta_solver = LinearVariationalSolver(
-            theta_problem, solver_parameters=self.theta_solver_parameters,
-            options_prefix=pc.getOptionsPrefix()+'thetabacksubstitution'
+            theta_problem,
+            options_prefix=pc.getOptionsPrefix()+'theta_backsub'
         )
 
         if logger.isEnabledFor(DEBUG):
@@ -782,23 +753,29 @@ class CompressibleHybridisedSCPC(PCBase):
             # Solve hybridized system
             self.hybridized_solver.solve()
 
-        with timed_region("Gusto:PC_apply_averaging"):
-            # Recover broken u and rho
-            u_broken, rho, l = self.y_hybrid.subfunctions
-            self.u_hdiv.assign(0)
-            self._average_kernel.apply(self.u_hdiv, self._weight, u_broken)
-            for bc in self.bcs:
-                bc.zero(self.u_hdiv)
+        self.xrhs.assign(self.riesz_map(self.xstar))
+        # Solve hybridized system
+        self.hybridized_solver.solve()
 
-            # Transfer data to non-hybrid space
-            self.y.subfunctions[0].assign(self.u_hdiv)
-            self.y.subfunctions[1].assign(rho)
+        # Recover broken u and rho
+        u_broken, rho, l = self.y_hybrid.subfunctions
+        self.u_hdiv.zero()
+        self._average_kernel.apply(self.u_hdiv, self._weight, u_broken)
+        for bc in self.bcs:
+            bc.zero(self.u_hdiv)
 
-        with timed_region("Gusto:PC_apply_theta_solve"):
-            # Recover theta
-            self.theta.assign(0)
-            self.theta_solver.solve()
-            self.y.subfunctions[2].assign(self.theta)
+        # Transfer data to non-hybrid space
+        self.y.subfunctions[0].assign(self.u_hdiv)
+        self.y.subfunctions[1].assign(rho)
+
+        # Recover theta
+        self.theta.zero()
+        self.theta_solver.solve()
+        self.y.subfunctions[2].assign(self.theta)
+
+        with self.y.dat.vec_ro as vout:
+            # copy into PETSc output vector
+            vout.copy(y)
 
             with self.y.dat.vec_ro as vout:
                 # copy into PETSc output vector
@@ -842,3 +819,32 @@ class CompressibleHybridisedSCPC(PCBase):
         """
 
         raise NotImplementedError("The transpose application of the PC is not implemented.")
+
+
+class SlateSchurPC(AuxiliaryOperatorPC):
+    _prefix = "slate_schur_"
+
+    def form(self, pc, test, trial):
+        appctx = self.get_appctx(pc)
+
+        aform = appctx['slateschur_form']
+
+        prefix = pc.getOptionsPrefix() + self._prefix
+        nf0 = PETSc.Options().getInt(prefix + 'nfields0', 1)
+
+        a = Tensor(aform)
+        a00 = a.blocks[:nf0, :nf0]
+        a10 = a.blocks[nf0, :nf0]
+        a01 = a.blocks[:nf0, nf0]
+        a11 = a.blocks[nf0, nf0]
+
+        schur_comp = a11 - a10*a00.inv*a01
+
+        return (schur_comp, None)
+
+    def view(self, pc, viewer=None):
+        super().view(pc, viewer)
+        if hasattr(self, "pc"):
+            msg = "PC to approximate Schur complement using Slate.\n"
+            viewer.printfASCII(msg)
+            self.pc.view(viewer)

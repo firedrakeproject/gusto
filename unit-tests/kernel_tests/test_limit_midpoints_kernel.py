@@ -25,7 +25,7 @@ def test_limit_midpoints(profile):
     m = IntervalMesh(3, 3)
     mesh = ExtrudedMesh(m, layers=1, layer_height=3.0)
 
-    cell = m.ufl_cell().cellname()
+    cell = m.ufl_cell().cellname
     DG_hori_elt = FiniteElement("DG", cell, 1, variant='equispaced')
     DG_vert_elt = FiniteElement("DG", interval, 1, variant='equispaced')
     Vt_vert_elt = FiniteElement("CG", interval, 2)
