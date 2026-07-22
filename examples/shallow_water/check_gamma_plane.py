@@ -92,7 +92,7 @@ smooth_delta = 2
 dt = 250
 tmax = 10*dt
 
-dirname=f'~/results/jupiter_sw/check_gamma_plane{file_name_suffix}'
+dirname=f'/data/home/sh1293/results/jupiter_sw/check_gamma_plane{file_name_suffix}'
 
 mesh = PeriodicRectangleMesh(nx=nx, ny=ny, Lx=Lx, Ly=Ly, quadrilateral=True)
 output = OutputParameters(dirname=f'{dirname}', dumpfreq=1, dump_nc=True)
@@ -163,4 +163,4 @@ stepper.set_reference_profiles([('D', Dbar)])
 
 stepper.run(t=0, tmax=tmax)
 
-logger.info(f'File produced:\n~/results/jupiter_sw/check_gamma_plane{file_name_suffix}')
+logger.info(f'File produced:\ncheck_gamma_plane{file_name_suffix}')
