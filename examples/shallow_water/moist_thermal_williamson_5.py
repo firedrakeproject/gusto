@@ -161,11 +161,13 @@ def moist_thermal_williamson_5(
     v0 = stepper.fields("water_vapour")
     c0 = stepper.fields("cloud_water")
     r0 = stepper.fields("rain")
+    Omega = parameters.Omega
+    topog_field = stepper.fields('topography')
 
     uexpr = as_vector([-u_max*y/radius, u_max*x/radius, 0.0])
 
     Dexpr = (
-        mean_depth - tpexpr
+        mean_depth - topog_field
         - (radius * Omega * u_max + 0.5*u_max**2)*(z/radius)**2/g
     )
 
