@@ -1,7 +1,6 @@
 """Objects describe chemical conversion and reaction processes."""
 
 from firedrake import dx, split, Function, sqrt, exp, Constant, conditional, max_value, min_value, assemble
-from firedrake.__future__ import interpolate
 from firedrake.fml import subject
 from gusto.core.labels import prognostic, source_label
 from gusto.core.logging import logger
