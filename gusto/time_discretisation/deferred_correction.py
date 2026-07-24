@@ -218,7 +218,6 @@ class SDC(object, metaclass=ABCMeta):
             elif not isinstance(self.lag_rebuild_freq, int):
                 raise ValueError("DeferredCorrection: td_lag_rebuild must be an integer")
             else:
-                from gusto import logger
                 logger.info(f"DeferredCorrection: td_lag_rebuild set to {self.lag_rebuild_freq}. "
                             "Jacobian will be rebuilt every td_lag_rebuild timesteps.")
 

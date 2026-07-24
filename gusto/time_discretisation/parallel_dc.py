@@ -11,7 +11,7 @@ and pipelining.
 """
 
 from firedrake import Function
-from firedrake.utils import cached_property
+from functools import cached_property
 from gusto.time_discretisation.time_discretisation import wrapper_apply
 from gusto.time_discretisation.deferred_correction import SDC, RIDC
 from gusto.core.logging import logger
