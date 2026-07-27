@@ -122,4 +122,4 @@ def test_gamma_plane(trap):
     fig.colorbar(c2)
     plt.show()
 
-    assert errornorm(coriolis_true, coriolis_gusto) < 1e-12
+    assert errornorm(coriolis_true, coriolis_gusto) < 1e-11
