@@ -3,7 +3,8 @@ from gusto import(
     CoriolisOptions
 )
 from firedrake import (
-    SpatialCoordinate, PeriodicRectangleMesh, conditional
+    SpatialCoordinate, PeriodicRectangleMesh, conditional, FunctionSpace,
+    Function
 )
 import scipy
 import numpy as np
@@ -107,18 +108,32 @@ fsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(
 if smooth_degree == 5:
     fsmooth += float(coeffs[4])*r**4 + float(coeffs[5])*r**5
 
+Vcg = FunctionSpace(domain.mesh, "DG", 1)
 
-### analytic gamma plane with step-edge-trap - gamma plane inside rstar, 2*Omega outside
-ftrap_step = conditional(r<rstar, fexpr, 2*Omega)
+trap = 'no_trap'
 
-### ShallowWaterEquations with step-edge-trap
-eqns_step = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar, 2*Omega))
+if trap=='no_trap':
+    pv_true = Function(Vcg).interpolate(fexpr)
 
-### analytic gamma plane with smooth-edge-trap - gamma plane inside rstar-2*dx, then smoothing polynomial, then 2*Omega
-ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
-ftrap_smooth = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)
+    eqns = ShallowWaterEquations(domain, parameters)
+    gusto_field = eqns.prescribed_fields('coriolis')
+    pv_gusto = Function(Vcg).interpolate(gusto_field)
 
-### ShallowWaterEquations with smooth-edge-trap
-eqns_smooth = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap_smooth))
+    breakpoint()
 
-breakpoint()
+elif trap=='step':
+    ftrap_step = conditional(r<rstar, fexpr, 2*Omega)
+    pv_true = Function(Vcg).interpolate(ftrap_step)
+
+    eqns_step = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar, 2*Omega))
+    gusto_step_field = eqns_step.prescribed_fields('coriolis')
+    pv_gusto = Function(Vcg).interpolate(gusto_step_field)
+
+elif trap=='smooth':
+    ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
+    ftrap_smooth = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)
+    pv_true = Function(Vcg).interpolate(ftrap_smooth)
+
+    eqns_smooth = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap_smooth))
+    gusto_smooth_field = eqns_smooth.prescribed_fields('coriolis')
+    pv_gusto = Function(Vcg).interpolate(gusto_smooth_field)
