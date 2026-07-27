@@ -1,13 +1,9 @@
 from gusto import(
-    OutputParameters, ShallowWaterParameters, Domain, ShallowWaterEquations,
-    logger, PotentialVorticity, IO, SubcyclingOptions, TrapeziumRule,
-    SSPRK3, DGUpwind, SemiImplicitQuasiNewton, Function,
-    xy_from_rtheta, rtheta_from_xy, rtheta_from_lonlat, lonlat_from_rtheta,
-    CoriolisOptions, RelativeVorticity
+    ShallowWaterParameters, Domain, ShallowWaterEquations,rtheta_from_xy,
+    CoriolisOptions
 )
 from firedrake import (
-    SpatialCoordinate, VertexOnlyMesh, as_vector, pi, interpolate, exp, sqrt,
-    PeriodicRectangleMesh, conditional
+    SpatialCoordinate, PeriodicRectangleMesh, conditional
 )
 import scipy
 import numpy as np
