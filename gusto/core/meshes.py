@@ -445,9 +445,8 @@ def _cubedsphere_cells_and_coords(radius, cells_per_cube_edge):
     # Start by making a grid of local coordinates which we use
     # to map to each panel of the cubed sphere under the gnonomic
     # transformation
-    dtheta = 2*np.arctan(1.0) / cells_per_cube_edge
     a = 3.0**(-0.5)*radius
-    theta = np.arange(np.arctan(-1.0), np.arctan(1.0)+dtheta, dtheta, dtype=np.double)
+    theta = np.linspace(np.arctan(-1.0), np.arctan(1.0), cells_per_cube_edge + 1)
     x = a*np.tan(theta)
     Nx = x.size
 
@@ -618,12 +617,12 @@ def get_flat_latlon_mesh(mesh):
     coords_fs = coords_orig.function_space()
 
     if coords_fs.extruded:
-        cell = mesh._base_mesh.ufl_cell().cellname()
+        cell = mesh._base_mesh.ufl_cell().cellname
         DG1_hori_elt = FiniteElement("DG", cell, 1, variant="equispaced")
         DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
         DG1_elt = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
     else:
-        cell = mesh.ufl_cell().cellname()
+        cell = mesh.ufl_cell().cellname
         DG1_elt = FiniteElement("DG", cell, 1, variant="equispaced")
     vec_DG1 = VectorFunctionSpace(mesh, DG1_elt)
     coords_dg = Function(vec_DG1).interpolate(coords_orig)

@@ -1,9 +1,9 @@
 """Implementations of IMEX Runge-Kutta time discretisations."""
 
+from functools import cached_property
 from firedrake import (Function, Constant, NonlinearVariationalProblem,
                        NonlinearVariationalSolver)
 from firedrake.fml import replace_subject, all_terms, drop
-from firedrake.utils import cached_property
 from gusto.core.labels import time_derivative, implicit, explicit, source_label
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
@@ -266,7 +266,6 @@ class IMEXRungeKutta(TimeDiscretisation):
 
             self.solver = solver_list[stage-self.solver_start_stage]
             # Set initial solver guess
-            self.x_out.assign(self.xs[stage-1])
             # Evaluate source terms
             for evaluate in self.evaluate_source:
                 evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])

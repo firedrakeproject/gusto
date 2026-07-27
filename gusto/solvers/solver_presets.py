@@ -40,7 +40,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
 
     # Callback function for the nullspace of the trace system
     def trace_nullsp(T):
-        return VectorSpaceBasis(constant=True)
+        return VectorSpaceBasis(constant=True, comm=equation.function_space.mesh().comm)
 
     # Prepare some generic variables to help with logic below ------------------
 
@@ -67,12 +67,89 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # Compressible Euler equations - (u, rho, theta) system. We use a
         # bespoke hybridization preconditioner for this system owing to the
         # nonlinear pressure gradient term.
+        r_tol = 1e-8
+
+        theta_backsub_settings = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+            'ksp_rtol': r_tol
+        }
+
+        exnerbar_avg_settings = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+            'ksp_rtol': r_tol
+        }
+
+        rhobar_avg_settings = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+            'ksp_rtol': r_tol
+        }
+
+        riesz_map_settings = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+            'ksp_rtol': r_tol
+        }
+
+        trace_params = {
+            'pc_type': 'ksp',
+            'ksp': {
+                'ksp_rtol': r_tol,
+                'ksp_type': 'fgmres',
+                'pc_type': 'gamg',
+                'mg_levels': {
+                    'ksp_type': 'gmres',
+                    'ksp_max_it': 5,
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu',
+                },
+            }
+        }
+
+        slate_schur_params = {
+            'mat_type': 'matfree',
+            'ksp_type': 'preonly',
+            'pc_type': 'fieldsplit',
+            'pc_fieldsplit_type': 'schur',
+            'pc_fieldsplit_schur_fact_type': 'full',
+            'pc_fieldsplit_0_fields': '0,1',
+            # The reduced operator is not symmetric
+            'pc_fieldsplit_1_fields': '2',
+            'fieldsplit_0': {
+                'ksp_type': 'preonly',
+                'pc_type': 'python',
+                'pc_python_type': 'firedrake.AssembledPC',
+                'assembled_pc_type': 'bjacobi',
+                'assembled_sub_pc_type': 'ilu',
+                'assembled_sub_pc_factor_mat_ordering_type': 'rcm',
+                'assembled_sub_pc_factor_reuse_ordering': None,
+            },
+            'fieldsplit_1': {
+                'ksp_type': 'preonly',
+                'pc_type': 'python',
+                'pc_python_type': 'gusto.SlateSchurPC',
+                'slate_schur_nfields0': 2,
+                'slate_schur': trace_params,
+            }
+        }
+
         settings = {
             'ksp_monitor': None,
             'ksp_type': 'preonly',
             'mat_type': 'matfree',
             'pc_type': 'python',
             'pc_python_type': 'gusto.CompressibleHybridisedSCPC',
+            'theta_backsub': theta_backsub_settings,
+            'exnerbar_avg': exnerbar_avg_settings,
+            'rhobar_avg': rhobar_avg_settings,
+            'riesz_map': riesz_map_settings,
+            'compressible_hybrid_scpc': slate_schur_params
         }
 
         # We pass the implicit weighting parameter (alpha) and tau_values to the
@@ -120,7 +197,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                     'pc_type': 'python',
                     'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
                     'hybridization': {                              # hybridization PC
-                        'ksp_type': 'cg',
+                        'ksp_type': 'gmres',
+                        'mat_type': 'aij',
                         'pc_type': 'gamg',  # AMG for trace system
                         'ksp_rtol': 1e-8,
                         'mg_levels': {
@@ -184,7 +262,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                         'pc_type': 'python',
                         'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's hybridization PC
                         'hybridization': {
-                            'ksp_type': 'cg',
+                            'ksp_type': 'gmres',
+                            'mat_type': 'aij',
                             'pc_type': 'gamg',  # AMG for trace system
                             'ksp_rtol': 1e-8,
                             'mg_levels': {
@@ -247,7 +326,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                     'pc_type': 'python',
                     'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
                     'hybridization': {                              # hybridization PC
-                        'ksp_type': 'cg',
+                        'ksp_type': 'gmres',
+                        'mat_type': 'aij',
                         'pc_type': 'gamg',  # AMG for trace system
                         'ksp_rtol': 1e-8,
                         'mg_levels': {
@@ -293,7 +373,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                 'pc_type': 'python',
                 'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
                 'hybridization': {                              # hybridization PC
-                    'ksp_type': 'cg',
+                    'ksp_type': 'gmres',
+                    'mat_type': 'aij',
                     'pc_type': 'gamg',  # AMG for trace system
                     'ksp_rtol': 1e-8,
                     'mg_levels': {
@@ -327,7 +408,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'pc_type': 'python',
             'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
             'hybridization': {                              # hybridization PC
-                'ksp_type': 'cg',
+                'ksp_type': 'gmres',
+                'mat_type': 'aij',
                 'pc_type': 'gamg',  # AMG for trace system
                 'ksp_rtol': 1e-8,
                 'mg_levels': {

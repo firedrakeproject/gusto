@@ -8,6 +8,10 @@ from firedrake import (IcosahedralSphereMesh, PeriodicIntervalMesh,
 from gusto import *
 from collections import namedtuple
 import pytest
+from pyadjoint.tape import (
+    annotate_tape, get_working_tape, set_working_tape,
+    continue_annotation, pause_annotation
+)
 
 opts = ('domain', 'tmax', 'io', 'f_init', 'f_end', 'degree',
         'uexpr', 'umax', 'radius', 'tol')
@@ -124,3 +128,29 @@ def tracer_setup():
                 return tracer_slice(tmpdir, degree, small_dt)
 
     return _tracer_setup
+
+
+@pytest.fixture(scope="module", autouse=True)
+def check_empty_tape(request):
+    """Check that the tape is empty at the end of each module.
+    """
+    def finalizer():
+        # make sure taping is switched off
+        assert not annotate_tape()
+
+        # make sure the tape is empty
+        tape = get_working_tape()
+        if tape is not None:
+            assert len(tape.get_blocks()) == 0
+
+    request.addfinalizer(finalizer)
+
+
+@pytest.fixture
+def set_test_tape():
+    """Set a new working tape specifically for this test.
+    """
+    continue_annotation()
+    with set_working_tape():
+        yield
+    pause_annotation()

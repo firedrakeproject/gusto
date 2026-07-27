@@ -257,7 +257,7 @@ def advection_equation_circulation_form(domain, test, q, ubar):
         class:`LabelledForm`: a labelled transport form.
     """
 
-    if domain.mesh.topological_dimension() == 3:
+    if domain.mesh.topological_dimension == 3:
         L = inner(test, cross(curl(q), ubar))*dx
 
     else:
