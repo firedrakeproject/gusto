@@ -1,5 +1,5 @@
-from gusto import(
-    ShallowWaterParameters, Domain, ShallowWaterEquations,rtheta_from_xy,
+from gusto import (
+    ShallowWaterParameters, Domain, ShallowWaterEquations, rtheta_from_xy,
     CoriolisOptions
 )
 from firedrake import (
@@ -11,10 +11,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+
 def smooth_f_profile(delta, rstar, Omega, R, Lx, nx):
     """
     This function does...??
-    """    
+    """
     delta *= Lx/nx
     r = sp.symbols('r')
     fexpr = 2*Omega*(1-0.5*r**2/R**2)
@@ -72,26 +73,25 @@ def test_gamma_plane(trap):
     # Define correct Coriolis expression
     x, y = SpatialCoordinate(mesh)
     r, _ = rtheta_from_xy(x, y, Lx/2, Ly/2)
-    Rsq = parameters.R**2
     fexpr = 2*Omega*(1-0.5*r**2/R**2)
 
     # Set up CG function for correct Coriolis field, set analytically
     Vcg = FunctionSpace(domain.mesh, "CG", 1)
     coriolis_true = Function(Vcg)
 
-    if trap=='no_trap':
+    if trap == 'no_trap':
         coriolis_true.interpolate(fexpr)
         eqns = ShallowWaterEquations(domain, parameters)
         coriolis_gusto = eqns.prescribed_fields('coriolis')
 
-    elif trap=='step':
-        ftrap_step = conditional(r<rstar, fexpr, 2*Omega)
+    elif trap == 'step':
+        ftrap_step = conditional(r < rstar, fexpr, 2*Omega)
         coriolis_true.interpolate(ftrap_step)
         eqns = ShallowWaterEquations(domain, parameters,
                                      coriolis_trap=(rstar, 2*Omega))
         coriolis_gusto = eqns.prescribed_fields('coriolis')
 
-    elif trap=='smooth':
+    elif trap == 'smooth':
         smooth_delta = 2
         coeffs = smooth_f_profile(delta=smooth_delta,
                                   rstar=rstar, Omega=Omega, R=R, Lx=Lx, nx=nx)
@@ -100,8 +100,10 @@ def test_gamma_plane(trap):
             + coeffs[3]*r**3 + coeffs[4]*r**4 + coeffs[5]*r**5
         )
 
-        ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
-        ftrap_smooth = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)
+        ftrap1 = conditional(r < rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
+        ftrap_smooth = conditional(
+            r < rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega
+        )
         coriolis_true.interpolate(ftrap_smooth)
 
         eqns = ShallowWaterEquations(
@@ -112,7 +114,7 @@ def test_gamma_plane(trap):
 
     fig, axes = plt.subplots(1, 2)
     levels = np.linspace(coriolis_true.dat.data.min(),
-                         coriolis_true.dat.data.max() , 10)
+                         coriolis_true.dat.data.max(), 10)
 
     c1 = tricontourf(coriolis_true, levels=levels, axes=axes[0])
     fig.colorbar(c1)
@@ -120,4 +122,4 @@ def test_gamma_plane(trap):
     fig.colorbar(c2)
     plt.show()
 
-    assert(errornorm(coriolis_true, coriolis_gusto) < 1e-12)
+    assert errornorm(coriolis_true, coriolis_gusto) < 1e-12
