@@ -119,7 +119,7 @@ Rsq = parameters.R**2
 
 Omega_num = Omega
 Omega = parameters.Omega
-fexpr = 2*Omega*(1-0.5*r*2/R**2)
+fexpr = 2*Omega*(1-0.5*r**2/R**2)
 # ftrap = conditional(r < rstar, fexpr, 2*Omega)
 coeffs = smooth_f_profile(degree=smooth_degree, delta=smooth_delta, style='polar', rstar=rstar, Omega=Omega_num, R=R, Lx=Lx, nx=nx)
 fsmooth = float(coeffs[0]) + float(coeffs[1])*r + float(coeffs[2])*r**2 + float(coeffs[3])*r**3
