@@ -501,7 +501,7 @@ if smooth_degree == 5:
 # ftrap1 = conditional(r<rstar-smooth_delta*Lx/nx, fexpr, fsmooth)
 # ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)#-2*Omega
 
-ftrap = conditional(r<rstar+smooth_delta*Lx/nx, fsmooth, 2*Omega)
+ftrap = conditional(r<rstar+smooth_delta*Lx/nx, fsmooth, 2*Omega) ### should this not be ftrap or 2*Omega, not fsmooth?
 
 if fplane:
     ftrap = 2*Omega
