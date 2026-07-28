@@ -65,7 +65,7 @@ def smooth_f_profile(degree, delta, style, rstar, Omega, R, Lx, nx):
     # )
     return coeffs
 
-file_name_suffix = 'rstar'
+file_name_suffix = 'rstar-dr_otherswe'
 if file_name_suffix != '':
     file_name_suffix = f'_{file_name_suffix}'
 
@@ -133,7 +133,7 @@ ftrap = conditional(r<rstar+smooth_delta*Lx/nx, ftrap1, 2*Omega)
 
 # first option (ftrap) is smoothed option, second (2*Omega) is step edge
 # eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, ftrap))
-eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar, 2*Omega))
+eqns = ShallowWaterEquations(domain, parameters, coriolis_trap=(rstar-smooth_delta*Lx/nx, 2*Omega))
 
 diagnostic_fields = [PotentialVorticity(), RelativeVorticity()]
 
