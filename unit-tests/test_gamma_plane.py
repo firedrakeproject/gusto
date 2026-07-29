@@ -1,5 +1,5 @@
 from gusto import (
-    ShallowWaterParameters, Domain, ShallowWaterEquations, rtheta_from_xy,
+    ShallowWaterParameters, ShallowWaterEquations, rtheta_from_xy,
     CoriolisOptions, OutputParameters, SIQNModel, RelativeVorticity,
     PotentialVorticity
 )
