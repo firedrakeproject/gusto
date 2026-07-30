@@ -84,9 +84,10 @@ def test_gamma_plane(tmpdir, trap):
         coriolis_trap = None
 
     elif trap == 'step':
+        Omega_par = parameters.Omega
         ftrap_step = conditional(r < rstar, fexpr, 2*Omega)
         pv_true.interpolate(ftrap_step)
-        coriolis_trap = (rstar, 2*Omega)
+        coriolis_trap = (rstar, 2*Omega_par)
 
     elif trap == 'smooth':
         smooth_delta = 2
@@ -135,6 +136,7 @@ def test_gamma_plane(tmpdir, trap):
                           pv_gusto.dat.data.max(), 10)
     c2 = tricontourf(pv_gusto, levels=levels2, axes=axes[1])
     fig.colorbar(c2)
+    plt.title(trap)
     plt.show()
 
     assert errornorm(pv_true, pv_gusto) < 1e-11
