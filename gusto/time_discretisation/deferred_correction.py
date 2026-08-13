@@ -564,7 +564,7 @@ class SDC(object, metaclass=ABCMeta):
                 self.Unodes[m+1].assign(self.Un)
         for m in range(self.M+1):
             for evaluate in self.evaluate_source:
-                evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
+                evaluate(self.Unodes[m], self.dt_coarse, x_out=self.source_Uk[m])
 
         # Iterate through correction sweeps
         k = 0
@@ -577,7 +577,7 @@ class SDC(object, metaclass=ABCMeta):
             # Loop through quadrature nodes and solve
             self.Unodes1[0].assign(self.Unodes[0])
             for evaluate in self.evaluate_source:
-                evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
+                evaluate(self.Unodes[0], self.dt_coarse, x_out=self.source_Uk[0])
             for m in range(1, self.M+1):
                 # Set initial guess for solver, and pick correct solver
                 if (self.formulation == "N2N"):
@@ -620,7 +620,7 @@ class SDC(object, metaclass=ABCMeta):
 
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes1[m], self.base.dt, x_out=self.source_Ukp1[m])
+                    evaluate(self.Unodes1[m], self.dt_coarse, x_out=self.source_Ukp1[m])
 
                 # Apply limiter if required
                 if self.limiter is not None:
@@ -933,7 +933,7 @@ class RIDC(object, metaclass=ABCMeta):
 
         for m in range(self.M+1):
             for evaluate in self.evaluate_source:
-                evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
+                evaluate(self.Unodes[m], self.dt_coarse, x_out=self.source_Uk[m])
 
         # Iterate through correction sweeps
         for k in range(1, self.K+1):
@@ -942,14 +942,14 @@ class RIDC(object, metaclass=ABCMeta):
                 self.Uin.assign(self.Unodes[m])
                 # Include source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Uin, self.base.dt, x_out=self.source_in)
+                    evaluate(self.Uin, self.dt_coarse, x_out=self.source_in)
                 self.solver_rhs.solve()
                 self.fUnodes[m].assign(self.Urhs)
 
             # Loop through quadrature nodes and solve
             self.Unodes1[0].assign(self.Unodes[0])
             for evaluate in self.evaluate_source:
-                evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
+                evaluate(self.Unodes[0], self.dt_coarse, x_out=self.source_Uk[0])
             if self.reduced:
                 self.M1 = k
             for m in range(0, self.M1):
@@ -977,7 +977,7 @@ class RIDC(object, metaclass=ABCMeta):
 
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+                    evaluate(self.Unodes1[m+1], self.dt_coarse, x_out=self.source_Ukp1[m+1])
 
                 # Apply limiter if required
                 if self.limiter is not None:
@@ -1007,7 +1007,7 @@ class RIDC(object, metaclass=ABCMeta):
 
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+                    evaluate(self.Unodes1[m+1], self.dt_coarse, x_out=self.source_Ukp1[m+1])
 
                 # Apply limiter if required
                 if self.limiter is not None:

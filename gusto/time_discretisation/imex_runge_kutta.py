@@ -191,14 +191,55 @@ class IMEXRungeKutta(TimeDiscretisation):
         for s in solvers:
             s._ctx._jacobian_assembled = not rebuild
     
+    def res_rhs(self, stage):
+        """Set up the discretisation's rhs residual for a given stage."""
+        # Add time derivative terms - y^n for stage s
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual = - mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        # Loop through stages up to s-1 and calcualte/sum
+        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
+        # and
+        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
+        for i in range(stage):
+            r_exp = self.residual.label_map(
+                lambda t: t.has_label(explicit),
+                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_exp = r_exp.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.butcher_exp[stage, i])*self.dt*t)
+            r_imp = self.residual.label_map(
+                lambda t: t.has_label(implicit),
+                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_imp = r_imp.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.butcher_imp[stage, i])*self.dt*t)
+            residual += r_imp
+            residual += r_exp
+
+            # Calculate source terms
+            r_source = self.residual.label_map(
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_source = r_source.label_map(
+                all_terms,
+                map_if_true=lambda t: Constant(self.butcher_exp[stage, i]) * self.dt * t
+            )
+            residual += r_source
+
+        return residual.form
+
     def res_mult(self, stage):
         """Set up the discretisation's residual for a given stage."""
         # Add time derivative terms  y_s - y^n for stage s
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=drop)
-        residual = mass_form.label_map(all_terms,
-                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.x1, old_idx=self.idx))
         # Loop through stages up to s-1 and calcualte/sum
@@ -247,8 +288,8 @@ class IMEXRungeKutta(TimeDiscretisation):
 
     @cached_property
     def stage_rhs(self):
-        """Cached stage RHS forms.""""
-        return [self.res(stage)
+        """Cached stage RHS forms."""
+        return [self.res_rhs(stage)
                 for stage in range(self.solver_start_stage, self.nStages)]
             
     @cached_property
