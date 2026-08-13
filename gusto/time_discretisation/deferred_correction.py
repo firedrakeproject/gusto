@@ -305,13 +305,7 @@ class SDC(object, metaclass=ABCMeta):
                 replace_subject(self.Unodes[i+1], old_idx=self.idx),
                 drop)
             F = F.label_map(all_terms, lambda t: Constant(w)*t)
-            F_source = self.residual.label_map(
-                lambda t: t.has_label(source_label),
-                replace_subject(self.source_Uk[i+1], old_idx=self.idx),
-                drop)
-            F_source = F_source.label_map(all_terms, lambda t: Constant(w)*t)
-            term = F + F_source
-            residual = term if residual is None else residual + term
+            residual = F if residual is None else residual + F
         return residual.form
 
     @cached_property
@@ -341,13 +335,7 @@ class SDC(object, metaclass=ABCMeta):
                 replace_subject(self.Unodes1[i+1], old_idx=self.idx),
                 drop)
             F = F.label_map(all_terms, lambda t: Constant(w)*t)
-            F_source = self.residual.label_map(
-                lambda t: t.has_label(source_label),
-                replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
-                drop)
-            F_source = F_source.label_map(all_terms, lambda t: Constant(w)*t)
-            term = F + F_source
-            residual = term if residual is None else residual + term
+            residual = F if residual is None else residual + F
         return residual.form
 
     @cached_property
@@ -404,6 +392,16 @@ class SDC(object, metaclass=ABCMeta):
         # sum(j=1,M) Qdelta_exp[m,j]*(S(y_j^(k+1)) - S(y_j^k)), for
         # nonzero Qdelta_exp entries only.
         for i in range(self.M):
+
+            Q_source = self.residual.label_map(
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source_Uk[i+1], old_idx=self.idx),
+                map_if_false=drop)
+            Q_source = Q_source.label_map(
+                all_terms,
+                lambda t: Constant(self.Q[m, i])*t)
+            residual += Q_source
+
             if self.Qdelta_exp[m, i] == 0:
                 continue
             r_exp_kp1 = self.residual.label_map(
@@ -515,7 +513,15 @@ class SDC(object, metaclass=ABCMeta):
                                         drop)
         F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
                                 lambda t: -1*t)
-        return (a + F_exp).form
+        for i in range(self.M):
+            Q_source = self.residual.label_map(
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source_Uk[i+1], old_idx=self.idx),
+                map_if_false=drop)
+            Q_source = Q_source.label_map(
+                all_terms,
+                lambda t: Constant(self.Qfin[i])*t)
+        return (a + F_exp + Q_source).form
 
     @cached_property
     def solver_fin(self):
