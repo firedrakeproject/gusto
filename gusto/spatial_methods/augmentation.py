@@ -255,7 +255,7 @@ class VorticityTransport(Augmentation):
 class MeanMixingRatio(Augmentation):
     """
     This augments a transport problem involving a k=1 mixing ratio, by adding
-    a mean mixing ratio field. This enables posivity to be
+    a mean mixing ratio field. This enables positivity to be
     ensured after each conservative transport step by blending the k=1 and
     mean fields.
 
