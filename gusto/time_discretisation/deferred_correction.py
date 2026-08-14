@@ -77,8 +77,10 @@ from abc import ABCMeta
 from functools import cached_property
 import numpy as np
 from firedrake import (
-    Function, NonlinearVariationalProblem, NonlinearVariationalSolver, Constant
+    Function, Cofunction, NonlinearVariationalProblem, NonlinearVariationalSolver,
+    Constant, derivative
 )
+from firedrake.assemble import get_assembler
 from firedrake.fml import (
     replace_subject, all_terms, drop
 )
@@ -207,10 +209,15 @@ class SDC(object, metaclass=ABCMeta):
             self.base_flag = True
         else:
             self.base_flag = False
-        
+
+        # Set up counters for total iterations and get sweep tolerances
         self.total_ksp_its = 0
+        self.total_snes_its = 0
         self.sweep_tols = sweep_tols
         self._step_count = 1
+
+        # Set up a lag rebuild frequency for the Jacobian, if requested.
+        # This is a timestep-level lag, not a sweep-level lag: the Jacobian is rebuilt every td_lag_rebuild timesteps
         self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
         if self.lag_rebuild_freq is not None:
             if self.lag_rebuild_freq < 1:
@@ -258,30 +265,26 @@ class SDC(object, metaclass=ABCMeta):
         self.W = W
         self.Unodes = [Function(W) for _ in range(self.M+1)]
         self.Unodes1 = [Function(W) for _ in range(self.M+1)]
-        self.fUnodes = [Function(W) for _ in range(self.M)]
-        self.quad = [Function(W) for _ in range(self.M)]
         self.source_Uk = [Function(W) for _ in range(self.M+1)]
         self.source_Ukp1 = [Function(W) for _ in range(self.M+1)]
         self.U_DC = Function(W)
         self.U_start = Function(W)
         self.Un = Function(W)
-        self.Q_ = Function(W)
-        self.quad_final = Function(W)
         self.U_fin = Function(W)
-        self.Urhs = Function(W)
-        self.Uin = Function(W)
-        self.source_in = Function(W)
 
-        # Persistent Constants for the diagonal of Qdelta_imp
+        # Qf[m] = sum_i Q[m,i] * F(Unodes[i+1]), where F is the
+        # non-time-derivative part of the residual. Assembled directly
+        # from a single per-node UFL form  into
+        # a Cofunction each sweep. Qf_fin is the equivanlent for the final update.
+        self.Qf = [Cofunction(W.dual()) for _ in range(self.M)]
+        self.Qf_fin = Cofunction(W.dual())
+
         if self.qdelta_imp_type == "MIN-SR-FLEX":
             logger.info(
                 "SDC: MIN-SR-FLEX diagonal is precomputed per (node, sweep) "
                 "so that td_lag_rebuild can be honoured across timesteps; "
                 "this builds maxk*M solver contexts instead of M.")
-            # genQDeltaCoeffs does not pass k through to computeQDelta, so it
-            # always returns the k=1 matrix regardless of the k kwarg given
-            # to it. Bypass it and call MIN_SR_FLEX directly instead, which
-            # gives diag(nodes/k) for sweep k <= M and MIN-SR-S for sweep
+            # This gives a sweep dependent Qdelta of diag(nodes/k) for sweep k <= M and MIN-SR-S for sweep
             # k > M (Caklovic et al.).
             self._min_sr_flex_gen = MIN_SR_FLEX(
                 nNodes=self.M, nodeType=self.node_type, quadType=self.quad_type)
@@ -297,62 +300,66 @@ class SDC(object, metaclass=ABCMeta):
     def nlevels(self):
         return 1
 
-    def compute_quad(self):
+    def Qf_form(self, m):
         """
-        Computes integration of F(y) on quadrature nodes
+        Weak (dual-space) form of node m's quadrature term:
+        sum_i Q[m,i] * F(Unodes[i+1]), where F is the non-time-derivative
+        part of the residual (implicit + explicit + source).
         """
-        for j in range(self.M):
-            self.quad[j].assign(0.)
-            for k in range(self.M):
-                self.quad[j] += float(self.Q[j, k])*self.fUnodes[k]
+        residual = None
+        for i in range(self.M):
+            w = float(self.Q[m, i])
+            if w == 0.0:
+                continue
+            F = self.residual.label_map(
+                lambda t: (not t.has_label(time_derivative)) and (not t.has_label(source_label)),
+                replace_subject(self.Unodes[i+1], old_idx=self.idx),
+                drop)
+            F = F.label_map(all_terms, lambda t: Constant(w)*t)
+            residual = F if residual is None else residual + F
+        return residual.form
 
-    def compute_quad_final(self):
+    @cached_property
+    def Qf_assemblers(self):
         """
-        Computes final integration of F(y) on quadrature nodes
+        Cached assemblers for each node's Qf_form, built once.
         """
-        self.quad_final.assign(0.)
-        for k in range(self.M):
-            self.quad_final += float(self.Qfin[k])*self.fUnodes[k]
+        return [get_assembler(self.Qf_form(m), tensor=self.Qf[m]) for m in range(self.M)]
 
-    @property
-    def res_rhs(self):
-        """Set up the residual for the calculation of F(y)."""
-        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Urhs, old_idx=self.idx),
-                                    drop)
-        # F(y)
-        L = self.residual.label_map(lambda t: any(t.has_label(time_derivative, source_label)),
-                                    drop,
-                                    replace_subject(self.Uin, old_idx=self.idx))
-        L_source = self.residual.label_map(lambda t: t.has_label(source_label),
-                                           replace_subject(self.source_in, old_idx=self.idx),
-                                           drop)
-        residual_rhs = a - (L + L_source)
-        return residual_rhs.form
+    def compute_Qf(self):
+        """Assembles self.Qf[m] for every node m, once per sweep, before
+        the per-node solves."""
+        for m in range(self.M):
+            self.Qf_assemblers[m].assemble(tensor=self.Qf[m])
 
-    @property
-    def res_fin(self):
-        """Set up the residual for final solve."""
-        # y_(n+1)
-        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.U_fin, old_idx=self.idx),
-                                    drop)
-        # y_n
-        F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                        replace_subject(self.Un, old_idx=self.idx),
-                                        drop)
-        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
-                                lambda t: -1*t)
+    def Qf_fin_form(self):
+        """
+        As Qf_form, but for the final-update residual
+        """
+        residual = None
+        for i in range(self.M):
+            w = float(self.Qfin[i])
+            if w == 0.0:
+                continue
+            F = self.residual.label_map(
+                lambda t: (not t.has_label(time_derivative)) and (not t.has_label(source_label)),
+                replace_subject(self.Unodes1[i+1], old_idx=self.idx),
+                drop)
+            F = F.label_map(all_terms, lambda t: Constant(w)*t)
+            residual = F if residual is None else residual + F
+        return residual.form
 
-        # sum(j=1,M) q_j*F(y_j)
-        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.quad_final, old_idx=self.idx),
-                                    drop)
+    @cached_property
+    def Qf_fin_assembler(self):
+        """Cached assembler for Qf_fin_form; built once."""
+        return get_assembler(self.Qf_fin_form(), tensor=self.Qf_fin)
 
-        residual_final = a + F_exp + Q
-        return residual_final.form
+    def compute_Qf_fin(self):
+        """Assemble self.Qf_fin, once, before the final-update solve."""
+        self.Qf_fin_assembler.assemble(tensor=self.Qf_fin)
 
-    def res(self, m, k=None):
+
+    def resval(self, m, k=None):
         """
         Set up the discretisation's residual for a given node m.
 
@@ -372,6 +379,7 @@ class SDC(object, metaclass=ABCMeta):
                                        map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.U_start, old_idx=self.idx))
+
         # Loop through nodes up to m-1 and calcualte
         # sum(j=1,m-1) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
         for i in range(m):
@@ -391,9 +399,22 @@ class SDC(object, metaclass=ABCMeta):
                 all_terms,
                 lambda t: Constant(self.Qdelta_imp[m, i])*t)
             residual -= r_imp_k
-        # Loop through nodes up to m-1 and calcualte
-        #  sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+
+        # sum(j=1,M) Qdelta_exp[m,j]*(S(y_j^(k+1)) - S(y_j^k)), for
+        # nonzero Qdelta_exp entries only.
         for i in range(self.M):
+
+            Q_source = self.residual.label_map(
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source_Uk[i+1], old_idx=self.idx),
+                map_if_false=drop)
+            Q_source = Q_source.label_map(
+                all_terms,
+                lambda t: Constant(self.Q[m, i])*t)
+            residual += Q_source
+
+            if self.Qdelta_exp[m, i] == 0:
+                continue
             r_exp_kp1 = self.residual.label_map(
                 lambda t: t.has_label(explicit),
                 map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
@@ -401,7 +422,6 @@ class SDC(object, metaclass=ABCMeta):
             r_exp_kp1 = r_exp_kp1.label_map(
                 all_terms,
                 lambda t: Constant(self.Qdelta_exp[m, i])*t)
-
             residual += r_exp_kp1
             r_exp_k = self.residual.label_map(
                 lambda t: t.has_label(explicit),
@@ -412,7 +432,7 @@ class SDC(object, metaclass=ABCMeta):
                 lambda t: Constant(self.Qdelta_exp[m, i])*t)
             residual -= r_exp_k
 
-            # Calculate source terms
+            # Source terms
             r_source_kp1 = self.residual.label_map(
                 lambda t: t.has_label(source_label),
                 map_if_true=replace_subject(self.source_Ukp1[i+1], old_idx=self.idx),
@@ -421,7 +441,6 @@ class SDC(object, metaclass=ABCMeta):
                 all_terms,
                 lambda t: Constant(self.Qdelta_exp[m, i])*t)
             residual += r_source_kp1
-
             r_source_k = self.residual.label_map(
                 lambda t: t.has_label(source_label),
                 map_if_true=replace_subject(self.source_Uk[i+1], old_idx=self.idx),
@@ -433,8 +452,6 @@ class SDC(object, metaclass=ABCMeta):
 
         # Add on final implicit terms
         # Qdelta_imp[m,m]*(F(y_(m)^(k+1)) - F(y_(m)^k))
-        # NOTE: uses a persistent Constant (self.Qdelta_imp_diag[m] for
-        # non-FLEX, or self.Qdelta_imp_diag_k[k-1][m] for MIN-SR-FLEX)
         diag_m = (self.Qdelta_imp_diag_k[k-1][m]
                   if self.qdelta_imp_type == "MIN-SR-FLEX"
                   else self.Qdelta_imp_diag[m])
@@ -455,13 +472,6 @@ class SDC(object, metaclass=ABCMeta):
             lambda t: diag_m*t)
         residual -= r_imp_k
 
-        # Add on error term. sum(j=1,M) q_mj*F(y_m^k) for Z2N formulation
-        # and sum(j=1,M) s_mj*F(y_m^k) for N2N formulation, where s_mj = q_mj-q_m-1j
-        # and s1j = q1j.
-        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Q_, old_idx=self.idx),
-                                    drop)
-        residual += Q
         return residual.form
 
     def _build_solver(self, m, k=None):
@@ -469,13 +479,18 @@ class SDC(object, metaclass=ABCMeta):
         Build a single NonlinearVariationalSolver for node m (and, for
         MIN-SR-FLEX, sweep k).
 
+        F = resval(m, k) + Qf[m]; J = derivative(resval(m, k), U_DC).
+
         Args:
             m (int): quadrature node index.
             k (int, optional): sweep number (1-indexed). Only relevant for
                 MIN-SR-FLEX; ignored (and omitted from the solver name)
                 otherwise.
         """
-        problem = NonlinearVariationalProblem(self.res(m, k), self.U_DC, bcs=self.bcs)
+        Fval = self.resval(m, k)
+        J = derivative(Fval, self.U_DC)
+        F = Fval + self.Qf[m]
+        problem = NonlinearVariationalProblem(F, self.U_DC, bcs=self.bcs, J=J)
         suffix = f"{m}_k{k}" if k is not None else f"{m}"
         solver_name = self.field_name + self.__class__.__name__ + suffix
         if self.nonlinear_solver_parameters is None:
@@ -502,25 +517,40 @@ class SDC(object, metaclass=ABCMeta):
                     for k in range(1, self.maxk + 1)]
         return [self._build_solver(m) for m in range(self.M)]
 
+
+    def resval_fin(self):
+        """Set up the residual for final solve."""
+        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                    replace_subject(self.U_fin, old_idx=self.idx),
+                                    drop)
+        F_exp = self.residual.label_map(lambda t: t.has_label(time_derivative),
+                                        replace_subject(self.Un, old_idx=self.idx),
+                                        drop)
+        F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
+                                lambda t: -1*t)
+        for i in range(self.M):
+            Q_source = self.residual.label_map(
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source_Uk[i+1], old_idx=self.idx),
+                map_if_false=drop)
+            Q_source = Q_source.label_map(
+                all_terms,
+                lambda t: Constant(self.Qfin[i])*t)
+        return (a + F_exp + Q_source).form
+
     @cached_property
     def solver_fin(self):
         """Set up the problem and the solver for final update."""
-        # setup linear solver using final residual defined in derived class
-        prob_fin = NonlinearVariationalProblem(self.res_fin, self.U_fin, bcs=self.bcs)
+        Fval = self.resval_fin()
+        J = derivative(Fval, self.U_fin)
+        F = Fval + self.Qf_fin
+        problem = NonlinearVariationalProblem(F, self.U_fin, bcs=self.bcs, J=J)
         solver_name = self.field_name+self.__class__.__name__+"_final"
-        return NonlinearVariationalSolver(prob_fin, solver_parameters=self.linear_solver_parameters,
-                                          options_prefix=solver_name)
-
-    @cached_property
-    def solver_rhs(self):
-        """Set up the problem and the solver for mass matrix inversion."""
-        # setup linear solver using rhs residual defined in derived class
-        prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
-        solver_name = self.field_name+self.__class__.__name__+"_rhs"
-        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
+        return NonlinearVariationalSolver(problem, solver_parameters=self.linear_solver_parameters,
                                           options_prefix=solver_name)
 
     def _lag_reset(self, solvers):
+        """Chooses whether to rebuild the Jacobian based on the lag frequency."""
         if self.lag_rebuild_freq is None:
             return
         rebuild = ((self._step_count - 1) % self.lag_rebuild_freq == 0)
@@ -555,32 +585,21 @@ class SDC(object, metaclass=ABCMeta):
                 self.Unodes[m+1].assign(self.Un)
         for m in range(self.M+1):
             for evaluate in self.evaluate_source:
-                evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
+                evaluate(self.Unodes[m], self.dt_coarse, x_out=self.source_Uk[m])
 
         # Iterate through correction sweeps
         k = 0
         while k < self.maxk:
             k += 1
 
-            # Compute for N2N: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
-            # for Z2N: sum(j=1,M) (q_mj*F(y_m^k) +  q_mj*S(y_m^k))
-            for m in range(1, self.M+1):
-                self.Uin.assign(self.Unodes[m])
-                # Include source terms
-                for evaluate in self.evaluate_source:
-                    evaluate(self.Uin, self.base.dt, x_out=self.source_in)
-                self.solver_rhs.solve()
-                self.fUnodes[m-1].assign(self.Urhs)
-            self.compute_quad()
+            # Assemble self.Qf[m] for every node m.
+            self.compute_Qf()
 
             # Loop through quadrature nodes and solve
             self.Unodes1[0].assign(self.Unodes[0])
             for evaluate in self.evaluate_source:
-                evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
+                evaluate(self.Unodes[0], self.dt_coarse, x_out=self.source_Uk[0])
             for m in range(1, self.M+1):
-                # Set Q or S matrix
-                self.Q_.assign(self.quad[m-1])
-
                 # Set initial guess for solver, and pick correct solver
                 if (self.formulation == "N2N"):
                     self.U_start.assign(self.Unodes1[m-1])
@@ -592,6 +611,7 @@ class SDC(object, metaclass=ABCMeta):
                                else solver_list[m-1])
                 self.U_DC.assign(self.Unodes[m])
 
+                # Set sweep dependent solver tolerances if requested
                 if self.sweep_tols is not None:
                     tol = self.sweep_tols[k-1]
 
@@ -614,11 +634,14 @@ class SDC(object, metaclass=ABCMeta):
                 #             + sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 self.solver.solve()
                 self.Unodes1[m].assign(self.U_DC)
+
+                # Update iteration counters
                 self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
 
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes1[m], self.base.dt, x_out=self.source_Ukp1[m])
+                    evaluate(self.Unodes1[m], self.dt_coarse, x_out=self.source_Ukp1[m])
 
                 # Apply limiter if required
                 if self.limiter is not None:
@@ -630,14 +653,8 @@ class SDC(object, metaclass=ABCMeta):
         if self.maxk > 0:
             # Compute value at dt rather than final quadrature node tau_M
             if self.final_update:
-                for m in range(1, self.M+1):
-                    self.Uin.assign(self.Unodes1[m])
-                    self.source_in.assign(self.source_Ukp1[m])
-                    self.solver_rhs.solve()
-                    self.fUnodes[m-1].assign(self.Urhs)
-                self.compute_quad_final()
-                # Compute y_(n+1) = y_n + sum(j=1,M) q_j*F(y_j)
-
+                # Compute final update quadrature term Qf_fin
+                self.compute_Qf_fin()
                 self.U_fin.assign(self.Unodes[-1])
                 self.solver_fin.solve()
                 # Apply limiter if required
@@ -651,7 +668,6 @@ class SDC(object, metaclass=ABCMeta):
             x_out.assign(self.Unodes[-1])
 
         self._step_count = self._step_count + 1
-
 
 class RIDC(object, metaclass=ABCMeta):
     """Class for Revisionist Integral Deferred Correction schemes."""
@@ -948,7 +964,7 @@ class RIDC(object, metaclass=ABCMeta):
 
         for m in range(self.M+1):
             for evaluate in self.evaluate_source:
-                evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
+                evaluate(self.Unodes[m], self.dt_coarse, x_out=self.source_Uk[m])
 
         # Iterate through correction sweeps
         for k in range(1, self.K+1):
@@ -957,14 +973,14 @@ class RIDC(object, metaclass=ABCMeta):
                 self.Uin.assign(self.Unodes[m])
                 # Include source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Uin, self.base.dt, x_out=self.source_in)
+                    evaluate(self.Uin, self.dt_coarse, x_out=self.source_in)
                 self.solver_rhs.solve()
                 self.fUnodes[m].assign(self.Urhs)
 
             # Loop through quadrature nodes and solve
             self.Unodes1[0].assign(self.Unodes[0])
             for evaluate in self.evaluate_source:
-                evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
+                evaluate(self.Unodes[0], self.dt_coarse, x_out=self.source_Uk[0])
             if self.reduced:
                 self.M1 = k
             for m in range(0, self.M1):
@@ -994,7 +1010,7 @@ class RIDC(object, metaclass=ABCMeta):
 
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+                    evaluate(self.Unodes1[m+1], self.dt_coarse, x_out=self.source_Ukp1[m+1])
 
                 # Apply limiter if required
                 if self.limiter is not None:
@@ -1026,7 +1042,7 @@ class RIDC(object, metaclass=ABCMeta):
 
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+                    evaluate(self.Unodes1[m+1], self.dt_coarse, x_out=self.source_Ukp1[m+1])
 
                 # Apply limiter if required
                 if self.limiter is not None:
