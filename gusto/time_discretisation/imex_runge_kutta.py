@@ -134,17 +134,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.total_snes_its = 0
         self._step_count = 1
 
-        # Set up lagged Jacobian rebuild frequency, if specified in the nonlinear solver parameters
-        self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
-        if self.lag_rebuild_freq is not None:
-            if self.lag_rebuild_freq < 1:
-                raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be >= 1")
-            elif not isinstance(self.lag_rebuild_freq, int):
-                raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be an integer")
-            else:
-                from gusto import logger
-                logger.info(f"IMEXRungeKutta: lag_rebuild_freq set to {self.lag_rebuild_freq}. "
-                            "Jacobian will be rebuilt every lag_rebuild_freq timesteps.")
+       
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -192,7 +182,19 @@ class IMEXRungeKutta(TimeDiscretisation):
 
         if not self.multiple_solvers and self.nonlinear_solver_parameters is None:
             # Use hybridised solver as default
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=self.alpha, tau_values=None, nonlinear=True)
+        
+         # Set up lagged Jacobian rebuild frequency, if specified in the nonlinear solver parameters
+        self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
+        if self.lag_rebuild_freq is not None:
+            if self.lag_rebuild_freq < 1:
+                raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be >= 1")
+            elif not isinstance(self.lag_rebuild_freq, int):
+                raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be an integer")
+            else:
+                from gusto import logger
+                logger.info(f"IMEXRungeKutta: lag_rebuild_freq set to {self.lag_rebuild_freq}. "
+                            "Jacobian will be rebuilt every lag_rebuild_freq timesteps.")
 
 
     def _lag_reset(self, solvers):
@@ -397,7 +399,7 @@ class IMEXRungeKutta(TimeDiscretisation):
             problem._constant_jacobian = True
         name = self.field_name + self.__class__.__name__ + "shared"
         solver = NonlinearVariationalSolver(
-            problem, solver_parameters=self.nonlinear_solver_parameters,
+            problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, 
             options_prefix=name)
         return solver
 

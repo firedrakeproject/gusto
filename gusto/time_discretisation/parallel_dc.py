@@ -10,11 +10,15 @@ while RIDC parallelises across the correction iterations by using a reduced sten
 and pipelining.
 """
 
-from firedrake import Function
+from firedrake import Function, NonlinearVariationalProblem, NonlinearVariationalSolver
+from firedrake.assemble import get_assembler
+from firedrake.fml import replace_subject, drop
+from gusto.core.labels import time_derivative, source_label
 from functools import cached_property
 from gusto.time_discretisation.time_discretisation import wrapper_apply
 from gusto.time_discretisation.deferred_correction import SDC, RIDC
 from gusto.core.logging import logger
+from mpi4py import MPI
 
 __all__ = ["Parallel_RIDC", "Parallel_SDC"]
 
@@ -52,11 +56,33 @@ class Parallel_RIDC(RIDC):
                                             linear_solver_parameters, nonlinear_solver_parameters,
                                             limiter, reduced=True)
         self.comm = communicator
-        self.TAG_EXCHANGE_FIELD = 11  # Tag for sending nodal fields (Firedrake Functions)
-        self.TAG_EXCHANGE_SOURCE = self.TAG_EXCHANGE_FIELD + J  # Tag for sending nodal source fields (Firedrake Functions)
-        self.TAG_FLUSH_PIPE = self.TAG_EXCHANGE_SOURCE + J  # Tag for flushing pipe and restarting
-        self.TAG_FINAL_OUT = self.TAG_FLUSH_PIPE + J  # Tag for the final broadcast and output
-        self.TAG_END_INTERVAL = self.TAG_FINAL_OUT + J  # Tag for telling the rank above you that you have ended interval j
+        # self.TAG_EXCHANGE_FIELD = 11  # Tag for sending nodal fields (Firedrake Functions)
+        # self.TAG_EXCHANGE_SOURCE = self.TAG_EXCHANGE_FIELD + J  # Tag for sending nodal source fields (Firedrake Functions)
+        # self.TAG_FLUSH_PIPE = self.TAG_EXCHANGE_SOURCE + J  # Tag for flushing pipe and restarting
+        # self.TAG_FINAL_OUT = self.TAG_FLUSH_PIPE + J  # Tag for the final broadcast and output
+        # self.TAG_END_INTERVAL = self.TAG_FINAL_OUT + J  # Tag for telling the rank above you that you have ended interval j
+
+            
+        self.TAG_STEP_MOD = max(32, 8 * (self.K + 1))
+        self.TAG_NODE_STRIDE = self.TAG_STEP_MOD
+        self.TAG_CHANNEL_STRIDE = self.TAG_NODE_STRIDE * (self.M + 2)
+
+        self.TAG_CHANNEL_FIELD = 0
+        self.TAG_CHANNEL_SOURCE = 1
+        self.TAG_CHANNEL_FLUSH = 2
+        self.TAG_CHANNEL_FINAL = 3
+        self.TAG_CHANNEL_END_INTERVAL = 4
+        self._n_tag_channels = 5
+
+        # Sanity-check against the MPI implementation's tag upper bound.
+        max_tag = (self._n_tag_channels - 1) * self.TAG_CHANNEL_STRIDE \
+            + (self.M + 1) * self.TAG_NODE_STRIDE + (self.TAG_STEP_MOD - 1)
+        tag_ub = self.comm.ensemble_comm.Get_attr(MPI.TAG_UB)# MPI.TAG_UB has value 3 as a predefined keyval
+        if tag_ub is not None and max_tag >= tag_ub:
+            raise ValueError(
+                f"Constructed tag range (max={max_tag}) exceeds MPI_TAG_UB "
+                f"({tag_ub}) for this M, K. Increase margin or reduce M/K."
+            )
 
         if flush_freq is None:
             self.flush_freq = 1
@@ -79,6 +105,13 @@ class Parallel_RIDC(RIDC):
             raise ValueError("Number of ranks must be equal to K+1 for Parallel RIDC.")
         if self.M < self.K*(self.K+1)//2:
             raise ValueError("Number of subintervals M must be greater than K*(K+1)/2 for Parallel RIDC.")
+    
+    def _tag(self, channel, m=0, step=None):
+        """Build a collision-free MPI tag for a given channel and subinterval."""
+        step = self.step if step is None else step
+        return (channel * self.TAG_CHANNEL_STRIDE
+                + m * self.TAG_NODE_STRIDE
+                + (step % self.TAG_STEP_MOD))
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -101,153 +134,105 @@ class Parallel_RIDC(RIDC):
 
     @wrapper_apply
     def apply(self, x_out, x_in):
-        # Set up varibles on this rank
         x_out.assign(x_in)
         self.kval = self.comm.ensemble_comm.rank
         self.Un.assign(x_in)
         self.Unodes[0].assign(self.Un)
-        # Loop through quadrature nodes and solve
-        if (self.flush_freq > 0 and (self.step -1) % self.flush_freq == 0):
-            # After a flush, predictor and corrector start from same point
+
+        if (self.flush_freq > 0 and (self.step - 1) % self.flush_freq == 0):
             self.Unodes[0].assign(x_in)
         else:
-            # No flush - predictor should be last timestep's pipeline value
             self.Unodes[0].assign(self.Uprev)
         self.Unodes1[0].assign(x_in)
-        # for evaluate in self.evaluate_source:
-        #     evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
-        self.Uin.assign(self.Unodes[0])
-        self.solver_rhs.solve()
-        self.fUnodes[0].assign(self.Urhs)
+        for evaluate in self.evaluate_source:
+            evaluate(self.Unodes[0], self.dt_coarse, x_out=self.source_Uk[0])
 
-        # On first communicator, we do the predictor step
         if (self.comm.ensemble_comm.rank == 0):
-            # Base timestepper
             for m in range(self.M):
                 self.base.dt = float(self.dt)
-                self.base.apply(self.Unodes[m+1], self.Unodes[m])
-                # for evaluate in self.evaluate_source:
-                #     evaluate(self.Unodes[m+1], self.base.dt, x_out=self.source_Uk[m+1])
+                self.base.apply(self.Unodes[m + 1], self.Unodes[m])
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes[m + 1], self.dt_coarse, x_out=self.source_Uk[m + 1])
 
-                # Send base guess to k+1 correction
-                self.U_send[m+1].assign(self.Unodes[m+1])
-                self.comm.isend(self.U_send[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
-                # self.comm.send(self.source_Uk[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
+                self.U_send[m + 1].assign(self.Unodes[m + 1])
+                self.comm.isend(self.U_send[m + 1], dest=self.kval + 1,
+                                tag=self._tag(self.TAG_CHANNEL_FIELD, m + 1))
         else:
             for m in range(1, self.kval + 1):
-                # Receive and evaluate the stencil of guesses we need to correct
-                self.comm.recv(self.U_send[m], source=self.kval-1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m)*100)
+                self.comm.recv(self.U_send[m], source=self.kval - 1,
+                                tag=self._tag(self.TAG_CHANNEL_FIELD, m))
                 self.Unodes[m].assign(self.U_send[m])
-                # self.comm.recv(self.source_Uk[m], source=self.kval-1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
-                self.Uin.assign(self.Unodes[m])
-                # for evaluate in self.evaluate_source:
-                #     evaluate(self.Uin, self.base.dt, x_out=self.source_in)
-                self.solver_rhs.solve()
-                self.fUnodes[m].assign(self.Urhs)
-            for m in range(0, self.kval):
-                # Set S matrix
-                self.Q_.assign(self.compute_quad(self.Q[self.kval-1], self.fUnodes, m+1))
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes[m], self.dt_coarse, x_out=self.source_Uk[m])
 
-                # Set initial guess for solver, and pick correct solver
+            for m in range(0, self.kval):
+                self.rhs_assemblers[self.kval - 1][m].assemble(tensor=self.b)
+
                 self.U_start.assign(self.Unodes1[m])
                 self.Ukp1_m.assign(self.Unodes1[m])
-                self.Uk_mp1.assign(self.Unodes[m+1])
+                self.Uk_mp1.assign(self.Unodes[m + 1])
                 self.Uk_m.assign(self.Unodes[m])
                 self.source_Ukp1_m.assign(self.source_Ukp1[m])
                 self.source_Uk_m.assign(self.source_Uk[m])
-                self.U_DC.assign(self.Unodes[m+1])
+                self.U_DC.assign(self.Unodes[m + 1])
 
-                if self.sweep_tols is not None:
-                    tol = self.sweep_tols[k-1]
-
-                    self.solver.snes.ksp.setTolerances(
-                        atol=tol["ksp_atol"],
-                        rtol=tol["ksp_rtol"]
-                    )
-
-                    self.solver.snes.setTolerances(
-                        atol=tol["snes_atol"],
-                        rtol=tol["snes_rtol"]
-                    )
-                # Compute
-                # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
-                #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-                #             + sum(j=1,M) s_mj*(F+S)(y_j^k)
                 self._lag_reset_solver()
                 self.solver.solve()
+                # Update iteration counters
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
+
                 self._lag_note_solver_call()
-                self.Unodes1[m+1].assign(self.U_DC)
+                self.Unodes1[m + 1].assign(self.U_DC)
 
-                # Evaluate source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
+                    evaluate(self.Unodes1[m + 1], self.dt_coarse, x_out=self.source_Ukp1[m + 1])
 
-                # Apply limiter if required
                 if self.limiter is not None:
-                    self.limiter.apply(self.Unodes1[m+1])
-                # Send our updated value to next communicator
+                    self.limiter.apply(self.Unodes1[m + 1])
+
                 if self.kval < self.K:
-                    self.U_send[m+1].assign(self.Unodes1[m+1])
-                    self.comm.isend(self.U_send[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
-                    #self.comm.isend(self.source_Ukp1[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
+                    self.U_send[m + 1].assign(self.Unodes1[m + 1])
+                    self.comm.isend(self.U_send[m + 1], dest=self.kval + 1,
+                                    tag=self._tag(self.TAG_CHANNEL_FIELD, m + 1))
 
             for m in range(self.kval, self.M):
-                # Receive the guess we need to correct and evaluate the rhs
-                self.comm.recv(self.U_send[m+1], source=self.kval-1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
-                self.Unodes[m+1].assign(self.U_send[m+1])
-                #self.comm.recv(self.source_Uk[m+1], source=self.kval-1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
-                self.Uin.assign(self.Unodes[m+1])
-                # for evaluate in self.evaluate_source:
-                #     evaluate(self.Uin, self.base.dt, x_out=self.source_in)
-                self.solver_rhs.solve()
-                self.fUnodes[m+1].assign(self.Urhs)
+                self.comm.recv(self.U_send[m + 1], source=self.kval - 1,
+                                tag=self._tag(self.TAG_CHANNEL_FIELD, m + 1))
+                self.Unodes[m + 1].assign(self.U_send[m + 1])
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes[m + 1], self.dt_coarse, x_out=self.source_Uk[m + 1])
 
-                # Set S matrix
-                self.Q_.assign(self.compute_quad_final(self.Q[self.kval-1], self.fUnodes, m+1))
+                self.rhs_assemblers[self.kval - 1][m].assemble(tensor=self.b)
 
-                # Set initial guess for solver, and pick correct solver
                 self.U_start.assign(self.Unodes1[m])
                 self.Ukp1_m.assign(self.Unodes1[m])
-                self.Uk_mp1.assign(self.Unodes[m+1])
+                self.Uk_mp1.assign(self.Unodes[m + 1])
                 self.Uk_m.assign(self.Unodes[m])
                 self.source_Ukp1_m.assign(self.source_Ukp1[m])
                 self.source_Uk_m.assign(self.source_Uk[m])
-                self.U_DC.assign(self.Unodes[m+1])
+                self.U_DC.assign(self.Unodes[m + 1])
 
-                # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
-                #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-                #             + sum(j=1,M) s_mj*(F+S)(y^k)
                 self._lag_reset_solver()
                 self.solver.solve()
                 self._lag_note_solver_call()
-                self.Unodes1[m+1].assign(self.U_DC)
+                self.Unodes1[m + 1].assign(self.U_DC)
 
-                # # Evaluate source terms
-                # for evaluate in self.evaluate_source:
-                #     evaluate(self.Unodes1[m+1], self.base.dt, x_out=self.source_Ukp1[m+1])
-
-                # Apply limiter if required
                 if self.limiter is not None:
-                    self.limiter.apply(self.Unodes1[m+1])
+                    self.limiter.apply(self.Unodes1[m + 1])
 
-                # Send our updated value to next communicator
                 if self.kval < self.K:
-                    self.U_send[m+1].assign(self.Unodes1[m+1])
-                    self.comm.isend(self.U_send[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m+1)*100)
-                    #self.comm.isend(self.source_Ukp1[m+1], dest=self.kval+1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
-
-            # for m in range(self.M+1):
-            #     self.Unodes[m].assign(self.Unodes1[m])
-            #     self.source_Uk[m].assign(self.source_Ukp1[m])
+                    self.U_send[m + 1].assign(self.Unodes1[m + 1])
+                    self.comm.isend(self.U_send[m + 1], dest=self.kval + 1,
+                                    tag=self._tag(self.TAG_CHANNEL_FIELD, m + 1))
 
         if (self.flush_freq > 0 and self.step % self.flush_freq == 0) or self.step == self.J:
-            # Flush the pipe to ensure all ranks have the same data
             if (self.kval == self.K):
                 x_out.assign(self.Unodes1[-1])
                 for i in range(self.K):
-                    self.comm.isend(x_out, dest=i, tag=self.TAG_FLUSH_PIPE + self.step)
+                    self.comm.isend(x_out, dest=i, tag=self._tag(self.TAG_CHANNEL_FLUSH))
             else:
-                self.comm.recv(x_out, source=self.K, tag=self.TAG_FLUSH_PIPE + self.step)
+                self.comm.recv(x_out, source=self.K, tag=self._tag(self.TAG_CHANNEL_FLUSH))
         else:
             if self.kval == 0:
                 x_out.assign(self.Unodes[-1])
@@ -255,7 +240,6 @@ class Parallel_RIDC(RIDC):
                 x_out.assign(self.Unodes1[-1])
 
         self.Uprev.assign(self.Unodes[-1])
-
         self.step += 1
 
 
@@ -324,22 +308,26 @@ class Parallel_SDC(SDC):
 
         _ = self.solvers
 
-    def compute_quad(self):
-        """
-        Computes integration of F(y) on quadrature nodes
-        """
-        x = Function(self.W)
-        for j in range(self.M):
-            x.assign(float(self.Q[j, self.comm.ensemble_comm.rank])*self.fUnodes[self.comm.ensemble_comm.rank])
-            self.comm.reduce(x, self.quad[j], root=j)
+        # Rank-local storage for parallel quadrature via MPI reduce/allreduce.
+        self.fUnodes = [Function(self.W) for _ in range(self.M)]
+        self.quad = [Function(self.W) for _ in range(self.M)]
+        self.quad_final = Function(self.W)
+        self.Urhs = Function(self.W)
+        self.Uin = Function(self.W)
+        self.source_in = Function(self.W)
+    
+    @cached_property
+    def Qf_assembler(self):
+        """Cached assembler for this rank's own Qf[m], m = rank's owned node."""
+        m = self.comm.ensemble_comm.rank
+        return get_assembler(self.Qf_form(m), tensor=self.Qf[m])
 
-    def compute_quad_final(self):
+    def _exchange_nodes(self, node_list):
         """
-        Computes final integration of F(y) on quadrature nodes
+        Make every rank's copy of node_list up to date for all M nodes.
         """
-        x = Function(self.W)
-        x.assign(float(self.Qfin[self.comm.ensemble_comm.rank])*self.fUnodes[self.comm.ensemble_comm.rank])
-        self.comm.allreduce(x, self.quad_final)
+        for i in range(self.M):
+            self.comm.bcast(node_list[i + 1], root=i)
     
     @cached_property
     def solvers(self):
@@ -348,20 +336,20 @@ class Parallel_SDC(SDC):
         if self.qdelta_imp_type == "MIN-SR-FLEX":
             return [self._build_solver(m, k) for k in range(1, self.maxk + 1)]
         return self._build_solver(m)
-
     @wrapper_apply
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
         self.U_start.assign(self.Un)
         solver_list = self.solvers
-
-        # Keep SDC lag-rebuild behaviour with rank-local solver containers.
         self._lag_reset([solver_list])
 
-        # Compute initial guess on quadrature nodes with low-order
-        # base timestepper
+        rank = self.comm.ensemble_comm.rank
+
+        # Initial guess: every rank runs the same serial base-scheme sweep
+        # redundantly, so all M+1 entries are already consistent -- no
+        # exchange needed before the first sweep's Qf assembly.
         self.Unodes[0].assign(self.Un)
-        if (self.base_flag):
+        if self.base_flag:
             for m in range(self.M):
                 self.base.dt = float(self.dtau[m])
                 self.base.apply(self.Unodes[m+1], self.Unodes[m])
@@ -372,97 +360,60 @@ class Parallel_SDC(SDC):
             for evaluate in self.evaluate_source:
                 evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
 
-        # Iterate through correction sweeps
         k = 0
         while k < self.maxk:
             k += 1
-
             solver = solver_list[k-1] if self.qdelta_imp_type == "MIN-SR-FLEX" else solver_list
 
-            # Compute for N2N: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
-            # for Z2N: sum(j=1,M) (q_mj*F(y_m^k) +  q_mj*S(y_m^k))
-            self.Uin.assign(self.Unodes[self.comm.ensemble_comm.rank+1])
-            # Include source terms
-            for evaluate in self.evaluate_source:
-                evaluate(self.Uin, self.base.dt, x_out=self.source_in)
-            self.solver_rhs.solve()
-            self.fUnodes[self.comm.ensemble_comm.rank].assign(self.Urhs)
+            # Direct weak-form Qf
+            self.Qf_assembler.assemble(tensor=self.Qf[rank])
 
-            self.compute_quad()
-
-            # Loop through quadrature nodes and solve
             self.Unodes1[0].assign(self.Unodes[0])
             for evaluate in self.evaluate_source:
                 evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
 
-            # Set Q or S matrix
-            self.Q_.assign(self.quad[self.comm.ensemble_comm.rank])
-
-            # Set initial guess for solver, and pick correct solver
-            #self.solver = solver_list[self.comm.ensemble_comm.rank]
-            self.U_DC.assign(self.Unodes[self.comm.ensemble_comm.rank+1])
+            self.U_DC.assign(self.Unodes[rank+1])
 
             if self.sweep_tols is not None:
                 tol = self.sweep_tols[k-1]
+                solver.snes.ksp.setTolerances(atol=tol["ksp_atol"], rtol=tol["ksp_rtol"])
+                solver.snes.setTolerances(atol=tol["snes_atol"], rtol=tol["snes_rtol"])
 
-                solver.snes.ksp.setTolerances(
-                    atol=tol["ksp_atol"],
-                    rtol=tol["ksp_rtol"]
-                )
-
-                solver.snes.setTolerances(
-                    atol=tol["snes_atol"],
-                    rtol=tol["snes_rtol"]
-                )
-
-            # Compute
-            # for N2N:
-            # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k)
-            #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-            #             + sum(j=1,M) s_mj*(F+S)(y^k)
-            # for Z2N:
-            # y_m^(k+1) = y^n + sum(j=1,m) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
-            #             + sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
             solver.solve()
-            self.Unodes1[self.comm.ensemble_comm.rank+1].assign(self.U_DC)
+            # Update iteration counters
+            self.total_ksp_its += solver.snes.getLinearSolveIterations()
+            self.total_snes_its += solver.snes.getIterationNumber()
 
-            # Evaluate source terms
+            self.Unodes1[rank+1].assign(self.U_DC)
+
             for evaluate in self.evaluate_source:
-                evaluate(self.Unodes1[self.comm.ensemble_comm.rank+1], self.base.dt, x_out=self.source_Ukp1[self.comm.ensemble_comm.rank+1])
+                evaluate(self.Unodes1[rank+1], self.base.dt, x_out=self.source_Ukp1[rank+1])
 
-            # Apply limiter if required
             if self.limiter is not None:
-                self.limiter.apply(self.Unodes1[self.comm.ensemble_comm.rank+1])
+                self.limiter.apply(self.Unodes1[rank+1])
 
-            self.Unodes[self.comm.ensemble_comm.rank+1].assign(self.Unodes1[self.comm.ensemble_comm.rank+1])
-            self.source_Uk[self.comm.ensemble_comm.rank+1].assign(self.source_Ukp1[self.comm.ensemble_comm.rank+1])
+            # Commit this rank's own update locally
+            self.Unodes[rank+1].assign(self.Unodes1[rank+1])
+            self.source_Uk[rank+1].assign(self.source_Ukp1[rank+1])
+
+            # Exchange so every rank's y^k is current for the next
+            # sweep's Qf (or, on the last sweep, for the final update).
+            self._exchange_nodes(self.Unodes)
+            self._exchange_nodes(self.source_Uk)
+            for m in range(1, self.M+1):
+                self.Unodes1[m].assign(self.Unodes[m])
 
         if self.maxk > 0:
-            # Compute value at dt rather than final quadrature node tau_M
             if self.final_update:
-                self.Uin.assign(self.Unodes1[self.comm.ensemble_comm.rank+1])
-                self.source_in.assign(self.source_Ukp1[self.comm.ensemble_comm.rank+1])
-                self.solver_rhs.solve()
-                self.fUnodes[self.comm.ensemble_comm.rank].assign(self.Urhs)
-                self.compute_quad_final()
-                # Compute y_(n+1) = y_n + sum(j=1,M) q_j*F(y_j)
-                if self.comm.ensemble_comm.rank == self.M-1:
-                    self.U_fin.assign(self.Unodes[-1])
-                self.comm.bcast(self.U_fin, self.M-1)
+                self.compute_Qf_fin()
+                self.U_fin.assign(self.Unodes[-1])
                 self.solver_fin.solve()
-                # Apply limiter if required
                 if self.limiter is not None:
                     self.limiter.apply(self.U_fin)
                 x_out.assign(self.U_fin)
             else:
-                # Take value at final quadrature node dtau_M
-                if self.comm.ensemble_comm.rank == self.M-1:
-                    x_out.assign(self.Unodes[-1])
-                self.comm.bcast(x_out, self.M-1)
-        else:
-            # Take value at final quadrature node dtau_M
-            if self.comm.ensemble_comm.rank == self.M-1:
                 x_out.assign(self.Unodes[-1])
-            self.comm.bcast(x_out, self.M-1)
+        else:
+            x_out.assign(self.Unodes[-1])
 
         self._step_count = self._step_count + 1

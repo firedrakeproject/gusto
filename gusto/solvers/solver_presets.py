@@ -15,7 +15,7 @@ from firedrake import VectorSpaceBasis
 __all__ = ["hybridised_solver_parameters", "monolithic_solver_parameters"]
 
 
-def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_values=None, nonlinear=False, imex=False):
+def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_values=None, nonlinear=False):
     """
     Returns PETSc solver settings for hybridised solver for mixed finite
     element problems.
@@ -97,45 +97,25 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'ksp_rtol': r_tol
         }
 
-        trace_params = {
-            'pc_type': 'ksp',
-            'ksp': {
-                'ksp_rtol': r_tol,
+        scpc_solve_settings = {
+            'mat_type': 'matfree',
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.SCPC',
+            'pc_sc_eliminate_fields': '0,1',
+            # The reduced operator is not symmetric
+            'condensed_field': {
                 'ksp_type': 'fgmres',
+                'ksp_rtol': r_tol,
+                'ksp_max_it': 100,
                 'pc_type': 'gamg',
+                'pc_gamg_sym_graph': None,
                 'mg_levels': {
                     'ksp_type': 'gmres',
                     'ksp_max_it': 5,
                     'pc_type': 'bjacobi',
-                    'sub_pc_type': 'ilu',
-                },
-            }
-        }
-
-        slate_schur_params = {
-            'mat_type': 'matfree',
-            'ksp_type': 'preonly',
-            'pc_type': 'fieldsplit',
-            'pc_fieldsplit_type': 'schur',
-            'pc_fieldsplit_schur_fact_type': 'full',
-            'pc_fieldsplit_0_fields': '0,1',
-            # The reduced operator is not symmetric
-            'pc_fieldsplit_1_fields': '2',
-            'fieldsplit_0': {
-                'ksp_type': 'preonly',
-                'pc_type': 'python',
-                'pc_python_type': 'firedrake.AssembledPC',
-                'assembled_pc_type': 'bjacobi',
-                'assembled_sub_pc_type': 'ilu',
-                'assembled_sub_pc_factor_mat_ordering_type': 'rcm',
-                'assembled_sub_pc_factor_reuse_ordering': None,
-            },
-            'fieldsplit_1': {
-                'ksp_type': 'preonly',
-                'pc_type': 'python',
-                'pc_python_type': 'gusto.SlateSchurPC',
-                'slate_schur_nfields0': 2,
-                'slate_schur': trace_params,
+                    'sub_pc_type': 'ilu'
+                }
             }
         }
 
@@ -149,7 +129,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'exnerbar_avg': exnerbar_avg_settings,
             'rhobar_avg': rhobar_avg_settings,
             'riesz_map': riesz_map_settings,
-            'compressible_hybrid_scpc': slate_schur_params
+            'compressible_hybrid_scpc': scpc_solve_settings,
         }
 
         # We pass the implicit weighting parameter (alpha) and tau_values to the
@@ -158,8 +138,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         appctx = {
             'equations': equation,
             'alpha': alpha,
-            'trace_nullspace': trace_nullsp,
-            'imex': imex
+            'trace_nullspace': trace_nullsp
         }
         if tau_values is not None:
             appctx['tau_values'] = tau_values
@@ -404,7 +383,6 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # No elimination via Schur complement, just hybridization of the
         # full system.
         settings = {
-            'snes_type': 'ksponly',
             'ksp_type': 'preonly',
             'mat_type': 'matfree',
             'pc_type': 'python',
@@ -423,8 +401,9 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             }
         }
         # Provide callback for the nullspace of the trace system with trace_nullsp.
-        appctx = {}
-
+        appctx = {
+            'trace_nullspace': trace_nullsp,
+        }
 
     else:
         raise NotImplementedError(
@@ -436,6 +415,14 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
     # Generic settings
     # ======================================================================== #
 
+    if nonlinear:
+        settings["snes_type"] = "newtonls"
+        settings["td_lag_rebuild"] = 5
+        settings["snes_rtol"] = 1e-6
+        settings["snes_atol"] = 1e-8
+        settings["snes_max_it"] = 50
+        settings["snes_converged_reason"] = None
+
     if logger.isEnabledFor(DEBUG):
         settings["ksp_monitor_true_residual"] = None
         # TODO: the following output is not picked up by the Gusto logger
@@ -443,18 +430,6 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         for key in fieldsplit_keys:
             if key in settings:
                 settings[key]['ksp_monitor_true_residual'] = None
-    if nonlinear:
-        settings['snes_type'] = 'newtonls'
-        settings['snes_atol'] = 1e-4
-        settings['snes_rtol'] = 1e-4
-        settings['snes_max_it'] = 50
-        settings['snes_lag_jacobian'] = 4
-        settings['snes_lag_preconditioner'] = 4
-        settings['snes_ksp_ew'] = None
-        settings['snes_ksp_ew_rtol'] = 1e-4
-        settings['snes_ksp_ew_threshold'] = 5e-5
-        settings['snes_ksp_ew_version'] = 2
-        settings['snes_monitor'] = None
 
     return settings, appctx
 

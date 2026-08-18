@@ -176,6 +176,13 @@ class SDC(object, metaclass=ABCMeta):
         self.Qdelta_imp = float(self.dt_coarse)*self.Qdelta_imp
         self.Qdelta_exp = float(self.dt_coarse)*self.Qdelta_exp
 
+        # If both Qdelta matrices are purely diagonal (lower triangle all-zero), each node's
+        # correction is independent. On the final sweep with no final update, only the last
+        # node needs solving since intermediate nodes don't contribute to the output.
+        _lower_imp = np.tril(self.Qdelta_imp[:self.M, :self.M], k=-1)
+        _lower_exp = np.tril(self.Qdelta_exp[:self.M, :self.M], k=-1)
+        self._final_sweep_shortcut = (np.allclose(_lower_imp, 0) and np.allclose(_lower_exp, 0))
+
         # Set default linear and nonlinear solver options if none passed in
         if linear_solver_parameters is None:
             self.linear_solver_parameters = {'snes_type': 'ksponly',
@@ -188,20 +195,7 @@ class SDC(object, metaclass=ABCMeta):
         self.nonlinear_solver_parameters = nonlinear_solver_parameters
         self.appctx = None
 
-        self.lag_rebuild_freq = None
-        self._solver_call_count = 0
-        if self.nonlinear_solver_parameters is not None:
-            self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
-        if self.lag_rebuild_freq is not None:
-            if self.lag_rebuild_freq < 1:
-                raise ValueError("RIDC: td_lag_rebuild must be >= 1")
-            elif not isinstance(self.lag_rebuild_freq, int):
-                raise ValueError("RIDC: td_lag_rebuild must be an integer")
-            else:
-                logger.info(f"RIDC: td_lag_rebuild set to {self.lag_rebuild_freq}. "
-                            "Jacobian will be rebuilt every td_lag_rebuild solver calls.")
 
-        self.appctx = None
 
         # Flag to check wheter initial guess is generated using base time discretisation
         # (i.e. Forward Euler)
@@ -215,18 +209,6 @@ class SDC(object, metaclass=ABCMeta):
         self.total_snes_its = 0
         self.sweep_tols = sweep_tols
         self._step_count = 1
-
-        # Set up a lag rebuild frequency for the Jacobian, if requested.
-        # This is a timestep-level lag, not a sweep-level lag: the Jacobian is rebuilt every td_lag_rebuild timesteps
-        self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
-        if self.lag_rebuild_freq is not None:
-            if self.lag_rebuild_freq < 1:
-                raise ValueError("DeferredCorrection: td_lag_rebuild must be >= 1")
-            elif not isinstance(self.lag_rebuild_freq, int):
-                raise ValueError("DeferredCorrection: td_lag_rebuild must be an integer")
-            else:
-                logger.info(f"DeferredCorrection: td_lag_rebuild set to {self.lag_rebuild_freq}. "
-                            "Jacobian will be rebuilt every td_lag_rebuild timesteps.")
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -278,6 +260,42 @@ class SDC(object, metaclass=ABCMeta):
         # a Cofunction each sweep. Qf_fin is the equivanlent for the final update.
         self.Qf = [Cofunction(W.dual()) for _ in range(self.M)]
         self.Qf_fin = Cofunction(W.dual())
+
+
+        if self.nonlinear_solver_parameters is None:
+            # Use hybridised solver as default
+            self.hybridised_solver = True
+            alpha = self.Qdelta_imp[0, 0]/self.dt_coarse
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.base.equation, self.base.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True)
+        else:
+            self.hybridised_solver = False
+            self.appctx = None
+        self.lag_rebuild_freq = None
+        self._solver_call_count = 0
+        if self.nonlinear_solver_parameters is not None:
+            self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
+        if self.lag_rebuild_freq is not None:
+            if self.lag_rebuild_freq < 1:
+                raise ValueError("SDC: td_lag_rebuild must be >= 1")
+            elif not isinstance(self.lag_rebuild_freq, int):
+                raise ValueError("SDC: td_lag_rebuild must be an integer")
+            else:
+                logger.info(f"RIDC: td_lag_rebuild set to {self.lag_rebuild_freq}. "
+                            "Jacobian will be rebuilt every td_lag_rebuild solver calls.")
+
+
+        # Set up a lag rebuild frequency for the Jacobian, if requested.
+        # This is a timestep-level lag, not a sweep-level lag: the Jacobian is rebuilt every td_lag_rebuild timesteps
+        self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
+        if self.lag_rebuild_freq is not None:
+            if self.lag_rebuild_freq < 1:
+                raise ValueError("DeferredCorrection: td_lag_rebuild must be >= 1")
+            elif not isinstance(self.lag_rebuild_freq, int):
+                raise ValueError("DeferredCorrection: td_lag_rebuild must be an integer")
+            else:
+                logger.info(f"DeferredCorrection: td_lag_rebuild set to {self.lag_rebuild_freq}. "
+                            "Jacobian will be rebuilt every td_lag_rebuild timesteps.")
+
 
         if self.qdelta_imp_type == "MIN-SR-FLEX":
             logger.info(
@@ -493,14 +511,14 @@ class SDC(object, metaclass=ABCMeta):
         problem = NonlinearVariationalProblem(F, self.U_DC, bcs=self.bcs, J=J)
         suffix = f"{m}_k{k}" if k is not None else f"{m}"
         solver_name = self.field_name + self.__class__.__name__ + suffix
-        if self.nonlinear_solver_parameters is None:
+        if self.hybridised_solver:
             # Use hybridised solver as default
             alpha = self.Qdelta_imp[m, m]/self.dt_coarse
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True)
         if self.lag_rebuild_freq is not None:
             problem._constant_jacobian = True
         return NonlinearVariationalSolver(
-            problem, solver_parameters=self.nonlinear_solver_parameters,
+            problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx,
             options_prefix=solver_name)
 
     @cached_property
@@ -528,6 +546,7 @@ class SDC(object, metaclass=ABCMeta):
                                         drop)
         F_exp = F_exp.label_map(lambda t: t.has_label(time_derivative),
                                 lambda t: -1*t)
+        residual = a + F_exp
         for i in range(self.M):
             Q_source = self.residual.label_map(
                 lambda t: t.has_label(source_label),
@@ -536,7 +555,8 @@ class SDC(object, metaclass=ABCMeta):
             Q_source = Q_source.label_map(
                 all_terms,
                 lambda t: Constant(self.Qfin[i])*t)
-        return (a + F_exp + Q_source).form
+            residual += Q_source
+        return residual.form
 
     @cached_property
     def solver_fin(self):
@@ -592,14 +612,21 @@ class SDC(object, metaclass=ABCMeta):
         while k < self.maxk:
             k += 1
 
-            # Assemble self.Qf[m] for every node m.
-            self.compute_Qf()
+            # On the final sweep with diagonal Qdelta and no final update, only the last
+            # node is needed so only assemble Qf for that node.
+            final_sweep_skip = (k == self.maxk and not self.final_update
+                                and self._final_sweep_shortcut)
+            if final_sweep_skip:
+                self.Qf_assemblers[self.M-1].assemble(tensor=self.Qf[self.M-1])
+            else:
+                self.compute_Qf()
 
             # Loop through quadrature nodes and solve
             self.Unodes1[0].assign(self.Unodes[0])
             for evaluate in self.evaluate_source:
                 evaluate(self.Unodes[0], self.dt_coarse, x_out=self.source_Uk[0])
-            for m in range(1, self.M+1):
+            node_range = range(self.M, self.M+1) if final_sweep_skip else range(1, self.M+1)
+            for m in node_range:
                 # Set initial guess for solver, and pick correct solver
                 if (self.formulation == "N2N"):
                     self.U_start.assign(self.Unodes1[m-1])
@@ -741,6 +768,27 @@ class RIDC(object, metaclass=ABCMeta):
         
         self.nonlinear_solver_parameters = nonlinear_solver_parameters
 
+        if self.nonlinear_solver_parameters is None:
+            # Use hybridised solver as default
+            self.hybridised_solver = True
+            alpha = self.Q[0][0, 0]/self.dt_coarse
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.base.equation, self.base.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True)
+        else:
+            self.hybridised_solver = False
+            self.appctx = None
+        self.lag_rebuild_freq = None
+        self._solver_call_count = 0
+        if self.nonlinear_solver_parameters is not None:
+            self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
+        if self.lag_rebuild_freq is not None:
+            if self.lag_rebuild_freq < 1:
+                raise ValueError("RIDC: td_lag_rebuild must be >= 1")
+            elif not isinstance(self.lag_rebuild_freq, int):
+                raise ValueError("RIDC: td_lag_rebuild must be an integer")
+            else:
+                logger.info(f"RIDC: td_lag_rebuild set to {self.lag_rebuild_freq}. "
+                            "Jacobian will be rebuilt every td_lag_rebuild solver calls.")
+
 
 
     def setup(self, equation, apply_bcs=True, *active_labels):
@@ -781,18 +829,13 @@ class RIDC(object, metaclass=ABCMeta):
         self.Unodes = [Function(W) for _ in range(self.M+1)]
         self.Unodes1 = [Function(W) for _ in range(self.M+1)]
         self.fUnodes = [Function(W) for _ in range(self.M+1)]
-        self.quad = [Function(W) for _ in range(self.M+1)]
         self.source_Uk = [Function(W) for _ in range(self.M+1)]
         self.source_Ukp1 = [Function(W) for _ in range(self.M+1)]
         self.U_DC = Function(W)
         self.U_start = Function(W)
         self.Un = Function(W)
-        self.Q_ = Function(W)
-        self.quad_final = Function(W)
         self.U_fin = Function(W)
-        self.Urhs = Function(W)
-        self.Uin = Function(W)
-        self.source_in = Function(W)
+        self.b = Cofunction(W.dual())
         self.source_Ukp1_m = Function(W)
         self.source_Uk_m = Function(W)
         self.Uk_mp1 = Function(W)
@@ -803,131 +846,149 @@ class RIDC(object, metaclass=ABCMeta):
     def nlevels(self):
         return 1
 
-    def compute_quad(self, Q, fUnodes, m):
+    def _quad_weights_and_indices(self, k, m):
         """
-        Computes integration of F(y) on quadrature nodes
-        """
-        quad = Function(self.W)
-        quad.assign(0.)
-        for k in range(0, np.shape(Q)[1]):
-            quad += float(Q[m, k])*fUnodes[k]
-        return quad
+        Returns (weight, fUnodes index) pairs for the RIDC quadrature term.
 
-    def compute_quad_final(self, Q, fUnodes, m):
+        Args:
+            k (int): 1-based sweep index.
+            m (int): 0-based local node index in the correction loop.
         """
-        Computes final integration of F(y) on quadrature nodes
-        """
-        quad = Function(self.W)
-        quad.assign(0.)
         if self.reduced:
+            Q = self.Q[k-1]
+            if m < k:
+                return [(float(Q[m+1, j]), j) for j in range(np.shape(Q)[1])]
             l = np.shape(Q)[0] - 1
-        else:
-            l = self.K
-        for k in range(0, l+1):
-            quad += float(Q[-1, k])*fUnodes[m - l + k]
-        return quad
+            start = (m + 1) - l
+            return [(float(Q[-1, j]), start + j) for j in range(l+1)]
 
-    @property
-    def res_rhs(self):
-        """Set up the residual for the calculation of F(y)."""
-        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Urhs, old_idx=self.idx),
-                                    drop)
-        # F(y)
-        L = self.residual.label_map(lambda t: any(t.has_label(time_derivative, source_label)),
-                                    drop,
-                                    replace_subject(self.Uin, old_idx=self.idx))
-        L_source = self.residual.label_map(lambda t: t.has_label(source_label),
-                                           replace_subject(self.source_in, old_idx=self.idx),
-                                           drop)
-        residual_rhs = a - (L + L_source)
-        return residual_rhs.form
+        Q = self.Q
+        if m < self.K:
+            return [(float(Q[m+1, j]), j) for j in range(np.shape(Q)[1])]
+        l = self.K
+        start = (m + 1) - l
+        return [(float(Q[-1, j]), start + j) for j in range(l+1)]
 
-    @property
-    def res(self):
-        """Set up the discretisation's residual."""
-        # Add time derivative terms  y^(k+1)_m - y_n
+   
+    def resval(self):
+        """
+        Jacobian-bearing part of the residual, evaluated at the unknown
+        U_DC: the mass term plus dt*F(U_DC). Everything else is known data
+        and goes into self.b via rhs_form/rhs_assemblers -- valid because
+        RIDC's implicit diagonal coefficient is always the constant self.dt,
+        independent of node or sweep (same structure as
+        IMEXRungeKutta.resval() in the constant-diagonal case).
+        """
         mass_form = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=drop)
-        residual = mass_form.label_map(all_terms,
-                                       map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
-        residual -= mass_form.label_map(all_terms,
-                                        map_if_true=replace_subject(self.U_start, old_idx=self.idx))
+            lambda t: t.has_label(time_derivative), map_if_false=drop)
+        residual = mass_form.label_map(
+            all_terms, map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
 
-        # Calculate source terms
-        r_source_kp1 = self.residual.label_map(
-            lambda t: t.has_label(source_label),
-            map_if_true=replace_subject(self.source_Ukp1_m, old_idx=self.idx),
-            map_if_false=drop)
-        r_source_kp1 = r_source_kp1.label_map(
-            all_terms,
-            lambda t: Constant(self.dt)*t)
-        residual += r_source_kp1
-
-        r_source_k = self.residual.label_map(
-            lambda t: t.has_label(source_label),
-            map_if_true=replace_subject(self.source_Uk_m, old_idx=self.idx),
-            map_if_false=drop)
-        r_source_k = r_source_k.label_map(
-            all_terms,
-            map_if_true=lambda t: Constant(self.dt)*t)
-        residual -= r_source_k
-
-        # Add on final implicit terms
-        # dt*(F(y_(m)^(k+1)) - F(y_(m)^k))
-        r_imp_kp1 = self.residual.label_map(
+        r_imp = self.residual.label_map(
             lambda t: t.has_label(implicit),
             map_if_true=replace_subject(self.U_DC, old_idx=self.idx),
             map_if_false=drop)
-        r_imp_kp1 = r_imp_kp1.label_map(
-            all_terms,
-            lambda t: Constant(self.dt)*t)
-        residual += r_imp_kp1
+        r_imp = r_imp.label_map(all_terms, lambda t: Constant(self.dt) * t)
+        residual += r_imp
+
+        return residual.form
+
+    def rhs_form(self, k, m):
+        """
+        Dual-space RHS for sweep k, node m (0-indexed local node; corrects
+        to Unodes1[m+1]). Combines every term that does NOT depend on the
+        unknown U_DC:
+        -mass(U_start)                                  (y_(m-1)^(k+1))
+        -dt*F(y_m^k)                                     (previous sweep, node m+1)
+        +dt*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))             explicit correction
+        +dt*(source(y_(m-1)^(k+1)) - source(y_(m-1)^k))   source correction
+        +sum_j Q[m+1,j]*(F+S)(y_j^k)                      dense RIDC
+                                                            quadrature term,
+                                                            evaluated directly
+                                                            on the raw nodal
+                                                            Functions -- no
+                                                            mass-matrix solve.
+        """
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative), map_if_false=drop)
+        residual = -mass_form.label_map(
+            all_terms, map_if_true=replace_subject(self.U_start, old_idx=self.idx))
+
         r_imp_k = self.residual.label_map(
             lambda t: t.has_label(implicit),
             map_if_true=replace_subject(self.Uk_mp1, old_idx=self.idx),
             map_if_false=drop)
-        r_imp_k = r_imp_k.label_map(
-            all_terms,
-            lambda t: Constant(self.dt)*t)
+        r_imp_k = r_imp_k.label_map(all_terms, lambda t: Constant(self.dt) * t)
         residual -= r_imp_k
 
         r_exp_kp1 = self.residual.label_map(
             lambda t: t.has_label(explicit),
             map_if_true=replace_subject(self.Ukp1_m, old_idx=self.idx),
             map_if_false=drop)
-        r_exp_kp1 = r_exp_kp1.label_map(
-            all_terms,
-            lambda t: Constant(self.dt)*t)
+        r_exp_kp1 = r_exp_kp1.label_map(all_terms, lambda t: Constant(self.dt) * t)
         residual += r_exp_kp1
         r_exp_k = self.residual.label_map(
             lambda t: t.has_label(explicit),
             map_if_true=replace_subject(self.Uk_m, old_idx=self.idx),
             map_if_false=drop)
-        r_exp_k = r_exp_k.label_map(
-            all_terms,
-            lambda t: Constant(self.dt)*t)
+        r_exp_k = r_exp_k.label_map(all_terms, lambda t: Constant(self.dt) * t)
         residual -= r_exp_k
 
-        # Add on sum(j=1,M) s_mj*F(y_m^k), where s_mj = q_mj-q_m-1j
-        # and s1j = q1j.
-        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Q_, old_idx=self.idx),
-                                    drop)
-        residual += Q
+        r_source_kp1 = self.residual.label_map(
+            lambda t: t.has_label(source_label),
+            map_if_true=replace_subject(self.source_Ukp1_m, old_idx=self.idx),
+            map_if_false=drop)
+        r_source_kp1 = r_source_kp1.label_map(all_terms, lambda t: Constant(self.dt) * t)
+        residual += r_source_kp1
+        r_source_k = self.residual.label_map(
+            lambda t: t.has_label(source_label),
+            map_if_true=replace_subject(self.source_Uk_m, old_idx=self.idx),
+            map_if_false=drop)
+        r_source_k = r_source_k.label_map(all_terms, lambda t: Constant(self.dt) * t)
+        residual -= r_source_k
+
+        for w, idx in self._quad_weights_and_indices(k, m):
+            if w == 0.0:
+                continue
+            Qi = self.residual.label_map(
+                lambda t: t.has_label(implicit) or t.has_label(explicit),
+                replace_subject(self.Unodes[idx], old_idx=self.idx),
+                drop)
+            Qi = Qi.label_map(all_terms, lambda t: Constant(w) * t)
+            residual += Qi
+
+            Qs = self.residual.label_map(
+                lambda t: t.has_label(source_label),
+                replace_subject(self.source_Uk[idx], old_idx=self.idx),
+                drop)
+            Qs = Qs.label_map(all_terms, lambda t: Constant(w) * t)
+            residual += Qs
+
         return residual.form
 
     @cached_property
+    def rhs_assemblers(self):
+        """Cached assemblers for the RHS Cofunction self.b, indexed [k-1][m]."""
+        return [[get_assembler(self.rhs_form(k, m), tensor=self.b)
+                for m in range(self.M)]
+                for k in range(1, self.K + 1)]
+
+    @cached_property
     def solver(self):
-        """Set up the problem and the solver for the nonlinear solve."""
-        # setup solver using residual defined in derived class
-        problem = NonlinearVariationalProblem(self.res, self.U_DC, bcs=self.bcs)
+        """
+        Single shared solver -- valid because the implicit diagonal
+        coefficient is always the constant self.dt, same as
+        IMEXRungeKutta's shared-solver path for constant-diagonal tableaus.
+        """
+        F = self.resval() + self.b
+        J = derivative(self.resval(), self.U_DC)
+        problem = NonlinearVariationalProblem(F, self.U_DC, bcs=self.bcs, J=J)
         if self.lag_rebuild_freq is not None:
             problem._constant_jacobian = True
-        solver_name = self.field_name+self.__class__.__name__
-        solver = NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name)
-        return solver
+        solver_name = self.field_name + self.__class__.__name__
+        return NonlinearVariationalSolver(
+            problem, solver_parameters=self.nonlinear_solver_parameters,
+            appctx=self.appctx, options_prefix=solver_name)
 
     def _lag_reset_solver(self):
         if self.lag_rebuild_freq is None:
@@ -952,103 +1013,69 @@ class RIDC(object, metaclass=ABCMeta):
     @wrapper_apply
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
-
-        # Compute initial guess on quadrature nodes with low-order
-        # base timestepper
         self.Unodes[0].assign(self.Un)
         self.M1 = self.K
 
         for m in range(self.M):
             self.base.dt = float(self.dt)
-            self.base.apply(self.Unodes[m+1], self.Unodes[m])
+            self.base.apply(self.Unodes[m + 1], self.Unodes[m])
 
-        for m in range(self.M+1):
+        for m in range(self.M + 1):
             for evaluate in self.evaluate_source:
                 evaluate(self.Unodes[m], self.dt_coarse, x_out=self.source_Uk[m])
 
-        # Iterate through correction sweeps
-        for k in range(1, self.K+1):
-            # Compute: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
-            for m in range(self.M+1):
-                self.Uin.assign(self.Unodes[m])
-                # Include source terms
-                for evaluate in self.evaluate_source:
-                    evaluate(self.Uin, self.dt_coarse, x_out=self.source_in)
-                self.solver_rhs.solve()
-                self.fUnodes[m].assign(self.Urhs)
-
-            # Loop through quadrature nodes and solve
+        for k in range(1, self.K + 1):
             self.Unodes1[0].assign(self.Unodes[0])
             for evaluate in self.evaluate_source:
                 evaluate(self.Unodes[0], self.dt_coarse, x_out=self.source_Uk[0])
             if self.reduced:
                 self.M1 = k
+
             for m in range(0, self.M1):
-                # Set integration matrix
-                if self.reduced:
-                    self.Q_.assign(self.compute_quad(self.Q[k-1], self.fUnodes, m+1))
-                else:
-                    self.Q_.assign(self.compute_quad(self.Q, self.fUnodes, m+1))
+                self.rhs_assemblers[k - 1][m].assemble(tensor=self.b)
 
-                # Set initial guess for solver, and pick correct solver
                 self.U_start.assign(self.Unodes1[m])
                 self.Ukp1_m.assign(self.Unodes1[m])
-                self.Uk_mp1.assign(self.Unodes[m+1])
+                self.Uk_mp1.assign(self.Unodes[m + 1])
                 self.Uk_m.assign(self.Unodes[m])
                 self.source_Ukp1_m.assign(self.source_Ukp1[m])
                 self.source_Uk_m.assign(self.source_Uk[m])
-                self.U_DC.assign(self.Unodes[m+1])
+                self.U_DC.assign(self.Unodes[m + 1])
 
-                # Compute:
-                # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
-                #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-                #             + sum(j=1,M) s_mj*(F+S)(y^k)
                 self._lag_reset_solver()
                 self.solver.solve()
                 self._lag_note_solver_call()
-                self.Unodes1[m+1].assign(self.U_DC)
+                self.Unodes1[m + 1].assign(self.U_DC)
 
-                # Evaluate source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes1[m+1], self.dt_coarse, x_out=self.source_Ukp1[m+1])
+                    evaluate(self.Unodes1[m + 1], self.dt_coarse, x_out=self.source_Ukp1[m + 1])
 
-                # Apply limiter if required
                 if self.limiter is not None:
-                    self.limiter.apply(self.Unodes1[m+1])
+                    self.limiter.apply(self.Unodes1[m + 1])
+
             for m in range(self.M1, self.M):
-                # Set integration matrix
-                if self.reduced:
-                    self.Q_.assign(self.compute_quad_final(self.Q[k-1], self.fUnodes, m+1))
-                else:
-                    self.Q_.assign(self.compute_quad_final(self.Q, self.fUnodes, m+1))
+                self.rhs_assemblers[k - 1][m].assemble(tensor=self.b)
 
-                # Set initial guess for solver, and pick correct solver
                 self.U_start.assign(self.Unodes1[m])
                 self.Ukp1_m.assign(self.Unodes1[m])
-                self.Uk_mp1.assign(self.Unodes[m+1])
+                self.Uk_mp1.assign(self.Unodes[m + 1])
                 self.Uk_m.assign(self.Unodes[m])
                 self.source_Ukp1_m.assign(self.source_Ukp1[m])
                 self.source_Uk_m.assign(self.source_Uk[m])
-                self.U_DC.assign(self.Unodes[m+1])
+                self.U_DC.assign(self.Unodes[m + 1])
 
-                # Compute:
-                # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
-                #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
-                #             + sum(j=1,M) s_mj*(F+S)(y^k)
                 self._lag_reset_solver()
                 self.solver.solve()
                 self._lag_note_solver_call()
-                self.Unodes1[m+1].assign(self.U_DC)
+                self.Unodes1[m + 1].assign(self.U_DC)
 
-                # Evaluate source terms
                 for evaluate in self.evaluate_source:
-                    evaluate(self.Unodes1[m+1], self.dt_coarse, x_out=self.source_Ukp1[m+1])
+                    evaluate(self.Unodes1[m + 1], self.dt_coarse, x_out=self.source_Ukp1[m + 1])
 
-                # Apply limiter if required
                 if self.limiter is not None:
-                    self.limiter.apply(self.Unodes1[m+1])
+                    self.limiter.apply(self.Unodes1[m + 1])
 
-            for m in range(self.M+1):
+            for m in range(self.M + 1):
                 self.Unodes[m].assign(self.Unodes1[m])
                 self.source_Uk[m].assign(self.source_Ukp1[m])
 
