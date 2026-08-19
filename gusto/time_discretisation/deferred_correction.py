@@ -190,14 +190,16 @@ class SDC(object, metaclass=ABCMeta):
         self._solver_call_count = 0
         if self.nonlinear_solver_parameters is not None:
             self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
-        if self.lag_rebuild_freq is not None:
-            if self.lag_rebuild_freq < 1:
-                raise ValueError("RIDC: td_lag_rebuild must be >= 1")
-            elif not isinstance(self.lag_rebuild_freq, int):
-                raise ValueError("RIDC: td_lag_rebuild must be an integer")
-            else:
-                logger.info(f"RIDC: td_lag_rebuild set to {self.lag_rebuild_freq}. "
-                            "Jacobian will be rebuilt every td_lag_rebuild solver calls.")
+            if self.lag_rebuild_freq is not None:
+                if self.lag_rebuild_freq < 1:
+                    raise ValueError("RIDC: td_lag_rebuild must be >= 1")
+                elif not isinstance(self.lag_rebuild_freq, int):
+                    raise ValueError("RIDC: td_lag_rebuild must be an integer")
+                else:
+                    logger.info(f"RIDC: td_lag_rebuild set to {self.lag_rebuild_freq}. "
+                                "Jacobian will be rebuilt every td_lag_rebuild solver calls.")
+        else:
+            self.lag_rebuild_freq = None
 
         self.appctx = None
 
@@ -211,15 +213,7 @@ class SDC(object, metaclass=ABCMeta):
         self.total_ksp_its = 0
         self.sweep_tols = sweep_tols
         self._step_count = 1
-        self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
-        if self.lag_rebuild_freq is not None:
-            if self.lag_rebuild_freq < 1:
-                raise ValueError("DeferredCorrection: td_lag_rebuild must be >= 1")
-            elif not isinstance(self.lag_rebuild_freq, int):
-                raise ValueError("DeferredCorrection: td_lag_rebuild must be an integer")
-            else:
-                logger.info(f"DeferredCorrection: td_lag_rebuild set to {self.lag_rebuild_freq}. "
-                            "Jacobian will be rebuilt every td_lag_rebuild timesteps.")
+
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -481,11 +475,11 @@ class SDC(object, metaclass=ABCMeta):
         if self.nonlinear_solver_parameters is None:
             # Use hybridised solver as default
             alpha = self.Qdelta_imp[m, m]/self.dt_coarse
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=False)
         if self.lag_rebuild_freq is not None:
             problem._constant_jacobian = True
         return NonlinearVariationalSolver(
-            problem, solver_parameters=self.nonlinear_solver_parameters,
+            problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx,
             options_prefix=solver_name)
 
     @cached_property

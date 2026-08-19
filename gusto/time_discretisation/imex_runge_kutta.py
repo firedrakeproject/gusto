@@ -129,16 +129,19 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.multiple_solvers = multiple_solvers
         self.total_ksp_its = 0
         self._step_count = 1
-        self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
-        if self.lag_rebuild_freq is not None:
-            if self.lag_rebuild_freq < 1:
-                raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be >= 1")
-            elif not isinstance(self.lag_rebuild_freq, int):
-                raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be an integer")
-            else:
-                from gusto import logger
-                logger.info(f"IMEXRungeKutta: lag_rebuild_freq set to {self.lag_rebuild_freq}. "
-                            "Jacobian will be rebuilt every lag_rebuild_freq timesteps.")
+        if self.nonlinear_solver_parameters is not None:
+            self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
+            if self.lag_rebuild_freq is not None:
+                if self.lag_rebuild_freq < 1:
+                    raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be >= 1")
+                elif not isinstance(self.lag_rebuild_freq, int):
+                    raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be an integer")
+                else:
+                    from gusto import logger
+                    logger.info(f"IMEXRungeKutta: lag_rebuild_freq set to {self.lag_rebuild_freq}. "
+                                "Jacobian will be rebuilt every lag_rebuild_freq timesteps.")
+        else:
+            self.lag_rebuild_freq = None
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -181,10 +184,10 @@ class IMEXRungeKutta(TimeDiscretisation):
             self.multiple_solvers = True
 
         self.alpha = Constant(self.butcher_imp[self.nStages-1, self.nStages-1])
-
+    
         if not self.multiple_solvers and self.nonlinear_solver_parameters is None:
             # Use hybridised solver as default
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=self.alpha, tau_values=None, nonlinear=True, imex=True)
 
 
     def _lag_reset(self, solvers):
