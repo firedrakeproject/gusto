@@ -211,6 +211,7 @@ class SDC(object, metaclass=ABCMeta):
             self.base_flag = False
         
         self.total_ksp_its = 0
+        self.total_snes_its = 0
         self.sweep_tols = sweep_tols
         self._step_count = 1
 
@@ -609,6 +610,7 @@ class SDC(object, metaclass=ABCMeta):
                 self.solver.solve()
                 self.Unodes1[m].assign(self.U_DC)
                 self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
 
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:
@@ -717,7 +719,11 @@ class RIDC(object, metaclass=ABCMeta):
         else:
             self.linear_solver_parameters = linear_solver_parameters
         
+
         self.nonlinear_solver_parameters = nonlinear_solver_parameters
+
+      
+        self.total_snes_its = 0
 
 
 
@@ -776,6 +782,11 @@ class RIDC(object, metaclass=ABCMeta):
         self.Uk_mp1 = Function(W)
         self.Uk_m = Function(W)
         self.Ukp1_m = Function(W)
+
+        if self.nonlinear_solver_parameters is None:
+            # Use hybridised solver as default
+            alpha = float(self.dt)/float(self.dt_coarse)
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True)
 
     @property
     def nlevels(self):
@@ -984,6 +995,7 @@ class RIDC(object, metaclass=ABCMeta):
                 self._lag_reset_solver()
                 self.solver.solve()
                 self._lag_note_solver_call()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)
 
                 # Evaluate source terms
@@ -1016,6 +1028,7 @@ class RIDC(object, metaclass=ABCMeta):
                 self._lag_reset_solver()
                 self.solver.solve()
                 self._lag_note_solver_call()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)
 
                 # Evaluate source terms

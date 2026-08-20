@@ -176,6 +176,7 @@ class Parallel_RIDC(RIDC):
                 self._lag_reset_solver()
                 self.solver.solve()
                 self._lag_note_solver_call()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)
 
                 # Evaluate source terms
@@ -220,6 +221,7 @@ class Parallel_RIDC(RIDC):
                 self._lag_reset_solver()
                 self.solver.solve()
                 self._lag_note_solver_call()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)
 
                 # # Evaluate source terms
@@ -424,6 +426,7 @@ class Parallel_SDC(SDC):
             # y_m^(k+1) = y^n + sum(j=1,m) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
             #             + sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
             solver.solve()
+            self.total_snes_its += solver.snes.getIterationNumber()
             self.Unodes1[self.comm.ensemble_comm.rank+1].assign(self.U_DC)
 
             # Evaluate source terms

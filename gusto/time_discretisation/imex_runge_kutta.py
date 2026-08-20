@@ -8,6 +8,7 @@ from gusto.core.labels import time_derivative, implicit, explicit, source_label
 from gusto.time_discretisation.time_discretisation import (
     TimeDiscretisation, wrapper_apply
 )
+from firedrake.assemble import get_assembler
 import numpy as np
 from qmat.qcoeff.butcher import ARK548L2SAESDIRK2, ARK548L2SAERK2
 from gusto.solvers.solver_presets import hybridised_solver_parameters
@@ -63,7 +64,7 @@ class IMEXRungeKutta(TimeDiscretisation):
 
     def __init__(self, domain, butcher_imp, butcher_exp, field_name=None,
              linear_solver_parameters=None, nonlinear_solver_parameters=None,
-             limiter=None, options=None, augmentation=None, multiple_solvers=False):
+             limiter=None, options=None, augmentation=None, multiple_solvers=False, solver_alpha_scale=1.0):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -96,6 +97,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.butcher_imp = butcher_imp
         self.butcher_exp = butcher_exp
         self.nStages = int(np.shape(self.butcher_imp)[1])
+        self.solver_alpha_scale = solver_alpha_scale
 
         # Some butcher tableaus have zero first stage, if so, we don't need to do an
         # initial solve and can copy across x_in to x_s[0]
@@ -122,26 +124,18 @@ class IMEXRungeKutta(TimeDiscretisation):
                                              'pc_type': 'bjacobi',
                                              'sub_pc_type': 'ilu'}
         else:
-            self.linear_solver_parameters = linear_solver_parameters
-
-        self.nonlinear_solver_parameters = nonlinear_solver_parameters
-
+            self.nonlinear_solver_parameters = nonlinear_solver_parameters
+        
+        # Set whether to use multiple solvers with different Jacobians, or a single solver with a shared Jacobian.  
+        # Only valid if the implicit diagonal is constant across all stages.
         self.multiple_solvers = multiple_solvers
+
+        # Set up counters for total number of linear and nonlinear iterations across all stages
         self.total_ksp_its = 0
+        self.total_snes_its = 0
         self._step_count = 1
-        if self.nonlinear_solver_parameters is not None:
-            self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
-            if self.lag_rebuild_freq is not None:
-                if self.lag_rebuild_freq < 1:
-                    raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be >= 1")
-                elif not isinstance(self.lag_rebuild_freq, int):
-                    raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be an integer")
-                else:
-                    from gusto import logger
-                    logger.info(f"IMEXRungeKutta: lag_rebuild_freq set to {self.lag_rebuild_freq}. "
-                                "Jacobian will be rebuilt every lag_rebuild_freq timesteps.")
-        else:
-            self.lag_rebuild_freq = None
+
+       
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -166,6 +160,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.xs = [Function(self.fs) for i in range(self.nStages)]
         self.source = [Function(self.fs) for i in range(self.nStages)]
         self.b = Cofunction(self.fs.dual())
+
         # Check whether the implicit diagonal is constant. The single shared
         # solver reuses one operator (I - alpha*dt*F) across all stages, which is
         # only valid if every implicit stage has the same diagonal coefficient.
@@ -183,28 +178,84 @@ class IMEXRungeKutta(TimeDiscretisation):
                 "Falling back to multiple per-stage solvers.")
             self.multiple_solvers = True
 
+        # Potential constant implicit diagonal coefficient
         self.alpha = Constant(self.butcher_imp[self.nStages-1, self.nStages-1])
-    
+
         if not self.multiple_solvers and self.nonlinear_solver_parameters is None:
             # Use hybridised solver as default
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=self.alpha, tau_values=None, nonlinear=True, imex=True)
+            solver_alpha = float(self.alpha)*self.solver_alpha_scale
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=solver_alpha, tau_values=None, nonlinear=True)
+        
+        # Set up lagged Jacobian rebuild frequency, if specified in the nonlinear solver parameters
+        self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
+        if self.lag_rebuild_freq is not None:
+            if self.lag_rebuild_freq < 1:
+                raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be >= 1")
+            elif not isinstance(self.lag_rebuild_freq, int):
+                raise ValueError("IMEXRungeKutta: lag_rebuild_freq must be an integer")
+            else:
+                from gusto import logger
+                logger.info(f"IMEXRungeKutta: lag_rebuild_freq set to {self.lag_rebuild_freq}. "
+                            "Jacobian will be rebuilt every lag_rebuild_freq timesteps.")
 
 
     def _lag_reset(self, solvers):
+        """Chooses whether to rebuild the Jacobian based on the lag frequency."""
         if self.lag_rebuild_freq is None:
             return
         rebuild = ((self._step_count - 1) % self.lag_rebuild_freq == 0)
         for s in solvers:
             s._ctx._jacobian_assembled = not rebuild
     
+    def res_rhs(self, stage):
+        """Set up the discretisation's rhs residual for a given stage."""
+        # Add time derivative terms - y^n for stage s
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative),
+            map_if_false=drop)
+        residual = - mass_form.label_map(all_terms,
+                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
+        # Loop through stages up to s-1 and calcualte/sum
+        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
+        # and
+        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
+        for i in range(stage):
+            r_exp = self.residual.label_map(
+                lambda t: t.has_label(explicit),
+                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_exp = r_exp.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.butcher_exp[stage, i])*self.dt*t)
+            r_imp = self.residual.label_map(
+                lambda t: t.has_label(implicit),
+                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_imp = r_imp.label_map(
+                lambda t: t.has_label(time_derivative),
+                map_if_false=lambda t: Constant(self.butcher_imp[stage, i])*self.dt*t)
+            residual += r_imp
+            residual += r_exp
+
+            # Calculate source terms
+            r_source = self.residual.label_map(
+                lambda t: t.has_label(source_label),
+                map_if_true=replace_subject(self.source[i], old_idx=self.idx),
+                map_if_false=drop)
+            r_source = r_source.label_map(
+                all_terms,
+                map_if_true=lambda t: Constant(self.butcher_exp[stage, i]) * self.dt * t
+            )
+            residual += r_source
+
+        return residual.form
+
     def res_mult(self, stage):
         """Set up the discretisation's residual for a given stage."""
         # Add time derivative terms  y_s - y^n for stage s
         mass_form = self.residual.label_map(
             lambda t: t.has_label(time_derivative),
             map_if_false=drop)
-        residual = mass_form.label_map(all_terms,
-                                       map_if_true=replace_subject(self.x_out, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.x1, old_idx=self.idx))
         # Loop through stages up to s-1 and calcualte/sum
@@ -251,61 +302,17 @@ class IMEXRungeKutta(TimeDiscretisation):
         residual += r_imp
         return residual.form
 
-    def res(self, stage):
-        """Set up the discretisation's residual if the diagonal coefficients are the same."""
-        # Add time derivative terms  y_s - y^n for stage s
-        mass_form = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=drop)
-        residual = -mass_form.label_map(all_terms,
-                                        map_if_true=replace_subject(self.x1, old_idx=self.idx))
-        # Loop through stages up to s-1 and calcualte/sum
-        # dt*(a_s1*F(y_1) + a_s2*F(y_2)+ ... + a_{s,s-1}*F(y_{s-1}))
-        # and
-        # dt*(d_s1*S(y_1) + d_s2*S(y_2)+ ... + d_{s,s-1}*S(y_{s-1}))
-        for i in range(stage):
-            r_exp = self.residual.label_map(
-                lambda t: t.has_label(explicit),
-                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
-                map_if_false=drop)
-            r_exp = r_exp.label_map(
-                lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.butcher_exp[stage, i])*self.dt*t)
-            r_imp = self.residual.label_map(
-                lambda t: t.has_label(implicit),
-                map_if_true=replace_subject(self.xs[i], old_idx=self.idx),
-                map_if_false=drop)
-            r_imp = r_imp.label_map(
-                lambda t: t.has_label(time_derivative),
-                map_if_false=lambda t: Constant(self.butcher_imp[stage, i])*self.dt*t)
-            residual += r_imp
-            residual += r_exp
-
-            # Calculate source terms
-            r_source = self.residual.label_map(
-                lambda t: t.has_label(source_label),
-                map_if_true=replace_subject(self.source[i], old_idx=self.idx),
-                map_if_false=drop)
-            r_source = r_source.label_map(
-                all_terms,
-                map_if_true=lambda t: Constant(self.butcher_exp[stage, i]) * self.dt * t
-            )
-            residual += r_source
-
-        return residual.form
-
     @cached_property
     def stage_rhs(self):
-        """Cached stage RHS forms.
-
-        The form *structure* is fixed once; the coefficients it references
-        (self.x1, self.xs[i], self.source[i]) are updated in place by .assign
-        each step, so the cached forms stay valid across timesteps. Removes the
-        per-step label_map/replace_subject rebuild that res(stage) otherwise
-        repeats every apply().
-        """
-        return [self.res(stage)
+        """Cached stage RHS forms."""
+        return [self.res_rhs(stage)
                 for stage in range(self.solver_start_stage, self.nStages)]
+            
+    @cached_property
+    def stage_rhs_assemblers(self):
+        """Cached assemblers for each stage's RHS form, built once and
+        reused every timestep."""
+        return [get_assembler(form, tensor=self.b) for form in self.stage_rhs]
     
     def resval(self):
         """Set up the discretisation's residual for a given stage."""
@@ -378,9 +385,6 @@ class IMEXRungeKutta(TimeDiscretisation):
         solvers = []
         for stage in range(self.solver_start_stage, self.nStages):
             # setup solver using residual defined in derived class
-            if self.nonlinear_solver_parameters is None:
-                alpha = self.butcher_imp[stage, stage]
-                self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
             problem = NonlinearVariationalProblem(self.res_mult(stage), self.x_out, bcs=self.bcs)
             problem._constant_jacobian = True
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (stage)
@@ -397,10 +401,10 @@ class IMEXRungeKutta(TimeDiscretisation):
             problem._constant_jacobian = True
         name = self.field_name + self.__class__.__name__ + "shared"
         solver = NonlinearVariationalSolver(
-            problem, solver_parameters=self.nonlinear_solver_parameters,
+            problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, 
             options_prefix=name)
-
         return solver
+
     @cached_property
     def final_solver(self):
         """Set up a solver for the final solve to evaluate time level n+1."""
@@ -426,17 +430,23 @@ class IMEXRungeKutta(TimeDiscretisation):
         for stage in range(self.solver_start_stage, self.nStages):
             if stage != self.solver_start_stage:
                 self.x_out.assign(self.xs[stage-1])
+            
+            # Evaluate source terms for this stage
             for evaluate in self.evaluate_source:
                 evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
 
+            # Solve the implicit problem for this stage, using either a separate solver for each stage or a shared solver
             if self.multiple_solvers:
                 solver = solvers_list[stage-self.solver_start_stage]
                 solver.solve()
                 self.total_ksp_its += solver.snes.getLinearSolveIterations()
+                self.total_snes_its += solver.snes.getIterationNumber()
             else:
-                assemble(self.stage_rhs[stage-self.solver_start_stage], tensor=self.b)
+                with PETSc.Log.Event("StageRHSAssembly"):
+                    self.stage_rhs_assemblers[stage - self.solver_start_stage].assemble(tensor=self.b)
                 self.solver.solve()
                 self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
 
             if self.limiter is not None:
                 self.limiter.apply(self.x_out)
@@ -465,7 +475,7 @@ class IMEX_Euler(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None):
+                 limiter=None, options=None, augmentation=None, solver_alpha_scale=1.0):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -491,7 +501,7 @@ class IMEX_Euler(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options, augmentation=augmentation)
+                         limiter=limiter, options=options, augmentation=augmentation, solver_alpha_scale=solver_alpha_scale)
 
 
 class IMEX_ARS3(IMEXRungeKutta):

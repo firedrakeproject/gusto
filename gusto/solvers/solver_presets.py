@@ -445,16 +445,11 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                 settings[key]['ksp_monitor_true_residual'] = None
     if nonlinear:
         settings['snes_type'] = 'newtonls'
-        settings['snes_atol'] = 1e-4
-        settings['snes_rtol'] = 1e-4
+        settings['snes_atol'] = 1e-8
+        settings['snes_rtol'] = 1e-6
         settings['snes_max_it'] = 50
         settings['snes_lag_jacobian'] = 4
         settings['snes_lag_preconditioner'] = 4
-        settings['snes_ksp_ew'] = None
-        settings['snes_ksp_ew_rtol'] = 1e-4
-        settings['snes_ksp_ew_threshold'] = 5e-5
-        settings['snes_ksp_ew_version'] = 2
-        settings['snes_monitor'] = None
 
     return settings, appctx
 
