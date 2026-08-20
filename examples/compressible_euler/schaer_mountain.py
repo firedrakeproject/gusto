@@ -83,8 +83,8 @@ def schaer_mountain(
     # Used equispaced DG elements to describe the mountain to ensure that
     # the resulting profile is smooth
     cell = base_mesh.ufl_cell().cellname
-    hori_elt = FiniteElement('DG', cell, 2, variant='equispaced')
-    vert_elt = FiniteElement('DG', interval, 2, variant='equispaced')
+    hori_elt = FiniteElement('DG', cell, 1, variant='equispaced')
+    vert_elt = FiniteElement('DG', interval, 1, variant='equispaced')
     dg_elt = TensorProductElement(hori_elt, vert_elt)
     Vc = VectorFunctionSpace(ext_mesh, dg_elt)
 

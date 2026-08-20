@@ -127,6 +127,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                 'pc_python_type': 'firedrake.AssembledPC',
                 'assembled_pc_type': 'bjacobi',
                 'assembled_sub_pc_type': 'ilu',
+                'assembled_sub_pc_factor_mat_ordering_type': 'rcm',
+                'assembled_sub_pc_factor_reuse_ordering': None,
             },
             'fieldsplit_1': {
                 'ksp_type': 'preonly',
