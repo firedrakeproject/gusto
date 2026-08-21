@@ -724,6 +724,22 @@ class RIDC(object, metaclass=ABCMeta):
 
       
         self.total_snes_its = 0
+        self.total_ksp_its = 0
+
+        self.lag_rebuild_freq = None
+        self._solver_call_count = 0
+        if self.nonlinear_solver_parameters is not None:
+            self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
+            if self.lag_rebuild_freq is not None:
+                if self.lag_rebuild_freq < 1:
+                    raise ValueError("RIDC: td_lag_rebuild must be >= 1")
+                elif not isinstance(self.lag_rebuild_freq, int):
+                    raise ValueError("RIDC: td_lag_rebuild must be an integer")
+                else:
+                    logger.info(f"RIDC: td_lag_rebuild set to {self.lag_rebuild_freq}. "
+                                "Jacobian will be rebuilt every td_lag_rebuild solver calls.")
+        else:
+            self.lag_rebuild_freq = None
 
 
 
@@ -912,8 +928,8 @@ class RIDC(object, metaclass=ABCMeta):
         """Set up the problem and the solver for the nonlinear solve."""
         # setup solver using residual defined in derived class
         problem = NonlinearVariationalProblem(self.res, self.U_DC, bcs=self.bcs)
-        if self.lag_rebuild_freq is not None:
-            problem._constant_jacobian = True
+        # if self.lag_rebuild_freq is not None:
+        #     problem._constant_jacobian = True
         solver_name = self.field_name+self.__class__.__name__
         solver = NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name)
         return solver
@@ -995,6 +1011,7 @@ class RIDC(object, metaclass=ABCMeta):
                 self._lag_reset_solver()
                 self.solver.solve()
                 self._lag_note_solver_call()
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
                 self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)
 
@@ -1025,9 +1042,10 @@ class RIDC(object, metaclass=ABCMeta):
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
-                self._lag_reset_solver()
+                #self._lag_reset_solver()
                 self.solver.solve()
-                self._lag_note_solver_call()
+                #self._lag_note_solver_call()
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
                 self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)
 

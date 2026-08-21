@@ -157,25 +157,26 @@ class Parallel_RIDC(RIDC):
                 self.source_Uk_m.assign(self.source_Uk[m])
                 self.U_DC.assign(self.Unodes[m+1])
 
-                if self.sweep_tols is not None:
-                    tol = self.sweep_tols[k-1]
+                # if self.sweep_tols is not None:
+                #     tol = self.sweep_tols[k-1]
 
-                    self.solver.snes.ksp.setTolerances(
-                        atol=tol["ksp_atol"],
-                        rtol=tol["ksp_rtol"]
-                    )
+                #     self.solver.snes.ksp.setTolerances(
+                #         atol=tol["ksp_atol"],
+                #         rtol=tol["ksp_rtol"]
+                #     )
 
-                    self.solver.snes.setTolerances(
-                        atol=tol["snes_atol"],
-                        rtol=tol["snes_rtol"]
-                    )
+                #     self.solver.snes.setTolerances(
+                #         atol=tol["snes_atol"],
+                #         rtol=tol["snes_rtol"]
+                #     )
                 # Compute
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y_j^k)
-                self._lag_reset_solver()
+                #self._lag_reset_solver()
                 self.solver.solve()
-                self._lag_note_solver_call()
+                #self._lag_note_solver_call()
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
                 self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)
 
@@ -218,9 +219,10 @@ class Parallel_RIDC(RIDC):
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
-                self._lag_reset_solver()
+                #self._lag_reset_solver()
                 self.solver.solve()
-                self._lag_note_solver_call()
+                #self._lag_note_solver_call()
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
                 self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)
 
