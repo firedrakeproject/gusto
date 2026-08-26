@@ -7,9 +7,8 @@ are written using loopy: https://documen.tician.de/loopy/index.html
 """
 
 import numpy as np
-from firedrake import dx
+from firedrake import dx, ds_t, ds_b
 from firedrake.parloops import par_loop, READ, INC, WRITE
-from pyop2 import ON_TOP, ON_BOTTOM
 
 
 class AverageKernel(object):
@@ -131,15 +130,15 @@ class BoundaryRecoveryExtruded():
         # x_out is the corrected output field
         top_instrs = ("""
                       for i
-                          x_out[2*i] = x_in[2*i]
-                          x_out[2*i+1] = -x_in[2*i] + 2 * x_in[2*i+1]
+                          x_out[2*i, 0] = x_in[2*i, 0]
+                          x_out[2*i+1, 0] = -x_in[2*i, 0] + 2 * x_in[2*i+1, 0]
                       end
                       """)
 
         bot_instrs = ("""
                       for i
-                          x_out[2*i] = 2 * x_in[2*i] - x_in[2*i+1]
-                          x_out[2*i+1] = x_in[2*i+1]
+                          x_out[2*i, 0] = 2 * x_in[2*i, 0] - x_in[2*i+1, 0]
+                          x_out[2*i+1, 0] = x_in[2*i+1, 0]
                       end
                       """)
 
@@ -157,14 +156,12 @@ class BoundaryRecoveryExtruded():
                 recovery process). It should be in the same continuous
                 :class:`FunctionSpace`.
         """
-        par_loop(self._top_kernel, dx,
+        par_loop(self._top_kernel, ds_t,
                  args={"x_out": (x_out, WRITE),
-                       "x_in": (x_in, READ)},
-                 iteration_region=ON_TOP)
-        par_loop(self._bot_kernel, dx,
+                       "x_in": (x_in, READ)})
+        par_loop(self._bot_kernel, ds_b,
                  args={"x_out": (x_out, WRITE),
-                       "x_in": (x_in, READ)},
-                 iteration_region=ON_BOTTOM)
+                       "x_in": (x_in, READ)})
 
 
 class BoundaryRecoveryHCurl():
@@ -233,14 +230,14 @@ class BoundaryRecoveryHCurl():
                 recovery process). It should be in the same continuous
                 :class:`FunctionSpace`.
         """
-        par_loop(self._top_kernel, dx,
+        par_loop(self._top_kernel, ds_t,
                  args={"x_out": (x_out, WRITE),
-                       "x_in": (x_in, READ)},
-                 iteration_region=ON_TOP)
-        par_loop(self._bot_kernel, dx,
+                       "x_in": (x_in, READ)})
+                 # iteration_region=ON_TOP)
+        par_loop(self._bot_kernel, ds_b,
                  args={"x_out": (x_out, WRITE),
-                       "x_in": (x_in, READ)},
-                 iteration_region=ON_BOTTOM)
+                       "x_in": (x_in, READ)})
+                 # iteration_region=ON_BOTTOM)
 
 
 class BoundaryGaussianElimination(object):

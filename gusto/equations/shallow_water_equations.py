@@ -9,7 +9,6 @@ from gusto.core.labels import (
     linearisation, pressure_gradient, coriolis, prognostic
 )
 from gusto.core.equation_configuration import CoriolisOptions
-from gusto.core.kernels import MinKernel
 from gusto.equations.common_forms import (
     advection_form, advection_form_1d, continuity_form,
     continuity_form_1d, vector_invariant_form,
@@ -194,8 +193,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 r = sqrt(inner(xyz, xyz))
                 radius_field = Function(CG1)
                 radius_field.interpolate(r)
-                min_kernel = MinKernel()
-                radius = Constant(min_kernel.apply(radius_field))
+                radius = Constant(radius_field.dat.min())
                 fexpr = 2*self.parameters.Omega*xyz[2]/radius
             elif rotation is CoriolisOptions.fplane:
                 fexpr = self.parameters.f0

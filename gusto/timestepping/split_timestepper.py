@@ -2,12 +2,12 @@
 
 from firedrake import Projector
 from firedrake.fml import Label, drop
-from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import time_derivative, physics_label
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper, Timestepper
 from numpy import ones
+from petsc4py import PETSc
 
 __all__ = ["SplitTimestepper", "SplitPhysicsTimestepper", "SplitPrescribedTransport"]
 
@@ -152,7 +152,7 @@ class SplitTimestepper(BaseTimestepper):
         for idx, term in enumerate(self.term_splitting):
             split_dt = self.split_dts[idx]
             if term == 'physics':
-                with timed_stage("Physics"):
+                with PETSc.Log.Stage("Physics"):
                     for _, scheme in self.physics_schemes:
                         scheme.dt = split_dt
                         scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
@@ -236,7 +236,7 @@ class SplitPhysicsTimestepper(Timestepper):
 
         super().timestep()
 
-        with timed_stage("Physics"):
+        with PETSc.Log.Stage("Physics"):
             for _, scheme in self.physics_schemes:
                 scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
 
@@ -399,6 +399,6 @@ class SplitPrescribedTransport(Timestepper):
 
         super().timestep()
 
-        with timed_stage("Physics"):
+        with PETSc.Log.Stage("Physics"):
             for _, scheme in self.physics_schemes:
                 scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))

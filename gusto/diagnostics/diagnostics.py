@@ -14,7 +14,6 @@ from ufl.domain import extract_unique_domain
 from abc import ABCMeta, abstractmethod, abstractproperty
 from gusto.core.coord_transforms import rotated_lonlatr_vectors
 from gusto.core.logging import logger
-from gusto.core.kernels import MinKernel, MaxKernel
 import numpy as np
 
 __all__ = ["Diagnostics", "DiagnosticField", "CourantNumber", "Gradient",
@@ -64,8 +63,7 @@ class Diagnostics(object):
         Args:
             f (:class:`Function`): field to compute diagnostic for.
         """
-        min_kernel = MinKernel()
-        return min_kernel.apply(f)
+        return f.dat.min()
 
     @staticmethod
     def max(f):
@@ -75,8 +73,7 @@ class Diagnostics(object):
         Args:
             f (:class:`Function`): field to compute diagnostic for.
         """
-        max_kernel = MaxKernel()
-        return max_kernel.apply(f)
+        return f.dat.max()
 
     @staticmethod
     def rms(f):

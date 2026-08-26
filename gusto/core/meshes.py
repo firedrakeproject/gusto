@@ -4,11 +4,12 @@ This file provides some specialised meshes not provided by Firedrake
 
 from firedrake import (FiniteElement, VectorFunctionSpace, interval,
                        TensorProductElement, functionspace, function, mesh,
-                       Function, op2, Mesh)
+                       Function, Mesh)
 from firedrake.petsc import PETSc
+import pyop3 as op3
 import numpy as np
 import ufl
-from pyop2.mpi import COMM_WORLD
+from pyop3.mpi import COMM_WORLD
 
 __all__ = ["GeneralIcosahedralSphereMesh", "GeneralCubedSphereMesh",
            "get_flat_latlon_mesh"]
@@ -637,34 +638,41 @@ def get_flat_latlon_mesh(mesh):
     # our vertical coordinate is radius - the minimum radius
     coords_latlon.dat.data[:, 2] = np.sqrt(coords_dg.dat.data[:, 0]**2 + coords_dg.dat.data[:, 1]**2 + coords_dg.dat.data[:, 2]**2) - radius
 
-# We need to ensure that all points in a cell are on the same side of the branch cut in longitude coords
-# This kernel amends the longitude coords so that all longitudes in one cell are close together
-    kernel = op2.Kernel("""
+    # We need to ensure that all points in a cell are on the same side of the branch cut in longitude coords
+    # This kernel amends the longitude coords so that all longitudes in one cell are close together
+    preambles = [("20_defs", """\
 #define PI 3.141592653589793
-#define TWO_PI 6.283185307179586
-void splat_coords(double *coords) {{
-    double max_diff = 0.0;
-    double diff = 0.0;
+#define TWO_PI 6.283185307179586""")]
+    splat_coords_code = """\
+double max_diff = 0.0;
+double diff = 0.0;
 
-    for (int i=0; i<{nDOFs}; i++) {{
-        for (int j=0; j<{nDOFs}; j++) {{
-            diff = coords[i*{dim}] - coords[j*{dim}];
-            if (fabs(diff) > max_diff) {{
-                max_diff = diff;
-            }}
-        }}
-    }}
-
-    if (max_diff > PI) {{
-        for (int i=0; i<{nDOFs}; i++) {{
-            if (coords[i*{dim}] < 0) {{
-                coords[i*{dim}] += TWO_PI;
-            }}
+for (int i=0; i<{nDOFs}; i++) {{
+    for (int j=0; j<{nDOFs}; j++) {{
+        diff = coords[i*{dim}] - coords[j*{dim}];
+        if (fabs(diff) > max_diff) {{
+            max_diff = diff;
         }}
     }}
 }}
-""".format(**shapes), "splat_coords")
 
-    op2.par_loop(kernel, coords_latlon.cell_set,
-                 coords_latlon.dat(op2.RW, coords_latlon.cell_node_map()))
+if (max_diff > PI) {{
+    for (int i=0; i<{nDOFs}; i++) {{
+        if (coords[i*{dim}] < 0) {{
+            coords[i*{dim}] += TWO_PI;
+        }}
+    }}
+}}""".format(**shapes)
+    kernel = op3.Function.from_c_string(
+        "splat_coords",
+        splat_coords_code,
+        [("coords", op3.ScalarType, op3.RW)],
+        preambles=preambles,
+    )
+
+    op3.loop(
+        c := coords_latlon.iter("cell"),
+        kernel(coords_latlon.dat(op3.RW, coords_latlon.cell_node_map())),
+        eager=True,
+    )
     return Mesh(coords_latlon)

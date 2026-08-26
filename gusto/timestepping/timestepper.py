@@ -3,7 +3,6 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import Function, Projector, split
 from firedrake.fml import drop, Term, LabelledForm
-from pyop2.profiling import timed_stage
 from gusto.equations import PrognosticEquationSet
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.io import TimeData
@@ -13,6 +12,7 @@ from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisa
 from gusto.spatial_methods.transport_methods import TransportMethod
 import ufl
 import numpy as np
+from petsc4py import PETSc
 
 __all__ = ["BaseTimestepper", "Timestepper", "PrescribedTransport"]
 
@@ -221,7 +221,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.step = 1
 
         # Set up dump, which may also include an initial dump
-        with timed_stage("Dump output"):
+        with PETSc.Log.Stage("Dump output"):
             logger.debug('Dumping output to disk')
             self.io.setup_dump(self.fields, t, pick_up)
 
@@ -245,7 +245,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             self.t.assign(float(self.t) + float(self.dt))
             self.step += 1
 
-            with timed_stage("Dump output"):
+            with PETSc.Log.Stage("Dump output"):
                 time_data = TimeData(
                     t=float(self.t), step=self.step,
                     initial_steps=self.get_initial_timesteps(),

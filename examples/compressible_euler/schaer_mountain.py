@@ -18,7 +18,7 @@ from gusto import (
     CompressibleParameters, logger,
     OutputParameters, SIQNModel,
     compressible_hydrostatic_balance, SpongeLayerParameters, Exner, ZComponent,
-    Perturbation, MaxKernel, MinKernel,
+    Perturbation
     CompressibleEulerEquations, SubcyclingOptions
 )
 
@@ -147,10 +147,6 @@ def schaer_mountain(
     exner = Function(Vr)
     rho_b = Function(Vr)
 
-    # Set up kernels to evaluate global minima and maxima of fields
-    min_kernel = MinKernel()
-    max_kernel = MaxKernel()
-
     # First solve hydrostatic balance that gives Exner = 1 at bottom boundary
     # This gives us a guess for the top boundary condition
     bottom_boundary = Constant(exner_surf)
@@ -162,7 +158,7 @@ def schaer_mountain(
 
     # Solve hydrostatic balance again, but now use minimum value from first
     # solve as the *top* boundary condition for Exner
-    top_value = min_kernel.apply(exner)
+    top_value = exner.dat.min()
     top_boundary = Constant(top_value)
     logger.info(f'Solving hydrostatic with top Exner of {top_value}')
     compressible_hydrostatic_balance(
@@ -170,7 +166,7 @@ def schaer_mountain(
         exner_boundary=top_boundary
     )
 
-    max_bottom_value = max_kernel.apply(exner)
+    max_bottom_value = exner.dat.max()
 
     # Now we iterate, adjusting the top boundary condition, until this gives
     # a maximum value of 1.0 at the surface

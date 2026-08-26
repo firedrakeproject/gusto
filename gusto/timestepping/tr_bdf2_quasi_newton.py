@@ -7,7 +7,6 @@ from firedrake import (
 )
 
 
-from pyop2.profiling import timed_stage
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (transport, diffusion, sponge, incompressible)
 from gusto.core.logging import logger
@@ -15,6 +14,7 @@ from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisa
 from gusto.timestepping.timestepper import BaseTimestepper
 from gusto.timestepping.semi_implicit_quasi_newton import Forcing, QuasiNewtonLinearSolver
 from gusto.solvers.solver_presets import hybridised_solver_parameters
+from petsc4py import PETSc
 
 
 __all__ = ["TRBDF2QuasiNewton"]
@@ -421,7 +421,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         # Slow physics ---------------------------------------------------------
         x_after_slow(self.field_name).assign(xn(self.field_name))
         if len(self.slow_physics_schemes) > 0:
-            with timed_stage("Slow physics"):
+            with PETSc.Log.Stage("Slow physics"):
                 logger.info('TR-BDF2 Quasi Newton: TR Slow physics')
                 for _, scheme in self.slow_physics_schemes:
                     scheme.apply(x_after_slow(scheme.field_name), x_after_slow(scheme.field_name))
@@ -429,7 +429,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         # TR step ==============================================================
 
         # Explicit forcing -----------------------------------------------------
-        with timed_stage("Apply forcing terms"):
+        with PETSc.Log.Stage("Apply forcing terms"):
             logger.info('TR-BDF2 Quasi Newton: TR Explicit forcing')
             # Put explicit forcing into xstar
             self.tr_forcing.apply(x_after_slow, xn, xstar(self.field_name), "explicit")
@@ -442,7 +442,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         for outer in range(self.num_outer_tr):
 
             # Transport --------------------------------------------------------
-            with timed_stage("Transport"):
+            with PETSc.Log.Stage("Transport"):
                 # Transport by 0.5*(u^n + u^m) for 2*gamma*dt
                 self.update_transporting_velocity(xn('u'), xm('u'), 2*self.gamma)
                 self.io.log_courant(self.fields, 'transporting_velocity',
@@ -452,7 +452,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:
-                with timed_stage("Fast physics"):
+                with PETSc.Log.Stage("Fast physics"):
                     logger.info(f'TR-BDF2 Quasi Newton: TR Fast physics {outer}')
                     for _, scheme in self.fast_physics_schemes:
                         scheme.apply(x_after_fast(scheme.field_name), x_after_fast(scheme.field_name))
@@ -463,7 +463,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             for inner in range(self.num_inner_tr):
 
                 # Implicit forcing ---------------------------------------------
-                with timed_stage("Apply forcing terms"):
+                with PETSc.Log.Stage("Apply forcing terms"):
                     logger.info(f'TR-BDF2 Quasi Newton: TR Implicit forcing {(outer, inner)}')
                     self.tr_forcing.apply(xp, xm, xrhs, "implicit")
                     xrhs += xrhs_phys
@@ -475,7 +475,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
                 # Linear solve -------------------------------------------------
 
-                with timed_stage("Implicit solve"):
+                with PETSc.Log.Stage("Implicit solve"):
                     logger.info(f'TR-BDF2 Quasi Newton: TR Mixed solve {(outer, inner)}')
                     self.tr_solver.solve(xrhs, dy)  # solves linear system and places result in dy
 
@@ -499,7 +499,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         for outer in range(self.num_outer_bdf):
 
             # Transport --------------------------------------------------------
-            with timed_stage("Transport"):
+            with PETSc.Log.Stage("Transport"):
                 # Transport by u^np1 for (1-2*gamma)*dt, so scale u by (1-2*gamma)
                 self.update_transporting_velocity(xnp1('u'), xnp1('u'), 1-2*self.gamma)
                 self.io.log_courant(self.fields, 'transporting_velocity',
@@ -518,7 +518,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))
             if len(self.fast_physics_schemes) > 0:
-                with timed_stage("Fast physics"):
+                with PETSc.Log.Stage("Fast physics"):
                     logger.info(f'TR-BDF2 Quasi Newton: BDF Fast physics {outer}')
                     for _, scheme in self.fast_physics_schemes:
                         scheme.apply(x_after_fast(scheme.field_name), x_after_fast(scheme.field_name))
@@ -527,7 +527,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             xrhs_phys.assign(x_after_fast(self.field_name) - xp(self.field_name))
             for inner in range(self.num_inner_bdf):
                 # Implicit forcing ---------------------------------------------
-                with timed_stage("Apply forcing terms"):
+                with PETSc.Log.Stage("Apply forcing terms"):
                     logger.info(f'TR-BDF2 Quasi Newton: BDF Implicit forcing {(outer, inner)}')
                     self.bdf_forcing.apply(xp, xnp1, xrhs, "implicit")
                     xrhs += xrhs_phys
@@ -538,7 +538,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 xrhs -= xnp1(self.field_name)
 
                 # Linear solve -------------------------------------------------
-                with timed_stage("Implicit solve"):
+                with PETSc.Log.Stage("Implicit solve"):
                     logger.info(f'TR-BDF2 Quasi Newton: BDF Mixed solve {(outer, inner)}')
                     self.bdf_solver.solve(xrhs, dy)  # solves linear system and places result in dy
 
@@ -549,13 +549,13 @@ class TRBDF2QuasiNewton(BaseTimestepper):
             self.copy_active_tracers(x_after_fast, xnp1)
             self._apply_bcs(xnp1)
 
-        with timed_stage("Diffusion"):
+        with PETSc.Log.Stage("Diffusion"):
             for name, scheme in self.diffusion_schemes:
                 logger.debug(f"TR-BDF2 Quasi-Newton diffusing {name}")
                 scheme.apply(xnp1(name), xnp1(name))
 
         if len(self.final_physics_schemes) > 0:
-            with timed_stage("Final Physics"):
+            with PETSc.Log.Stage("Final Physics"):
                 for _, scheme in self.final_physics_schemes:
                     scheme.apply(xnp1(scheme.field_name), xnp1(scheme.field_name))
 
