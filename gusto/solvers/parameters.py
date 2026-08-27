@@ -4,7 +4,10 @@ for particular kinds of system.
 """
 from gusto.core.function_spaces import is_cg
 
-__all__ = ['mass_parameters', 'hydrostatic_parameters']
+__all__ = [
+    'mass_parameters', 'hydrostatic_parameters',
+    'conservative_tracer_parameters'
+]
 
 
 def mass_parameters(V, spaces=None, ignore_vertical=True):
@@ -120,3 +123,56 @@ hydrostatic_parameters = {
         }
     }
 }
+
+
+def conservative_tracer_parameters(V, num_fields=2):
+    """
+    Returns PETSc solver settings for conservative tracer transport, in which
+    a tracer is transported simultaneously with a reference density field in a
+    discontinuous space.
+
+    As the density does not depend upon the tracer, we solve this with a
+    multiplicative fieldsplit, in which the density is solved for first.
+
+    Parameters
+    ----------
+    V : :class:`FunctionSpace`
+        The (sub)function space of the density/tracer.
+    num_fields : int, optional
+        The number of fields in the mixed function space. Default is 2.
+
+    Returns
+    -------
+    settings : dict
+        A dictionary containing the PETSc solver settings.
+    """
+    fs_name = V.name
+    settings = {
+        "mat_type": "aij",
+        "snes_type": "ksponly",
+        "ksp_type": "preonly",
+        "pc_type": "fieldsplit",
+        "ksp_monitor_true_residual": None,
+        "ksp_converged_reason": None,
+        "snes_monitor": None,
+        "snes_converged_reason": None,
+        "pc_fieldsplit_type": "multiplicative",
+        "pc_fieldsplit_0_fields": "0",
+        "pc_fieldsplit_1_fields": "1",
+
+        f"fieldsplit_{fs_name}_ksp_type": "preonly",
+        "fieldsplit_0_pc_type": "lu",
+        f"fieldsplit_{fs_name}_ksp_converged_reason": None,
+        f"fieldsplit_{fs_name}_ksp_monitor_true_residual": None,
+    }
+
+    if num_fields < 2:
+        raise ValueError(
+            "The number of fields used for conservative tracer transport must "
+            + f"be at least 2, but got {num_fields}."
+        )
+    elif num_fields > 2:
+        for i in range(2, num_fields):
+            settings[f"pc_fieldsplit_{i}_fields"] = str(i)
+
+    return settings
