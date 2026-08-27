@@ -101,6 +101,8 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
         self.courant_max = None
         self.augmentation = augmentation
         self.subcycling_options = subcycling_options
+        self.solver_parameters = solver_parameters
+        self.default_solver_parameters = (solver_parameters is None)
 
         if self.subcycling_options is not None:
             self.subcycling_options.check_options()
@@ -136,13 +138,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.wrapper = None
             self.wrapper_name = None
 
-        # get default solver options if none passed in
-        if solver_parameters is None:
-            self.solver_parameters = {'ksp_type': 'gmres',
-                                      'pc_type': 'bjacobi',
-                                      'sub_pc_type': 'ilu'}
-        else:
-            self.solver_parameters = solver_parameters
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -351,7 +346,14 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     )
 
                     self.residual = self.wrapper.label_terms(self.residual)
-                if self.solver_parameters is None:
+
+                # Use wrapper solver parameters if they are specified
+                if (self.solver_parameters is None
+                    and self.wrapper.solver_parameters is not None):
+                    logger.info(
+                        'Using default solver parameters for'
+                        + f'{self.wrapper_name} wrapper'
+                    )
                     self.solver_parameters = self.wrapper.solver_parameters
 
         # -------------------------------------------------------------------- #
@@ -383,6 +385,14 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         self.x_out = Function(self.fs)
         self.x1 = Function(self.fs)
+
+        # Finally, set solver parameters to default
+        if self.solver_parameters is None:
+            self.solver_parameters = {
+                'ksp_type': 'gmres',
+                'pc_type': 'bjacobi',
+                'sub_pc_type': 'ilu'
+            }
 
     @property
     def nlevels(self):
@@ -490,6 +500,7 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
                 this time discretisation to be augmented, for instances with
                 extra terms of another auxiliary variable. Defaults to None.
         """
+
         super().__init__(domain, field_name,
                          subcycling_options=subcycling_options,
                          solver_parameters=solver_parameters,
@@ -509,10 +520,12 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
         """
         super().setup(equation, apply_bcs, *active_labels)
 
-        # get default solver options if none passed in
-        self.solver_parameters.update(mass_parameters(
-            self.fs, equation.domain.spaces))
-        self.solver_parameters['snes_type'] = 'ksponly'
+        # Set default solver params for explicit schemes, if none were passed in
+        if self.default_solver_parameters:
+            self.solver_parameters = mass_parameters(
+                self.fs, equation.domain.spaces
+            )
+            self.solver_parameters['snes_type'] = 'ksponly'
 
         # if user has specified a number of fixed subcycles, then save this
         # and rescale dt accordingly; else perform just one cycle using dt
