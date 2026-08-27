@@ -138,7 +138,6 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
             self.wrapper = None
             self.wrapper_name = None
 
-
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
@@ -348,8 +347,11 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
                     self.residual = self.wrapper.label_terms(self.residual)
 
                 # Use wrapper solver parameters if they are specified
-                if (self.solver_parameters is None
-                    and self.wrapper.solver_parameters is not None):
+                use_wrapper_params = (
+                    self.solver_parameters is None
+                    and self.wrapper.solver_parameters is not None
+                )
+                if use_wrapper_params:
                     logger.info(
                         'Using default solver parameters for'
                         + f'{self.wrapper_name} wrapper'
@@ -388,6 +390,7 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         # Finally, set solver parameters to default
         if self.solver_parameters is None:
+            logger.info('Using default TimeDiscretisation solver parameters')
             self.solver_parameters = {
                 'ksp_type': 'gmres',
                 'pc_type': 'bjacobi',
@@ -522,6 +525,10 @@ class ExplicitTimeDiscretisation(TimeDiscretisation):
 
         # Set default solver params for explicit schemes, if none were passed in
         if self.default_solver_parameters:
+            logger.info(
+                'Actually using default ExplicitTimeDiscretisation '
+                + 'solver parameters'
+            )
             self.solver_parameters = mass_parameters(
                 self.fs, equation.domain.spaces
             )
