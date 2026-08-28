@@ -174,6 +174,11 @@ class SDC(object, metaclass=ABCMeta):
         self.Qdelta_imp = float(self.dt_coarse)*self.Qdelta_imp
         self.Qdelta_exp = float(self.dt_coarse)*self.Qdelta_exp
 
+        # If the implicit correction matrix is diagonal, the final sweep can
+        # skip all but the last node when no final update is requested.
+        _lower_imp = np.tril(self.Qdelta_imp[:self.M, :self.M], k=-1)
+        self._final_sweep_shortcut = np.allclose(_lower_imp, 0)
+
         # Set default linear and nonlinear solver options if none passed in
         if linear_solver_parameters is None:
             self.linear_solver_parameters = {'snes_type': 'ksponly',
@@ -184,6 +189,10 @@ class SDC(object, metaclass=ABCMeta):
             self.linear_solver_parameters = linear_solver_parameters
 
         self.nonlinear_solver_parameters = nonlinear_solver_parameters
+        if self.nonlinear_solver_parameters is None:
+            self.hybridised = True
+        else:
+            self.hybridised = False
         self.appctx = None
 
         self.lag_rebuild_freq = None
@@ -473,7 +482,7 @@ class SDC(object, metaclass=ABCMeta):
         problem = NonlinearVariationalProblem(self.res(m, k), self.U_DC, bcs=self.bcs)
         suffix = f"{m}_k{k}" if k is not None else f"{m}"
         solver_name = self.field_name + self.__class__.__name__ + suffix
-        if self.nonlinear_solver_parameters is None:
+        if self.hybridised:
             # Use hybridised solver as default
             alpha = self.Qdelta_imp[m, m]/self.dt_coarse
             self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=False)
@@ -572,7 +581,10 @@ class SDC(object, metaclass=ABCMeta):
             self.Unodes1[0].assign(self.Unodes[0])
             for evaluate in self.evaluate_source:
                 evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
-            for m in range(1, self.M+1):
+            node_range = (range(self.M, self.M+1)
+                          if (k == self.maxk and not self.final_update and self._final_sweep_shortcut)
+                          else range(1, self.M+1))
+            for m in node_range:
                 # Set Q or S matrix
                 self.Q_.assign(self.quad[m-1])
 
