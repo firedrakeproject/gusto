@@ -114,11 +114,6 @@ class Parallel_RIDC(RIDC):
             # No flush - predictor should be last timestep's pipeline value
             self.Unodes[0].assign(self.Uprev)
         self.Unodes1[0].assign(x_in)
-        # for evaluate in self.evaluate_source:
-        #     evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
-        self.Uin.assign(self.Unodes[0])
-        self.solver_rhs.solve()
-        self.fUnodes[0].assign(self.Urhs)
 
         # On first communicator, we do the predictor step
         if (self.comm.ensemble_comm.rank == 0):
@@ -138,15 +133,8 @@ class Parallel_RIDC(RIDC):
                 # Receive and evaluate the stencil of guesses we need to correct
                 self.comm.recv(self.U_send[m], source=self.kval-1, tag=self.TAG_EXCHANGE_FIELD + self.step + (m)*100)
                 self.Unodes[m].assign(self.U_send[m])
-                # self.comm.recv(self.source_Uk[m], source=self.kval-1, tag=self.TAG_EXCHANGE_SOURCE + self.step)
-                self.Uin.assign(self.Unodes[m])
-                # for evaluate in self.evaluate_source:
-                #     evaluate(self.Uin, self.base.dt, x_out=self.source_in)
-                self.solver_rhs.solve()
-                self.fUnodes[m].assign(self.Urhs)
+
             for m in range(0, self.kval):
-                # Set S matrix
-                self.Q_.assign(self.compute_quad(self.Q[self.kval-1], self.fUnodes, m+1))
 
                 # Set initial guess for solver, and pick correct solver
                 self.U_start.assign(self.Unodes1[m])
@@ -157,25 +145,15 @@ class Parallel_RIDC(RIDC):
                 self.source_Uk_m.assign(self.source_Uk[m])
                 self.U_DC.assign(self.Unodes[m+1])
 
-                # if self.sweep_tols is not None:
-                #     tol = self.sweep_tols[k-1]
+                self.rhs_assemblers[self.kval - 1][m].assemble(tensor=self.b)
 
-                #     self.solver.snes.ksp.setTolerances(
-                #         atol=tol["ksp_atol"],
-                #         rtol=tol["ksp_rtol"]
-                #     )
-
-                #     self.solver.snes.setTolerances(
-                #         atol=tol["snes_atol"],
-                #         rtol=tol["snes_rtol"]
-                #     )
                 # Compute
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y_j^k)
-                #self._lag_reset_solver()
+                self._lag_reset_solver()
                 self.solver.solve()
-                #self._lag_note_solver_call()
+                self._lag_note_solver_call()
                 self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
                 self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)
@@ -201,11 +179,7 @@ class Parallel_RIDC(RIDC):
                 self.Uin.assign(self.Unodes[m+1])
                 # for evaluate in self.evaluate_source:
                 #     evaluate(self.Uin, self.base.dt, x_out=self.source_in)
-                self.solver_rhs.solve()
-                self.fUnodes[m+1].assign(self.Urhs)
 
-                # Set S matrix
-                self.Q_.assign(self.compute_quad_final(self.Q[self.kval-1], self.fUnodes, m+1))
 
                 # Set initial guess for solver, and pick correct solver
                 self.U_start.assign(self.Unodes1[m])
@@ -216,12 +190,14 @@ class Parallel_RIDC(RIDC):
                 self.source_Uk_m.assign(self.source_Uk[m])
                 self.U_DC.assign(self.Unodes[m+1])
 
+                self.rhs_assemblers[self.kval - 1][m].assemble(tensor=self.b)
+
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
-                #self._lag_reset_solver()
+                self._lag_reset_solver()
                 self.solver.solve()
-                #self._lag_note_solver_call()
+                self._lag_note_solver_call()
                 self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
                 self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)

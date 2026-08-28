@@ -77,7 +77,8 @@ from abc import ABCMeta
 from functools import cached_property
 import numpy as np
 from firedrake import (
-    Function, NonlinearVariationalProblem, NonlinearVariationalSolver, Constant
+    Function, NonlinearVariationalProblem, NonlinearVariationalSolver, Constant,
+    Cofunction, derivative
 )
 from firedrake.fml import (
     replace_subject, all_terms, drop
@@ -88,7 +89,7 @@ from qmat import genQCoeffs, genQDeltaCoeffs
 from gusto.solvers.solver_presets import hybridised_solver_parameters
 from qmat.qdelta.diag import MIN_SR_FLEX
 from gusto.core.logging import logger
-
+from firedrake.assemble import get_assembler
 __all__ = ["SDC", "RIDC"]
 
 
@@ -802,7 +803,7 @@ class RIDC(object, metaclass=ABCMeta):
         self.Q_ = Function(W)
         self.quad_final = Function(W)
         self.U_fin = Function(W)
-        self.Urhs = Function(W)
+        self.b = Cofunction(W.dual())
         self.Uin = Function(W)
         self.source_in = Function(W)
         self.source_Ukp1_m = Function(W)
@@ -820,131 +821,149 @@ class RIDC(object, metaclass=ABCMeta):
     def nlevels(self):
         return 1
 
-    def compute_quad(self, Q, fUnodes, m):
+    def _quad_weights_and_indices(self, k, m):
         """
-        Computes integration of F(y) on quadrature nodes
-        """
-        quad = Function(self.W)
-        quad.assign(0.)
-        for k in range(0, np.shape(Q)[1]):
-            quad += float(Q[m, k])*fUnodes[k]
-        return quad
+        Returns (weight, fUnodes index) pairs for the RIDC quadrature term.
 
-    def compute_quad_final(self, Q, fUnodes, m):
+        Args:
+            k (int): 1-based sweep index.
+            m (int): 0-based local node index in the correction loop.
         """
-        Computes final integration of F(y) on quadrature nodes
-        """
-        quad = Function(self.W)
-        quad.assign(0.)
         if self.reduced:
+            Q = self.Q[k-1]
+            if m < k:
+                return [(float(Q[m+1, j]), j) for j in range(np.shape(Q)[1])]
             l = np.shape(Q)[0] - 1
-        else:
-            l = self.K
-        for k in range(0, l+1):
-            quad += float(Q[-1, k])*fUnodes[m - l + k]
-        return quad
+            start = (m + 1) - l
+            return [(float(Q[-1, j]), start + j) for j in range(l+1)]
 
-    @property
-    def res_rhs(self):
-        """Set up the residual for the calculation of F(y)."""
-        a = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Urhs, old_idx=self.idx),
-                                    drop)
-        # F(y)
-        L = self.residual.label_map(lambda t: any(t.has_label(time_derivative, source_label)),
-                                    drop,
-                                    replace_subject(self.Uin, old_idx=self.idx))
-        L_source = self.residual.label_map(lambda t: t.has_label(source_label),
-                                           replace_subject(self.source_in, old_idx=self.idx),
-                                           drop)
-        residual_rhs = a - (L + L_source)
-        return residual_rhs.form
+        Q = self.Q
+        if m < self.K:
+            return [(float(Q[m+1, j]), j) for j in range(np.shape(Q)[1])]
+        l = self.K
+        start = (m + 1) - l
+        return [(float(Q[-1, j]), start + j) for j in range(l+1)]
 
-    @property
-    def res(self):
-        """Set up the discretisation's residual."""
-        # Add time derivative terms  y^(k+1)_m - y_n
+    def resval(self):
+        """
+        Jacobian-bearing part of the residual, evaluated at the unknown
+        U_DC: the mass term plus dt*F(U_DC). Everything else is known data
+        and goes into self.b via rhs_form/rhs_assemblers -- valid because
+        RIDC's implicit diagonal coefficient is always the constant self.dt,
+        independent of node or sweep (same structure as
+        IMEXRungeKutta.resval() in the constant-diagonal case).
+        """
         mass_form = self.residual.label_map(
-            lambda t: t.has_label(time_derivative),
-            map_if_false=drop)
-        residual = mass_form.label_map(all_terms,
-                                       map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
-        residual -= mass_form.label_map(all_terms,
-                                        map_if_true=replace_subject(self.U_start, old_idx=self.idx))
+            lambda t: t.has_label(time_derivative), map_if_false=drop)
+        residual = mass_form.label_map(
+            all_terms, map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
 
-        # Calculate source terms
-        r_source_kp1 = self.residual.label_map(
-            lambda t: t.has_label(source_label),
-            map_if_true=replace_subject(self.source_Ukp1_m, old_idx=self.idx),
-            map_if_false=drop)
-        r_source_kp1 = r_source_kp1.label_map(
-            all_terms,
-            lambda t: Constant(self.dt)*t)
-        residual += r_source_kp1
-
-        r_source_k = self.residual.label_map(
-            lambda t: t.has_label(source_label),
-            map_if_true=replace_subject(self.source_Uk_m, old_idx=self.idx),
-            map_if_false=drop)
-        r_source_k = r_source_k.label_map(
-            all_terms,
-            map_if_true=lambda t: Constant(self.dt)*t)
-        residual -= r_source_k
-
-        # Add on final implicit terms
-        # dt*(F(y_(m)^(k+1)) - F(y_(m)^k))
-        r_imp_kp1 = self.residual.label_map(
+        r_imp = self.residual.label_map(
             lambda t: t.has_label(implicit),
             map_if_true=replace_subject(self.U_DC, old_idx=self.idx),
             map_if_false=drop)
-        r_imp_kp1 = r_imp_kp1.label_map(
-            all_terms,
-            lambda t: Constant(self.dt)*t)
-        residual += r_imp_kp1
+        r_imp = r_imp.label_map(all_terms, lambda t: Constant(self.dt) * t)
+        residual += r_imp
+
+        return residual.form
+
+    def rhs_form(self, k, m):
+        """
+        Dual-space RHS for sweep k, node m (0-indexed local node; corrects
+        to Unodes1[m+1]). Combines every term that does NOT depend on the
+        unknown U_DC:
+        -mass(U_start)                                  (y_(m-1)^(k+1))
+        -dt*F(y_m^k)                                     (previous sweep, node m+1)
+        +dt*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))             explicit correction
+        +dt*(source(y_(m-1)^(k+1)) - source(y_(m-1)^k))   source correction
+        +sum_j Q[m+1,j]*(F+S)(y_j^k)                      dense RIDC
+                                                            quadrature term,
+                                                            evaluated directly
+                                                            on the raw nodal
+                                                            Functions -- no
+                                                            mass-matrix solve.
+        """
+        mass_form = self.residual.label_map(
+            lambda t: t.has_label(time_derivative), map_if_false=drop)
+        residual = -mass_form.label_map(
+            all_terms, map_if_true=replace_subject(self.U_start, old_idx=self.idx))
+
         r_imp_k = self.residual.label_map(
             lambda t: t.has_label(implicit),
             map_if_true=replace_subject(self.Uk_mp1, old_idx=self.idx),
             map_if_false=drop)
-        r_imp_k = r_imp_k.label_map(
-            all_terms,
-            lambda t: Constant(self.dt)*t)
+        r_imp_k = r_imp_k.label_map(all_terms, lambda t: Constant(self.dt) * t)
         residual -= r_imp_k
 
         r_exp_kp1 = self.residual.label_map(
             lambda t: t.has_label(explicit),
             map_if_true=replace_subject(self.Ukp1_m, old_idx=self.idx),
             map_if_false=drop)
-        r_exp_kp1 = r_exp_kp1.label_map(
-            all_terms,
-            lambda t: Constant(self.dt)*t)
+        r_exp_kp1 = r_exp_kp1.label_map(all_terms, lambda t: Constant(self.dt) * t)
         residual += r_exp_kp1
         r_exp_k = self.residual.label_map(
             lambda t: t.has_label(explicit),
             map_if_true=replace_subject(self.Uk_m, old_idx=self.idx),
             map_if_false=drop)
-        r_exp_k = r_exp_k.label_map(
-            all_terms,
-            lambda t: Constant(self.dt)*t)
+        r_exp_k = r_exp_k.label_map(all_terms, lambda t: Constant(self.dt) * t)
         residual -= r_exp_k
 
-        # Add on sum(j=1,M) s_mj*F(y_m^k), where s_mj = q_mj-q_m-1j
-        # and s1j = q1j.
-        Q = self.residual.label_map(lambda t: t.has_label(time_derivative),
-                                    replace_subject(self.Q_, old_idx=self.idx),
-                                    drop)
-        residual += Q
-        return residual.form
+        r_source_kp1 = self.residual.label_map(
+            lambda t: t.has_label(source_label),
+            map_if_true=replace_subject(self.source_Ukp1_m, old_idx=self.idx),
+            map_if_false=drop)
+        r_source_kp1 = r_source_kp1.label_map(all_terms, lambda t: Constant(self.dt) * t)
+        residual += r_source_kp1
+        r_source_k = self.residual.label_map(
+            lambda t: t.has_label(source_label),
+            map_if_true=replace_subject(self.source_Uk_m, old_idx=self.idx),
+            map_if_false=drop)
+        r_source_k = r_source_k.label_map(all_terms, lambda t: Constant(self.dt) * t)
+        residual -= r_source_k
 
+        for w, idx in self._quad_weights_and_indices(k, m):
+            if w == 0.0:
+                continue
+            Qi = self.residual.label_map(
+                lambda t: t.has_label(implicit) or t.has_label(explicit),
+                replace_subject(self.Unodes[idx], old_idx=self.idx),
+                drop)
+            Qi = Qi.label_map(all_terms, lambda t: Constant(w) * t)
+            residual += Qi
+
+            Qs = self.residual.label_map(
+                lambda t: t.has_label(source_label),
+                replace_subject(self.source_Uk[idx], old_idx=self.idx),
+                drop)
+            Qs = Qs.label_map(all_terms, lambda t: Constant(w) * t)
+            residual += Qs
+
+        return residual.form
+    
+    @cached_property
+    def rhs_assemblers(self):
+        """Cached assemblers for the RHS Cofunction self.b, indexed [k-1][m]."""
+        return [[get_assembler(self.rhs_form(k, m), tensor=self.b)
+                for m in range(self.M)]
+                for k in range(1, self.K + 1)]
+
+   
     @cached_property
     def solver(self):
-        """Set up the problem and the solver for the nonlinear solve."""
-        # setup solver using residual defined in derived class
-        problem = NonlinearVariationalProblem(self.res, self.U_DC, bcs=self.bcs)
-        # if self.lag_rebuild_freq is not None:
-        #     problem._constant_jacobian = True
-        solver_name = self.field_name+self.__class__.__name__
-        solver = NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name)
-        return solver
+        """
+        Single shared solver -- valid because the implicit diagonal
+        coefficient is always the constant self.dt, same as
+        IMEXRungeKutta's shared-solver path for constant-diagonal tableaus.
+        """
+        F = self.resval() + self.b
+        J = derivative(self.resval(), self.U_DC)
+        problem = NonlinearVariationalProblem(F, self.U_DC, bcs=self.bcs, J=J)
+        if self.lag_rebuild_freq is not None:
+            problem._constant_jacobian = True
+        solver_name = self.field_name + self.__class__.__name__
+        return NonlinearVariationalSolver(
+            problem, solver_parameters=self.nonlinear_solver_parameters,
+            appctx=self.appctx, options_prefix=solver_name)
 
     def _lag_reset_solver(self):
         if self.lag_rebuild_freq is None:
@@ -956,15 +975,6 @@ class RIDC(object, metaclass=ABCMeta):
         if self.lag_rebuild_freq is None:
             return
         self._solver_call_count = self._solver_call_count + 1
-
-    @cached_property
-    def solver_rhs(self):
-        """Set up the problem and the solver for mass matrix inversion."""
-        # setup linear solver using rhs residual defined in derived class
-        prob_rhs = NonlinearVariationalProblem(self.res_rhs, self.Urhs, bcs=self.bcs)
-        solver_name = self.field_name+self.__class__.__name__+"_rhs"
-        return NonlinearVariationalSolver(prob_rhs, solver_parameters=self.linear_solver_parameters,
-                                          options_prefix=solver_name)
 
     @wrapper_apply
     def apply(self, x_out, x_in):
@@ -985,15 +995,7 @@ class RIDC(object, metaclass=ABCMeta):
 
         # Iterate through correction sweeps
         for k in range(1, self.K+1):
-            # Compute: sum(j=1,M) (s_mj*F(y_m^k) +  s_mj*S(y_m^k))
-            for m in range(self.M+1):
-                self.Uin.assign(self.Unodes[m])
-                # Include source terms
-                for evaluate in self.evaluate_source:
-                    evaluate(self.Uin, self.base.dt, x_out=self.source_in)
-                self.solver_rhs.solve()
-                self.fUnodes[m].assign(self.Urhs)
-
+        
             # Loop through quadrature nodes and solve
             self.Unodes1[0].assign(self.Unodes[0])
             for evaluate in self.evaluate_source:
@@ -1001,11 +1003,7 @@ class RIDC(object, metaclass=ABCMeta):
             if self.reduced:
                 self.M1 = k
             for m in range(0, self.M1):
-                # Set integration matrix
-                if self.reduced:
-                    self.Q_.assign(self.compute_quad(self.Q[k-1], self.fUnodes, m+1))
-                else:
-                    self.Q_.assign(self.compute_quad(self.Q, self.fUnodes, m+1))
+                
 
                 # Set initial guess for solver, and pick correct solver
                 self.U_start.assign(self.Unodes1[m])
@@ -1015,6 +1013,8 @@ class RIDC(object, metaclass=ABCMeta):
                 self.source_Ukp1_m.assign(self.source_Ukp1[m])
                 self.source_Uk_m.assign(self.source_Uk[m])
                 self.U_DC.assign(self.Unodes[m+1])
+
+                self.rhs_assemblers[k - 1][m].assemble(tensor=self.b)
 
                 # Compute:
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
@@ -1035,11 +1035,6 @@ class RIDC(object, metaclass=ABCMeta):
                 if self.limiter is not None:
                     self.limiter.apply(self.Unodes1[m+1])
             for m in range(self.M1, self.M):
-                # Set integration matrix
-                if self.reduced:
-                    self.Q_.assign(self.compute_quad_final(self.Q[k-1], self.fUnodes, m+1))
-                else:
-                    self.Q_.assign(self.compute_quad_final(self.Q, self.fUnodes, m+1))
 
                 # Set initial guess for solver, and pick correct solver
                 self.U_start.assign(self.Unodes1[m])
@@ -1050,13 +1045,15 @@ class RIDC(object, metaclass=ABCMeta):
                 self.source_Uk_m.assign(self.source_Uk[m])
                 self.U_DC.assign(self.Unodes[m+1])
 
+                self.rhs_assemblers[k - 1][m].assemble(tensor=self.b)
+
                 # Compute:
                 # y_m^(k+1) = y_(m-1)^(k+1) + dt*(F(y_(m)^(k+1)) - F(y_(m)^k)
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
-                #self._lag_reset_solver()
+                self._lag_reset_solver()
                 self.solver.solve()
-                #self._lag_note_solver_call()
+                self._lag_note_solver_call()
                 self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
                 self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)
