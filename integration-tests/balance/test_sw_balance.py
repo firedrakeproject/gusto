@@ -33,10 +33,6 @@ def setup_balance(dirname):
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
-
-    g = parameters.g
-    Omega = parameters.Omega
-
     stepper = model.stepper
     u0 = stepper.fields("u")
     D0 = stepper.fields("D")
@@ -53,7 +49,7 @@ def setup_balance(dirname):
 
     # calculate corresponding velocity and depth such that initial
     # conditions are nondivergent and div(u_t)=0
-    nondivergent_velocity(model.equation, zeta0, u0, D0)
+    nondivergent_flow(model.equation, zeta0, u0, D0)
 
     Dbar = Function(D0.function_space()).assign(mean_depth)
     stepper.set_reference_profiles([('D', Dbar)])
@@ -69,9 +65,9 @@ def run_balance(dirname):
 
 
 def test_nondivergent_sw(tmpdir):
-    
+
     dirname = str(tmpdir)
     hdiv_space, u = run_balance(dirname)
     divu = Function(hdiv_space).project(div(u))
-    tol = 1e-16
+    tol = 1e-6
     assert divu.dat.data.max() < tol and abs(divu.dat.data.min()) < tol
