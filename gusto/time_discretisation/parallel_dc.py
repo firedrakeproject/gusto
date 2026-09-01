@@ -245,7 +245,8 @@ class Parallel_SDC(SDC):
     def __init__(self, base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                  field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
-                 limiter=None, options=None, initial_guess="base", communicator=None, sweep_tols=None):
+                 limiter=None, options=None, initial_guess="base", communicator=None, sweep_tols=None,
+                 final_share_mode="auto"):
         """
         Initialise SDC object
         Args:
@@ -276,6 +277,11 @@ class Parallel_SDC(SDC):
             initial_guess (str, optional): Initial guess to be base timestepper, or copy
             communicator (MPI communicator, optional): communicator for parallel execution. Defaults to None.
             sweep_tols (list of dict, optional): list of tolerances for each sweep. Defaults to None.
+            final_share_mode (str, optional): Strategy for sharing final-rank
+                output state across time ranks. Options:
+                - "auto": point-to-point for size=2, otherwise bcast.
+                - "bcast": always use bcast.
+                - "fanout": root sends point-to-point to all non-root ranks.
         """
         super().__init__(base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                          formulation="Z2N", field_name=field_name,
@@ -283,6 +289,10 @@ class Parallel_SDC(SDC):
                          final_update=final_update,
                          limiter=limiter, initial_guess=initial_guess, sweep_tols=sweep_tols)
         self.comm = communicator
+        self.TAG_FINAL_SHARE = 19001
+        if final_share_mode not in ("auto", "bcast", "fanout"):
+            raise ValueError("final_share_mode must be one of: auto, bcast, fanout")
+        self.final_share_mode = final_share_mode
         # Checks for parallel SDC
         if self.comm is None:
             raise ValueError("No communicator provided. Please provide a valid MPI communicator.")
@@ -302,24 +312,32 @@ class Parallel_SDC(SDC):
         """
         super(Parallel_SDC, self).setup(equation, apply_bcs, *active_labels)
 
+        # Reuse temporary storage in collective quadrature operations to avoid
+        # repeated Function allocations every sweep.
+        self._quad_work = Function(self.W)
+        self._quad_final_work = Function(self.W)
+
 
 
     def compute_quad(self):
         """
         Computes integration of F(y) on quadrature nodes
         """
-        x = Function(self.W)
         for j in range(self.M):
-            x.assign(float(self.Q[j, self.comm.ensemble_comm.rank])*self.fUnodes[self.comm.ensemble_comm.rank])
-            self.comm.reduce(x, self.quad[j], root=j)
+            self._quad_work.assign(float(self.Q[j, self.comm.ensemble_comm.rank])*self.fUnodes[self.comm.ensemble_comm.rank])
+            self.comm.reduce(self._quad_work, self.quad[j], root=j)
+
+    def compute_quad_row(self, row):
+        """Compute a single quadrature row by reduction to its owning rank."""
+        self._quad_work.assign(float(self.Q[row, self.comm.ensemble_comm.rank])*self.fUnodes[self.comm.ensemble_comm.rank])
+        self.comm.reduce(self._quad_work, self.quad[row], root=row)
 
     def compute_quad_final(self):
         """
         Computes final integration of F(y) on quadrature nodes
         """
-        x = Function(self.W)
-        x.assign(float(self.Qfin[self.comm.ensemble_comm.rank])*self.fUnodes[self.comm.ensemble_comm.rank])
-        self.comm.allreduce(x, self.quad_final)
+        self._quad_final_work.assign(float(self.Qfin[self.comm.ensemble_comm.rank])*self.fUnodes[self.comm.ensemble_comm.rank])
+        self.comm.allreduce(self._quad_final_work, self.quad_final)
     
     @cached_property
     def solvers(self):
@@ -328,6 +346,46 @@ class Parallel_SDC(SDC):
         if self.qdelta_imp_type == "MIN-SR-FLEX":
             return [self._build_solver(m, k) for k in range(1, self.maxk + 1)]
         return self._build_solver(m)
+
+    def _share_from_final_rank(self, field):
+        """Share final-rank state to all ranks.
+
+        Modes:
+        - auto: point-to-point for size=2, otherwise bcast.
+        - bcast: always use bcast.
+        - fanout: root sends point-to-point to all non-root ranks.
+        """
+        root = self.M - 1
+        rank = self.comm.ensemble_comm.rank
+        size = self.comm.ensemble_comm.size
+
+        if size == 1:
+            return
+
+        mode = self.final_share_mode
+
+        if mode == "bcast":
+            self.comm.bcast(field, root)
+            return
+
+        if mode == "auto" and size == 2:
+            if rank == root:
+                self.comm.send(field, dest=0, tag=self.TAG_FINAL_SHARE + self._step_count)
+            else:
+                self.comm.recv(field, source=root, tag=self.TAG_FINAL_SHARE + self._step_count)
+            return
+
+        if mode == "fanout":
+            tag = self.TAG_FINAL_SHARE + self._step_count
+            if rank == root:
+                for dest in range(size):
+                    if dest != root:
+                        self.comm.send(field, dest=dest, tag=tag)
+            else:
+                self.comm.recv(field, source=root, tag=tag)
+            return
+
+        self.comm.bcast(field, root)
 
     @wrapper_apply
     def apply(self, x_out, x_in):
@@ -352,10 +410,17 @@ class Parallel_SDC(SDC):
             for evaluate in self.evaluate_source:
                 evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
 
+        # Node 0 is invariant through sweeps for this step.
+        self.Unodes1[0].assign(self.Unodes[0])
+
         # Iterate through correction sweeps
         k = 0
         while k < self.maxk:
             k += 1
+
+            final_sweep_shortcut = (
+                k == self.maxk and not self.final_update and self._final_sweep_shortcut
+            )
 
             solver = solver_list[k-1] if self.qdelta_imp_type == "MIN-SR-FLEX" else solver_list
 
@@ -368,13 +433,17 @@ class Parallel_SDC(SDC):
             self.solver_rhs.solve()
             self.fUnodes[self.comm.ensemble_comm.rank].assign(self.Urhs)
 
-            self.compute_quad()
+            if final_sweep_shortcut:
+                # Only the final node is needed on the terminal sweep when
+                # no final update is requested and Qdelta is diagonal.
+                self.compute_quad_row(self.M-1)
+            else:
+                self.compute_quad()
+
+            if final_sweep_shortcut and self.comm.ensemble_comm.rank != self.M-1:
+                continue
 
             # Loop through quadrature nodes and solve
-            self.Unodes1[0].assign(self.Unodes[0])
-            for evaluate in self.evaluate_source:
-                evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
-
             # Set Q or S matrix
             self.Q_.assign(self.quad[self.comm.ensemble_comm.rank])
 
@@ -429,21 +498,21 @@ class Parallel_SDC(SDC):
                 # Compute y_(n+1) = y_n + sum(j=1,M) q_j*F(y_j)
                 if self.comm.ensemble_comm.rank == self.M-1:
                     self.U_fin.assign(self.Unodes[-1])
-                self.comm.bcast(self.U_fin, self.M-1)
-                self.solver_fin.solve()
-                # Apply limiter if required
-                if self.limiter is not None:
-                    self.limiter.apply(self.U_fin)
+                    self.solver_fin.solve()
+                    # Apply limiter if required
+                    if self.limiter is not None:
+                        self.limiter.apply(self.U_fin)
+                self._share_from_final_rank(self.U_fin)
                 x_out.assign(self.U_fin)
             else:
                 # Take value at final quadrature node dtau_M
                 if self.comm.ensemble_comm.rank == self.M-1:
                     x_out.assign(self.Unodes[-1])
-                self.comm.bcast(x_out, self.M-1)
+                self._share_from_final_rank(x_out)
         else:
             # Take value at final quadrature node dtau_M
             if self.comm.ensemble_comm.rank == self.M-1:
                 x_out.assign(self.Unodes[-1])
-            self.comm.bcast(x_out, self.M-1)
+            self._share_from_final_rank(x_out)
 
         self._step_count = self._step_count + 1
