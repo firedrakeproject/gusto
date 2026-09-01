@@ -12,7 +12,7 @@ from firedrake.assemble import get_assembler
 import numpy as np
 from qmat.qcoeff.butcher import ARK548L2SAESDIRK2, ARK548L2SAERK2
 from gusto.solvers.solver_presets import hybridised_solver_parameters
-
+from gusto import logger
 
 __all__ = ["IMEXRungeKutta", "IMEX_Euler", "IMEX_ARS3", "IMEX_ARK2",
            "IMEX_Trap2", "IMEX_SSP3", "IMEX_ARS443", "IMEX_ARK4", "IMEX_ARK5"]
@@ -184,6 +184,8 @@ class IMEXRungeKutta(TimeDiscretisation):
         if not self.multiple_solvers and self.nonlinear_solver_parameters is None:
             # Use hybridised solver as default
             solver_alpha = float(self.alpha)*self.solver_alpha_scale
+            from gusto import logger
+            logger.info(f"IMEXRungeKutta: Building shared solver with alpha={solver_alpha}")
             self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=solver_alpha, tau_values=None, nonlinear=True)
         
         # Set up lagged Jacobian rebuild frequency, if specified in the nonlinear solver parameters

@@ -139,6 +139,33 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             }
         }
 
+        scpc_solve_settings = {
+            'mat_type': 'matfree',
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.SCPC',
+            'pc_sc_eliminate_fields': '0,1',
+            # The reduced operator is not symmetric
+            'condensed_field': {
+                'ksp_type': 'fgmres',
+                'ksp_converged_reason': None,
+                'ksp_rtol': r_tol,
+                'ksp_max_it': 100,
+                'pc_type': 'gamg',
+                'pc_gamg_sym_graph': None,
+                'pc_gamg_verbose': 2,
+                'pc_gamg_threshold': 0.01,
+                'pc_gamg_agg_nsmooths': 2,
+                'mg_levels': {
+                    'ksp_type': 'gmres',
+                    'ksp_max_it': 8,
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu',
+                }
+            }
+        }
+
+
         settings = {
             'ksp_monitor': None,
             'ksp_type': 'preonly',
@@ -149,7 +176,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'exnerbar_avg': exnerbar_avg_settings,
             'rhobar_avg': rhobar_avg_settings,
             'riesz_map': riesz_map_settings,
-            'compressible_hybrid_scpc': slate_schur_params
+            'compressible_hybrid_scpc': scpc_solve_settings,
         }
 
         # We pass the implicit weighting parameter (alpha) and tau_values to the
@@ -451,6 +478,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         settings['ksp_converged_reason'] = None
         settings['snes_atol'] = 1e-8
         settings['snes_rtol'] = 1e-6
+        settings['snes_stol'] = 0
         settings['snes_max_it'] = 50
         settings['td_lag_rebuild'] = 5
 

@@ -302,7 +302,7 @@ class Parallel_SDC(SDC):
         """
         super(Parallel_SDC, self).setup(equation, apply_bcs, *active_labels)
 
-        _ = self.solvers
+
 
     def compute_quad(self):
         """

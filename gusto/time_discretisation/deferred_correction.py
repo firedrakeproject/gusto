@@ -190,28 +190,6 @@ class SDC(object, metaclass=ABCMeta):
             self.linear_solver_parameters = linear_solver_parameters
 
         self.nonlinear_solver_parameters = nonlinear_solver_parameters
-        if self.nonlinear_solver_parameters is None:
-            self.hybridised = True
-        else:
-            self.hybridised = False
-        self.appctx = None
-
-        self.lag_rebuild_freq = None
-        self._solver_call_count = 0
-        if self.nonlinear_solver_parameters is not None:
-            self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
-            if self.lag_rebuild_freq is not None:
-                if self.lag_rebuild_freq < 1:
-                    raise ValueError("RIDC: td_lag_rebuild must be >= 1")
-                elif not isinstance(self.lag_rebuild_freq, int):
-                    raise ValueError("RIDC: td_lag_rebuild must be an integer")
-                else:
-                    logger.info(f"RIDC: td_lag_rebuild set to {self.lag_rebuild_freq}. "
-                                "Jacobian will be rebuilt every td_lag_rebuild solver calls.")
-        else:
-            self.lag_rebuild_freq = None
-
-        self.appctx = None
 
         # Flag to check wheter initial guess is generated using base time discretisation
         # (i.e. Forward Euler)
@@ -276,6 +254,24 @@ class SDC(object, metaclass=ABCMeta):
         self.Urhs = Function(W)
         self.Uin = Function(W)
         self.source_in = Function(W)
+
+        if self.nonlinear_solver_parameters is None:
+            self.hybridised = True
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(
+                self.equation, self.equation.field_names, alpha=1.0, tau_values=None, nonlinear=True)
+        else:
+            self.hybridised = False
+            self.appctx = None
+
+        self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
+        if self.lag_rebuild_freq is not None:
+            if self.lag_rebuild_freq < 1:
+                raise ValueError("SDC: td_lag_rebuild must be >= 1")
+            elif not isinstance(self.lag_rebuild_freq, int):
+                raise ValueError("SDC: td_lag_rebuild must be an integer")
+            else:
+                logger.info(f"SDC: td_lag_rebuild set to {self.lag_rebuild_freq}. "
+                            "Jacobian will be rebuilt every td_lag_rebuild solver calls.")
 
         # Persistent Constants for the diagonal of Qdelta_imp
         if self.qdelta_imp_type == "MIN-SR-FLEX":
@@ -485,7 +481,12 @@ class SDC(object, metaclass=ABCMeta):
         solver_name = self.field_name + self.__class__.__name__ + suffix
         if self.hybridised:
             # Use hybridised solver as default
-            alpha = self.Qdelta_imp[m, m]/self.dt_coarse
+            alpha = (float(self.Qdelta_imp_diag_k[k-1][m])
+                  if self.qdelta_imp_type == "MIN-SR-FLEX"
+                  else float(self.Qdelta_imp_diag[m]))
+            alpha = alpha/float(self.dt_coarse)
+            print(f"rank {m}: building solver for node {m}, alpha={alpha}")
+            logger.info(f"Building hybridised solver for node {m} (and sweep {k}) with alpha={float(alpha)}")
             self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=False)
         if self.lag_rebuild_freq is not None:
             problem._constant_jacobian = True
