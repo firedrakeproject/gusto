@@ -534,7 +534,7 @@ def great_arc_angle(lon1, lat1, lon2, lat2, units='rad'):
     return arc_length
 
 
-def xy_from_rtheta(r, theta, x0, y0, angle_units='rad'):
+def xy_from_rtheta(r, theta, x0=None, y0=None, angle_units='rad'):
     """
     Returns the planar cartsian x, y coordinates from the
     r, theta coordinates
@@ -570,16 +570,15 @@ def xy_from_rtheta(r, theta, x0, y0, angle_units='rad'):
     x = r * cos(theta)
     y = r * sin(theta)
 
-    x += x0
-    y += y0
-
-    # xshift = x + x0
-    # yshift = y + y0
+    if x0:
+        x += x0
+    if y0:
+        y += y0
 
     return x, y
 
 
-def rtheta_from_xy(x, y, x0, y0, angle_units='rad'):
+def rtheta_from_xy(x, y, x0=None, y0=None, angle_units='rad'):
     """
     Returns the r, theta coordinates (where theta is measured anticlockwise
     from horizontal) from the planar Cartesian x, y coordinates.
@@ -610,10 +609,10 @@ def rtheta_from_xy(x, y, x0, y0, angle_units='rad'):
     if angle_units == 'rad':
         unit_factor = 1.0
 
-    x -= x0
-    y -= y0
-    # xshift = x-x0
-    # yshift = y-y0
+    if x0:
+        x -= x0
+    if y0:
+        y -= y0
 
     theta = atan2(y, x)
     r = sqrt(x**2 + y**2)

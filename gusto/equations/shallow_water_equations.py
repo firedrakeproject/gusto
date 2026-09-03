@@ -217,9 +217,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 x, y = SpatialCoordinate(self.domain.mesh)
                 Lx = self.domain.mesh.coordinates.dat.data[:, 0].max()
                 Ly = self.domain.mesh.coordinates.dat.data[:, 1].max()
-                # breakpoint()
                 r, _ = rtheta_from_xy(x, y, Lx/2, Ly/2)
-                # r, _ = rtheta_from_xy(x, y, 35e6, 35e6)
                 Rsq = self.parameters.R**2
                 fexpr = 2*self.parameters.Omega * (1 - 0.5 * r**2 / Rsq)
                 # breakpoint()
