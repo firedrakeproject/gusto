@@ -11,7 +11,8 @@ __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
            "ShallowWaterPotentialEnstrophy", "PotentialVorticity",
            "RelativeVorticity", "AbsoluteVorticity", "PartitionedVapour",
            "PartitionedCloud", "ShallowWaterAvailablePotentialEnergy",
-           "MoistConvectiveSWRelativeHumidity", "MoistThermalSWRelativeHumidity"]
+           "MoistConvectiveSWRelativeHumidity", "MoistThermalSWRelativeHumidity",
+           "MoistSWMass"]
 
 
 class ShallowWaterKineticEnergy(Energy):
@@ -483,3 +484,38 @@ class MoistThermalSWRelativeHumidity(DiagnosticField):
     def compute(self):
         self.sat_val.interpolate(self.sat_func(self.b, self.D))
         self.field.interpolate(self.expr)
+
+
+class MoistSWMass(DiagnosticField):
+    """
+    Diagnostic for computing a measure for mass conservation in moist shallow water,
+    defined as the integral of (D)(q).
+    """
+    name = "MoistSWMass"
+
+    def __init__(self, space=None, method='interpolate'):
+        """
+        Args:
+            space (:class:`FunctionSpace`, optional): the function space to
+            evaluate the diagnostic field in. Defaults to None, in which
+            case a default space will be chosen for this diagnostic (the DG
+            space here).
+            method (str, optional): a string specifying the method of evaluation
+            for this diagnostic. Valid options are 'interpolate', 'project',
+            'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        super().__init__(space=space, method=method, required_fields=("D", "water_vapour"))
+
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        D = state_fields("D")
+        qv = state_fields("water_vapour")
+        space = domain.spaces("DG")
+        self.expr = D * qv
+        super().setup(domain, state_fields, space=space)
