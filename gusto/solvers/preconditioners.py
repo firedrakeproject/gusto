@@ -483,10 +483,6 @@ class CompressibleHybridisedSCPC(PCBase):
         # Unpack sub-solver parameters from the options prefix
         self.riesz_map_parameters = PETSc.Options(prefix + "riesz_map_").getAll()
 
-        if logger.isEnabledFor(DEBUG):
-            self.scpc_solve_parameters['ksp_monitor_true_residual'] = None
-            self.scpc_solve_parameters['ksp_converged_reason'] = None
-
         # Equations and parameters
         equations = self.equations
         dt = self.dt
@@ -614,6 +610,14 @@ class CompressibleHybridisedSCPC(PCBase):
             exner_avg_prb,
             options_prefix=pc.getOptionsPrefix()+'exnerbar_avg'
         )
+
+        if logger.isEnabledFor(DEBUG):
+            self.rho_avg_solver.snes.ksp.setMonitor(
+                logging_ksp_monitor_true_residual
+            )
+            self.exner_avg_solver.snes.ksp.setMonitor(
+                logging_ksp_monitor_true_residual
+            )
 
         # "broken" u, rho, and trace system
         # NOTE: no ds_v integrals since equations are defined on
