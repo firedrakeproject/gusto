@@ -12,11 +12,14 @@ from firedrake.formmanipulation import split_form
 from gusto.core.labels import time_derivative, all_but_last, source_label
 from gusto.core.logging import logger
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
+from gusto.solvers.sequential_transport import (
+    SequentialConservativeTransportSolver
+)
 
 
 __all__ = [
     "ForwardEuler", "ExplicitRungeKutta", "SSPRK2", "SSPRK3", "SSPRK4",
-    "RK4", "Heun", "RungeKuttaFormulation"
+    "RK4", "Heun", "RungeKuttaFormulation", "SequentialConservativeSSPRK3"
 ]
 
 
@@ -149,6 +152,26 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                 'Runge-Kutta formulation is not implemented'
             )
 
+    def _make_variational_solver(
+        self, residual, solution, solver_name, bcs=None):
+        """
+        Construct a solver for one Runge--Kutta stage.
+
+        Subclasses may override this method to provide a specialised algebraic
+        solution while retaining the existing RK residual construction.
+        """
+        problem = NonlinearVariationalProblem(
+            residual,
+            solution,
+            bcs=bcs,
+        )
+
+        return NonlinearVariationalSolver(
+            problem,
+            solver_parameters=self.solver_parameters,
+            options_prefix=solver_name,
+        )
+
     @cached_property
     def solver(self):
         if self.rk_formulation == RungeKuttaFormulation.increment:
@@ -159,14 +182,17 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             for stage in range(self.nStages):
                 # setup linear solver using lhs and rhs defined in derived class
-                problem = NonlinearVariationalProblem(
-                    self.res[stage].form,
-                    self.field_i[stage+1], bcs=self.bcs
+                solver_name = (
+                    self.field_name
+                    + self.__class__.__name__
+                    + str(stage)
                 )
-                solver_name = self.field_name+self.__class__.__name__+str(stage)
-                solver = NonlinearVariationalSolver(
-                    problem, solver_parameters=self.solver_parameters,
-                    options_prefix=solver_name
+
+                solver = self._make_variational_solver(
+                    residual=self.res[stage].form,
+                    solution=self.field_i[stage+1],
+                    solver_name=solver_name,
+                    bcs=self.bcs,
                 )
                 solver_list.append(solver)
             return solver_list
@@ -690,6 +716,59 @@ class SSPRK3(ExplicitRungeKutta):
                          solver_parameters=solver_parameters,
                          limiter=limiter, options=options,
                          augmentation=augmentation)
+
+class SequentialConservativeSSPRK3(SSPRK3):
+    """
+    SSPRK3 predictor scheme using a density-first sequential solution of
+    conservative tracer transport.
+    """
+
+    def __init__(
+            self,
+            domain,
+            field_name=None,
+            subcycling_options=None,
+            solver_parameters=None,
+            limiter=None,
+            options=None,
+            augmentation=None,
+            stages=3,
+            density_index=0,
+            tracer_indices=(1,),
+            density_solver_parameters=None,
+            tracer_solver_parameters=None):
+
+        self.density_index = density_index
+        self.tracer_indices = tuple(tracer_indices)
+
+        self.density_solver_parameters = density_solver_parameters
+        self.tracer_solver_parameters = tracer_solver_parameters
+
+        super().__init__(
+            domain,
+            field_name=field_name,
+            subcycling_options=subcycling_options,
+            rk_formulation=RungeKuttaFormulation.predictor,
+            solver_parameters=solver_parameters,
+            limiter=limiter,
+            options=options,
+            augmentation=augmentation,
+            stages=stages,
+        )
+
+    def _make_variational_solver(
+            self, residual, solution, solver_name, bcs=None):
+
+        return SequentialConservativeTransportSolver(
+            residual=residual,
+            solution=solution,
+            density_index=self.density_index,
+            tracer_indices=self.tracer_indices,
+            bcs=bcs,
+            options_prefix=solver_name,
+            density_parameters=self.density_solver_parameters,
+            tracer_parameters=self.tracer_solver_parameters,
+        )
 
 
 class SSPRK4(ExplicitRungeKutta):
