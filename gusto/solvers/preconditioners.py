@@ -611,14 +611,6 @@ class CompressibleHybridisedSCPC(PCBase):
             options_prefix=pc.getOptionsPrefix()+'exnerbar_avg'
         )
 
-        if logger.isEnabledFor(DEBUG):
-            self.rho_avg_solver.snes.ksp.setMonitor(
-                logging_ksp_monitor_true_residual
-            )
-            self.exner_avg_solver.snes.ksp.setMonitor(
-                logging_ksp_monitor_true_residual
-            )
-
         # "broken" u, rho, and trace system
         # NOTE: no ds_v integrals since equations are defined on
         # a periodic (or sphere) base mesh.
