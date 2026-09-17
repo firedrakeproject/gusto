@@ -6,14 +6,18 @@ to be compatible with with :class:`FunctionSpace` of the transported field.
 """
 
 from firedrake import (BrokenElement, Function, FunctionSpace, interval,
-                       FiniteElement, TensorProductElement, Constant)
+                       FiniteElement, TensorProductElement, Constant,
+                       min_value, max_value)
 from firedrake.slope_limiter.vertex_based_limiter import VertexBasedLimiter
-from gusto.core.kernels import LimitMidpoints, ClipZero, MeanMixingRatioWeights
+from gusto.core.kernels import (
+    LimitMidpoints, ClipZero, MeanMixingRatioWeights,
+    MeanMixingRatioStencilBounds, MonotonicMeanMixingRatioWeights
+)
 
 import numpy as np
 
 __all__ = ["DG1Limiter", "ThetaLimiter", "NoLimiter", "ZeroLimiter",
-           "MixedFSLimiter", "MeanLimiter"]
+           "MixedFSLimiter", "MeanLimiter", "MonotonicMeanLimiter"]
 
 
 class DG1Limiter(object):
@@ -346,4 +350,214 @@ class MeanLimiter(object):
             self.mean_field.interpolate(mean_fields[i])
 
             self.mX_new.interpolate((Constant(1.0) - self.lamda)*self.mX_field + self.lamda*self.mean_field)
+            mX_fields[i].interpolate(self.mX_new)
+
+
+class MonotonicMeanLimiter(object):
+    """
+    A mass-preserving limiter for mixing ratios that enforces monotonicity
+    (rather than just non-negativity) by blending the transported mixing
+    ratio with its associated mean field.
+
+    Following the derivation in monotone_limiter.tex, in each cell e the
+    blending weight lamda_e is chosen so that the limited field
+    m*_e = (1-lamda_e)*m^{n+1}_e + lamda_e*mbar_e
+    lies within the minimum and maximum values taken by the pre-transport
+    field over the cell e and its facet-neighbours, e union d(e). As with
+    :class:`MeanLimiter`, the same lamda field is used to blend every mixing
+    ratio provided, so that mass is conserved.
+    """
+
+    def __init__(self, spaces, enforce_nonnegative=False, extruded_bounds_method='facet'):
+        """
+        Args:
+            spaces: The function spaces for the DG1 mixing ratios
+            enforce_nonnegative (bool, optional): whether to additionally
+                clip small negative values from the mean field, to guard
+                against numerical error in its computation. This should
+                not be used if the mixing ratio may be legitimately
+                negative, since monotonicity does not imply non-negativity.
+                Defaults to False.
+            extruded_bounds_method (str, optional): for extruded meshes, how
+                to gather the min/max stencil bounds of the pre-transport
+                field. Options are:
+                - 'relaxed': gather bounds using a single CG1 space, so that
+                  any cells sharing a vertex (including diagonal neighbours
+                  across a layer and column) contribute to the bounds. This
+                  gives valid, but more relaxed, monotonic bounds.
+                - 'facet': gather bounds using a pair of tensor-product
+                  spaces (one continuous in the horizontal and discontinuous
+                  in the vertical, and vice versa), so that only the cell's
+                  true facet-neighbours contribute to the bounds. This gives
+                  tighter bounds, but relies on the horizontal base mesh
+                  having the property that cells sharing a horizontal vertex
+                  are also horizontal facet-neighbours (true e.g. for the 1D
+                  meshes used to build vertical-slice extruded meshes).
+                Ignored for non-extruded meshes, which always use a CG1
+                space. Defaults to 'facet'.
+        Raises:
+            ValueError: If the space is not appropriate for the limiter, i.e DG1
+            ValueError: If extruded_bounds_method is not a recognised option
+        """
+
+        # The Monotonic Mean Limiter is currently set up for mixing ratios in DG1.
+        for space in spaces:
+            degree = space.ufl_element().degree()
+            if (space.ufl_element().sobolev_space.name != 'L2'
+                or ((type(degree) is tuple and np.any([deg != 1 for deg in degree]))
+                    and degree != 1)):
+                raise NotImplementedError('MonotonicMeanLimiter only implemented for mixing'
+                                          + 'ratios in the DG1 space')
+
+        if extruded_bounds_method not in ['relaxed', 'facet']:
+            raise ValueError("extruded_bounds_method must be either 'relaxed' or 'facet', "
+                             + f"got '{extruded_bounds_method}'")
+
+        self.space = spaces[0]
+        mesh = self.space.mesh()
+        self.extruded = mesh.extruded
+        self.extruded_bounds_method = extruded_bounds_method
+
+        # Create equispaced DG1 space needed for limiting
+        if mesh.extruded:
+            base_cell = mesh._base_mesh.ufl_cell().cellname
+            DG1_hori_elt = FiniteElement("DG", base_cell, 1, variant="equispaced")
+            DG1_vert_elt = FiniteElement("DG", interval, 1, variant="equispaced")
+            DG1_element = TensorProductElement(DG1_hori_elt, DG1_vert_elt)
+        else:
+            cell = mesh.ufl_cell().cellname
+            DG1_element = FiniteElement("DG", cell, 1, variant="equispaced")
+
+        DG1_equispaced = FunctionSpace(mesh, DG1_element)
+        DG0 = FunctionSpace(mesh, 'DG', 0)
+
+        self.lamda = Function(DG0)
+        self.new_field = Function(DG1_equispaced)
+        self.old_field = Function(DG1_equispaced)
+        self.mean_field = Function(DG0)
+        self.mX_new = Function(DG1_equispaced)
+
+        self.stencil_min_dg1 = Function(DG1_equispaced)
+        self.stencil_max_dg1 = Function(DG1_equispaced)
+
+        self._stencil_bounds_kernel = MeanMixingRatioStencilBounds(DG1_equispaced)
+        self._lamda_kernel = MonotonicMeanMixingRatioWeights(DG1_equispaced)
+
+        if mesh.extruded and extruded_bounds_method == 'facet':
+            # Gather bounds separately over horizontal facet-neighbours (via a
+            # space that's continuous in the horizontal, discontinuous in the
+            # vertical) and vertical facet-neighbours (continuous in the
+            # vertical, discontinuous in the horizontal), then combine them.
+            CG1_hori_elt = FiniteElement("CG", base_cell, 1)
+            CG1_vert_elt = FiniteElement("CG", interval, 1)
+            horiz_neighbour_elt = TensorProductElement(CG1_hori_elt, DG1_vert_elt)
+            vert_neighbour_elt = TensorProductElement(DG1_hori_elt, CG1_vert_elt)
+            self.stencil_bounds_space_horiz = FunctionSpace(mesh, horiz_neighbour_elt)
+            self.stencil_bounds_space_vert = FunctionSpace(mesh, vert_neighbour_elt)
+
+            self.stencil_min_horiz = Function(self.stencil_bounds_space_horiz)
+            self.stencil_max_horiz = Function(self.stencil_bounds_space_horiz)
+            self.stencil_min_vert = Function(self.stencil_bounds_space_vert)
+            self.stencil_max_vert = Function(self.stencil_bounds_space_vert)
+            self.stencil_min_dg1_horiz = Function(DG1_equispaced)
+            self.stencil_max_dg1_horiz = Function(DG1_equispaced)
+        else:
+            # CG1 space used to gather min/max values across cells sharing a
+            # vertex. On extruded meshes, this includes diagonal neighbours,
+            # giving valid but more relaxed bounds.
+            CG1 = FunctionSpace(mesh, 'CG', 1)
+            self.stencil_min_cg = Function(CG1)
+            self.stencil_max_cg = Function(CG1)
+
+        # Whether to additionally clip small negatives from the mean field
+        # that arise from numerical error when computing it. This is kept
+        # optional, since monotonicity alone does not require non-negativity.
+        self.enforce_nonnegative = enforce_nonnegative
+        self._clip_means_kernel = ClipZero(DG0)
+
+    def apply(self, mX_fields, mean_fields, old_mX_fields):
+        """
+        Compute the limiter weights, lambda, and use these to combine the
+        DG1 mixing ratio and DG0 mean field to ensure monotonicity.
+
+        Args:
+            mX_fields (list of :class:`Function`): the transported (pre-
+                limited) DG1 mixing ratios to limit.
+            mean_fields (list of :class:`Function`): the DG0 mean field
+                associated with each mX_field.
+            old_mX_fields (list of :class:`Function`): the DG1 mixing ratios
+                before this step's transport, used to compute the monotonic
+                bounds for each cell and its facet-neighbours.
+         """
+
+        # Remove weights from previous applications
+        self.lamda.interpolate(Constant(0.0))
+
+        if self.enforce_nonnegative:
+            for mean_field in mean_fields:
+                self._clip_means_kernel.apply(mean_field, mean_field)
+
+        for i in range(len(mX_fields)):
+            # Gather the min/max of the pre-transport field over each cell
+            # and its facet-neighbours
+            self.old_field.interpolate(old_mX_fields[i])
+
+            if self.extruded and self.extruded_bounds_method == 'facet':
+                # Gather bounds over horizontal facet-neighbours only (using
+                # a space continuous in the horizontal, discontinuous in the
+                # vertical)
+                self.stencil_min_horiz.assign(1.0e10)
+                self.stencil_max_horiz.assign(-1.0e10)
+                self._stencil_bounds_kernel.apply(
+                    self.stencil_min_horiz, self.stencil_max_horiz, self.old_field
+                )
+                self.stencil_min_dg1_horiz.interpolate(self.stencil_min_horiz)
+                self.stencil_max_dg1_horiz.interpolate(self.stencil_max_horiz)
+
+                # Gather bounds over vertical facet-neighbours only (using a
+                # space continuous in the vertical, discontinuous in the
+                # horizontal)
+                self.stencil_min_vert.assign(1.0e10)
+                self.stencil_max_vert.assign(-1.0e10)
+                self._stencil_bounds_kernel.apply(
+                    self.stencil_min_vert, self.stencil_max_vert, self.old_field
+                )
+                self.stencil_min_dg1.interpolate(self.stencil_min_vert)
+                self.stencil_max_dg1.interpolate(self.stencil_max_vert)
+
+                # Combine the two, so that the bounds are taken over the
+                # cell and its true facet-neighbours (horizontal and
+                # vertical) only
+                self.stencil_min_dg1.interpolate(
+                    min_value(self.stencil_min_dg1, self.stencil_min_dg1_horiz)
+                )
+                self.stencil_max_dg1.interpolate(
+                    max_value(self.stencil_max_dg1, self.stencil_max_dg1_horiz)
+                )
+            else:
+                self.stencil_min_cg.assign(1.0e10)
+                self.stencil_max_cg.assign(-1.0e10)
+                self._stencil_bounds_kernel.apply(
+                    self.stencil_min_cg, self.stencil_max_cg, self.old_field
+                )
+                self.stencil_min_dg1.interpolate(self.stencil_min_cg)
+                self.stencil_max_dg1.interpolate(self.stencil_max_cg)
+
+            # Interpolate fields from DG1 to DG1 equispaced
+            self.new_field.interpolate(mX_fields[i])
+            self.mean_field.interpolate(mean_fields[i])
+
+            # Update the weights based on the monotonic bounds
+            self._lamda_kernel.apply(
+                self.lamda, self.new_field,
+                self.stencil_min_dg1, self.stencil_max_dg1, self.mean_field
+            )
+
+        # Perform blended limiting, with all mixing ratios using
+        # the same lambda field to ensure conservation.
+        for i in range(len(mX_fields)):
+            self.new_field.interpolate(mX_fields[i])
+            self.mean_field.interpolate(mean_fields[i])
+
+            self.mX_new.interpolate((Constant(1.0) - self.lamda)*self.new_field + self.lamda*self.mean_field)
             mX_fields[i].interpolate(self.mX_new)
