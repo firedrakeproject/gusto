@@ -8,7 +8,7 @@ from firedrake.preconditioners import PCBase
 from firedrake.matrix_free.operators import ImplicitMatrixContext
 from gusto.recovery.recovery_kernels import AverageKernel, AverageWeightings
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
-from pyop2.profiling import timed_region, timed_function
+from pyop2.profiling import timed_region, timed_function, timed_stage
 from functools import partial
 
 
@@ -726,9 +726,11 @@ class CompressibleHybridisedSCPC(PCBase):
         with self.xstar.dat.vec_wo as xv:
             x.copy(xv)
 
-        self.xrhs.assign(self.riesz_map(self.xstar))
+        with timed_stage("Gusto: Riesz map"):
+            self.xrhs.assign(self.riesz_map(self.xstar))
         # Solve hybridized system
-        self.hybridized_solver.solve()
+        with timed_stage("Gusto:Solve hybridized system"):
+            self.hybridized_solver.solve()
 
         # Recover broken u and rho
         u_broken, rho, l = self.y_hybrid.subfunctions
@@ -742,9 +744,10 @@ class CompressibleHybridisedSCPC(PCBase):
         self.y.subfunctions[1].assign(rho)
 
         # Recover theta
-        self.theta.zero()
-        self.theta_solver.solve()
-        self.y.subfunctions[2].assign(self.theta)
+        with timed_stage("Gusto:Recover theta"):
+            self.theta.zero()
+            self.theta_solver.solve()
+            self.y.subfunctions[2].assign(self.theta)
 
         with self.y.dat.vec_ro as vout:
             # copy into PETSc output vector
