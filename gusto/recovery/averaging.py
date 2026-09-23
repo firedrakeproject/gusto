@@ -6,9 +6,9 @@ fields from (partially-)discontinuous function spaces to their (partially-)
 continuous counterparts. It does this by simply averaging the values at the DoFs
 from the discontiuous space that correspond to those from the continuous space.
 """
+from functools import cached_property
 
 from firedrake import Function
-from firedrake.utils import cached_property
 from gusto.recovery import recovery_kernels as kernels
 import ufl
 

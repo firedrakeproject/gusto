@@ -41,7 +41,7 @@ def test_split_dg_transport_scalar(tmpdir, tracer_setup):
 def test_split_dg_transport_vector(tmpdir, tracer_setup):
     setup = tracer_setup(tmpdir, "slice")
     domain = setup.domain
-    gdim = domain.mesh.geometric_dimension()
+    gdim = domain.mesh.geometric_dimension
     f_init = as_vector([setup.f_init]*gdim)
     V = VectorFunctionSpace(domain.mesh, "DG", 1)
     eqn = AdvectionEquation(domain, V, "f")

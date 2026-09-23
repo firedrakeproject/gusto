@@ -5,10 +5,10 @@ and GungHo dynamical cores.
 
 from firedrake import (
     Function, Constant, TrialFunctions, DirichletBC, div, assemble,
-    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace, action
+    LinearVariationalProblem, LinearVariationalSolver, FunctionSpace,
+    action, interpolate, Projector, SpatialCoordinate, dot
 )
 from firedrake.fml import drop, replace_subject, Term
-from firedrake.__future__ import interpolate
 from pyop2.profiling import timed_stage, timed_function
 from gusto.core import TimeLevelFields, StateFields
 from gusto.core.labels import (
@@ -20,7 +20,6 @@ from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
 from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisation
 from gusto.timestepping.timestepper import BaseTimestepper
 from gusto.solvers.solver_presets import hybridised_solver_parameters
-from gusto.equations.compressible_euler_equations import CompressibleEulerEquations
 
 
 __all__ = ["SemiImplicitQuasiNewton", "Forcing", "QuasiNewtonLinearSolver"]
@@ -36,18 +35,19 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
     terms.
     """
 
-    def __init__(self, equation_set, io, transport_schemes, spatial_methods,
-                 auxiliary_equations_and_schemes=None,
-                 diffusion_schemes=None, inner_physics_schemes=None,
-                 final_physics_schemes=None,
-                 slow_physics_schemes=None, fast_physics_schemes=None,
-                 alpha=0.5, tau_values=None, off_centred_u=False,
-                 physics_beta=0.5,
-                 num_outer=2, num_inner=2, accelerator=True,
-                 predictor=None, reference_update_freq=None,
-                 spinup_steps=0, solver_prognostics=None,
-                 linear_solver_parameters=None,
-                 appctx=None):
+    def __init__(
+            self, equation_set, io, transport_schemes, spatial_methods,
+            auxiliary_equations_and_schemes=None,
+            diffusion_schemes=None, inner_physics_schemes=None,
+            final_physics_schemes=None,
+            slow_physics_schemes=None, fast_physics_schemes=None,
+            alpha=0.5, tau_values=None, off_centred_u=False,
+            physics_beta=0.5,
+            num_outer=2, num_inner=2, accelerator=True,
+            predictor=None, reference_update_freq=None,
+            spinup_steps=0, consistent_metric=False,
+            solver_prognostics=None, linear_solver_parameters=None, appctx=None
+    ):
         """
         Args:
             equation_set (:class:`PrognosticEquationSet`): the prognostic
@@ -127,6 +127,9 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             spinup_steps (int, optional): the number of steps to run the model
                 in "spin-up" mode, where the alpha parameter is set to 1.0.
                 Defaults to 0, which corresponds to no spin-up.
+            consistent_metric (bool, optional): whether to use the consistent
+                metric term for transporting potential temperature. Improves
+                transport over orography.
             solver_prognostics (list, optional): a list of the names of
                 prognostic variables to include in the solver. Defaults to None,
                 in which case all prognostics that aren't active tracers are
@@ -146,6 +149,7 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         R = FunctionSpace(mesh, "R", 0)
         self.alpha = Function(R, val=float(alpha))
         self.predictor = predictor
+        self.consistent_metric = consistent_metric
         self.accelerator = accelerator
         self.implicit_terms = [incompressible, sponge]
 
@@ -233,6 +237,34 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
         # Flag for if we have simultaneous transport of tracers
         self.simult = False
+
+        # Consistent metric term
+        if self.consistent_metric:
+            # Check that potential temperature is a variable
+            if 'theta' not in equation_set.field_names:
+                raise ValueError(
+                    "Cannot use consistent metric term for transporting theta "
+                    + "if theta is not a prognostic variable"
+                )
+            # Check that z is in all of the correct places
+            if 'z' not in equation_set.field_names:
+                raise ValueError(
+                    "Cannot use consistent metric term for transporting theta "
+                    + "if z is not added as an active tracer"
+                )
+            if transport_schemes[0].field_name != 'z':
+                raise ValueError(
+                    "Cannot use consistent metric term for transporting theta "
+                    + "if z has no transport scheme specified"
+                )
+
+            # Set up adv_z term
+            self.adv_z = Function(
+                equation_set.domain.spaces('theta'), name='adv_z'
+            )
+            self.consistent_wind = Function(
+                equation_set.domain.spaces('HDiv'), name='consistent_wind'
+            )
 
         self.active_transport = []
         for scheme in transport_schemes:
@@ -345,6 +377,19 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
             self.predictor_interpolate = interpolate(
                 self.x.star(predictor)*div_factor, V_DG)
 
+        # Consistent metric term -- things that need setting up afterwards as
+        # the state fields need to be created first
+        if self.consistent_metric:
+            ubar = self.transporting_velocity
+            k = self.equation.domain.k
+            x = SpatialCoordinate(self.equation.domain.mesh)
+            z = dot(k, x)
+            self.z = Function(self.equation.domain.spaces('theta')).interpolate(z)
+            expr = ubar + k*(dot(ubar, k) - self.adv_z)
+            self.consistent_wind_projection = Projector(
+                expr, self.consistent_wind, bcs=equation_set.bcs['u']
+            )
+
     def _apply_bcs(self):
         """
         Set the zero boundary conditions in the velocity.
@@ -386,9 +431,12 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
         # tests with KGOs fail
         apply_bcs = True
         self.setup_equation(self.equation)
-        for _, scheme in self.active_transport:
+        for field_name, scheme in self.active_transport:
             scheme.setup(self.equation, apply_bcs, transport)
-            self.setup_transporting_velocity(scheme)
+            if self.consistent_metric and field_name == 'theta':
+                self.setup_transporting_velocity(scheme, self.consistent_wind)
+            else:
+                self.setup_transporting_velocity(scheme)
             if self.io.output.log_courant:
                 scheme.courant_max = self.io.courant_max
 
@@ -448,6 +496,18 @@ class SemiImplicitQuasiNewton(BaseTimestepper):
 
                     # xp is xstar plus the increment from the transported predictor
                     xp(name).assign(xstar(name) + field_out - self.predictor_field_in)
+
+                elif self.consistent_metric and name == 'z':
+                    # Reset z to z
+                    k = self.equation.domain.k
+                    x = SpatialCoordinate(self.equation.domain.mesh)
+                    xstar('z').interpolate(dot(k, x))
+                    # Apply transport
+                    scheme.apply(xp(name), xstar(name))
+                    # Compute adv_z
+                    self.adv_z.interpolate((xstar('z') - xp('z'))/self.dt)
+                    self.consistent_wind_projection.project()
+
                 else:
                     # Standard transport
                     scheme.apply(xp(name), xstar(name))
@@ -936,12 +996,6 @@ class QuasiNewtonLinearSolver(object):
         if self.reference_dependent:
             self.equation.update_reference_profiles()
             self.solver.invalidate_jacobian()
-
-            # TODO: Issue #686 is to address this reference profile update bug (pythonPC update not called)
-            # this line forces it to update for now
-            pc = self.solver.snes.getKSP().getPC()
-            if (isinstance(self.equation, CompressibleEulerEquations) and pc.getType() == "python"):
-                pc.getPythonContext().update(pc)
 
     def zero_non_prognostics(self, equation, xrhs, field_names, prognostic_names):
         """

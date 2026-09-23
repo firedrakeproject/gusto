@@ -84,7 +84,7 @@ def test_3D_cartesian_recovery(geometry, element, mesh, expr):
         family = "BDM"
 
     # horizontal base spaces
-    cell = mesh._base_mesh.ufl_cell().cellname()
+    cell = mesh._base_mesh.ufl_cell().cellname
     u_div_hori = FiniteElement(family, cell, 1)
     w_div_hori = FiniteElement("DG", cell, 0)
 

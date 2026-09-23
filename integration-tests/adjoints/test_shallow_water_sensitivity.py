@@ -1,45 +1,32 @@
 import pytest
-import numpy as np
 
 from firedrake import *
 from firedrake.adjoint import *
-from pyadjoint import get_working_tape
 from gusto import *
 
 
 @pytest.fixture(autouse=True)
-def handle_taping():
-    yield
-    tape = get_working_tape()
-    tape.clear_tape()
+def autouse_set_test_tape(set_test_tape):
+    pass
 
 
-@pytest.fixture(autouse=True, scope="module")
-def handle_annotation():
-    from firedrake.adjoint import annotate_tape, continue_annotation
-    if not annotate_tape():
-        continue_annotation()
-    yield
-    # Ensure annotation is paused when we finish.
-    annotate = annotate_tape()
-    if annotate:
-        pause_annotation()
-
-
-def test_shallow_water(tmpdir):
-    assert get_working_tape()._blocks == []
+@pytest.mark.parametrize("control", ["u", "D"])
+@pytest.mark.parametrize("stepper_type", ["BackwardEuler", "RK4", "SemiImplicitQuasiNewton"])
+def test_shallow_water(tmpdir, control, stepper_type):
     # setup shallow water parameters
     R = 6371220.
     H = 5960.
-    dt = 900.
+    mountain = 2000.
+    dt = 300.
+    u_max = 20.
 
     # Domain
-    mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=2)
-    x = SpatialCoordinate(mesh)
+    mesh = IcosahedralSphereMesh(radius=R, refinement_level=3, degree=1)
+    x, y, z = SpatialCoordinate(mesh)
     domain = Domain(mesh, dt, 'BDM', 1)
 
     # Equation
-    lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
+    lamda, theta, _ = lonlatr_from_xyz(x, y, z)
     R0 = pi/9.
     R0sq = R0**2
     lamda_c = -pi/2.
@@ -48,52 +35,122 @@ def test_shallow_water(tmpdir):
     thsq = (theta - theta_c)**2
     rsq = min_value(R0sq, lsq+thsq)
     r = sqrt(rsq)
-    bexpr = 2000 * (1 - r/R0)
-    parameters = ShallowWaterParameters(mesh, H=H, topog_expr=bexpr)
+    bexpr = mountain * (1 - r/R0)
+    b = Function(domain.spaces("DG")).interpolate(bexpr)
+    parameters = ShallowWaterParameters(mesh, H=H, topog_expr=b)
     eqn = ShallowWaterEquations(domain, parameters)
 
     # I/O
     output = OutputParameters(dirname=str(tmpdir), log_courant=False)
     io = IO(domain, output)
 
+    # Don't let an inexact solve get in the way of a good Taylor test
+    lu_parameters = {
+        'ksp_type': 'preonly',
+        'pc_type': 'lu',
+        'pc_factor_mat_solver_type': 'mumps',
+    }
+    mass_parameters = {
+        'snes_type': 'ksponly',
+        **lu_parameters,
+        'ksp_reuse_preconditioner': None,
+    }
+    snes_parameters = {
+        'snes_monitor': None,
+        'snes_converged_reason': None,
+        'snes_type': 'newtonls',
+        'snes_stol': 0,
+        'snes_rtol': 1e-10,
+        **lu_parameters,
+    }
+    linear_solver_parameters = {
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': lu_parameters,
+    }
+
     # Transport schemes
-    transported_fields = [TrapeziumRule(domain, "u"), SSPRK3(domain, "D")]
     transport_methods = [DGUpwind(eqn, "u"), DGUpwind(eqn, "D")]
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(
-        eqn, io, transported_fields, transport_methods
-    )
+    if stepper_type == "BackwardEuler":
+        stepper = Timestepper(
+            eqn, BackwardEuler(domain, solver_parameters=snes_parameters),
+            io, spatial_methods=transport_methods
+        )
+    elif stepper_type == "RK4":
+        stepper = Timestepper(
+            eqn, RK4(domain, solver_parameters=mass_parameters),
+            io, spatial_methods=transport_methods
+        )
+    else:
+        assert stepper_type == "SemiImplicitQuasiNewton"
+        transported_fields = [
+            TrapeziumRule(domain, "u", solver_parameters=snes_parameters),
+            SSPRK3(domain, "D", solver_parameters=mass_parameters),
+        ]
+        stepper = SemiImplicitQuasiNewton(
+            eqn, io, transported_fields, transport_methods,
+            linear_solver_parameters=linear_solver_parameters
+        )
 
     u0 = stepper.fields('u')
     D0 = stepper.fields('D')
-    u_max = 20.   # Maximum amplitude of the zonal wind (m/s)
-    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
+
+    uexpr = as_vector([-u_max*y/R, u_max*x/R, 0.0])
     g = parameters.g
     Omega = parameters.Omega
     Rsq = R**2
-    Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
+    Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*z**2/Rsq)/g - bexpr
 
-    u0.project(uexpr)
-    D0.interpolate(Dexpr)
+    # controls m for the initial conditions
+    m_u = Function(u0.function_space()).project(uexpr)
+    m_D = Function(D0.function_space()).interpolate(Dexpr)
+
+    if control == "u":
+        m = m_u
+    else:
+        m = m_D
 
     Dbar = Function(D0.function_space()).assign(H)
     stepper.set_reference_profiles([('D', Dbar)])
 
-    stepper.run(0., 5*dt)
+    # These are the only operations we are interested in rerunning with the tape.
+    with set_working_tape() as tape:
+        # initialise the solution
+        u0.assign(m_u)
+        D0.assign(m_D)
 
-    u_tf = stepper.fields('u')  # Final velocity field
-    D_tf = stepper.fields('D')  # Final depth field
+        # propagate forwards
+        stepper.run(0., 2*dt)
 
-    J = assemble(0.5*inner(u_tf, u_tf)*dx + 0.5*g*D_tf**2*dx)
+        if control == "u":
+            u_tf = stepper.fields('u')
+            J = assemble(inner(u_tf, u_tf)*dx)**2
+        else:
+            D_tf = stepper.fields('D')
+            dD = D_tf - (H - b)
+            J = assemble(0.5*g*inner(dD, dD)*dx)**2
 
-    control = [Control(D0), Control(u0)]  # Control variables
-    J_hat = ReducedFunctional(J, control)
-    assert np.isclose(J_hat([D0, u0]), J, rtol=1e-10)
-    with stop_annotating():
-        # Stop annotation to perform the Taylor test
-        h0 = Function(D0.function_space())
-        h1 = Function(u0.function_space())
-        h0.assign(D0 * np.random.rand())
-        h1.assign(u0 * np.random.rand())
-        assert taylor_test(J_hat, [D0, u0], [h0, h1]) > 1.95
+        Jhat = ReducedFunctional(J, Control(m), tape=tape)
+
+    # Perturbation directions for taylor test
+    # pyadjoint will multiply h by 1e-2, 1e-4 etc so we pre-multiply by 10
+    if control == "u":
+        h = Function(u0.function_space()).interpolate(
+            10.0*u_max*as_vector([cos(2*pi*y/R), 0.0, 1 + cos(pi*z/R)*sin(4*pi*x/R)]))
+    else:
+        h = Function(D0.function_space()).interpolate(1.0*(Dexpr - (H - b))*cos(pi*z/R))
+
+    assert abs(float(J) - float(Jhat(m))) < 1e-10, "Functional re-evaluation does not match original evaluation."
+
+    # Check the TLM explicitly before checking the Hessian (which relies on the tlm)
+    assert taylor_test(Jhat, m, h, dJdm=Jhat.tlm(h)) > 1.95, "TLM is not second order accurate."
+
+    # Check the re-evaluation, derivative, and Hessian all converge at the expected rates.
+    taylor = taylor_to_dict(Jhat, m, h)
+    assert min(taylor['R0']['Rate']) > 0.95, taylor['R0']
+    assert min(taylor['R1']['Rate']) > 1.95, taylor['R1']
+    assert min(taylor['R2']['Rate']) > 2.95, taylor['R2']

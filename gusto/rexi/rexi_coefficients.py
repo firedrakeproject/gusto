@@ -9,9 +9,9 @@ class RexiConstants(object):
     Haut et.al.
     """
 
-    def __init__(self, coefficients="Haut"):
+    def __init__(self, coefficients="haut"):
 
-        if coefficients == "Haut":
+        if coefficients == "haut":
             """
             mu and a coefficients from "A high-order time-parallel
             scheme for solving wave propagation problems via the
@@ -47,7 +47,7 @@ class RexiConstants(object):
                 -1.0816457995911385e-7 + 1j*-2.954309729192276e-8
             ]
 
-        elif coefficients == "Caliari":
+        elif coefficients == "caliari":
             """
             mu and a coefficients from "An accurate and time-parallel rational
             exponential integrator for hyperbolic and oscillatory PDEs",
@@ -90,7 +90,7 @@ class RexiConstants(object):
                 self.a[l] = numpy.conjugate(self.a[l])
 
         else:
-            raise ValueError("Please choose either Haut or Caliari for coefficients argument.")
+            raise ValueError("Please choose either 'haut' or 'caliari' for coefficients argument.")
 
 
 def b_coefficients(h, M):

@@ -257,7 +257,7 @@ def advection_equation_circulation_form(domain, test, q, ubar):
         class:`LabelledForm`: a labelled transport form.
     """
 
-    if domain.mesh.topological_dimension() == 3:
+    if domain.mesh.topological_dimension == 3:
         L = inner(test, cross(curl(q), ubar))*dx
 
     else:
@@ -334,51 +334,59 @@ def split_continuity_form(equation):
         :class:`PrognosticEquation`: the model's equation.
     """
 
-    for t in equation.residual:
-        if (t.get(transport) == TransportEquationType.conservative):
-            # Get fields and test functions
-            subj = t.get(subject)
-            prognostic_field_name = t.get(prognostic)
-            if hasattr(equation, "field_names"):
-                idx = equation.field_names.index(prognostic_field_name)
-                W = equation.function_space
-                test = TestFunctions(W)[idx]
-                q = split(subj)[idx]
-            else:
-                W = equation.function_space
-                test = TestFunction(W)
-                q = subj
-            # u is either a prognostic or prescribed field
-            if (hasattr(equation, "field_names")
-               and 'u' in equation.field_names):
-                u_idx = equation.field_names.index('u')
-                uadv = split(equation.X)[u_idx]
-            elif 'u' in equation.prescribed_fields._field_names:
-                uadv = equation.prescribed_fields('u')
-            else:
-                raise ValueError('Cannot get velocity field')
+    original_terms = [t for t in equation.residual.terms
+                      if t.get(transport) == TransportEquationType.conservative]
 
-            # Create new advective and divergence terms
-            adv_term = prognostic(advection_form(test, q, uadv), prognostic_field_name)
-            div_term = divergence(prognostic(test*q*div(uadv)*dx, prognostic_field_name))
+    # Remove the original conservative transport terms before adding the split
+    # advective and divergence terms. Doing this in a separate pass avoids
+    # leaving the original transport term in place when the residual is updated.
+    equation.residual = equation.residual.label_map(
+        lambda t: t.get(transport) == TransportEquationType.conservative,
+        map_if_true=drop)
 
-            # Add linearisations of new terms if required
-            if (t.has_label(linearisation)):
-                u_trial = TrialFunctions(W)[u_idx]
-                qbar = split(equation.X_ref)[idx]
-                # Add linearisation to adv_term
-                linear_adv_term = linear_advection_form(test, qbar, u_trial, qbar, uadv)
-                adv_term = linearisation(adv_term, linear_adv_term)
-                # Add linearisation to div_term
-                linear_div_term = transporting_velocity(qbar*test*div(u_trial)*dx, u_trial)
-                div_term = linearisation(div_term, linear_div_term)
+    for t in original_terms:
+        # Get fields and test functions
+        subj = t.get(subject)
+        prognostic_field_name = t.get(prognostic)
+        if hasattr(equation, "field_names"):
+            idx = equation.field_names.index(prognostic_field_name)
+            W = equation.function_space
+            test = TestFunctions(W)[idx]
+            q = split(subj)[idx]
+        else:
+            W = equation.function_space
+            test = TestFunction(W)
+            q = subj
+        # u is either a prognostic or prescribed field
+        if (hasattr(equation, "field_names")
+           and 'u' in equation.field_names):
+            u_idx = equation.field_names.index('u')
+            uadv = split(equation.X)[u_idx]
+        elif 'u' in equation.prescribed_fields._field_names:
+            uadv = equation.prescribed_fields('u')
+        else:
+            raise ValueError('Cannot get velocity field')
 
-            # Add new terms onto residual
-            equation.residual += subject(adv_term + div_term, subj)
-            # Drop old term
-            equation.residual = equation.residual.label_map(
-                lambda t: t.get(transport) == TransportEquationType.conservative,
-                map_if_true=drop)
+        # Create new advective and divergence terms
+        adv_term = prognostic(advection_form(test, q, uadv), prognostic_field_name)
+        div_term = divergence(prognostic(test*q*div(uadv)*dx, prognostic_field_name))
+
+        # Add linearisations of new terms if required
+        if (t.has_label(linearisation)):
+            u_trial = TrialFunctions(W)[u_idx]
+            q_trial = TrialFunctions(W)[idx]
+            qbar = split(equation.X_ref)[idx]
+            ubar = split(equation.X_ref)[u_idx]
+            # Add linearisation to adv_term
+            linear_adv_term = linear_advection_form(test, q_trial, u_trial, qbar, ubar)
+            adv_term = linearisation(adv_term, linear_adv_term)
+            # Add linearisation to div_term
+            linear_div_term = transporting_velocity(qbar*test*div(u_trial)*dx, u_trial)
+            div_term = linearisation(div_term, linear_div_term)
+
+        # Add the split terms back onto the residual as the replacement for the
+        # original conservative transport term.
+        equation.residual += subject(adv_term + div_term, subj)
 
     return equation
 

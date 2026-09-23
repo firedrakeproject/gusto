@@ -74,14 +74,15 @@ Key choices in RIDC:
 """
 
 from abc import ABCMeta
+from functools import cached_property
 import numpy as np
 from firedrake import (
     Function, NonlinearVariationalProblem, NonlinearVariationalSolver, Constant
 )
+from gusto.core.logging import logger
 from firedrake.fml import (
     replace_subject, all_terms, drop
 )
-from firedrake.utils import cached_property
 from gusto.time_discretisation.time_discretisation import wrapper_apply
 from gusto.core.labels import (time_derivative, implicit, explicit, source_label)
 from qmat import genQCoeffs, genQDeltaCoeffs
@@ -403,12 +404,21 @@ class SDC(object, metaclass=ABCMeta):
         solvers = []
         for m in range(self.M):
             # setup solver using residual defined in derived class
-            alpha = self.Qdelta_imp[m, m]/self.dt_coarse
-            #print("Setting up hybridised solver with alpha = %s" % alpha)
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
+            alpha = float(self.Qdelta_imp[m, m])/float(self.dt_coarse)
+            logger.info(f"SDC node {m}: Qdelta_imp[{m},{m}]={self.Qdelta_imp[m, m]}, alpha={alpha}")
+            if alpha <= 0.0:
+                raise ValueError(
+                    f"SDC node {m}: non-positive implicit diagonal "
+                    f"Qdelta_imp[{m},{m}]={self.Qdelta_imp[m, m]}; the hybridised "
+                    f"preconditioner needs beta = alpha*dt > 0")
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(
+                self.equation, self.equation.field_names, alpha=alpha,
+                tau_values=None, nonlinear=True, imex=True)
             problem = NonlinearVariationalProblem(self.res(m), self.U_DC, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
-            solvers.append(NonlinearVariationalSolver(problem, solver_parameters=self.nonlinear_solver_parameters, appctx=self.appctx, options_prefix=solver_name))
+            solvers.append(NonlinearVariationalSolver(
+                problem, solver_parameters=self.nonlinear_solver_parameters,
+                appctx=self.appctx, options_prefix=solver_name))
         return solvers
 
     @cached_property

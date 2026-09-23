@@ -10,7 +10,7 @@ tested.
 """
 
 from firedrake import dx
-from firedrake.parloops import par_loop, READ, WRITE, INC, MIN, MAX, op2
+from firedrake.parloops import par_loop, READ, WRITE, RW, MIN, MAX, op2
 import numpy as np
 
 
@@ -158,7 +158,7 @@ class MeanMixingRatioWeights():
                 lives in the continuous target space.
         """
         par_loop(self._kernel, dx,
-                 {"lamda": (lamda, INC),
+                 {"lamda": (lamda, RW),
                   "mX_field": (mX_field, READ),
                   "mean_field": (mean_field, READ)})
 
@@ -185,7 +185,7 @@ class MinKernel():
             The minimum DoF value of the field.
         """
 
-        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=field._comm)
+        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=field.comm)
 
         op2.par_loop(self._kernel, field.dof_dset.set, fmin(MIN), field.dat(READ))
 
@@ -214,7 +214,7 @@ class MaxKernel():
             The maximum DoF value of the field.
         """
 
-        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=field._comm)
+        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=field.comm)
 
         op2.par_loop(self._kernel, field.dof_dset.set, fmax(MAX), field.dat(READ))
 

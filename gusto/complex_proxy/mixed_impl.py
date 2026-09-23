@@ -49,7 +49,7 @@ def FunctionSpace(V):
 
     :arg V: the real-valued FunctionSpace.
     """
-    return fd.FunctionSpace(V.mesh(), FiniteElement(V.ufl_element()))
+    return fd.FunctionSpace(V.mesh().unique(), FiniteElement(V.ufl_element()))
 
 
 def DirichletBC(W, V, bc, function_arg=None):

@@ -18,7 +18,9 @@ from gusto.equations.common_forms import (
 )
 from gusto.equations.active_tracers import Phases, TracerVariableType
 from gusto.equations.prognostic_equations import PrognosticEquationSet
-__all__ = ["CompressibleEulerEquations", "HydrostaticCompressibleEulerEquations"]
+from gusto.core.logging import logger
+
+_all__ = ["CompressibleEulerEquations", "HydrostaticCompressibleEulerEquations"]
 
 
 class CompressibleEulerEquations(PrognosticEquationSet):
@@ -47,7 +49,7 @@ class CompressibleEulerEquations(PrognosticEquationSet):
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
                 mesh and the compatible function spaces.
-            x (:class:`Configuration`, optional): an object containing
+            parameters (:class:`Configuration`, optional): an object containing
                 the model's physical parameters.
             sponge_options (:class:`SpongeLayerParameters`, optional): any
                 parameters for applying a sponge layer to the upper boundary.
@@ -181,7 +183,11 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                 idx = self.field_names.index(tracer.name)
                 tracer_mr_total += split(self.X)[idx]
             else:
-                raise NotImplementedError('Only mixing ratio tracers are implemented')
+                logger.warning(
+                    f'Tracer {tracer.name} is not a mixing ratio, so will not '
+                    + 'contribute to virtual dry potential temperature'
+                )
+
         theta_v = theta / (Constant(1.0) + tracer_mr_total)
 
         pressure_gradient_form = pressure_gradient(subject(prognostic(
@@ -221,7 +227,10 @@ class CompressibleEulerEquations(PrognosticEquationSet):
                         elif tracer.phase == Phases.liquid:
                             mr_l += split(self.X)[idx]
                     else:
-                        raise NotImplementedError('Only mixing ratio tracers are implemented')
+                        logger.warning(
+                            f'Tracer {tracer.name} is not a moisture mixing'
+                            + 'ratio, so will not contribute to heat capacities'
+                        )
 
             c_vml = cv + mr_v * c_vv + mr_l * c_pl
             c_pml = cp + mr_v * c_pv + mr_l * c_pl
