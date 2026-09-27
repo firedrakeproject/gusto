@@ -1,17 +1,19 @@
 """
 Tests the MonotonicMeanLimiter, which blends a DG1 mixing ratio field with
-its DG0 mean companion field so that the result respects monotonicity
-(rather than just non-negativity), following the derivation in
-monotone_limiter.tex.
+a density-weighted DG0 mean companion field (computed internally from a
+reference density field) so that the result respects monotonicity (rather
+than just non-negativity), following the derivation in monotone_limiter.tex.
 
 The test checks two properties:
   1. Monotonicity: in every cell, the limited field lies within the min/max
      of the pre-transport field over that cell and its facet-neighbours.
-  2. Mass conservation: since the "mean" field is constructed here to be
-     exactly the cell-average of the "new" (post-transport) field, blending
-     with any lamda in [0, 1] must preserve the mass (integral) in every
-     cell, and hence the total mass.
+  2. Mass conservation: since a uniform reference density is used here, the
+     internally-computed mean field is exactly the cell-average of the
+     "new" (post-transport) field, so blending with any lamda in [0, 1]
+     must preserve the mass (integral) in every cell, and hence the total
+     mass.
 """
+
 
 import numpy as np
 from firedrake import (
@@ -46,7 +48,6 @@ def test_monotonic_mean_limiter():
     ncells = 6
     mesh = PeriodicIntervalMesh(ncells, float(ncells))
 
-    DG0 = FunctionSpace(mesh, "DG", 0)
     # Use the equispaced variant so that DOFs correspond to vertex values,
     # matching what MonotonicMeanLimiter uses internally
     cell = mesh.ufl_cell().cellname
@@ -97,15 +98,13 @@ def test_monotonic_mean_limiter():
         new_field.dat.data[dofs[0]] = left_val
         new_field.dat.data[dofs[1]] = right_val
 
-    # The mean field is set to the exact cell-average of the new field, as
-    # would be the case for a genuinely mass-consistent low-order companion
-    # field.
+    # With a uniform reference density, the density-weighted mean field
+    # computed internally by the limiter reduces to the exact cell-average
+    # of the new field.
     mean_values = np.array(
         [0.5*(new_left_right[c][0] + new_left_right[c][1]) for c in range(ncells)]
     )
-    mean_field = Function(DG0)
-    for c in range(ncells):
-        mean_field.dat.data[DG0.cell_node_list[c]] = mean_values[c]
+    rho_field = Function(DG1).assign(1.0)
 
     total_mass_before = assemble(new_field*dx)
 
@@ -114,9 +113,8 @@ def test_monotonic_mean_limiter():
     # ---------------------------------------------------------------------- #
     limiter = MonotonicMeanLimiter([DG1])
     mX_fields = [new_field]
-    mean_fields = [mean_field]
     old_fields = [old_field]
-    limiter.apply(mX_fields, mean_fields, old_fields)
+    limiter.apply(mX_fields, rho_field, old_fields)
 
     limited_field = mX_fields[0]
 
@@ -151,9 +149,10 @@ def test_monotonic_mean_limiter():
     assert np.isclose(total_mass_before, total_mass_after, atol=1e-10), \
         "MonotonicMeanLimiter did not conserve total mass"
 
-    # Since mean_field was constructed as the exact cell-average of
-    # new_field, mass should also be conserved on a per-cell basis,
-    # regardless of the blending weight used in each cell.
+    # Since rho_field is uniform, the internally-computed mean field is
+    # exactly the cell-average of new_field, so mass should also be
+    # conserved on a per-cell basis, regardless of the blending weight used
+    # in each cell.
     for c in range(ncells):
         cell_length = 1.0  # PeriodicIntervalMesh(ncells, ncells) -> unit cells
         mass_before = mean_values[c] * cell_length

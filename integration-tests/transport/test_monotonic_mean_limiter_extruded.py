@@ -9,7 +9,7 @@ options.
 
 from gusto import *
 from firedrake import (as_vector, PeriodicIntervalMesh, pi, SpatialCoordinate,
-                       ExtrudedMesh, FunctionSpace, Function, conditional,
+                       ExtrudedMesh, Function, conditional,
                        sqrt, sin, cos, assemble, dx)
 import numpy as np
 import pytest
@@ -153,6 +153,7 @@ def test_monotonic_mean_limiter_extruded(tmpdir, extruded_bounds_method):
     # pre-limiting field
     stepper.run(t=0, tmax=dt)
     new_field = stepper.fields('m_X')
+    rho_field = stepper.fields('rho_d')
 
     # Sanity check: unlimited transport of this discontinuous field should
     # have produced some new over/undershoot relative to the initial
@@ -162,17 +163,11 @@ def test_monotonic_mean_limiter_extruded(tmpdir, extruded_bounds_method):
     assert unlimited_overshoot > 1e-3 or unlimited_undershoot > 1e-3, \
         'Test setup should produce genuine over/undershoots for the limiter to fix'
 
-    # A conservative, mass-consistent mean companion field: since there is
-    # no density-weighting in the limiter itself, this is simply the cell
-    # average of the mixing ratio
-    DG0 = FunctionSpace(V.mesh(), 'DG', 0)
-    mean_field = Function(DG0).project(new_field)
-
     mass_before = assemble(new_field*dx)
 
     limiter = MonotonicMeanLimiter([V], extruded_bounds_method=extruded_bounds_method)
     limited_field = Function(V).assign(new_field)
-    limiter.apply([limited_field], [mean_field], [old_field])
+    limiter.apply([limited_field], rho_field, [old_field])
 
     # The limiter only guarantees that the limited field in each cell lies
     # within the min/max of the pre-transport field over that cell and its

@@ -366,6 +366,10 @@ class MonotonicMeanLimiter(object):
     field over the cell e and its facet-neighbours, e union d(e). As with
     :class:`MeanLimiter`, the same lamda field is used to blend every mixing
     ratio provided, so that mass is conserved.
+
+    The mean field mbar_e is mass-weighted, and is computed with respect to
+    a reference density field rho: mbar_e is the cellwise mean of rho*m
+    divided by the cellwise mean of rho.
     """
 
     def __init__(self, spaces, enforce_nonnegative=False, extruded_bounds_method='facet'):
@@ -437,6 +441,12 @@ class MonotonicMeanLimiter(object):
         self.mean_field = Function(DG0)
         self.mX_new = Function(DG1_equispaced)
 
+        # Fields used to compute the density-weighted mean field, mbar_e,
+        # as the cellwise mean of rho*m divided by the cellwise mean of rho
+        self.rho_field = Function(DG1_equispaced)
+        self.rho_mean = Function(DG0)
+        self.rhom_mean = Function(DG0)
+
         self.stencil_min_dg1 = Function(DG1_equispaced)
         self.stencil_max_dg1 = Function(DG1_equispaced)
 
@@ -475,7 +485,7 @@ class MonotonicMeanLimiter(object):
         self.enforce_nonnegative = enforce_nonnegative
         self._clip_means_kernel = ClipZero(DG0)
 
-    def apply(self, mX_fields, mean_fields, old_mX_fields):
+    def apply(self, mX_fields, rho_field, old_mX_fields):
         """
         Compute the limiter weights, lambda, and use these to combine the
         DG1 mixing ratio and DG0 mean field to ensure monotonicity.
@@ -483,8 +493,10 @@ class MonotonicMeanLimiter(object):
         Args:
             mX_fields (list of :class:`Function`): the transported (pre-
                 limited) DG1 mixing ratios to limit.
-            mean_fields (list of :class:`Function`): the DG0 mean field
-                associated with each mX_field.
+            rho_field (:class:`Function`): a reference density field, used
+                to compute the density-weighted mean field for each
+                mX_field as the cellwise mean of rho*m divided by the
+                cellwise mean of rho.
             old_mX_fields (list of :class:`Function`): the DG1 mixing ratios
                 before this step's transport, used to compute the monotonic
                 bounds for each cell and its facet-neighbours.
@@ -493,9 +505,13 @@ class MonotonicMeanLimiter(object):
         # Remove weights from previous applications
         self.lamda.interpolate(Constant(0.0))
 
+        # Compute the cellwise mean of rho, shared by every mX_field since
+        # they are all weighted by the same reference density
+        self.rho_field.interpolate(rho_field)
+        self.rho_mean.project(self.rho_field)
+
         if self.enforce_nonnegative:
-            for mean_field in mean_fields:
-                self._clip_means_kernel.apply(mean_field, mean_field)
+            self._clip_means_kernel.apply(self.rho_mean, self.rho_mean)
 
         for i in range(len(mX_fields)):
             # Gather the min/max of the pre-transport field over each cell
@@ -543,9 +559,14 @@ class MonotonicMeanLimiter(object):
                 self.stencil_min_dg1.interpolate(self.stencil_min_cg)
                 self.stencil_max_dg1.interpolate(self.stencil_max_cg)
 
-            # Interpolate fields from DG1 to DG1 equispaced
+            # Interpolate fields from DG1 to DG1 equispaced, and compute the
+            # density-weighted mean field as the cellwise mean of rho*m
+            # divided by the cellwise mean of rho
             self.new_field.interpolate(mX_fields[i])
-            self.mean_field.interpolate(mean_fields[i])
+            self.rhom_mean.project(self.rho_field*self.new_field)
+            self.mean_field.interpolate(self.rhom_mean/self.rho_mean)
+            if self.enforce_nonnegative:
+                self._clip_means_kernel.apply(self.mean_field, self.mean_field)
 
             # Update the weights based on the monotonic bounds
             self._lamda_kernel.apply(
@@ -557,7 +578,10 @@ class MonotonicMeanLimiter(object):
         # the same lambda field to ensure conservation.
         for i in range(len(mX_fields)):
             self.new_field.interpolate(mX_fields[i])
-            self.mean_field.interpolate(mean_fields[i])
+            self.rhom_mean.project(self.rho_field*self.new_field)
+            self.mean_field.interpolate(self.rhom_mean/self.rho_mean)
+            if self.enforce_nonnegative:
+                self._clip_means_kernel.apply(self.mean_field, self.mean_field)
 
             self.mX_new.interpolate((Constant(1.0) - self.lamda)*self.new_field + self.lamda*self.mean_field)
             mX_fields[i].interpolate(self.mX_new)
