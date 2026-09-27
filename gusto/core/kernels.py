@@ -163,6 +163,142 @@ class MeanMixingRatioWeights():
                   "mean_field": (mean_field, READ)})
 
 
+class MeanMixingRatioStencilBounds():
+    """
+    Gathers, at each vertex of a DG1 field, the minimum and maximum value
+    taken by the field over all cells sharing that vertex.
+
+    This is used by the :class:`MonotonicMeanLimiter` to find the minimum and
+    maximum value of the pre-transported field over each cell and its
+    facet-neighbours (since, for a 1D mesh, cells sharing a vertex are exactly
+    the facet-neighbours of a cell). The result is stored in a continuous
+    (CG1) field, so that the bounds are automatically shared between
+    neighbouring cells.
+    """
+
+    def __init__(self, V_DG1):
+        """
+        Args:
+            V_DG1 (:class:`FunctionSpace`): The (equispaced) DG1 space of the
+                field whose stencil bounds are to be computed.
+        """
+
+        shapes = {'nDOFs': V_DG1.finat_element.space_dimension()}
+        domain = "{{[i]: 0 <= i < {nDOFs}}}".format(**shapes)
+
+        instrs = ("""
+                  for i
+                      stencil_max[i] = fmax(stencil_max[i], field[i])
+                      stencil_min[i] = fmin(stencil_min[i], field[i])
+                  end
+                  """)
+
+        self._kernel = (domain, instrs)
+
+    def apply(self, stencil_min, stencil_max, field):
+        """
+        Performs the par loop.
+
+        Args:
+            stencil_min (:class:`Function`): the CG1 field in which to
+                accumulate the minimum value at each vertex. Should be reset
+                to a large value before calling this.
+            stencil_max (:class:`Function`): the CG1 field in which to
+                accumulate the maximum value at each vertex. Should be reset
+                to a very negative value before calling this.
+            field (:class:`Function`): the (equispaced) DG1 field to find the
+                bounds of.
+        """
+        par_loop(self._kernel, dx,
+                 {"stencil_min": (stencil_min, MIN),
+                  "stencil_max": (stencil_max, MAX),
+                  "field": (field, READ)})
+
+
+class MonotonicMeanMixingRatioWeights():
+    """
+    Finds the lambda values for blending a mixing ratio and its mean DG0
+    field in the :class:`MonotonicMeanLimiter`.
+
+    Unlike :class:`MeanMixingRatioWeights` (which only enforces
+    non-negativity), this enforces that the transported field in each cell
+    lies within the minimum and maximum of the pre-transport field over that
+    cell and its facet-neighbours, following the derivation in
+    monotone_limiter.tex.
+    """
+
+    def __init__(self, V_DG1):
+        """
+        Args:
+            V_DG1 (:class:`FunctionSpace`): The (equispaced) DG1 space of the
+                mixing ratio field.
+        """
+
+        shapes = {'nDOFs': V_DG1.finat_element.space_dimension()}
+        domain = "{{[i]: 0 <= i < {nDOFs}}}".format(**shapes)
+
+        instrs = ("""
+                  <float64> eps = 1.0e-12
+                  <float64> new_min = 1.0e10
+                  <float64> new_max = -1.0e10
+                  <float64> old_min = 1.0e10
+                  <float64> old_max = -1.0e10
+                  <float64> lamda_min = 0.0
+                  <float64> lamda_max = 0.0
+
+                  for i
+                      new_min = fmin(new_min, new_field[i])
+                      new_max = fmax(new_max, new_field[i])
+                      old_min = fmin(old_min, stencil_min[i])
+                      old_max = fmax(old_max, stencil_max[i])
+                  end
+
+                  # Note: within each guarded branch below, the mean is
+                  # assumed to lie within [old_min, old_max], so the
+                  # denominator is guaranteed to already be non-negative
+                  # (e.g. mean_field - new_min > old_min - new_min > 0 when
+                  # new_min < old_min). This means only a small positive
+                  # eps is needed to guard against a zero denominator; no
+                  # sign-dependent epssign offset (as used elsewhere for
+                  # unguarded divisions) is required here.
+                  if new_min < old_min
+                      lamda_min = fmin(fmax((old_min - new_min)/(mean_field[0] - new_min + eps), 0.0), 1.0)
+                  end
+
+                  if new_max > old_max
+                      lamda_max = fmin(fmax((new_max - old_max)/(new_max - mean_field[0] + eps), 0.0), 1.0)
+                  end
+
+                  lamda[0] = fmax(lamda[0], fmax(lamda_min, lamda_max))
+                  """)
+
+        self._kernel = (domain, instrs)
+
+    def apply(self, lamda, new_field, stencil_min, stencil_max, mean_field):
+        """
+        Performs the par loop.
+
+        Args:
+            lamda (:class:`Function`): the DG0 field in which to accumulate
+                the blending weights.
+            new_field (:class:`Function`): the (equispaced) DG1 pre-limited,
+                post-transport mixing ratio field.
+            stencil_min (:class:`Function`): the (equispaced) DG1
+                representation of the minimum of the pre-transport field over
+                each cell and its facet-neighbours.
+            stencil_max (:class:`Function`): the (equispaced) DG1
+                representation of the maximum of the pre-transport field over
+                each cell and its facet-neighbours.
+            mean_field (:class:`Function`): the DG0 mean mixing ratio field.
+        """
+        par_loop(self._kernel, dx,
+                 {"lamda": (lamda, RW),
+                  "new_field": (new_field, READ),
+                  "stencil_min": (stencil_min, READ),
+                  "stencil_max": (stencil_max, READ),
+                  "mean_field": (mean_field, READ)})
+
+
 class MinKernel():
     """Finds the minimum DoF value of a field."""
 
