@@ -22,7 +22,7 @@ __all__ = ["Diagnostics", "DiagnosticField", "CourantNumber", "Gradient",
            "ZonalComponent", "RadialComponent", "Energy", "KineticEnergy",
            "Sum", "Difference", "SteadyStateError", "Perturbation",
            "Divergence", "TracerDensity", "IterativeDiagnosticField",
-           "CumulativeSum"]
+           "CumulativeSum", "TimeAveragedDiagnostic"]
 
 
 class Diagnostics(object):
@@ -1095,3 +1095,91 @@ class CumulativeSum(DiagnosticField):
     def name(self):
         """Gives the name of this diagnostic field."""
         return self.integral_name
+
+
+class TimeAveragedDiagnostic(DiagnosticField):
+    """
+    Computes a running time-average of a named field.
+
+    A new sample is added to the average every `sample_freq` calls to
+    `compute` (i.e. every `sample_freq` timesteps). The average is a
+    cumulative mean over the whole simulation and is never reset. The
+    running sum and the number of samples taken are stored as fields (in the
+    'R' space) so that they -- and hence the average itself -- are correctly
+    checkpointed and restored when picking up a run.
+    """
+    def __init__(self, name, sample_freq=1):
+        """
+        Args:
+            name (str): name of the field to be time-averaged. This can be
+                the name of a prognostic field, or of another diagnostic
+                field's output -- in the latter case that diagnostic must
+                also be registered so that it is computed before this one.
+            sample_freq (int, optional): the number of calls to `compute`
+                (i.e. timesteps) between each sample added to the average.
+                Defaults to 1, so that a sample is taken every timestep.
+        """
+        self.field_name = name
+        self.average_name = name+"_average"
+        self.sample_freq = sample_freq
+        super().__init__(method='assign', required_fields=(self.field_name,))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+
+        # Gather the field to be averaged
+        self.integrand = state_fields(self.field_name)
+        self.space = self.integrand.function_space()
+        R = FunctionSpace(domain.mesh, "R", 0)
+
+        # Running sum of the samples taken so far, and the number of samples
+        # taken. These are not dumped themselves, but must be checkpointed so
+        # that the average can be correctly continued after a pick-up.
+        self.running_sum = state_fields(
+            self.average_name+"_sum", space=self.space, dump=False, pick_up=True
+        )
+        self.num_samples = state_fields(
+            self.average_name+"_num_samples", space=R, dump=False, pick_up=True
+        )
+        # Counts the number of calls to compute() since the diagnostic was
+        # created, so that a pick-up resumes at the correct point in the
+        # sampling cycle.
+        self.num_calls = state_fields(
+            self.average_name+"_num_calls", space=R, dump=False, pick_up=True
+        )
+
+        # Initialise everything to zero. If picking up from a checkpoint file
+        # these fields will be loaded afterwards and so will not be
+        # overwritten by this.
+        self.running_sum.assign(0.0)
+        self.num_samples.assign(0.0)
+        self.num_calls.assign(0.0)
+
+        # Create the field to hold the time-average itself
+        self.field = state_fields(
+            self.average_name, space=self.space, dump=True, pick_up=True
+        )
+        self.field.assign(0.0)
+
+    def compute(self):
+        """
+        Increments the call counter, and if the sampling frequency has been
+        reached, adds a new sample to the running average.
+        """
+        self.num_calls.assign(self.num_calls + 1.0)
+
+        if int(round(float(self.num_calls))) % self.sample_freq == 0:
+            self.running_sum.assign(self.running_sum + self.integrand)
+            self.num_samples.assign(self.num_samples + 1.0)
+            self.field.assign(self.running_sum / self.num_samples)
+
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return self.average_name

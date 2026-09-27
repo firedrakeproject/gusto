@@ -19,9 +19,12 @@ def set_up_model_objects(mesh, dt, output, stepper_type, ref_update_freq):
     eqns = CompressibleEulerEquations(domain, parameters)
 
     # Have two diagnostic fields that depend on initial values -- check if
-    # these diagnostics are preserved by checkpointing
-    diagnostic_fields = [SteadyStateError('rho'), Perturbation('theta')]
-
+    # these diagnostics are preserved by checkpointing. sample_freq=3 is
+    # deliberately chosen so that it does *not* divide the checkpoint
+    # frequency (chkptfreq=2 below), so the checkpoint lands mid-cycle
+    # (i.e. num_calls is not a multiple of sample_freq at checkpoint time)
+    diagnostic_fields = [SteadyStateError('rho'), Perturbation('theta'),
+                         TimeAveragedDiagnostic('theta', sample_freq=2)]
     io = IO(domain, output, diagnostic_fields=diagnostic_fields)
 
     transport_methods = [DGUpwind(eqns, 'u'),
@@ -211,7 +214,7 @@ def test_checkpointing(tmpdir, stepper_type, checkpoint_method, ref_update_freq)
     # This is because Firedrake may see the fields from the different time
     # steppers as being on different meshes
 
-    for field_name in ['rho', 'theta', 'u', 'rho_error', 'theta_perturbation']:
+    for field_name in ['rho', 'theta', 'u', 'rho_error', 'theta_perturbation', 'theta_average']:
         if checkpoint_method == 'dumbcheckpoint':
             # Check final fields are the same when checkpointing with the same time
             # stepper -- very tight tolerance as there should be no error
