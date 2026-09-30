@@ -97,7 +97,7 @@ class SDC(object, metaclass=ABCMeta):
     def __init__(self, base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                  formulation="N2N", field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
-                 limiter=None, initial_guess="base"):
+                 limiter=None, initial_guess="base", imex=True, sweep_tols=None):
         """
         Initialise SDC object
         Args:
@@ -146,6 +146,7 @@ class SDC(object, metaclass=ABCMeta):
         self.limiter = limiter
         self.augmentation = self.base.augmentation
         self.wrapper = self.base.wrapper
+        self.imex = imex
 
         # Get quadrature nodes and weights
         self.nodes, self.weights, self.Q = genQCoeffs("Collocation", nNodes=M,
@@ -172,6 +173,11 @@ class SDC(object, metaclass=ABCMeta):
         self.Qdelta_imp = float(self.dt_coarse)*self.Qdelta_imp
         self.Qdelta_exp = float(self.dt_coarse)*self.Qdelta_exp
 
+        # If the implicit correction matrix is diagonal, the final sweep can
+        # skip all but the last node when no final update is requested.
+        _lower_imp = np.tril(self.Qdelta_imp[:self.M, :self.M], k=-1)
+        self._final_sweep_shortcut = np.allclose(_lower_imp, 0)
+
         # Set default linear and nonlinear solver options if none passed in
         if linear_solver_parameters is None:
             self.linear_solver_parameters = {'snes_type': 'ksponly',
@@ -189,6 +195,12 @@ class SDC(object, metaclass=ABCMeta):
             self.base_flag = True
         else:
             self.base_flag = False
+        
+        self.total_ksp_its = 0
+        self.total_snes_its = 0
+        self.sweep_tols = sweep_tols
+        self.solver_call_count = 0
+        self._step_count = 1
 
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
@@ -311,9 +323,13 @@ class SDC(object, metaclass=ABCMeta):
                                        map_if_true=replace_subject(self.U_DC, old_idx=self.idx))
         residual -= mass_form.label_map(all_terms,
                                         map_if_true=replace_subject(self.U_start, old_idx=self.idx))
-        # Loop through nodes up to m-1 and calcualte
-        # sum(j=1,m-1) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
+        # Loop through nodes up to m-1 and calculate
+        # sum(j=1,m-1) Qdelta_imp[m,j]*(F(y_(j)^(k+1)) - F(y_(j)^k))
+        # Zero-coefficient terms (all of them for diagonal Qdelta_imp) are
+        # skipped so they are not assembled on every residual evaluation.
         for i in range(m):
+            if self.Qdelta_imp[m, i] == 0.0:
+                continue
             r_imp_kp1 = self.residual.label_map(
                 lambda t: t.has_label(implicit),
                 map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
@@ -330,9 +346,12 @@ class SDC(object, metaclass=ABCMeta):
                 all_terms,
                 lambda t: Constant(self.Qdelta_imp[m, i])*t)
             residual -= r_imp_k
-        # Loop through nodes up to m-1 and calcualte
-        #  sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
+        # Loop through nodes and calculate
+        # sum(j=1,M) Q_delta_exp[m,j]*(S(y_(j)^(k+1)) - S(y_(j)^k))
+        # Zero-coefficient terms (all of them for PIC) are skipped.
         for i in range(self.M):
+            if self.Qdelta_exp[m, i] == 0.0:
+                continue
             r_exp_kp1 = self.residual.label_map(
                 lambda t: t.has_label(explicit),
                 map_if_true=replace_subject(self.Unodes1[i+1], old_idx=self.idx),
@@ -340,7 +359,6 @@ class SDC(object, metaclass=ABCMeta):
             r_exp_kp1 = r_exp_kp1.label_map(
                 all_terms,
                 lambda t: Constant(self.Qdelta_exp[m, i])*t)
-
             residual += r_exp_kp1
             r_exp_k = self.residual.label_map(
                 lambda t: t.has_label(explicit),
@@ -413,7 +431,7 @@ class SDC(object, metaclass=ABCMeta):
                     f"preconditioner needs beta = alpha*dt > 0")
             self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(
                 self.equation, self.equation.field_names, alpha=alpha,
-                tau_values=None, nonlinear=True, imex=True)
+                tau_values=None, nonlinear=True, imex=self.imex)
             problem = NonlinearVariationalProblem(self.res(m), self.U_DC, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
             solvers.append(NonlinearVariationalSolver(
@@ -502,6 +520,19 @@ class SDC(object, metaclass=ABCMeta):
                 self.solver = solver_list[m-1]
                 self.U_DC.assign(self.Unodes[m])
 
+                if self.sweep_tols is not None:
+                    tol = self.sweep_tols[k-1]
+
+                    self.solver.snes.ksp.setTolerances(
+                        atol=tol["ksp_atol"],
+                        rtol=tol["ksp_rtol"]
+                    )
+
+                    self.solver.snes.setTolerances(
+                        atol=tol["snes_atol"],
+                        rtol=tol["snes_rtol"]
+                    )
+
                 # Compute
                 # for N2N:
                 # y_m^(k+1) = y_(m-1)^(k+1) + dtau_m*(F(y_(m)^(k+1)) - F(y_(m)^k)
@@ -512,6 +543,9 @@ class SDC(object, metaclass=ABCMeta):
                 #             + sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 self.solver.solve()
                 self.Unodes1[m].assign(self.U_DC)
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
+                self.solver_call_count += 1
 
                 # Evaluate source terms
                 for evaluate in self.evaluate_source:
@@ -553,7 +587,7 @@ class RIDC(object, metaclass=ABCMeta):
 
     def __init__(self, base_scheme, domain, M, K, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, reduced=True):
+                 limiter=None, reduced=True, imex=True):
         """
         Initialise RIDC object
         Args:
@@ -583,8 +617,14 @@ class RIDC(object, metaclass=ABCMeta):
         self.K = K
         self.M = M
         self.reduced = reduced
+        self.imex = imex
         self.dt = Constant(float(self.dt_coarse)/(self.M))
-        self.base.dt = float(self.dt_coarse)/(self.M)
+        self.base.dt = self.dt
+        self.imex=imex
+
+        self.total_snes_its = 0
+        self.total_ksp_its = 0
+        self.solver_call_count = 0
 
         if reduced:
             self.Q = []
@@ -641,7 +681,7 @@ class RIDC(object, metaclass=ABCMeta):
         if self.nonlinear_solver_parameters is None:
             alpha = float(self.dt)//float(self.dt_coarse)
             alpha = self.dt/self.domain.dt
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=self.imex)
         else:
             self.appctx=None
         print(self.nonlinear_solver_parameters)
@@ -877,6 +917,9 @@ class RIDC(object, metaclass=ABCMeta):
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
                 self.solver.solve()
+                self.solver_call_count += 1
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)
 
                 # Evaluate source terms
@@ -907,6 +950,9 @@ class RIDC(object, metaclass=ABCMeta):
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
                 self.solver.solve()
+                self.solver_call_count += 1
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
                 self.Unodes1[m+1].assign(self.U_DC)
 
                 # Evaluate source terms

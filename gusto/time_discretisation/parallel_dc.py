@@ -10,8 +10,10 @@ while RIDC parallelises across the correction iterations by using a reduced sten
 and pipelining.
 """
 
+import numpy as np
 from firedrake import (
-    Function, NonlinearVariationalProblem, NonlinearVariationalSolver, Constant
+    Function, NonlinearVariationalProblem, NonlinearVariationalSolver, Constant,
+    inner, dx, assemble
 )
 from functools import cached_property
 from gusto.time_discretisation.time_discretisation import wrapper_apply
@@ -28,7 +30,7 @@ class Parallel_RIDC(RIDC):
 
     def __init__(self, base_scheme, domain, M, K, J, output_freq, flush_freq=None, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, communicator=None):
+                 limiter=None, communicator=None, imex=True):
         """
         Initialise RIDC object
         Args:
@@ -54,7 +56,7 @@ class Parallel_RIDC(RIDC):
 
         super(Parallel_RIDC, self).__init__(base_scheme, domain, M, K, field_name,
                                             linear_solver_parameters, nonlinear_solver_parameters,
-                                            limiter, reduced=True)
+                                            limiter, reduced=True, imex=imex)
         self.comm = communicator
         self.TAG_EXCHANGE_FIELD = 11  # Tag for sending nodal fields (Firedrake Functions)
         self.TAG_EXCHANGE_SOURCE = self.TAG_EXCHANGE_FIELD + J  # Tag for sending nodal source fields (Firedrake Functions)
@@ -166,6 +168,9 @@ class Parallel_RIDC(RIDC):
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y_j^k)
                 self.solver.solve()
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
+                self.solver_call_count += 1
                 self.Unodes1[m+1].assign(self.U_DC)
 
                 # Evaluate source terms
@@ -208,6 +213,9 @@ class Parallel_RIDC(RIDC):
                 #             + S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
                 #             + sum(j=1,M) s_mj*(F+S)(y^k)
                 self.solver.solve()
+                self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
+                self.total_snes_its += self.solver.snes.getIterationNumber()
+                self.solver_call_count += 1
                 self.Unodes1[m+1].assign(self.U_DC)
 
                 # # Evaluate source terms
@@ -253,7 +261,8 @@ class Parallel_SDC(SDC):
     def __init__(self, base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                  field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
-                 limiter=None, options=None, initial_guess="base", communicator=None):
+                 limiter=None, options=None, initial_guess="base", communicator=None,
+                 use_anderson=False, m_aa=2, beta_aa=1.0, imex=True,  sweep_tols=None):
         """
         Initialise SDC object
         Args:
@@ -283,12 +292,26 @@ class Parallel_SDC(SDC):
                 the evolving field to enforce monotonicity. Defaults to None.
             initial_guess (str, optional): Initial guess to be base timestepper, or copy
             communicator (MPI communicator, optional): communicator for parallel execution. Defaults to None.
+            use_anderson (bool, optional): Whether to accelerate the sweep iteration using
+                Anderson mixing (Walker & Ni, 2011, "Type-I"). This is a Qdelta-agnostic,
+                opt-in post-processing step applied on top of the unchanged SDC sweep update.
+                Defaults to False.
+            m_aa (int, optional): Anderson mixing history window size. Should be kept small
+                and fixed (2-3 is typical); if `m_aa >= maxk` the history is never evicted
+                and the iteration converges to the fully-converged collocation solution,
+                independent of qdelta_imp/qdelta_exp. Only used if `use_anderson` is True.
+                Defaults to 2.
+            beta_aa (float, optional): Anderson mixing damping/relaxation factor in (0, 1].
+                A value of 1.0 gives the full (undamped) Type-I Anderson step; smaller
+                values blend the mixed update back towards the plain sweep output, which
+                can improve robustness at the cost of some acceleration. Only used if
+                `use_anderson` is True. Defaults to 1.0.
         """
         super().__init__(base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                          formulation="Z2N", field_name=field_name,
                          linear_solver_parameters=linear_solver_parameters, nonlinear_solver_parameters=nonlinear_solver_parameters,
                          final_update=final_update,
-                         limiter=limiter, initial_guess=initial_guess)
+                         limiter=limiter, initial_guess=initial_guess, imex=imex, sweep_tols=sweep_tols)
         self.comm = communicator
         self.alpha = Constant(0.0)  # Initial value, will be updated in solver setup
         # Checks for parallel SDC
@@ -296,7 +319,23 @@ class Parallel_SDC(SDC):
             raise ValueError("No communicator provided. Please provide a valid MPI communicator.")
         if self.comm.ensemble_comm.size != self.M:
             raise ValueError("Number of ranks must be equal to the number of nodes M for Parallel SDC.")
-        
+
+        # Anderson mixing options
+        self.use_anderson = use_anderson
+        self.m_aa = m_aa
+        self.beta_aa = beta_aa
+        if self.use_anderson:
+            if self.m_aa < 1:
+                raise ValueError("m_aa (Anderson mixing window) must be at least 1.")
+            if not (0.0 < self.beta_aa <= 1.0):
+                raise ValueError("beta_aa (Anderson mixing damping factor) must be in (0, 1].")
+            if self.m_aa >= self.maxk:
+                logger.warn("m_aa >= maxk: Anderson mixing history will never be evicted, so "
+                            "the SDC iteration will converge towards the fully-converged "
+                            "collocation solution, independent of qdelta_imp/qdelta_exp.")
+        self._G_hist = []
+        self._R_hist = []
+
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the SDC time discretisation based on the equation.
@@ -328,7 +367,88 @@ class Parallel_SDC(SDC):
         x = Function(self.W)
         x.assign(float(self.Qfin[self.comm.ensemble_comm.rank])*self.fUnodes[self.comm.ensemble_comm.rank])
         self.comm.allreduce(x, self.quad_final)
-    
+
+    def _anderson_mix(self, Gu):
+        """
+        Anderson-accelerate the SDC sweep iteration (Walker & Ni, 2011, "Type-I").
+
+        This is a pure post-processing step applied on top of the (unchanged)
+        sweep update. It is Qdelta-agnostic: it only uses the sequence of raw
+        sweep outputs and residuals for the local node owned by this rank, plus
+        a single small all-reduce over the ensemble communicator to combine the
+        contributions from all M nodes ("the full stacked SDC state") into the
+        small Anderson least-squares system.
+
+        Args:
+            Gu (:class:`Function`): the raw output of the current sweep, i.e.
+                G(u) for the local node, with the limiter (if any) already
+                applied to it.
+
+        Returns:
+            :class:`Function`: the (possibly) mixed iterate to use as the
+            starting point for the next sweep.
+        """
+        rank = self.comm.ensemble_comm.rank
+
+        # Residual r = G(u) - u, using the pre-update value of Unodes
+        r = Function(self.W)
+        r.assign(Gu - self.Unodes[rank+1])
+
+        # Update history, capped at window size m_aa
+        self._G_hist.append(Gu.copy(deepcopy=True))
+        self._R_hist.append(r.copy(deepcopy=True))
+        if len(self._G_hist) > self.m_aa:
+            self._G_hist.pop(0)
+            self._R_hist.pop(0)
+
+        mm = len(self._R_hist)
+        if mm == 1:
+            # No history yet - plain sweep step
+            return Gu
+
+        # Consecutive differences of residuals and sweep outputs
+        dF = [Function(self.W).assign(self._R_hist[i+1] - self._R_hist[i]) for i in range(mm-1)]
+        f_last = self._R_hist[-1]
+
+        # Local contributions to the (mm-1)x(mm-1) Gram matrix and rhs vector.
+        # assemble(inner(.,.)*dx) already reduces correctly over the spatial
+        # communicator; the ensemble allreduce below combines contributions
+        # from the other quadrature nodes (owned by other ranks).
+        Gram_local = np.zeros((mm-1, mm-1))
+        rhs_local = np.zeros(mm-1)
+        for i in range(mm-1):
+            rhs_local[i] = assemble(inner(dF[i], f_last)*dx)
+            for j in range(mm-1):
+                Gram_local[i, j] = assemble(inner(dF[i], dF[j])*dx)
+
+        Gram = self.comm.allreduce(Gram_local)
+        rhs = self.comm.allreduce(rhs_local)
+
+        try:
+            if np.linalg.cond(Gram) > 1e12:
+                raise np.linalg.LinAlgError("Anderson Gram matrix is ill-conditioned")
+            gamma = np.linalg.solve(Gram, rhs)
+        except np.linalg.LinAlgError:
+            logger.warn("Anderson mixing: Gram matrix singular or ill-conditioned, "
+                        "skipping mixing for this sweep.")
+            return Gu
+
+        dG = [Function(self.W).assign(self._G_hist[i+1] - self._G_hist[i]) for i in range(mm-1)]
+        g_last = self._G_hist[-1]
+
+        # Damp the correction by beta_aa: beta_aa=1 gives the full (undamped)
+        # Type-I Anderson step; smaller values blend back towards the plain
+        # sweep output g_last for extra robustness.
+        gamma = self.beta_aa*gamma
+
+        u_new = Function(self.W)
+        expr = g_last
+        for i in range(mm-1):
+            expr = expr - Constant(gamma[i])*dG[i]
+        u_new.assign(expr)
+
+        return u_new
+
     @cached_property
     def solver(self):
         """Set up a list of solvers for each problem at a node m."""
@@ -347,7 +467,7 @@ class Parallel_SDC(SDC):
         alpha = QD_imp[m, m]
         #print("Setting up hybridised solver with alpha = %s" % alpha)
         if self.nonlinear_solver_parameters is None:
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=True)
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=self.imex)
         else:
             self.appctx = None
         problem = NonlinearVariationalProblem(self.res(m), self.U_DC, bcs=self.bcs)
@@ -373,7 +493,7 @@ class Parallel_SDC(SDC):
             )
             alpha_k = Qdelta_imp_k[self.comm.ensemble_comm.rank, self.comm.ensemble_comm.rank]/float(self.dt_coarse)
             if self.nonlinear_solver_parameters is not None:
-                nonlinear_solver_parameters_k, appctx_k = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha_k, tau_values=None, nonlinear=True, imex=True)
+                nonlinear_solver_parameters_k, appctx_k = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha_k, tau_values=None, nonlinear=True, imex=self.imex)
             else:
                 nonlinear_solver_parameters_k = None
                 appctx_k = None
@@ -387,7 +507,8 @@ class Parallel_SDC(SDC):
     def apply(self, x_out, x_in):
         self.Un.assign(x_in)
         self.U_start.assign(self.Un)
-        solver_list = self.solvers
+        # Per-sweep solvers are only needed for MIN-SR-FLEX
+        solver_list = self.solvers if self.qdelta_imp_type == "MIN-SR-FLEX" else None
 
         # Compute initial guess on quadrature nodes with low-order
         # base timestepper
@@ -402,6 +523,13 @@ class Parallel_SDC(SDC):
         for m in range(self.M+1):
             for evaluate in self.evaluate_source:
                 evaluate(self.Unodes[m], self.base.dt, x_out=self.source_Uk[m])
+
+        # Reset Anderson mixing history for this time step - the sweep operator
+        # changes between time steps (different dt, initial condition, etc.), so
+        # history must not be carried over.
+        if self.use_anderson:
+            self._G_hist = []
+            self._R_hist = []
 
         # Iterate through correction sweeps
         k = 0
@@ -445,6 +573,18 @@ class Parallel_SDC(SDC):
             # Set initial guess for solver, and pick correct solver
             #self.solver = solver_list[self.comm.ensemble_comm.rank]
             self.U_DC.assign(self.Unodes[self.comm.ensemble_comm.rank+1])
+            if self.sweep_tols is not None:
+                tol = self.sweep_tols[k-1]
+
+                self.solver.snes.ksp.setTolerances(
+                    atol=tol["ksp_atol"],
+                    rtol=tol["ksp_rtol"]
+                )
+
+                self.solver.snes.setTolerances(
+                    atol=tol["snes_atol"],
+                    rtol=tol["snes_rtol"]
+                )
 
             # Compute
             # for N2N:
@@ -455,6 +595,9 @@ class Parallel_SDC(SDC):
             # y_m^(k+1) = y^n + sum(j=1,m) Qdelta_imp[m,j]*(F(y_(m)^(k+1)) - F(y_(m)^k))
             #             + sum(j=1,M)  Q_delta_exp[m,j]*(S(y_(m-1)^(k+1)) - S(y_(m-1)^k))
             self.solver.solve()
+            self.total_snes_its += self.solver.snes.getIterationNumber()
+            self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
+            self.solver_call_count += 1
             self.Unodes1[self.comm.ensemble_comm.rank+1].assign(self.U_DC)
 
             # Evaluate source terms
@@ -465,14 +608,30 @@ class Parallel_SDC(SDC):
             if self.limiter is not None:
                 self.limiter.apply(self.Unodes1[self.comm.ensemble_comm.rank+1])
 
-            self.Unodes[self.comm.ensemble_comm.rank+1].assign(self.Unodes1[self.comm.ensemble_comm.rank+1])
-            self.source_Uk[self.comm.ensemble_comm.rank+1].assign(self.source_Ukp1[self.comm.ensemble_comm.rank+1])
+            if self.use_anderson:
+                # Anderson mixing is a pure post-processing step on top of the
+                # (unchanged) sweep update above: it uses the sweep output
+                # Unodes1 and residual history to produce an accelerated iterate.
+                u_new = self._anderson_mix(self.Unodes1[self.comm.ensemble_comm.rank+1])
+                self.Unodes[self.comm.ensemble_comm.rank+1].assign(u_new)
+                # Reapply limiter, since mixing can extrapolate outside the
+                # convex hull of the sweep history and violate monotonicity.
+                if self.limiter is not None:
+                    self.limiter.apply(self.Unodes[self.comm.ensemble_comm.rank+1])
+                # Source terms depend on the state, so must be recomputed from
+                # the mixed iterate rather than copied from source_Ukp1.
+                for evaluate in self.evaluate_source:
+                    evaluate(self.Unodes[self.comm.ensemble_comm.rank+1], self.base.dt,
+                             x_out=self.source_Uk[self.comm.ensemble_comm.rank+1])
+            else:
+                self.Unodes[self.comm.ensemble_comm.rank+1].assign(self.Unodes1[self.comm.ensemble_comm.rank+1])
+                self.source_Uk[self.comm.ensemble_comm.rank+1].assign(self.source_Ukp1[self.comm.ensemble_comm.rank+1])
 
         if self.maxk > 0:
             # Compute value at dt rather than final quadrature node tau_M
             if self.final_update:
-                self.Uin.assign(self.Unodes1[self.comm.ensemble_comm.rank+1])
-                self.source_in.assign(self.source_Ukp1[self.comm.ensemble_comm.rank+1])
+                self.Uin.assign(self.Unodes[self.comm.ensemble_comm.rank+1])
+                self.source_in.assign(self.source_Uk[self.comm.ensemble_comm.rank+1])
                 self.solver_rhs.solve()
                 self.fUnodes[self.comm.ensemble_comm.rank].assign(self.Urhs)
                 self.compute_quad_final()
