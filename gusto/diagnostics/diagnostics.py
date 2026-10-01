@@ -1102,8 +1102,11 @@ class TimeAveragedDiagnostic(DiagnosticField):
     Computes a running time-average of a named field.
 
     A new sample is added to the average every `sample_freq` calls to
-    `compute` (i.e. every `sample_freq` timesteps). The average is a
-    cumulative mean over the whole simulation and is never reset. The
+    `compute` (i.e. every `sample_freq` timesteps). The running sum and
+    number of samples are reset to zero each time the diagnostic is written
+    out (i.e. every `dumpfreq` timesteps), so each written value is the
+    average over the period since the previous output -- this allows e.g. a
+    spin-up period to be excluded by discarding the early output values. The
     running sum and the number of samples taken are stored as fields (in the
     'R' space) so that they -- and hence the average itself -- are correctly
     checkpointed and restored when picking up a run.
@@ -1178,6 +1181,17 @@ class TimeAveragedDiagnostic(DiagnosticField):
             self.running_sum.assign(self.running_sum + self.integrand)
             self.num_samples.assign(self.num_samples + 1.0)
             self.field.assign(self.running_sum / self.num_samples)
+
+    def reset(self):
+        """
+        Zeroes the running sum and sample count, so that the average starts
+        accumulating afresh. This is called by the I/O once the averaged
+        diagnostic has been written out, so that e.g. a spin-up period can be
+        excluded from later averaging windows. The call counter (and hence
+        the point in the sampling cycle) is not reset.
+        """
+        self.running_sum.assign(0.0)
+        self.num_samples.assign(0.0)
 
     @property
     def name(self):
