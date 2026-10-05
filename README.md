@@ -17,20 +17,20 @@ These compatible methods underpin the Met Office's next-generation model, [LFRic
 Before installing Gusto you should first install Firedrake using the instructions found [here](https://firedrakeproject.org/install).
 Once this is done Gusto can then be installed by running:
 ```
-$ git clone https://github.com/firedrakeproject/gusto.git
-$ pip install --editable ./gusto
+git clone https://github.com/firedrakeproject/gusto.git
+pip install --editable ./gusto
 ```
 or equivalently:
 ```
-$ pip install --src . --editable git+https://github.com/firedrakeproject/gusto.git#egg=gusto
+pip install --src . --editable git+https://github.com/firedrakeproject/gusto.git#egg=gusto
 ```
 
 ## Getting Started
 
 To test your Gusto installation you can run the test suite with:
 ```
-$ cd gusto
-$ make test
+cd gusto
+make test
 ```
 
 The `examples` directory contains several test cases, which you can play with to get started with Gusto.

@@ -480,10 +480,6 @@ class CompressibleHybridisedSCPC(PCBase):
         self._process_context(pc)
         prefix = pc.getOptionsPrefix()
 
-        if logger.isEnabledFor(DEBUG):
-            self.scpc_solve_parameters['ksp_monitor_true_residual'] = None
-            self.scpc_solve_parameters['ksp_converged_reason'] = None
-
         # Equations and parameters
         equations = self.equations
         dt = self.dt
