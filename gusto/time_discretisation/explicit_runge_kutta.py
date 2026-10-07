@@ -343,6 +343,8 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
                     self.limiter.apply(self.x1)
 
         elif self.rk_formulation == RungeKuttaFormulation.predictor:
+
+            print('RK stage', stage)
             # Set initial field
             if stage == 0:
                 self.field_i[0].assign(x0)
@@ -350,9 +352,17 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             # Use previous stage value as a first guess (otherwise may not converge)
             self.field_i[stage+1].assign(self.field_i[stage])
             if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
-                self.augmentation.limit(self.field_i[stage])
+                pass
+                #if stage > 0: 
+                #    self.augmentation.update(self.field_i[stage-1])
+                #if stage > 0:
+                #    self.augmentation.limit(self.field_i[stage])
             elif self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
+
+            # Save the untransported field
+            if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
+                self.augmentation.update(self.field_i[stage])
 
             for evaluate in self.evaluate_source:
                 evaluate(self.field_i[stage], self.dt, x_out=self.source_i[stage])
@@ -360,9 +370,15 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             # Obtain field_ip1 = field_n - dt* sum_m{a_im*F[field_m]}
             self.solver[stage].solve()
 
+            print('Transport is complete')
+
+            if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
+                self.augmentation.limit(self.field_i[stage+1])
+
             if (stage == self.nStages - 1):
                 self.x1.assign(self.field_i[stage+1])
                 if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
+                    #self.augmentation.update(self.field_i[stage])
                     self.augmentation.limit(self.x1)
                 elif self.limiter is not None:
                     self.limiter.apply(self.x1)

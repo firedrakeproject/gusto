@@ -484,6 +484,7 @@ class MonotonicMeanLimiter(object):
         # optional, since monotonicity alone does not require non-negativity.
         self.enforce_nonnegative = enforce_nonnegative
         self._clip_means_kernel = ClipZero(DG0)
+        self._clip_mX_kernel = ClipZero(DG1_equispaced)
 
     def apply(self, mX_fields, rho_field, old_mX_fields):
         """
@@ -516,7 +517,11 @@ class MonotonicMeanLimiter(object):
         for i in range(len(mX_fields)):
             # Gather the min/max of the pre-transport field over each cell
             # and its facet-neighbours
+            #print('min of pre transported field is ', np.min(old_mX_fields[i].dat.data))
+
             self.old_field.interpolate(old_mX_fields[i])
+
+            #print('min of old field is ', np.min(self.old_field.dat.data))
 
             if self.extruded and self.extruded_bounds_method == 'facet':
                 # Gather bounds over horizontal facet-neighbours only (using
@@ -568,11 +573,30 @@ class MonotonicMeanLimiter(object):
             if self.enforce_nonnegative:
                 self._clip_means_kernel.apply(self.mean_field, self.mean_field)
 
+            # Check if mean field is non-negative
+            min_val = np.min(self.mean_field.dat.data)
+            if min_val < 0:
+                print('mean field negative before limiting')
+                print(min_val)
+
+                print('min new mX')
+                print(np.min(mX_fields[i].dat.data))
+                print(np.min(self.new_field.dat.data))
+
+                print('min of pre transported field')
+                print(np.min(self.old_field.dat.data))
+                
+                import sys; sys.exit()
+
             # Update the weights based on the monotonic bounds
             self._lamda_kernel.apply(
                 self.lamda, self.new_field,
                 self.stencil_min_dg1, self.stencil_max_dg1, self.mean_field
             )
+
+
+        #print(np.max(self.lamda.dat.data))
+        #print(np.min(self.lamda.dat.data))
 
         # Perform blended limiting, with all mixing ratios using
         # the same lambda field to ensure conservation.
@@ -584,4 +608,8 @@ class MonotonicMeanLimiter(object):
                 self._clip_means_kernel.apply(self.mean_field, self.mean_field)
 
             self.mX_new.interpolate((Constant(1.0) - self.lamda)*self.new_field + self.lamda*self.mean_field)
+
+            # Remove miniscule negativites in the updated mixing ratio, if desired.
+            if self.enforce_nonnegative:
+                self._clip_mX_kernel.apply(self.mX_new, self.mX_new)
             mX_fields[i].interpolate(self.mX_new)

@@ -483,6 +483,9 @@ class CompressibleHybridisedSCPC(PCBase):
         # Unpack sub-solver parameters from the options prefix
         self.riesz_map_parameters = PETSc.Options(prefix + "riesz_map_").getAll()
 
+        self.scpc_solve_parameters['ksp_monitor_true_residual'] = None
+        self.scpc_solve_parameters['ksp_converged_reason'] = None
+
         # Equations and parameters
         equations = self.equations
         dt = self.dt
