@@ -423,20 +423,41 @@ class TimeDiscretisation(object, metaclass=ABCMeta):
 
         return residual.form
 
-    @cached_property
-    def solver(self):
-        """Set up the problem and the solver."""
-        # setup solver using residual (res) defined in derived class
-        problem = NonlinearVariationalProblem(self.res, self.x_out, bcs=self.bcs)
-        solver_name = self.field_name+self.__class__.__name__
+    def _make_solver(self, residual, solution, bcs, options_prefix):
+        """
+        Construct the variational solver.
+
+        Subclasses may override this to provide a specialised algebraic
+        solution method while retaining the full time-discrete residual.
+        """
+        problem = NonlinearVariationalProblem(
+            residual,
+            solution,
+            bcs=bcs,
+        )
+
         solver = NonlinearVariationalSolver(
             problem,
             solver_parameters=self.solver_parameters,
-            options_prefix=solver_name
+            options_prefix=options_prefix,
         )
+
         if logger.isEnabledFor(DEBUG):
             solver.snes.ksp.setMonitor(logging_ksp_monitor_true_residual)
+
         return solver
+
+    @cached_property
+    def solver(self):
+        """Set up the problem and solver."""
+        solver_name = self.field_name + self.__class__.__name__
+
+        return self._make_solver(
+            residual=self.res,
+            solution=self.x_out,
+            bcs=self.bcs,
+            options_prefix=solver_name,
+        )
 
     def update_subcycling(self):
         """
