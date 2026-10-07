@@ -480,9 +480,6 @@ class CompressibleHybridisedSCPC(PCBase):
         self._process_context(pc)
         prefix = pc.getOptionsPrefix()
 
-        # Unpack sub-solver parameters from the options prefix
-        self.riesz_map_parameters = PETSc.Options(prefix + "riesz_map_").getAll()
-
         # Equations and parameters
         equations = self.equations
         dt = self.dt
@@ -516,7 +513,7 @@ class CompressibleHybridisedSCPC(PCBase):
 
         # Riesz map for the dual of the original function space
         self.riesz_map = RieszMap(self.W.dual(),
-                                  solver_parameters=self.riesz_map_parameters,
+                                  options_prefix=prefix + "riesz_map_",
                                   constant_jacobian=True)
 
         self.y_hybrid = Function(self.W_hyb)
