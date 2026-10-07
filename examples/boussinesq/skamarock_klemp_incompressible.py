@@ -15,7 +15,8 @@ from firedrake import (
 from gusto import (
     Domain, IO, OutputParameters, SemiImplicitQuasiNewton, SSPRK3, DGUpwind,
     TrapeziumRule, SUPGOptions, Divergence, Perturbation, CourantNumber,
-    BoussinesqParameters, BoussinesqEquations, boussinesq_hydrostatic_balance
+    BoussinesqParameters, BoussinesqEquations, boussinesq_hydrostatic_balance,
+    initial_buoyancy_field_degree1_from_degree0
 )
 
 skamarock_klemp_incompressible_bouss_defaults = {
@@ -110,13 +111,16 @@ def skamarock_klemp_incompressible_bouss(
     # interpolate the expression to the function
     b_b = Function(Vb).interpolate(bref)
 
-    # setup constants
-    b_pert = (
-        deltab * sin(pi*z/domain_height)
-        / (1 + (x - domain_width/2)**2 / pert_width**2)
-    )
-    # interpolate the expression to the function
-    b0.interpolate(b_b + b_pert)
+    # put the initial conditions into a function so that they can be called by
+    # the routine to preserve the spectrum
+    def initial_b(x_in, z_in):
+        return (
+            z_in*N**2 + deltab * sin(pi*z_in/domain_height)
+            / (1 + (x_in - domain_width/2)**2 / pert_width**2)
+        )
+    # interpolate the expression in such a way as to preserve the spectrum
+    b_expr = initial_buoyancy_field_degree1_from_degree0(domain, initial_b)
+    b0.interpolate(b_expr)
 
     boussinesq_hydrostatic_balance(eqns, b_b, p0)
 
