@@ -211,7 +211,6 @@ def run_moisture_experiment(dt, timestepper='split', physics_frequency=1, dirnam
 
     stepper.fields('water_vapour').interpolate(vapour_init_expr(x))
     stepper.fields('rain').interpolate(Function(stepper.fields('rain').function_space()))
-    Vu = stepper.fields('u').function_space()
     stepper.fields('u').project(as_vector([u0]))
 
     stepper.run(t=0, tmax=tmax)
