@@ -127,7 +127,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                 'pc_python_type': 'firedrake.AssembledPC',
                 'assembled_pc_type': 'python',
                 'assembled_pc_python_type': 'firedrake.ASMExtrudedStarPC',
-                'assembled_pc_star_construct_dim': 3,
+                'assembled_pc_star_construct_dim': equation.domain.mesh.topological_dimension,
                 'assembled_pc_star_backend': 'tinyasm',
             },
             'fieldsplit_1': {
