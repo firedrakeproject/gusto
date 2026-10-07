@@ -118,7 +118,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 if hasattr(self.scheme.augmentation, 'setup_residual') and callable(self.scheme.augmentation.setup_residual):
                     self.scheme.augmentation.setup_residual(self.equation)
 
-    def setup_transporting_velocity(self, scheme):
+    def setup_transporting_velocity(self, scheme, uadv_in=None):
         """
         Set up the time discretisation by replacing the transporting velocity
         used by the appropriate one for this time loop.
@@ -127,8 +127,14 @@ class BaseTimestepper(object, metaclass=ABCMeta):
             scheme (:class:`TimeDiscretisation`): the time discretisation whose
                 transport term should be replaced with the transport term of
                 this discretisation.
+            uadv_in (:class:`ufl.Expr`, optional): the transporting velocity
+                to use for the transport term. If None, the transporting
+                velocity is taken from the `transporting_velocity` property of
+                this timestepper. Defaults to None.
         """
-        if self.transporting_velocity == "prognostic" and "u" in self.fields._field_names:
+        if uadv_in is not None:
+            uadv = uadv_in
+        elif self.transporting_velocity == "prognostic" and "u" in self.fields._field_names:
             # Use the prognostic wind variable as the transporting velocity
             u_idx = self.equation.field_names.index('u')
             uadv = split(self.equation.X)[u_idx]

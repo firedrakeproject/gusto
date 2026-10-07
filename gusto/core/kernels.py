@@ -10,7 +10,7 @@ tested.
 """
 
 from firedrake import dx
-from firedrake.parloops import par_loop, READ, WRITE, INC, MIN, MAX, op2
+from firedrake.parloops import par_loop, READ, WRITE, RW, MIN, MAX, op2
 import numpy as np
 
 
@@ -158,7 +158,7 @@ class MeanMixingRatioWeights():
                 lives in the continuous target space.
         """
         par_loop(self._kernel, dx,
-                 {"lamda": (lamda, INC),
+                 {"lamda": (lamda, RW),
                   "mX_field": (mX_field, READ),
                   "mean_field": (mean_field, READ)})
 

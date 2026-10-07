@@ -69,28 +69,33 @@ def williamson_5(
         dirname=dirname, dumpfreq=dumpfreq,
         dump_vtus=True, dump_nc=True, dumplist=['D', 'topography']
     )
-    diagnostic_fields = [Sum('D', 'topography'), RelativeVorticity(),
-                         MeridionalComponent('u'), ZonalComponent('u')]
+
+    diagnostic_fields = [
+        Sum('D', 'topography'), RelativeVorticity(),
+        MeridionalComponent('u'), ZonalComponent('u')
+    ]
 
     # Transport schemes
     subcycling_options = SubcyclingOptions(subcycle_by_courant=0.25)
 
-    model = SIQNModel(mesh, dt, parameters, eqns,
-                      family='BDM')
-    model.setup(output, subcycling_options=subcycling_options,
-                diagnostic_fields=diagnostic_fields)
+    model = SIQNModel(mesh, dt, parameters, eqns, family='BDM')
+    model.setup(
+        output, subcycling_options=subcycling_options,
+        diagnostic_fields=diagnostic_fields
+    )
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
     # ------------------------------------------------------------------------ #
 
     stepper = model.stepper
+    topog_field = stepper.fields('topography')
     u0 = stepper.fields('u')
     D0 = stepper.fields('D')
     Omega = parameters.Omega
     uexpr = as_vector([-u_max*y/radius, u_max*x/radius, 0.0])
     Dexpr = (
-        mean_depth - tpexpr
+        mean_depth - topog_field
         - (radius*Omega*u_max + 0.5*u_max**2)*(z/radius)**2/g
     )
 
