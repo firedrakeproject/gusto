@@ -221,7 +221,9 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # BoussinesqEquations class.
         # Provide callback for nullspace of the trace system with trace_nullsp
         appctx = {
-            'auxform': equation.schur_complement_form(alpha=alpha),
+            'auxform': equation.schur_complement_form(
+                alpha=alpha, tau_values=tau_values
+            ),
             'trace_nullspace': trace_nullsp,
         }
 
@@ -291,7 +293,9 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # ThermalShallowWaterEquations class.
         # Provide callback for nullspace of the trace system with trace_nullsp
         appctx = {
-            'auxform': equation.schur_complement_form(alpha=alpha),
+            'auxform': equation.schur_complement_form(
+                alpha=alpha, tau_values=tau_values
+            ),
             'trace_nullspace': trace_nullsp,
         }
 
@@ -350,7 +354,9 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # ThermalShallowWaterEquations class.
         # Provide callback for nullspace of the trace system with trace_nullsp
         appctx = {
-            'auxform': equation.schur_complement_form(alpha=alpha),
+            'auxform': equation.schur_complement_form(
+                alpha=alpha, tau_values=tau_values
+            ),
             'trace_nullspace': trace_nullsp,
         }
 
