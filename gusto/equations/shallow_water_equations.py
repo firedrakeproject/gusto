@@ -573,7 +573,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
             - beta_u * (D_) * div(w_*bbar) * dx
             + beta_u * jump(w_*bbar, n) * avg(D_) * dS
             - beta_u * 0.5 * b_ * div(Dref*w_) * dx
-            # + beta_u * 0.5 * jump(Dref*w_, n) * avg(b_) * dS
+            + beta_u * 0.5 * jump(Dref*w_, n) * avg(b_) * dS
             - beta_u * 0.5 * bbar * div(w_*(D_)) * dx
             + beta_u * 0.5 * jump((D_)*w_, n) * avg(bbar) * dS
             + inner(phi_, (D_)) * dx
