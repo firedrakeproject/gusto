@@ -69,6 +69,13 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # nonlinear pressure gradient term.
         r_tol = 1e-8
 
+        if equation.domain.horizontal_degree < 1 or equation.domain.vertical_degree < 1:
+            # Lowest-order configurations seem to suffer from diverged linear
+            # solves if using tinyasm
+            assembled_pc_star_backend = 'petscasm'
+        else:
+            assembled_pc_star_backend = 'tinyasm'
+
         theta_backsub_settings = {
             'ksp_type': 'cg',
             'pc_type': 'bjacobi',
@@ -125,10 +132,10 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                 'ksp_type': 'preonly',
                 'pc_type': 'python',
                 'pc_python_type': 'firedrake.AssembledPC',
-                'assembled_pc_type': 'bjacobi',
-                'assembled_sub_pc_type': 'ilu',
-                'assembled_sub_pc_factor_mat_ordering_type': 'rcm',
-                'assembled_sub_pc_factor_reuse_ordering': None,
+                'assembled_pc_type': 'python',
+                'assembled_pc_python_type': 'firedrake.ASMExtrudedStarPC',
+                'assembled_pc_star_construct_dim': equation.domain.mesh.topological_dimension,
+                'assembled_pc_star_backend': assembled_pc_star_backend,
             },
             'fieldsplit_1': {
                 'ksp_type': 'preonly',
