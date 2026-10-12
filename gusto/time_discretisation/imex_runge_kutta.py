@@ -277,13 +277,13 @@ class IMEXRungeKutta(TimeDiscretisation):
             self.xs[stage].assign(self.x_out)
 
         # Solve final stage
-        for evaluate in self.evaluate_source:
-            evaluate(self.xs[-1], self.dt, x_out=self.source[-1])
-        self.final_solver.solve()
+        # for evaluate in self.evaluate_source:
+        #     evaluate(self.xs[-1], self.dt, x_out=self.source[-1])
+        # self.final_solver.solve()
 
-        # Apply limiter
-        if self.limiter is not None:
-            self.limiter.apply(self.x_out)
+        # # Apply limiter
+        # if self.limiter is not None:
+        #     self.limiter.apply(self.x_out)
         x_out.assign(self.x_out)
 
 
