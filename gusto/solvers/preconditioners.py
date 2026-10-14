@@ -175,7 +175,7 @@ class VerticalHybridizationPC(PCBase):
                 trace_subdomains.extend(sorted({"top", "bottom"} - extruded_neumann_subdomains))
 
             measures.extend((ds(sd) for sd in sorted(neumann_subdomains)))
-            markers = [int(x) for x in unique_mesh.exterior_facets.unique_markers]
+            markers = [int(x) for x in unique_mesh.facet_markers]
             dirichlet_subdomains = set(markers) - neumann_subdomains
             trace_subdomains.extend(sorted(dirichlet_subdomains))
 
@@ -256,8 +256,8 @@ class VerticalHybridizationPC(PCBase):
         B = Tensor(split_mixed_op[(id0, id1)])
         C = Tensor(split_mixed_op[(id1, id0)])
         D = Tensor(split_mixed_op[(id1, id1)])
-        K_0 = Tensor(split_trace_op[(0, id0)])
-        K_1 = Tensor(split_trace_op[(0, id1)])
+        K_0 = Tensor(split_trace_op[(None, id0)])
+        K_1 = Tensor(split_trace_op[(None, id1)])
 
         # Split functions and reconstruct each bit separately
         split_residual = self.broken_residual.subfunctions
@@ -334,7 +334,7 @@ class VerticalHybridizationPC(PCBase):
             # any projections
             unbroken_scalar_data = self.unbroken_residual.subfunctions[self.pidx]
             broken_scalar_data = self.broken_residual.subfunctions[self.pidx]
-            unbroken_scalar_data.dat.copy(broken_scalar_data.dat)
+            broken_scalar_data.dat.assign(unbroken_scalar_data.dat, eager=True)
 
         with PETSc.Log.Event("VertHybridRHS"):
             # Assemble the new "broken" hdiv residual
@@ -369,7 +369,7 @@ class VerticalHybridizationPC(PCBase):
             # Project the broken solution into non-broken spaces
             broken_pressure = self.broken_solution.subfunctions[self.pidx]
             unbroken_pressure = self.unbroken_solution.subfunctions[self.pidx]
-            broken_pressure.dat.copy(unbroken_pressure.dat)
+            unbroken_pressure.dat.assign(broken_pressure.dat, eager=True)
 
             # Compute the hdiv projection of the broken hdiv solution
             broken_hdiv = self.broken_solution.subfunctions[self.vidx]

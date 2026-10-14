@@ -103,8 +103,12 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
         self.linearisation_map = lambda t: False if linearisation_map is None else linearisation_map(t)
 
         # Build finite element spaces
-        self.spaces = [domain.spaces(space_name) for space_name in
-                       [self.space_names[field_name] for field_name in self.field_names]]
+        spaces = [domain.spaces(space_name)
+                  for space_name in [self.space_names[field_name] for field_name in self.field_names]]
+        # Make sure that the spaces have unique names
+        self.spaces = [space.reconstruct(name=f"{field_name}_{space.name}")
+                       for field_name, space in zip(self.field_names, spaces, strict=True)]
+
 
         # Add active tracers to the list of prognostics
         if active_tracers is None:
@@ -346,7 +350,9 @@ class PrognosticEquationSet(PrognosticEquation, metaclass=ABCMeta):
                         + f'{tracer.space} specified in the ActiveTracer object'
                 else:
                     self.space_names[tracer.name] = tracer.space
-                self.spaces.append(domain.spaces(tracer.space))
+                space = domain.spaces(tracer.space)
+                # Give the space a unique name
+                self.spaces.append(space.reconstruct(name=f"{tracer.name}_{space.name}"))
             else:
                 raise TypeError(f'Tracers must be ActiveTracer objects, not {type(tracer)}')
 
