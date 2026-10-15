@@ -158,7 +158,7 @@ def schaer_mountain(
 
     # Solve hydrostatic balance again, but now use minimum value from first
     # solve as the *top* boundary condition for Exner
-    top_value = exner.dat.min()
+    top_value = exner.dat.min
     top_boundary = Constant(top_value)
     logger.info(f'Solving hydrostatic with top Exner of {top_value}')
     compressible_hydrostatic_balance(
@@ -166,7 +166,7 @@ def schaer_mountain(
         exner_boundary=top_boundary
     )
 
-    max_bottom_value = exner.dat.max()
+    max_bottom_value = exner.dat.max
 
     # Now we iterate, adjusting the top boundary condition, until this gives
     # a maximum value of 1.0 at the surface

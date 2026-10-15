@@ -63,7 +63,7 @@ class Diagnostics(object):
         Args:
             f (:class:`Function`): field to compute diagnostic for.
         """
-        return f.dat.min()
+        return f.dat.min
 
     @staticmethod
     def max(f):
@@ -73,7 +73,7 @@ class Diagnostics(object):
         Args:
             f (:class:`Function`): field to compute diagnostic for.
         """
-        return f.dat.max()
+        return f.dat.max
 
     @staticmethod
     def rms(f):

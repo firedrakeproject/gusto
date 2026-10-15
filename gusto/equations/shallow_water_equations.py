@@ -193,7 +193,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
                 r = sqrt(inner(xyz, xyz))
                 radius_field = Function(CG1)
                 radius_field.interpolate(r)
-                radius = Constant(radius_field.dat.min())
+                radius = Constant(radius_field.dat.min)
                 fexpr = 2*self.parameters.Omega*xyz[2]/radius
             elif rotation is CoriolisOptions.fplane:
                 fexpr = self.parameters.f0

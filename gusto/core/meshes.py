@@ -670,9 +670,5 @@ if (max_diff > PI) {{
         preambles=preambles,
     )
 
-    op3.loop(
-        c := coords_latlon.iter("cell"),
-        kernel(coords_latlon.dat(op3.RW, coords_latlon.cell_node_map())),
-        eager=True,
-    )
+    op3.loop(c := mesh.iter("cell"), kernel(coords_latlon.dat[c]), eager=True)
     return Mesh(coords_latlon)
