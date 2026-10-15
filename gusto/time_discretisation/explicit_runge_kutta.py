@@ -378,17 +378,23 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             # Use previous stage value as a first guess (otherwise may not converge)
             self.field_i[stage+1].assign(self.field_i[stage])
             if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
-                pass
-                #if stage > 0: 
-                #    self.augmentation.update(self.field_i[stage-1])
-                #if stage > 0:
-                #    self.augmentation.limit(self.field_i[stage])
+                if stage == 0: 
+                    # Perform pre-limiting with a non-negative limiter
+                    self.augmentation.pre_limit(self.field_i[stage])
+                    # Try without any initial limiter:
+                    #pass
+                else:
+                    # Perform monotonic limiting
+                    self.augmentation.limit(self.field_i[stage])
+                # Update the pre transport reference state
+                self.augmentation.update(self.field_i[stage])
+
             elif self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
 
-            # Save the untransported field
-            if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
-                self.augmentation.update(self.field_i[stage])
+            # Save the untransported field for mono
+            #if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
+             #   self.augmentation.update(self.field_i[stage])
 
             for evaluate in self.evaluate_source:
                 evaluate(self.field_i[stage], self.dt, x_out=self.source_i[stage])
@@ -397,9 +403,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             self.solver[stage].solve()
 
             print('Transport is complete')
-
-            if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
-                self.augmentation.limit(self.field_i[stage+1])
 
             if (stage == self.nStages - 1):
                 self.x1.assign(self.field_i[stage+1])

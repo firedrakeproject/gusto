@@ -238,7 +238,7 @@ class MonotonicMeanMixingRatioWeights():
         domain = "{{[i]: 0 <= i < {nDOFs}}}".format(**shapes)
 
         instrs = ("""
-                  <float64> eps = 1.0e-12
+                  <float64> eps = 1.0e-14
                   <float64> new_min = 1.0e10
                   <float64> new_max = -1.0e10
                   <float64> old_min = 1.0e10
@@ -266,7 +266,7 @@ class MonotonicMeanMixingRatioWeights():
                   end
 
                   if new_max > old_max
-                      lamda_max = fmin(fmax((new_max - old_max)/(new_max - mean_field[0] +eps ), 0.0), 1.0)
+                      lamda_max = fmin(fmax((new_max - old_max)/(new_max - mean_field[0]+ eps ), 0.0), 1.0)
                   end
 
                   lamda[0] = fmax(lamda[0], fmax(lamda_min, lamda_max))
