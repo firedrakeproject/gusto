@@ -324,7 +324,6 @@ class VerticalHybridizationPC(PCBase):
             x (:class:`PETSc.Vec`): the vector to apply the preconditioner to.
             y (:class:`PETSc.Vec`): the vector to put the result into.
         """
-
         with PETSc.Log.Event("VertHybridBreak"):
             with self.unbroken_residual.dat.vec_wo as v:
                 x.copy(v)

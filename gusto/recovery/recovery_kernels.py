@@ -280,11 +280,11 @@ class BoundaryGaussianElimination(object):
             eff_coord_expr = (
                 """
                 A[i,0] = 1.0
-                A[i,1] = EFF_COORDS[i]
+                A[i,1] = EFF_COORDS[i, 0]
                 """)
             act_coord_expr = (
                 """
-                DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii]
+                DG1[iiii, 0] = a[0] + a[1]*ACT_COORDS[iiii, 0]
                 """)
         else:
             eff_coord_expr = (
@@ -318,15 +318,15 @@ class BoundaryGaussianElimination(object):
             act_coord_expr = (
                 """
                 if {nDOFs} == 2
-                    DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0]
+                    DG1[iiii, 0] = a[0] + a[1]*ACT_COORDS[iiii,0]
                 elif {nDOFs} == 3
-                    DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1]
+                    DG1[iiii, 0] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1]
                 elif {nDOFs} == 4
-                    DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1]
+                    DG1[iiii, 0] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1]
                 elif {nDOFs} == 6
-                    DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,{dim}-1] + a[4]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,{dim}-1] + a[5]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,{dim}-1]
+                    DG1[iiii, 0] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,{dim}-1] + a[4]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,{dim}-1] + a[5]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,{dim}-1]
                 elif {nDOFs} == 8
-                    DG1[iiii] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1] + a[4]*ACT_COORDS[iiii,{dim}-1] + a[5]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,{dim}-1] + a[6]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,{dim}-1] + a[7]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,{dim}-1]
+                    DG1[iiii, 0] = a[0] + a[1]*ACT_COORDS[iiii,0] + a[2]*ACT_COORDS[iiii,1] + a[3]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1] + a[4]*ACT_COORDS[iiii,{dim}-1] + a[5]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,{dim}-1] + a[6]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,{dim}-1] + a[7]*ACT_COORDS[iiii,0]*ACT_COORDS[iiii,1]*ACT_COORDS[iiii,{dim}-1]
                 end
                 """).format(**shapes)
 
@@ -364,7 +364,7 @@ class BoundaryGaussianElimination(object):
             # N.B. several for loops must be executed in numerical order (loopy does not necessarily do this).
             # For these loops we must manually iterate the index.
             """
-            if NUM_EXT[0] > 0.0
+            if NUM_EXT[0, 0] > 0.0
             """
             # only do Gaussian elimination for elements with effective coordinates
             """
@@ -372,7 +372,7 @@ class BoundaryGaussianElimination(object):
             """
             # fill f with the original field values and A with the effective coordinate values
             """
-                    f[i] = DG1_OLD[i]
+                    f[i] = DG1_OLD[i, 0]
                     a[i] = 0.0
                     {eff_coord_expr}
                 end
@@ -465,13 +465,13 @@ class BoundaryGaussianElimination(object):
             """
             # Having found a, this gives us the coefficients for the Taylor expansion with the actual coordinates.
             """
-                if NUM_EXT[0] > 0.0
+                if NUM_EXT[0, 0] > 0.0
                 {act_coord_expr}
             """
             # if element is not external, just use old field values.
             """
                 else
-                    DG1[iiii] = DG1_OLD[iiii]
+                    DG1[iiii, 0] = DG1_OLD[iiii, 0]
                 end
             end
             """).format(**shapes)
