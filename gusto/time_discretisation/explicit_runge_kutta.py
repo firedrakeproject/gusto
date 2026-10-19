@@ -379,10 +379,9 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
             self.field_i[stage+1].assign(self.field_i[stage])
             if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
                 if stage == 0: 
-                    # Perform pre-limiting with a non-negative limiter
-                    self.augmentation.pre_limit(self.field_i[stage])
-                    # Try without any initial limiter:
-                    #pass
+                    # Don't limit as there is no transport yet. Instead,
+                    # record the time n field reference.
+                    self.augmentation.set_step_reference(self.field_i[0])
                 else:
                     # Perform monotonic limiting
                     self.augmentation.limit(self.field_i[stage])
@@ -391,10 +390,6 @@ class ExplicitRungeKutta(ExplicitTimeDiscretisation):
 
             elif self.limiter is not None:
                 self.limiter.apply(self.field_i[stage])
-
-            # Save the untransported field for mono
-            #if hasattr(self.augmentation, 'limit') and callable(self.augmentation.limit):
-             #   self.augmentation.update(self.field_i[stage])
 
             for evaluate in self.evaluate_source:
                 evaluate(self.field_i[stage], self.dt, x_out=self.source_i[stage])

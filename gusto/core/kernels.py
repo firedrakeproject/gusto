@@ -262,11 +262,11 @@ class MonotonicMeanMixingRatioWeights():
                   # sign-dependent epssign offset (as used elsewhere for
                   # unguarded divisions) is required here.
                   if new_min < old_min
-                      lamda_min = fmin(fmax((old_min - new_min)/(mean_field[0] - new_min + eps), 0.0), 1.0)
+                      lamda_min = fmin(fmax((old_min - new_min)/(mean_field[0] - new_min), 0.0), 1.0)
                   end
 
                   if new_max > old_max
-                      lamda_max = fmin(fmax((new_max - old_max)/(new_max - mean_field[0]+ eps ), 0.0), 1.0)
+                      lamda_max = fmin(fmax((new_max - old_max)/(new_max - mean_field[0]), 0.0), 1.0)
                   end
 
                   lamda[0] = fmax(lamda[0], fmax(lamda_min, lamda_max))

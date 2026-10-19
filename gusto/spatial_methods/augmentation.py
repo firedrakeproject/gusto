@@ -317,9 +317,7 @@ class MeanMixingRatio(Augmentation):
 
         # Define a limiter using the mean mixing ratios
         self.pre_limiters = MeanLimiter(mX_spaces)
-        #self.limiters = MonotonicMeanLimiter(mX_spaces, enforce_nonnegative=True)
         self.limiters = MonotonicMeanLimiter(mX_spaces)
-        #self.limiters = MonotonicMeanLimiter(mX_spaces, extruded_bounds_method='relaxed')
 
         # Projector for computing the mean mixing ratios
         self.DG1_field = Function(DG1)
@@ -343,6 +341,7 @@ class MeanMixingRatio(Augmentation):
 
         # For the monotonic limiter
         self.pre_transport = Function(self.fs)
+        self.step_reference = Function(self.fs)
 
         self.bcs = None
 
@@ -380,64 +379,20 @@ class MeanMixingRatio(Augmentation):
         """
         x_out.assign(self.x_out)
 
+    def set_step_reference(self, x_in_mixed):
+        self.step_reference.assign(x_in_mixed)
+
+
     def update(self, x_in_mixed):
         """
-        Compute the mean mixing ratio fields by conservative projection,
-        where both the target and source density are in the higher-order
-        space.
+        Update the pre-transport field, used for monotonic limiting
 
         Args:
             x_in_mixed (:class:`Function`): The mixed function, containing
             mean fields to update.
         """
         self.pre_transport.assign(x_in_mixed)
-        print('updating the transport reference solution')
-        print('X')
-        print('min', np.min(x_in_mixed.subfunctions[1].dat.data))
-        print('max', np.max(x_in_mixed.subfunctions[1].dat.data))
-        #print('X2')
-        #print('min', np.min(x_in_mixed.subfunctions[2].dat.data))
-        #print('max', np.max(x_in_mixed.subfunctions[2].dat.data))
-        #pass
 
-    def pre_limit(self, x_in_mixed):
-        """
-        Limit k=1 mixing ratios using a limiter that blends the
-        k=1 field and its mean field.
-
-        Args:
-            x_in_mixed (:class:`Function`): The mixed function, containing
-            mixing ratio fields to limit.
-        """
-
-        # Ensure non-negativity by applying the blended limiter
-        mX_pre = []
-        means = []
-
-        # Compute the new mean mixing ratio
-        for i in range(self.mX_num):
-            self.rho_field.assign(x_in_mixed.subfunctions[self.rho_idxs[i]])
-
-            # Compute the mean mixing ratio with conservative projection
-            self.DG1_field.assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
-            self.compute_mean_mX.project()
-
-            # Clip any minuscule negative values in the mean mixing ratio
-            # that arise from numerical error
-            self.limiters._clip_means_kernel.apply(self.DG0_field, self.DG0_field)
-
-            self.mean_fields.subfunctions[i].assign(self.DG0_field)
-
-            mX_pre.append(x_in_mixed.subfunctions[self.mX_idxs[i]])
-            means.append(self.mean_fields.subfunctions[i])
-
-        # Limit all mixing ratios at the same time to have
-        # the same blending weights.
-        self.pre_limiters.apply(mX_pre, means)
-
-        # Update the mixing ratios with the limited version
-        for i in range(self.mX_num):
-            x_in_mixed.subfunctions[self.mX_idxs[i]].assign(mX_pre[i])
 
     def limit(self, x_in_mixed):
         """
@@ -449,104 +404,16 @@ class MeanMixingRatio(Augmentation):
             mixing ratio fields to limit.
         """
 
-        # Ensure non-negativity by applying the blended limiter
-        mX_pre = []
-        means = []
-        mX_old = []
+        mX_step_ref = [self.step_reference.subfunctions[self.mX_idxs[i]]
+                       for i in range(self.mX_num)]
+        self.rho_field = x_in_mixed.subfunctions[self.rho_idxs[0]]
+        mX_pre_transport = [self.pre_transport.subfunctions[self.mX_idxs[i]] for i in range(self.mX_num)]
+        mX_current = [x_in_mixed.subfunctions[self.mX_idxs[i]] for i in range(self.mX_num)]
 
-        print('After transport')
-        print('X')
-        print('min', np.min(x_in_mixed.subfunctions[1].dat.data))
-        print('max', np.max(x_in_mixed.subfunctions[1].dat.data))
-        #print('X2')
-        #print('min', np.min(x_in_mixed.subfunctions[2].dat.data))
-        #print('max', np.max(x_in_mixed.subfunctions[2].dat.data))
-
-        # Compute the new mean mixing ratio
-        for i in range(self.mX_num):
-            self.rho_field.assign(x_in_mixed.subfunctions[self.rho_idxs[i]])
-
-            # Compute the mean mixing ratio with conservative projection
-            self.DG1_field.assign(x_in_mixed.subfunctions[self.mX_idxs[i]])
-            self.compute_mean_mX.project()
-
-            # Clip any minuscule negative values in the mean mixing ratio
-            # that arise from numerical error
-            self.limiters._clip_means_kernel.apply(self.DG0_field, self.DG0_field)
-
-            self.mean_fields.subfunctions[i].assign(self.DG0_field)
-
-            mX_pre.append(x_in_mixed.subfunctions[self.mX_idxs[i]])
-            means.append(self.mean_fields.subfunctions[i])
-            mX_old.append(self.pre_transport.subfunctions[self.mX_idxs[i]])
-
-        # Limit all mixing ratios at the same time to have
-        # the same blending weights.
-
-        #pre_transport_mass = assemble(self.pre_transport.subfunctions[0]*self.pre_transport.subfunctions[1]*dx) 
-        #old_mass = assemble(self.rho_field*(mX_pre[0]+2*mX_pre[1])*dx)
-        #mean_mass = assemble(self.rho_field*means[0]*dx)
-
-        #transport_mass_diff = np.abs(old_mass - pre_transport_mass)/pre_transport_mass
-        #mean_mass_diff = np.abs(old_mass - mean_mass)/old_mass
-
-        #if transport_mass_diff > 1e-10:
-        #    print('Mass difference is too large from transport itself')
-        #    print(transport_mass_diff)
-        #    import sys; sys.exit()
-
-        #if mean_mass_diff > 1e-10:
-        #    print('Mean mass difference is too large')
-        #    print(mean_mass_diff)
-        #    import sys; sys.exit()
-
-        # Check that the pre transported field is non-negative
-        #print('Min of pre transported field')
-        #print(np.min(self.pre_transport.subfunctions[self.mX_idxs[0]].dat.data))
-        #print(np.min(mX_old[0].dat.data))
-
-        # For the previous non-negative limiter
-        #self.limiters.apply(mX_pre, means)
-
-        # For the new monotonic limiter.
-        #self.limiters.apply(mX_pre, self.rho_field, means, mX_old)
-        self.limiters.apply(mX_pre, self.rho_field, mX_old)
+        # Applying the union bound, as SSPRK3 is a convex combination of the 
+        # time n field and the forward Euler solution
+        self.limiters.apply(mX_current, self.rho_field, mX_pre_transport, mX_step_ref)
 
         # Update the mixing ratios with the limited version
         for i in range(self.mX_num):
-            x_in_mixed.subfunctions[self.mX_idxs[i]].assign(mX_pre[i])
-
-        # Print mass difference after limiting
-        #new_mass = assemble(self.rho_field*(mX_pre[0]+2*mX_pre[1])*dx)
-
-        #mass_diff = np.abs(old_mass - new_mass)/old_mass
-        #min_val = np.min(mX_pre[0].dat.data)
-        #max_val = np.max(mX_pre[0].dat.data)
-
-        print('After limiting')
-        print('X')
-        print('min', np.min(x_in_mixed.subfunctions[1].dat.data))
-        print('max', np.max(x_in_mixed.subfunctions[1].dat.data))
-        #print('X2')
-        #print('min', np.min(x_in_mixed.subfunctions[2].dat.data))
-        #print('max', np.max(x_in_mixed.subfunctions[2].dat.data))
-
-        #print('min', min_val)
-        #print('max', max_val)
-        #print('mass difference', mass_diff)
-
-        #if mass_diff > 1e-11:
-        #    print('Mass difference is too large')
-        #    print(mass_diff)
-        #    import sys; sys.exit()
-
-        #if min_val < -1e-5:
-        #    print('Mixing ratio is now negative')
-        #    print(min_val)
-        #    import sys; sys.exit()
-
-        #if max_val >1.0001:
-        #    print('Mixing ratio is too large')
-        #    print(max_val)
-        #    print('Mixing ratio is now negative')
-        #    import sys; sys.exit()
+            x_in_mixed.subfunctions[self.mX_idxs[i]].assign(mX_current[i])

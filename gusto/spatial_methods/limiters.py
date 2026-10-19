@@ -441,6 +441,10 @@ class MonotonicMeanLimiter(object):
         self.mean_field = Function(DG0)
         self.mX_new = Function(DG1_equispaced)
 
+        # Equispaced representation of the start-of-step field, whose
+        # cellwise extrema contribute to the bounds for later RK stages
+        self.step_ref_field = Function(DG1_equispaced)
+
         # Fields used to compute the density-weighted mean field, mbar_e,
         # as the cellwise mean of rho*m divided by the cellwise mean of rho
         self.rho_field = Function(DG1_equispaced)
@@ -479,6 +483,7 @@ class MonotonicMeanLimiter(object):
             self.stencil_min_cg = Function(CG1)
             self.stencil_max_cg = Function(CG1)
 
+
         # Whether to additionally clip small negatives from the mean field
         # that arise from numerical error when computing it. This is kept
         # optional, since monotonicity alone does not require non-negativity.
@@ -486,7 +491,7 @@ class MonotonicMeanLimiter(object):
         self._clip_means_kernel = ClipZero(DG0)
         self._clip_mX_kernel = ClipZero(DG1_equispaced)
 
-    def apply(self, mX_fields, rho_field, old_mX_fields):
+    def apply(self, mX_fields, rho_field, old_mX_fields, step_ref_mX_fields=None):
         """
         Compute the limiter weights, lambda, and use these to combine the
         DG1 mixing ratio and DG0 mean field to ensure monotonicity.
@@ -517,10 +522,7 @@ class MonotonicMeanLimiter(object):
         for i in range(len(mX_fields)):
             # Gather the min/max of the pre-transport field over each cell
             # and its facet-neighbours
-            print('interpolating pre transport field')
-            print(np.min(old_mX_fields[i].dat.data))
             self.old_field.interpolate(old_mX_fields[i])
-            print(np.min(self.old_field.dat.data))
 
             if self.extruded and self.extruded_bounds_method == 'facet':
                 # Gather bounds over horizontal facet-neighbours only (using
@@ -562,6 +564,18 @@ class MonotonicMeanLimiter(object):
                 )
                 self.stencil_min_dg1.interpolate(self.stencil_min_cg)
                 self.stencil_max_dg1.interpolate(self.stencil_max_cg)
+
+            # Widen the bounds with the cellwise extrema of the field at the
+            # start of the timestep. Only values in the cell itself are
+            # needed, since this part of the stage is not transported.
+            if step_ref_mX_fields is not None:
+                self.step_ref_field.interpolate(step_ref_mX_fields[i])
+                self.stencil_min_dg1.interpolate(
+                    min_value(self.stencil_min_dg1, self.step_ref_field)
+                )
+                self.stencil_max_dg1.interpolate(
+                    max_value(self.stencil_max_dg1, self.step_ref_field)
+                )
 
             # Interpolate fields from DG1 to DG1 equispaced, and compute the
             # density-weighted mean field as the cellwise mean of rho*m

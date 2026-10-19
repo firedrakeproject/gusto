@@ -78,6 +78,11 @@ class TerminatorToy(PhysicsParametrisation):
             # This uses the anaytical formulation given in
             # Appendix D of Lauritzen et al. (2015)
             # This must be used with forward Euler.
+            V_eq = equation.domain.spaces('DG1_equispaced')
+            self.X_eq = Function(V_eq)
+            self.X2_eq = Function(V_eq)
+            self.source_eq = Function(V_eq)
+
             X_T_0 = 4.e-6
             r = k1/(4.0*k2)
             d = sqrt(r**2 + 2.0*X_T_0*r)
@@ -87,20 +92,17 @@ class TerminatorToy(PhysicsParametrisation):
 
             source_expr = -e1 * (species1 - d + r) * (species1 + d + r) / (1.0 + e + self.dt * e1 * (species1 + r))
 
-            # Ensure the increments don't create a negative mixing ratio
+            # Ensure the increments don't create a negative mixing ratio.
+            # Do so at vertices for the DG1 space.
             source_expr = conditional(source_expr < 0.0,
                                       max_value(source_expr, -species1/self.dt),
                                       min_value(source_expr, 2.0*species2/self.dt))
 
-            source1_expr = source_expr
-            source2_expr = -source_expr/2.0
+            self.source_eq_interpolate = interpolate(source_expr, V_eq)
 
             self.source = Function(W)
             self.source_expr = [split(self.source)[V_idx] for V_idx in V_idxs]
             self.source_int = [self.source.subfunctions[V_idx] for V_idx in V_idxs]
-
-            self.source_interpolate = [interpolate(source1_expr, self.source_int[0].function_space()),
-                                       interpolate(source2_expr, self.source_int[1].function_space())]
 
             equation.residual -= source_label(self.label(subject(prognostic(test1 * self.source_expr[0] * dx, species1_name), equation.X), self.evaluate))
             equation.residual -= source_label(self.label(subject(prognostic(test2 * self.source_expr[1] * dx, species2_name), equation.X), self.evaluate))
@@ -131,8 +133,18 @@ class TerminatorToy(PhysicsParametrisation):
             self.Xq.assign(x_in)
 
             # Evaluate the source
-            for interpolator, src in zip(self.source_interpolate, self.source_int):
-                src.assign(assemble(interpolator))
+            #for interpolator, src in zip(self.source_interpolate, self.source_int):
+            #    src.assign(assemble(interpolator))
+
+            # Move the species to the vertex (equispaced) representation
+            self.X_eq.interpolate(self.Xq.subfunctions[self.species1_idx])
+            self.X2_eq.interpolate(self.Xq.subfunctions[self.species2_idx])
+
+            # Evaluate the bounded source at the vertices, then map back to
+            # the prognostic space (exact, as both are the same DG1 space)
+            self.source_eq.assign(assemble(self.source_eq_interpolate))
+            self.source_int[0].interpolate(self.source_eq)
+            self.source_int[1].interpolate(-self.source_eq/2.0)
 
             if x_out is not None:
                 x_out.assign(self.source)
