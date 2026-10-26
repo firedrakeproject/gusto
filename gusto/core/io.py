@@ -802,6 +802,13 @@ class IO(object):
                 # dump fields
                 self.pvd_dumpfile.write(*self.to_dump)
 
+            # Diagnostics which accumulate over time (e.g. TimeAveragedDiagnostic)
+            # may define a reset method, to restart their accumulation once
+            # they have been written out
+            for diagnostic_field in self.diagnostic_fields:
+                if hasattr(diagnostic_field, 'reset'):
+                    diagnostic_field.reset()
+
                 # dump fields on latlon mesh
                 if len(output.dumplist_latlon) > 0:
                     self.dumpfile_ll.write(*self.to_dump_latlon)
