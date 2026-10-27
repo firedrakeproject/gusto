@@ -21,14 +21,14 @@ from gusto import (
     SemiImplicitQuasiNewton, ForwardEuler, WaterVapour, CloudWater,
     xyz_vector_from_lonlatr, SWSaturationAdjustment, ZonalComponent,
     GeneralIcosahedralSphereMesh, PartitionedCloud, prognostic, subject,
-    monolithic_solver_parameters
+    monolithic_solver_parameters, Cloud, Vapour
 )
 
 moist_thermal_gw_defaults = {
     'ncells_per_edge': 16,         # number of cells per icosahedron edge
     'dt': 900.0,                   # 15 minutes
     'tmax': 5.*24.*60.*60.,        # 5 days
-    'dumpfreq': 96,                # dump once per day
+    'dumpfreq': 1,                # dump once per day
     'dirname': 'moist_thermal_gw',
     'equivb': False
 }
@@ -92,50 +92,6 @@ def moist_thermal_gw(
             sat = q0*mean_depth/D * exp(nu*(1-b_e/g))
             return sat
 
-        # Extract fields from equations
-        _, Dbar, _, _, _ = split(eqns.X_ref)
-        _, D, b, qv, _ = split(eqns.X)
-        _, _, lamda, tau1, tau2 = eqns.tests
-
-        P_expr = qv - sat_func(eqns.X_ref)*(-D/Dbar - b*nu/g + qv*nu*beta2/g)
-        phys_b_form = physics_beta * lamda * beta2 * P_expr * dx
-        phys_qv_form = physics_beta * tau1 * P_expr * dx
-        phys_qc_form = -physics_beta * tau2 * P_expr * dx
-        eqns.residual += (
-            subject(prognostic(physics_label(phys_b_form), 'b'), eqns.X)
-        )
-        eqns.residual += (
-            subject(prognostic(physics_label(phys_qv_form), 'water_vapour'), eqns.X)
-        )
-        eqns.residual += (
-            subject(prognostic(physics_label(phys_qc_form), 'cloud_water'), eqns.X)
-        )
-
-        # Add linearisation of these terms
-        eqns.residual = eqns.generate_linear_terms(
-            eqns.residual, lambda t: t.has_label(physics_label)
-        )
-
-    # IO
-    if dirname == moist_thermal_gw_defaults['dirname'] and equivb:
-        dirname += '_equivb'
-
-    if equivb:
-        dumplist = ['b_e', 'D', 'q_t']
-        diagnostic_fields = [
-            ZonalComponent('u'), MeridionalComponent('u'),
-            PartitionedCloud(eqns)
-        ]
-    else:
-        diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u')]
-        dumplist = ['b', 'water_vapour', 'cloud_water', 'D']
-
-    output = OutputParameters(
-        dirname=dirname, dumpfreq=dumpfreq, dump_nc=True, dump_vtus=False,
-        dumplist=dumplist
-    )
-    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
-
     # Transport
     transport_methods = [
         DGUpwind(eqns, field_name) for field_name in eqns.field_names
@@ -181,14 +137,34 @@ def moist_thermal_gw(
 
         physics_schemes = [(sat_adj, ForwardEuler(domain))]
 
+    # IO
+    if dirname == moist_thermal_gw_defaults['dirname'] and equivb:
+        dirname += '_equivb'
+
+    if equivb:
+        dumplist = ['b_e', 'D', 'q_t']
+        diagnostic_fields = [
+            ZonalComponent('u'), MeridionalComponent('u'),
+            PartitionedCloud(eqns)
+        ]
+    else:
+        diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'),
+                             Cloud(eqns, sat_adj), Vapour(eqns, sat_adj)]
+        dumplist = ['b', 'water_vapour', 'cloud_water', 'D']
+
+    output = OutputParameters(
+        dirname=dirname, dumpfreq=dumpfreq, dump_nc=True, dump_vtus=True,
+        dumplist=dumplist
+    )
+    io = IO(domain, output, diagnostic_fields=diagnostic_fields)
+
     # ------------------------------------------------------------------------ #
     # Timestepper
     # ------------------------------------------------------------------------ #
 
     stepper = SemiImplicitQuasiNewton(
         eqns, io, transported_fields, transport_methods,
-        physics_beta=physics_beta, tau_values=tau_values,
-        inner_physics_schemes=physics_schemes,
+        slow_physics_schemes=physics_schemes, tau_values=tau_values,
         num_outer=2, num_inner=2, solver_prognostics=solver_prognostics,
         linear_solver_parameters=solver_parameters, reference_update_freq=10800.
     )
