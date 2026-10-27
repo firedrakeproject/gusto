@@ -51,10 +51,10 @@ def initial_buoyancy_field_degree1_from_degree0(domain, buoyancy_expr):
             f'two-dimensional (vertical slice) meshes, not dimension '
             f'{mesh.topological_dimension}'
         )
-    if domain.horizontal_degree != 1 or domain.vertical_degree != 1:
+    if domain.horizontal_degree != 1:
         raise ValueError(
             'initial_buoyancy_field_degree1_from_degree0 requires a '
-            'domain with horizontal and vertical degree 1, but got '
+            'domain with horizontal degree 1, but got '
             f'horizontal degree {domain.horizontal_degree} and vertical '
             f'degree {domain.vertical_degree}'
         )
