@@ -13,6 +13,7 @@ from gusto.time_discretisation.time_discretisation import ExplicitTimeDiscretisa
 from gusto.spatial_methods.transport_methods import TransportMethod
 import ufl
 import numpy as np
+from mpi4py import MPI
 
 __all__ = ["BaseTimestepper", "Timestepper", "PrescribedTransport"]
 
@@ -33,6 +34,7 @@ class BaseTimestepper(object, metaclass=ABCMeta):
         self.t = self.equation.domain.t
         self.reference_profiles_initialised = False
         self.last_ref_update_time = None
+        self.first_step_time = 0.0
 
         self.setup_fields()
         self.setup_scheme()
@@ -247,6 +249,9 @@ class BaseTimestepper(object, metaclass=ABCMeta):
                 self.io.log_courant(self.fields, component='vertical', message='vertical')
 
             self.timestep()
+
+            if self.step == 1:
+                self.first_step_time = MPI.Wtime()
 
             self.t.assign(float(self.t) + float(self.dt))
             self.step += 1
