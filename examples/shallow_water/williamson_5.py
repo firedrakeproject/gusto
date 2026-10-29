@@ -15,6 +15,7 @@ from gusto import (
     lonlatr_from_xyz, GeneralIcosahedralSphereMesh, ZonalComponent,
     MeridionalComponent, RelativeVorticity, SubcyclingOptions, SIQNModel
 )
+from mpi4py import MPI
 
 williamson_5_defaults = {
     'ncells_per_edge': 16,     # number of cells per icosahedron edge
@@ -109,7 +110,20 @@ def williamson_5(
     # Run
     # ------------------------------------------------------------------------ #
 
+    # Run the model with timing calipers
+    start_time = MPI.Wtime()
     model.run(t=0, tmax=tmax)
+    end_time = MPI.Wtime()
+
+    # Compute and print timing information
+    first_step_time = stepper.first_step_time
+    wall_time = end_time - start_time
+    first_step_wall_time = first_step_time - start_time
+    from_first_step_wall_time = wall_time - first_step_wall_time
+    if MPI.COMM_WORLD.rank == 0:
+        print(f"Simulation time: {wall_time} seconds")
+        print(f"First step wall time: {first_step_wall_time} seconds")
+        print(f"Wall time from first step: {from_first_step_wall_time} seconds")
 
 # ---------------------------------------------------------------------------- #
 # MAIN
