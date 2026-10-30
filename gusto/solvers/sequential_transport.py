@@ -118,11 +118,17 @@ class SequentialConservativeTransportSolver:
         # in the closed/periodic cases in the paper. Mixed BCs require an
         # additional step to assign each BC to the appropriate block.
         if bcs:
-            raise NotImplementedError(
-                "Sequential conservative transport does not yet split "
-                "mixed Dirichlet boundary conditions. The scalar transport "
-                "tests considered here should not require essential BCs."
-            )
+            # BCs on blocks that are not solved for here (e.g. the velocity when
+            # the full SIQN mixed space is passed in) do not affect the solve.
+            solved_indices = (density_index,) + self.tracer_indices
+            for bc in (bcs or []):
+                bc_index = bc.function_space().index
+                if bc_index is None or bc_index in solved_indices:
+                    raise NotImplementedError(
+                        "Sequential conservative transport does not yet split "
+                        "mixed Dirichlet boundary conditions on the density or "
+                        "tracer blocks."
+                    )
 
         default_parameters = {
             "mat_type": "aij",
