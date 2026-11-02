@@ -12,7 +12,8 @@ from gusto.core.function_spaces import is_cg
 __all__ = ["ShallowWaterKineticEnergy", "ShallowWaterPotentialEnergy",
            "ShallowWaterPotentialEnstrophy", "PotentialVorticity",
            "RelativeVorticity", "AbsoluteVorticity", "PartitionedVapour",
-           "PartitionedCloud", "Cloud", "Vapour"]
+           "PartitionedCloud", "Cloud", "Vapour", "Cloud2", "Vapour2",
+           "Cloud3", "Vapour3", "Cloud4", "Vapour4"]
 
 
 class ShallowWaterKineticEnergy(Energy):
@@ -462,7 +463,7 @@ class Cloud(DiagnosticField):
 class Vapour(DiagnosticField):
     """
     """
-    name = "diagnostic_vapour"
+    name = "diagnostic_vapour2"
 
     def __init__(self, equation, saturation_adjustment_scheme, space=None,
                  method='interpolate'):
@@ -481,6 +482,183 @@ class Vapour(DiagnosticField):
         self.expr = q_v - P_v
 
         super().setup(domain, state_fields)
+
+    def compute(self):
+        """Performs the computation of the diagnostic field."""
+        self.scheme.evaluate(self.X, self.dt, self.P)
+        super().compute()
+
+class Cloud2(DiagnosticField):
+    """
+    """
+    name = "diagnostic_cloud2"
+
+    def __init__(self, equation, saturation_adjustment_scheme, space=None,
+                 method='interpolate'):
+
+        self.equation = equation
+        self.scheme = saturation_adjustment_scheme
+        super().__init__(space=space, method=method)
+
+    def setup(self, domain, state_fields):
+        
+        self.X = state_fields.X(self.equation.field_name)
+        self.dt = domain.dt
+        self.P = Function(self.equation.function_space)
+        P_c = self.P.subfunctions[self.scheme.Vc_idx]
+        q_c = state_fields.X("cloud_water")
+        self.expr = q_c - P_c
+
+        super().setup(domain, state_fields)
+
+    def compute(self):
+        """Performs the computation of the diagnostic field."""
+        self.scheme.evaluate(self.X, self.dt, self.P)
+        super().compute()
+
+
+class Vapour2(DiagnosticField):
+    """
+    """
+    name = "diagnostic_vapour2"
+
+    def __init__(self, equation, saturation_adjustment_scheme, space=None,
+                 method='interpolate'):
+
+        self.equation = equation
+        self.scheme = saturation_adjustment_scheme
+        super().__init__(space=space, method=method)
+
+    def setup(self, domain, state_fields):
+
+        self.X = state_fields.X(self.equation.field_name)
+        self.dt = domain.dt
+        self.P = Function(self.equation.function_space)
+        P_v = self.P.subfunctions[self.scheme.Vv_idx]
+        q_v = state_fields.X("water_vapour")
+        self.expr = q_v + P_v
+
+        super().setup(domain, state_fields)
+
+    def compute(self):
+        """Performs the computation of the diagnostic field."""
+        self.scheme.evaluate(self.X, self.dt, self.P)
+        super().compute()
+
+
+class Cloud3(DiagnosticField):
+    """
+    """
+    name = "diagnostic_cloud3"
+
+    def __init__(self, equation, saturation_adjustment_scheme, space=None,
+                 method='interpolate'):
+
+        self.equation = equation
+        self.scheme = saturation_adjustment_scheme
+        super().__init__(space=space, method=method)
+
+    def setup(self, domain, state_fields):
+        
+        self.X = state_fields.X(self.equation.field_name)
+        self.dt = domain.dt
+        self.P = Function(self.equation.function_space)
+        P_c = self.P.subfunctions[self.scheme.Vc_idx]
+        q_c = state_fields.X("cloud_water")
+        self.expr = q_c + P_c
+
+        space = domain.spaces("DG")
+        super().setup(domain, state_fields, space=space)
+
+    def compute(self):
+        """Performs the computation of the diagnostic field."""
+        self.scheme.evaluate(self.X, self.dt, self.P)
+        super().compute()
+
+
+class Vapour3(DiagnosticField):
+    """
+    """
+    name = "diagnostic_vapour3"
+
+    def __init__(self, equation, saturation_adjustment_scheme, space=None,
+                 method='interpolate'):
+
+        self.equation = equation
+        self.scheme = saturation_adjustment_scheme
+        super().__init__(space=space, method=method)
+
+    def setup(self, domain, state_fields):
+
+        self.X = state_fields.X(self.equation.field_name)
+        self.dt = domain.dt   
+        self.P = Function(self.equation.function_space)
+        P_v = self.P.subfunctions[self.scheme.Vv_idx]
+        q_v = state_fields.X("water_vapour")
+        self.expr = q_v - P_v
+
+        space = domain.spaces("DG")
+        super().setup(domain, state_fields, space=space)
+
+    def compute(self):
+        """Performs the computation of the diagnostic field."""
+        self.scheme.evaluate(self.X, self.dt, self.P)
+        super().compute()
+
+
+class Cloud4(DiagnosticField):
+    """
+    """
+    name = "diagnostic_cloud4"
+
+    def __init__(self, equation, saturation_adjustment_scheme, space=None,
+                 method='interpolate'):
+
+        self.equation = equation
+        self.scheme = saturation_adjustment_scheme
+        super().__init__(space=space, method=method)
+
+    def setup(self, domain, state_fields):
+        
+        self.X = state_fields.X(self.equation.field_name)
+        self.dt = domain.dt
+        self.P = Function(self.equation.function_space)
+        P_c = self.P.subfunctions[self.scheme.Vc_idx]
+        q_c = state_fields.X("cloud_water")
+        self.expr = q_c - P_c
+
+        space = domain.spaces("DG")
+        super().setup(domain, state_fields, space=space)
+
+    def compute(self):
+        """Performs the computation of the diagnostic field."""
+        self.scheme.evaluate(self.X, self.dt, self.P)
+        super().compute()
+
+
+class Vapour4(DiagnosticField):
+    """
+    """
+    name = "diagnostic_vapour4"
+
+    def __init__(self, equation, saturation_adjustment_scheme, space=None,
+                 method='interpolate'):
+
+        self.equation = equation
+        self.scheme = saturation_adjustment_scheme
+        super().__init__(space=space, method=method)
+
+    def setup(self, domain, state_fields):
+
+        self.X = state_fields.X(self.equation.field_name)
+        self.dt = domain.dt
+        self.P = Function(self.equation.function_space)
+        P_v = self.P.subfunctions[self.scheme.Vv_idx]
+        q_v = state_fields.X("water_vapour")
+        self.expr = q_v + P_v
+
+        space = domain.spaces("DG")
+        super().setup(domain, state_fields, space=space)
 
     def compute(self):
         """Performs the computation of the diagnostic field."""
