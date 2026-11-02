@@ -21,14 +21,14 @@ from gusto import (
     SemiImplicitQuasiNewton, ForwardEuler, WaterVapour, CloudWater,
     xyz_vector_from_lonlatr, SWSaturationAdjustment, ZonalComponent,
     GeneralIcosahedralSphereMesh, PartitionedCloud, prognostic, subject,
-    monolithic_solver_parameters, Cloud, Vapour
+    monolithic_solver_parameters, Cloud, Vapour, Buoyancy
 )
 
 moist_thermal_gw_defaults = {
     'ncells_per_edge': 16,         # number of cells per icosahedron edge
     'dt': 900.0,                   # 15 minutes
-    'tmax': 5.*24.*60.*60.,        # 5 days
-    'dumpfreq': 1,                # dump once per day
+    'tmax': 6.*60.*60.,            # 6 hrs
+    'dumpfreq': 1,                 # dump every timestep
     'dirname': 'moist_thermal_gw',
     'equivb': False
 }
@@ -149,7 +149,8 @@ def moist_thermal_gw(
         ]
     else:
         diagnostic_fields = [MeridionalComponent('u'), ZonalComponent('u'),
-                             Cloud(eqns, sat_adj), Vapour(eqns, sat_adj)]
+                             Cloud(eqns, sat_adj), Vapour(eqns, sat_adj),
+                             Buoyancy(eqns, sat_adj)]
         dumplist = ['b', 'water_vapour', 'cloud_water', 'D']
 
     output = OutputParameters(
