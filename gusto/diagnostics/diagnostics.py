@@ -20,7 +20,8 @@ import numpy as np
 
 __all__ = ["Diagnostics", "DiagnosticField", "CourantNumber", "Gradient",
            "XComponent", "YComponent", "ZComponent", "MeridionalComponent",
-           "ZonalComponent", "RadialComponent", "Energy", "KineticEnergy",
+           "ZonalComponent", "RadialComponent", "Energy", "KineticEnergy", "VerticalKineticEnergy",
+           "BousInternalEnergy", "BousPotentialEnergy", "BousPMLEnergy",
            "Sum", "Difference", "SteadyStateError", "Perturbation",
            "Divergence", "TracerDensity", "IterativeDiagnosticField",
            "CumulativeSum"]
@@ -801,6 +802,125 @@ class KineticEnergy(Energy):
         self.expr = self.kinetic(u)
         super().setup(domain, state_fields)
 
+class VerticalKineticEnergy(Energy):
+    """Diagnostic kinetic energy density."""
+    name = "VerticalKineticEnergy"
+
+    def __init__(self, space=None, method='interpolate'):
+        """
+        Args:
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        super().__init__(space=space, method=method, required_fields=("u"))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        u = state_fields("u")
+        u_vert = domain.k*inner(u, domain.k)
+        self.expr = self.kinetic(u_vert)
+        super().setup(domain, state_fields)
+
+class BousInternalEnergy(Energy):
+    """Diagnostic kinetic energy density."""
+    name = "BousInternalEnergy"
+
+    def __init__(self, cs, space=None, method='interpolate'):
+        """
+        Args:
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        super().__init__(space=space, method=method, required_fields=("u"))
+        self.cs = cs
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        p = state_fields("p")
+        self.expr = 0.5*(p/self.cs)**2
+        super().setup(domain, state_fields)
+
+class BousPotentialEnergy(Energy):
+    """Diagnostic kinetic energy density."""
+    name = "BousPotentialEnergy"
+
+    def __init__(self, N, space=None, method='interpolate'):
+        """
+        Args:
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        super().__init__(space=space, method=method, required_fields=("u"))
+        self.N = N
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        b = state_fields("b")
+        self.expr = 0.5*(b/self.N)**2
+        super().setup(domain, state_fields)
+
+class BousPMLEnergy(Energy):
+    """Diagnostic kinetic energy density."""
+    name = "BousPMLEnergy"
+
+    def __init__(self, sigma, cs, space=None, method='interpolate'):
+        """
+        Args:
+            space (:class:`FunctionSpace`, optional): the function space to
+                evaluate the diagnostic field in. Defaults to None, in which
+                case a default space will be chosen for this diagnostic.
+            method (str, optional): a string specifying the method of evaluation
+                for this diagnostic. Valid options are 'interpolate', 'project',
+                'assign' and 'solve'. Defaults to 'interpolate'.
+        """
+        super().__init__(space=space, method=method, required_fields=("u"))
+        self.sigma = sigma
+        self.cs = cs
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+        u = state_fields("u")
+        q_u = state_fields("q_u")
+        p = state_fields("p")
+        q_p = state_fields("q_p")
+        self.expr = self.sigma*(inner(u, q_u) + p*q_p/(self.cs**2))
+        super().setup(domain, state_fields)
 
 class Sum(DiagnosticField):
     """Base diagnostic for computing the sum of two fields."""
