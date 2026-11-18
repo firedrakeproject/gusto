@@ -568,6 +568,10 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         else:
             bbar = bref
 
+            # however, we leave b_ as is, and do not add a contribution from qv.
+            # It already represents the perturbation to b_e, and since we
+            # neglect perturbations to qv, the equation below is already correct
+
         seqn = (
             inner(w_, (u_)) * dx
             - beta_u * (D_) * div(w_*bbar) * dx
