@@ -15,7 +15,7 @@ from firedrake import VectorSpaceBasis
 __all__ = ["hybridised_solver_parameters", "monolithic_solver_parameters"]
 
 
-def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_values=None, nonlinear=False, imex=False):
+def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_values=None, nonlinear=False, imex=False, dt = None, snes_rtol = 1e-5, snes_atol = 1e-4):
     """
     Returns PETSc solver settings for hybridised solver for mixed finite
     element problems.
@@ -155,7 +155,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                 'pc_gamg_sym_graph': None,
                 'pc_gamg_verbose': 2,
                 'pc_gamg_threshold': 0.01,
-                'pc_gamg_agg_nsmooths': 2,
+                'pc_gamg_agg_nsmooths': 1,
                 'mg_levels': {
                     'ksp_type': 'gmres',
                     'ksp_max_it': 8,
@@ -166,6 +166,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         }
 
         settings = {
+            'snes_type': 'ksponly',
             'ksp_monitor': None,
             'ksp_type': 'preonly',
             'mat_type': 'matfree',
@@ -189,6 +190,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         }
         if tau_values is not None:
             appctx['tau_values'] = tau_values
+        if dt is not None:
+            appctx['dt'] = dt
 
     # ======================================================================== #
     # Boussinesq
@@ -478,8 +481,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         settings['snes_converged_reason'] = None
         settings["ksp_monitor_true_residual"] = None
         settings['ksp_converged_reason'] = None
-        settings['snes_atol'] = 1e-4
-        settings['snes_rtol'] = 1e-5
+        settings['snes_atol'] = snes_atol
+        settings['snes_rtol'] = snes_rtol
         settings['snes_stol'] = 0
         settings['snes_max_it'] = 50
     return settings, appctx

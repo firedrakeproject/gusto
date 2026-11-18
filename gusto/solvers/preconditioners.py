@@ -795,7 +795,9 @@ class CompressibleHybridisedSCPC(PCBase):
         tau_values = appctx.get('tau_values')
         self.tau_values = tau_values if tau_values is not None else {}
 
-        self.dt = self.equations.domain.dt
+        # Timestep of the implicit solve this PC is preconditioning; falls back
+        # to the domain timestep when the scheme does not provide one
+        self.dt = appctx.get('dt', self.equations.domain.dt)
 
         self.imex = appctx.get('imex', False)
 

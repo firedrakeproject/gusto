@@ -97,7 +97,7 @@ class SDC(object, metaclass=ABCMeta):
     def __init__(self, base_scheme, domain, M, maxk, quad_type, node_type, qdelta_imp, qdelta_exp,
                  formulation="N2N", field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None, final_update=True,
-                 limiter=None, initial_guess="base", imex=True, sweep_tols=None):
+                 limiter=None, initial_guess="base", imex=True, sweep_tols=None, nonlinear=True):
         """
         Initialise SDC object
         Args:
@@ -147,6 +147,7 @@ class SDC(object, metaclass=ABCMeta):
         self.augmentation = self.base.augmentation
         self.wrapper = self.base.wrapper
         self.imex = imex
+        self.nonlinear = nonlinear
 
         # Get quadrature nodes and weights
         self.nodes, self.weights, self.Q = genQCoeffs("Collocation", nNodes=M,
@@ -431,7 +432,7 @@ class SDC(object, metaclass=ABCMeta):
                     f"preconditioner needs beta = alpha*dt > 0")
             self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(
                 self.equation, self.equation.field_names, alpha=alpha,
-                tau_values=None, nonlinear=True, imex=self.imex)
+                tau_values=None, nonlinear=self.nonlinear, imex=self.imex)
             problem = NonlinearVariationalProblem(self.res(m), self.U_DC, bcs=self.bcs)
             solver_name = self.field_name+self.__class__.__name__ + "%s" % (m)
             solvers.append(NonlinearVariationalSolver(
@@ -510,7 +511,10 @@ class SDC(object, metaclass=ABCMeta):
             self.Unodes1[0].assign(self.Unodes[0])
             for evaluate in self.evaluate_source:
                 evaluate(self.Unodes[0], self.base.dt, x_out=self.source_Uk[0])
-            for m in range(1, self.M+1):
+            node_range = (range(self.M, self.M+1)
+                          if (k == self.maxk and not self.final_update and self._final_sweep_shortcut)
+                          else range(1, self.M+1))
+            for m in node_range:
                 # Set Q or S matrix
                 self.Q_.assign(self.quad[m-1])
 
@@ -587,7 +591,7 @@ class RIDC(object, metaclass=ABCMeta):
 
     def __init__(self, base_scheme, domain, M, K, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, reduced=True, imex=True):
+                 limiter=None, reduced=True, imex=True, snes_rtol=1e-5, snes_atol=1e-4):
         """
         Initialise RIDC object
         Args:
@@ -618,6 +622,8 @@ class RIDC(object, metaclass=ABCMeta):
         self.M = M
         self.reduced = reduced
         self.imex = imex
+        self.snes_rtol = snes_rtol
+        self.snes_atol = snes_atol
         self.dt = Constant(float(self.dt_coarse)/(self.M))
         self.base.dt = self.dt
         self.imex=imex
@@ -679,12 +685,12 @@ class RIDC(object, metaclass=ABCMeta):
         self.residual = self.base.residual
         self.evaluate_source = self.base.evaluate_source
         if self.nonlinear_solver_parameters is None:
-            alpha = float(self.dt)//float(self.dt_coarse)
-            alpha = self.dt/self.domain.dt
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=alpha, tau_values=None, nonlinear=True, imex=self.imex)
+            # Corrector solves use the subinterval dt with unit implicit weight
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(
+                self.equation, self.equation.field_names, alpha=1.0,
+                tau_values=None, nonlinear=True, imex=self.imex, dt=self.dt, snes_rtol=self.snes_rtol, snes_atol=self.snes_atol)
         else:
-            self.appctx=None
-        print(self.nonlinear_solver_parameters)
+            self.appctx = None
 
         for t in self.residual:
             # Check all terms are labeled implicit or explicit
@@ -872,7 +878,7 @@ class RIDC(object, metaclass=ABCMeta):
         self.M1 = self.K
 
         for m in range(self.M):
-            self.base.dt = float(self.dt)
+            self.base.dt.assign(float(self.dt))
             self.base.apply(self.Unodes[m+1], self.Unodes[m])
 
         for m in range(self.M+1):

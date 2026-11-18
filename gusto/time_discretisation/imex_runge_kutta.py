@@ -18,6 +18,47 @@ __all__ = ["IMEXRungeKutta", "IMEX_Euler", "IMEX_ARS3", "IMEX_ARK2",
            "IMEX_Trap2", "IMEX_SSP3", "IMEX_ARS443", "IMEX_ARK4", "IMEX_ARK5"]
 
 
+import resource
+from mpi4py import MPI
+
+_node_comm = None
+
+
+def _rss_now_gb():
+    """Current resident set size of this process in GB."""
+    with open("/proc/self/status") as f:
+        for line in f:
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1]) / 1024**2  # kB -> GB
+    return float("nan")
+
+
+def _mem(tag):
+    """Collective over COMM_WORLD. Logs per-rank peak RSS (max and mean over
+    ranks), and the largest per-node total of current RSS."""
+    global _node_comm
+    comm = MPI.COMM_WORLD
+    if _node_comm is None:
+        _node_comm = comm.Split_type(MPI.COMM_TYPE_SHARED)
+
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024**2  # Linux: kB -> GB
+    now = _rss_now_gb()
+
+    peak_max = comm.allreduce(peak, op=MPI.MAX)
+    peak_mean = comm.allreduce(peak, op=MPI.SUM) / comm.size
+    node_now = _node_comm.allreduce(now, op=MPI.SUM)
+    node_peak_sum = _node_comm.allreduce(peak, op=MPI.SUM)
+    node_now_max = comm.allreduce(node_now, op=MPI.MAX)
+    node_peak_max = comm.allreduce(node_peak_sum, op=MPI.MAX)
+
+    if comm.rank == 0:
+        print(f"[mem] {tag:<48s} rank peak max {peak_max:6.3f} GB | "
+              f"rank peak mean {peak_mean:6.3f} GB | "
+              f"node now {node_now_max:7.1f} GB | "
+              f"node sum-of-peaks {node_peak_max:7.1f} GB",
+              flush=True)
+
+
 class IMEXRungeKutta(TimeDiscretisation):
     """
     A class for implementing general IMEX multistage (Runge-Kutta)
@@ -64,7 +105,7 @@ class IMEXRungeKutta(TimeDiscretisation):
 
     def __init__(self, domain, butcher_imp, butcher_exp, field_name=None,
              linear_solver_parameters=None, nonlinear_solver_parameters=None,
-             limiter=None, options=None, augmentation=None, multiple_solvers=False, solver_alpha_scale=1.0, imex=True):
+             limiter=None, options=None, augmentation=None, multiple_solvers=False, solver_alpha_scale=1.0, imex=True, snes_rtol=1e-5, snes_atol=1e-4):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -94,6 +135,8 @@ class IMEXRungeKutta(TimeDiscretisation):
         super().__init__(domain, field_name=field_name,
                          solver_parameters=nonlinear_solver_parameters,
                          options=options, augmentation=augmentation)
+        self.snes_rtol = snes_rtol
+        self.snes_atol = snes_atol
         self.butcher_imp = butcher_imp
         self.butcher_exp = butcher_exp
         self.nStages = int(np.shape(self.butcher_imp)[1])
@@ -138,7 +181,6 @@ class IMEXRungeKutta(TimeDiscretisation):
         )
 
        
-
     def setup(self, equation, apply_bcs=True, *active_labels):
         """
         Set up the time discretisation based on the equation.
@@ -184,12 +226,16 @@ class IMEXRungeKutta(TimeDiscretisation):
         self.alpha = Constant(self.butcher_imp[self.nStages-1, self.nStages-1])
 
         if not self.multiple_solvers and self.nonlinear_solver_parameters is None:
-            # Use hybridised solver as default
+            # Use hybridised solver as default. Pass this scheme's own dt so the
+            # PC matches the implicit operator (e.g. RIDC predictor uses dt/M).
+            if not isinstance(self.dt, Constant):
+                self.dt = Constant(self.dt)
             solver_alpha = float(self.alpha)
             from gusto import logger
-            logger.info(f"IMEXRungeKutta: Building shared solver with alpha={solver_alpha}")
-            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(self.equation, self.equation.field_names, alpha=solver_alpha, tau_values=None, nonlinear=True, imex=self.imex)
-        
+            logger.info(f"IMEXRungeKutta: Building shared solver with alpha={solver_alpha}, dt={float(self.dt)}")
+            self.nonlinear_solver_parameters, self.appctx = hybridised_solver_parameters(
+                self.equation, self.equation.field_names, alpha=solver_alpha,
+                tau_values=None, nonlinear=True, imex=self.imex, dt=self.dt, snes_rtol=self.snes_rtol, snes_atol=self.snes_atol)
         # Set up lagged Jacobian rebuild frequency, if specified in the nonlinear solver parameters
         self.lag_rebuild_freq = self.nonlinear_solver_parameters.get("td_lag_rebuild", None)
         if self.lag_rebuild_freq is not None:
@@ -420,6 +466,8 @@ class IMEXRungeKutta(TimeDiscretisation):
     @wrapper_apply
     def apply(self, x_out, x_in):
         from firedrake import PETSc
+        first = self._step_count == 1
+
         self.x1.assign(x_in)
         self.x_out.assign(x_in)
         self.xs[0].assign(x_in)
@@ -429,12 +477,13 @@ class IMEXRungeKutta(TimeDiscretisation):
         else:
             solvers_list = [self.solver]
 
+
         self._lag_reset(solvers_list)
 
         for stage in range(self.solver_start_stage, self.nStages):
             if stage != self.solver_start_stage:
                 self.x_out.assign(self.xs[stage-1])
-            
+
             # Evaluate source terms for this stage
             for evaluate in self.evaluate_source:
                 evaluate(self.xs[stage-1], self.dt, x_out=self.source[stage-1])
@@ -448,10 +497,12 @@ class IMEXRungeKutta(TimeDiscretisation):
             else:
                 with PETSc.Log.Event("StageRHSAssembly"):
                     self.stage_rhs_assemblers[stage - self.solver_start_stage].assemble(tensor=self.b)
+
                 self.solver.solve()
                 self.total_ksp_its += self.solver.snes.getLinearSolveIterations()
                 self.total_snes_its += self.solver.snes.getIterationNumber()
             self.solver_call_count += 1
+
 
             if self.limiter is not None:
                 self.limiter.apply(self.x_out)
@@ -474,6 +525,7 @@ class IMEXRungeKutta(TimeDiscretisation):
         if self.limiter is not None:
             self.limiter.apply(self.x_out)
         x_out.assign(self.x_out)
+
         self._step_count = self._step_count + 1
 
 
@@ -490,7 +542,8 @@ class IMEX_Euler(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None, solver_alpha_scale=1.0, imex=True):
+                 limiter=None, options=None, augmentation=None, solver_alpha_scale=1.0, imex=True,
+                 snes_rtol=1e-5, snes_atol=1e-4):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -517,7 +570,7 @@ class IMEX_Euler(IMEXRungeKutta):
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
                          limiter=limiter, options=options, augmentation=augmentation, solver_alpha_scale=solver_alpha_scale,
-                         imex=imex)
+                         imex=imex, snes_rtol=snes_rtol, snes_atol=snes_atol)
 
 
 class IMEX_ARS3(IMEXRungeKutta):
@@ -538,7 +591,7 @@ class IMEX_ARS3(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None, imex=True):
+                 limiter=None, options=None, augmentation=None, imex=True, snes_rtol=1e-5, snes_atol=1e-4):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -566,7 +619,7 @@ class IMEX_ARS3(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options, augmentation=augmentation, imex=imex)
+                         limiter=limiter, options=options, augmentation=augmentation, imex=imex, snes_rtol=snes_rtol, snes_atol=snes_atol)
 
 
 class IMEX_ARK2(IMEXRungeKutta):
@@ -587,7 +640,7 @@ class IMEX_ARK2(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None, imex=True):
+                 limiter=None, options=None, augmentation=None, imex=True, snes_rtol=1e-5, snes_atol=1e-4):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -616,7 +669,7 @@ class IMEX_ARK2(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options, augmentation=augmentation, imex=imex)
+                         limiter=limiter, options=options, augmentation=augmentation, imex=imex, snes_rtol=snes_rtol, snes_atol=snes_atol)
 
 
 class IMEX_SSP3(IMEXRungeKutta):
@@ -635,7 +688,7 @@ class IMEX_SSP3(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None, imex=True):
+                 limiter=None, options=None, augmentation=None, imex=True, snes_rtol=1e-5, snes_atol=1e-4):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -662,7 +715,7 @@ class IMEX_SSP3(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options, augmentation=augmentation, imex=imex)
+                         limiter=limiter, options=options, augmentation=augmentation, imex=imex, snes_rtol=snes_rtol, snes_atol=snes_atol)
 
 
 class IMEX_Trap2(IMEXRungeKutta):
@@ -681,7 +734,7 @@ class IMEX_Trap2(IMEXRungeKutta):
     """
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None, imex=True):
+                 limiter=None, options=None, augmentation=None, imex=True, snes_rtol=1e-5, snes_atol=1e-4):
         """
         Args:
             domain (:class:`Domain`): the model's domain object, containing the
@@ -708,7 +761,7 @@ class IMEX_Trap2(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options, augmentation=augmentation, imex=imex)
+                         limiter=limiter, options=options, augmentation=augmentation, imex=imex, snes_rtol=snes_rtol, snes_atol=snes_atol)
 
 class IMEX_ARS443(IMEXRungeKutta):
     r"""
@@ -717,7 +770,7 @@ class IMEX_ARS443(IMEXRungeKutta):
 
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None, imex=True):
+                 limiter=None, options=None, augmentation=None, imex=True, snes_rtol=1e-5, snes_atol=1e-4):
 
         # ---------- Explicit tableau (ERK) ----------
         butcher_exp = np.array([
@@ -757,8 +810,8 @@ class IMEX_ARS443(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options, augmentation=augmentation, imex=imex)
-        
+                         limiter=limiter, options=options, augmentation=augmentation, imex=imex, snes_rtol=snes_rtol, snes_atol=snes_atol)
+
 class IMEX_ARK4(IMEXRungeKutta):
     r"""
     Implements ARK4(3)6L[2]SA (Kennedy–Carpenter) 4th‑order IMEX Runge–Kutta.
@@ -766,7 +819,7 @@ class IMEX_ARK4(IMEXRungeKutta):
 
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None, imex=True):
+                 limiter=None, options=None, augmentation=None, imex=True, snes_rtol=1e-5, snes_atol=1e-4):
 
         # ---------- Explicit tableau (ERK) ----------
         Aexp = [
@@ -822,7 +875,7 @@ class IMEX_ARK4(IMEXRungeKutta):
         super().__init__(domain, butcher_imp, butcher_exp, field_name,
                          linear_solver_parameters=linear_solver_parameters,
                          nonlinear_solver_parameters=nonlinear_solver_parameters,
-                         limiter=limiter, options=options, augmentation=augmentation, imex=imex)
+                         limiter=limiter, options=options, augmentation=augmentation, imex=imex, snes_rtol=snes_rtol, snes_atol=snes_atol)
         
 class IMEX_ARK5(IMEXRungeKutta):
     r"""
@@ -836,7 +889,7 @@ class IMEX_ARK5(IMEXRungeKutta):
 
     def __init__(self, domain, field_name=None,
                  linear_solver_parameters=None, nonlinear_solver_parameters=None,
-                 limiter=None, options=None, augmentation=None, imex=True):
+                 limiter=None, options=None, augmentation=None, imex=True, snes_rtol=1e-5, snes_atol=1e-4):
 
         
         dirk = ARK548L2SAESDIRK2()
@@ -857,5 +910,5 @@ class IMEX_ARK5(IMEXRungeKutta):
             nonlinear_solver_parameters=nonlinear_solver_parameters,
             limiter=limiter,
             options=options,
-            augmentation=augmentation, imex=imex
+            augmentation=augmentation, imex=imex, snes_rtol=snes_rtol, snes_atol=snes_atol
         )
