@@ -119,6 +119,10 @@ def test_mixed_function_space(mesh, mixed_element):
     V = fd.FunctionSpace(mesh, mixed_element)
     W = cpx.FunctionSpace(V)
 
+    assert V.ufl_element() == mixed_element
+    assert W.ufl_element() == cpx.FiniteElement(mixed_element)
+    assert W.ufl_element().num_sub_elements == 2*V.ufl_element().num_sub_elements
+
     assert len(W.subspaces) == 2*len(V.subspaces), "The complex space should have twice the number of components as the real space"
 
     for i in range(V.ufl_element().num_sub_elements):
@@ -519,10 +523,7 @@ def test_mixed_linear_solve(mesh, bc_type):
     if bc_type == "nobc":
         bcs = []
     elif bc_type == "dirichletbc":
-        bcs = [
-            fd.DirichletBC(V.sub(1), 0, 3),
-            fd.DirichletBC(V.sub(1), 0, 4)
-        ]
+        bcs = [fd.DirichletBC(V.sub(0), 0, 1)]
     else:
         raise ValueError(f"Unrecognised boundary condition type: {bc_type}")
 
