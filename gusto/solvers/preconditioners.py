@@ -8,8 +8,8 @@ from firedrake.preconditioners import PCBase
 from firedrake.matrix_free.operators import ImplicitMatrixContext
 from gusto.recovery.recovery_kernels import AverageKernel, AverageWeightings
 from gusto.core.logging import logger, DEBUG, logging_ksp_monitor_true_residual
-from pyop2.profiling import timed_region, timed_function
 from functools import partial
+from petsc4py import PETSc
 
 
 __all__ = ["VerticalHybridizationPC", "AuxiliaryPC", "CompressibleHybridisedSCPC", "SlateSchurPC"]
@@ -45,7 +45,7 @@ class VerticalHybridizationPC(PCBase):
     Firedrake. See firedrake/preconditioners/base.py for more details.
     """
 
-    @timed_function("VertHybridInit")
+    @PETSc.Log.EventDecorator("VertHybridInit")
     def initialize(self, pc):
         """
         Set up the problem context.
@@ -175,7 +175,7 @@ class VerticalHybridizationPC(PCBase):
                 trace_subdomains.extend(sorted({"top", "bottom"} - extruded_neumann_subdomains))
 
             measures.extend((ds(sd) for sd in sorted(neumann_subdomains)))
-            markers = [int(x) for x in unique_mesh.exterior_facets.unique_markers]
+            markers = [int(x) for x in unique_mesh.facet_markers]
             dirichlet_subdomains = set(markers) - neumann_subdomains
             trace_subdomains.extend(sorted(dirichlet_subdomains))
 
@@ -256,8 +256,8 @@ class VerticalHybridizationPC(PCBase):
         B = Tensor(split_mixed_op[(id0, id1)])
         C = Tensor(split_mixed_op[(id1, id0)])
         D = Tensor(split_mixed_op[(id1, id1)])
-        K_0 = Tensor(split_trace_op[(0, id0)])
-        K_1 = Tensor(split_trace_op[(0, id1)])
+        K_0 = Tensor(split_trace_op[(None, id0)])
+        K_1 = Tensor(split_trace_op[(None, id1)])
 
         # Split functions and reconstruct each bit separately
         split_residual = self.broken_residual.subfunctions
@@ -282,7 +282,7 @@ class VerticalHybridizationPC(PCBase):
             sigma_rec,
             form_compiler_parameters=self.ctx.fc_params).assemble, tensor=sigma)
 
-    @timed_function("VertHybridRecon")
+    @PETSc.Log.EventDecorator("VertHybridRecon")
     def _reconstruct(self):
         """
         Reconstructs the system unknowns using the multipliers.
@@ -297,7 +297,7 @@ class VerticalHybridizationPC(PCBase):
         # Recover the eliminated unknown
         self._elim_unknown()
 
-    @timed_function("VertHybridUpdate")
+    @PETSc.Log.EventDecorator("VertHybridUpdate")
     def update(self, pc):
         """
         Update by assembling into the operator.
@@ -324,8 +324,7 @@ class VerticalHybridizationPC(PCBase):
             x (:class:`PETSc.Vec`): the vector to apply the preconditioner to.
             y (:class:`PETSc.Vec`): the vector to put the result into.
         """
-
-        with timed_region("VertHybridBreak"):
+        with PETSc.Log.Event("VertHybridBreak"):
             with self.unbroken_residual.dat.vec_wo as v:
                 x.copy(v)
 
@@ -334,9 +333,9 @@ class VerticalHybridizationPC(PCBase):
             # any projections
             unbroken_scalar_data = self.unbroken_residual.subfunctions[self.pidx]
             broken_scalar_data = self.broken_residual.subfunctions[self.pidx]
-            unbroken_scalar_data.dat.copy(broken_scalar_data.dat)
+            broken_scalar_data.dat.assign(unbroken_scalar_data.dat, eager=True)
 
-        with timed_region("VertHybridRHS"):
+        with PETSc.Log.Event("VertHybridRHS"):
             # Assemble the new "broken" hdiv residual
             # We need a residual R' in the broken space that
             # gives R'[w] = R[w] when w is in the unbroken space.
@@ -352,7 +351,7 @@ class VerticalHybridizationPC(PCBase):
             # Compute the rhs for the multiplier system
             self._assemble_Srhs()
 
-        with timed_region("VertHybridSolve"):
+        with PETSc.Log.Event("VertHybridSolve"):
             # Solve the system for the Lagrange multipliers
             with self.schur_rhs.dat.vec_ro as b:
                 if self.trace_ksp.getInitialGuessNonzero():
@@ -365,11 +364,11 @@ class VerticalHybridizationPC(PCBase):
         # Reconstruct the unknowns
         self._reconstruct()
 
-        with timed_region("VertHybridRecover"):
+        with PETSc.Log.Event("VertHybridRecover"):
             # Project the broken solution into non-broken spaces
             broken_pressure = self.broken_solution.subfunctions[self.pidx]
             unbroken_pressure = self.unbroken_solution.subfunctions[self.pidx]
-            broken_pressure.dat.copy(unbroken_pressure.dat)
+            unbroken_pressure.dat.assign(broken_pressure.dat, eager=True)
 
             # Compute the hdiv projection of the broken hdiv solution
             broken_hdiv = self.broken_solution.subfunctions[self.vidx]
