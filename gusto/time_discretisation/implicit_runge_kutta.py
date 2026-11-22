@@ -1,11 +1,11 @@
 """Objects to describe implicit multi-stage (Runge-Kutta) discretisations."""
 
 import numpy as np
+from functools import cached_property
 
 from firedrake import (Function, split, NonlinearVariationalProblem,
                        NonlinearVariationalSolver, Constant)
 from firedrake.fml import replace_subject, all_terms, drop
-from firedrake.utils import cached_property
 
 from gusto.core.labels import time_derivative, source_label
 from gusto.time_discretisation.time_discretisation import (

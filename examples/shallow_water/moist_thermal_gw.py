@@ -161,7 +161,7 @@ def moist_thermal_gw(
         ]
 
     if equivb:
-        tau_values = {'D': 1.0, 'b': 1.0}
+        tau_values = {'D': 1.0, 'b_e': 1.0}
         solver_parameters = None
         solver_prognostics = ['u', 'D', 'b_e']
     else:

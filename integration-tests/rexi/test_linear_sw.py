@@ -8,7 +8,8 @@ from os.path import join, abspath, dirname
 from gusto import *
 from gusto.rexi import *
 from firedrake import (PeriodicUnitSquareMesh, SpatialCoordinate, sin,
-                       cos, pi, as_vector, Function, COMM_WORLD, Ensemble)
+                       cos, pi, as_vector, Function, COMM_WORLD, Ensemble,
+                       CheckpointFile)
 from firedrake.output import VTKFile
 
 import numpy as np
@@ -26,21 +27,22 @@ def run_rexi_sw(tmpdir, coefficients, ensemble=None):
     mesh_name = 'linear_sw_mesh'
     L = 1
     n = 20
-    write_output = True
+
+    outdir = f"linear_sw_{coefficients}"
+
     if ensemble is not None:
         comm = ensemble.comm
         mesh = PeriodicUnitSquareMesh(n, n, name=mesh_name, comm=comm)
         # REXI output
         rexi_output = VTKFile(
-            str(tmpdir)+"/waves_sw/rexi.pvd",
-            comm=ensemble.comm
+            join(tmpdir, outdir, "rexi.pvd"), comm=ensemble.comm
         )
 
     else:
         comm = COMM_WORLD
         mesh = PeriodicUnitSquareMesh(n, n, name=mesh_name)
         # REXI output
-        rexi_output = VTKFile(str(tmpdir)+"/waves_sw/rexi.pvd")
+        rexi_output = VTKFile(join(tmpdir, outdir, "rexi.pvd"))
 
     domain = Domain(mesh, tmax, 'BDM', 1)
 
@@ -62,8 +64,7 @@ def run_rexi_sw(tmpdir, coefficients, ensemble=None):
     u.project(uexpr)
     D.interpolate(Dexpr)
     Dbar.interpolate(H)
-    if write_output:
-        rexi_output.write(u, D)
+    rexi_output.write(u, D)
 
     # Compute exponential solution and write it out
     rexi = Rexi(eqns, RexiParameters(coefficients=coefficients),
@@ -74,38 +75,50 @@ def run_rexi_sw(tmpdir, coefficients, ensemble=None):
     u.assign(uexpl)
     D.assign(Dexpl)
 
-    if write_output:
-        rexi_output.write(u, D)
+    # Since this test does not use Gusto timesteppers, we have to
+    # checkpoint ourselves. This is useful when regenerating KGOs.
+    with CheckpointFile(join(tmpdir, outdir, "chkpt.h5"), 'w', mesh.comm) as chk:
+        chk.save_mesh(domain.mesh)
+        chk.save_function(u, name='u')
+        chk.save_function(D, name='D')
+        chk.save_function(eqns.prescribed_fields('coriolis'), name='coriolis')
+        chk.set_attr("/", "time", tmax)
+        chk.set_attr("/", "step", 1)
+
+    rexi_output.write(u, D)
 
     # Checkpointing
-    if write_output:
-        checkpoint_name = 'linear_sw_wave_rexi_chkpt.h5'
-        new_path = join(abspath(dirname(__file__)), '..', f'data/{checkpoint_name}')
-        check_output = OutputParameters(dirname=tmpdir+"/linear_sw_wave",
-                                        checkpoint_pickup_filename=new_path,
-                                        checkpoint=True)
-        check_mesh = pick_up_mesh(check_output, mesh_name, comm=comm)
-        check_domain = Domain(check_mesh, tmax, 'BDM', 1)
-        check_parameters = ShallowWaterParameters(check_mesh, H=H, g=g,
-                                                  rotation=CoriolisOptions.fplane,
-                                                  f0=f)
-        check_eqn = ShallowWaterEquations(check_domain, check_parameters)
-        check_io = IO(check_domain, output=check_output)
-        check_stepper = Timestepper(check_eqn, RK4(check_domain), check_io)
-        check_stepper.io.pick_up_from_checkpoint(check_stepper.fields, comm=comm)
-        usoln = check_stepper.fields("u")
-        Dsoln = check_stepper.fields("D")
+    checkpoint_name = f'linear_sw_wave_rexi_{coefficients}_chkpt.h5'
+    new_path = join(abspath(dirname(__file__)), '..', 'data')
+    print(checkpoint_name)
+    print(new_path)
+    check_output = OutputParameters(
+        dirname=tmpdir+"/linear_sw_wave",
+        checkpoint_pickup_filename=join(new_path, checkpoint_name),
+        checkpoint=True
+    )
+    check_mesh = pick_up_mesh(check_output, mesh_name, comm=comm)
+    check_domain = Domain(check_mesh, tmax, 'BDM', 1)
+    check_parameters = ShallowWaterParameters(check_mesh, H=H, g=g,
+                                              rotation=CoriolisOptions.fplane,
+                                              f0=f)
+    check_eqn = ShallowWaterEquations(check_domain, check_parameters)
+    check_io = IO(check_domain, output=check_output)
+    check_stepper = Timestepper(check_eqn, RK4(check_domain), check_io)
+    check_stepper.io.pick_up_from_checkpoint(check_stepper.fields, comm=comm)
+    usoln = check_stepper.fields("u")
+    Dsoln = check_stepper.fields("D")
 
-        udiff_arr = uexpl.dat.data - usoln.dat.data
-        Ddiff_arr = Dexpl.dat.data - Dsoln.dat.data
+    udiff_arr = uexpl.dat.data - usoln.dat.data
+    Ddiff_arr = Dexpl.dat.data - Dsoln.dat.data
 
-        uerror = np.linalg.norm(udiff_arr) / np.linalg.norm(usoln.dat.data)
-        Derror = np.linalg.norm(Ddiff_arr) / np.linalg.norm(Dsoln.dat.data)
+    uerror = np.linalg.norm(udiff_arr) / np.linalg.norm(usoln.dat.data)
+    Derror = np.linalg.norm(Ddiff_arr) / np.linalg.norm(Dsoln.dat.data)
 
     return uerror, Derror
 
 
-@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+@pytest.mark.parametrize("coefficients", ["haut", "caliari"])
 def test_rexi_sw(tmpdir, coefficients):
 
     dirname = str(tmpdir)
@@ -117,7 +130,7 @@ def test_rexi_sw(tmpdir, coefficients):
 
 
 @pytest.mark.parallel(nprocs=2)
-@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+@pytest.mark.parametrize("coefficients", ["haut", "caliari"])
 def test_parallel_rexi_sw(tmpdir, coefficients):
 
     dirname = str(tmpdir)

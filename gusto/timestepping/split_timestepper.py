@@ -170,7 +170,7 @@ class SplitPhysicsTimestepper(Timestepper):
     """
 
     def __init__(self, equation, scheme, io, spatial_methods=None,
-                 physics_schemes=None):
+                 physics_schemes=None, physics_frequency=1):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
@@ -187,6 +187,13 @@ class SplitPhysicsTimestepper(Timestepper):
                 pairing physics parametrisations and timestepping schemes to use
                 for each. Timestepping schemes for physics must be explicit.
                 Defaults to None.
+            physics_frequency (int, optional): allows the physics schemes to be
+                "superstepped", i.e. only called every `physics_frequency`
+                timesteps. When they are called, the physics schemes are
+                applied with an internal timestep of `physics_frequency*dt`,
+                so that the physics increment corresponds to the elapsed time
+                since it was last applied. Defaults to 1, corresponding to the
+                standard behaviour of calling physics every timestep.
         """
 
         # As we handle physics differently to the Timestepper, these are not
@@ -206,6 +213,10 @@ class SplitPhysicsTimestepper(Timestepper):
                      + f"physics scheme {parametrisation.label.label}")
             apply_bcs = False
             phys_scheme.setup(equation, apply_bcs, parametrisation.label)
+
+        assert physics_frequency >= 1, 'physics_frequency must be a positive integer'
+        self.physics_frequency = physics_frequency
+        self.physics_step_count = 0
 
     @property
     def transporting_velocity(self):
@@ -236,9 +247,12 @@ class SplitPhysicsTimestepper(Timestepper):
 
         super().timestep()
 
-        with timed_stage("Physics"):
-            for _, scheme in self.physics_schemes:
-                scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+        self.physics_step_count += 1
+        if self.physics_step_count % self.physics_frequency == 0:
+            with timed_stage("Physics"):
+                for _, scheme in self.physics_schemes:
+                    scheme.dt = self.physics_frequency*self.equation.domain.dt
+                    scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
 
 
 class SplitPrescribedTransport(Timestepper):
@@ -250,7 +264,7 @@ class SplitPrescribedTransport(Timestepper):
     """
 
     def __init__(self, equation, scheme, io, prescribed_transporting_velocity,
-                 spatial_methods=None, physics_schemes=None):
+                 spatial_methods=None, physics_schemes=None, physics_frequency=1):
         """
         Args:
             equation (:class:`PrognosticEquation`): the prognostic equation
@@ -276,6 +290,13 @@ class SplitPrescribedTransport(Timestepper):
                 This can be made time-varying by defining a python function
                 that uses time as an argument.
                 Defaults to None.
+            physics_frequency (int, optional): allows the physics schemes to be
+                "superstepped", i.e. only called every `physics_frequency`
+                timesteps. When they are called, the physics schemes are
+                applied with an internal timestep of `physics_frequency*dt`,
+                so that the physics increment corresponds to the elapsed time
+                since it was last applied. Defaults to 1, corresponding to the
+                standard behaviour of calling physics every timestep.
         """
 
         # As we handle physics differently to the Timestepper, these are not
@@ -295,6 +316,10 @@ class SplitPrescribedTransport(Timestepper):
                      + f"physics scheme {parametrisation.label.label}")
             apply_bcs = False
             phys_scheme.setup(equation, apply_bcs, parametrisation.label)
+
+        assert physics_frequency >= 1, 'physics_frequency must be a positive integer'
+        self.physics_frequency = physics_frequency
+        self.physics_step_count = 0
 
         self.prescribed_transport_velocity = prescribed_transporting_velocity
         self.is_velocity_setup = not self.prescribed_transport_velocity
@@ -399,6 +424,9 @@ class SplitPrescribedTransport(Timestepper):
 
         super().timestep()
 
-        with timed_stage("Physics"):
-            for _, scheme in self.physics_schemes:
-                scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))
+        self.physics_step_count += 1
+        if self.physics_step_count % self.physics_frequency == 0:
+            with timed_stage("Physics"):
+                for _, scheme in self.physics_schemes:
+                    scheme.dt = self.physics_frequency*self.equation.domain.dt
+                    scheme.apply(self.x.np1(scheme.field_name), self.x.np1(scheme.field_name))

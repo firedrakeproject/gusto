@@ -7,9 +7,8 @@ from firedrake import (dot, dx, Function, sqrt, TestFunction,
                        ds_b, ds_v, ds_t, dS_h, dS_v, ds, dS, div, avg, pi,
                        TensorFunctionSpace, SpatialCoordinate, as_vector,
                        Projector, assemble, FunctionSpace, FiniteElement,
-                       TensorProductElement, CellVolume, Cofunction)
+                       TensorProductElement, CellVolume, Cofunction, interpolate)
 from firedrake.assign import Assigner
-from firedrake.__future__ import interpolate
 from ufl.domain import extract_unique_domain
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -23,7 +22,7 @@ __all__ = ["Diagnostics", "DiagnosticField", "CourantNumber", "Gradient",
            "ZonalComponent", "RadialComponent", "Energy", "KineticEnergy",
            "Sum", "Difference", "SteadyStateError", "Perturbation",
            "Divergence", "TracerDensity", "IterativeDiagnosticField",
-           "CumulativeSum"]
+           "CumulativeSum", "TimeAveragedDiagnostic"]
 
 
 class Diagnostics(object):
@@ -490,7 +489,7 @@ class Gradient(DiagnosticField):
         """
         f = state_fields(self.fname)
 
-        mesh_dim = domain.mesh.geometric_dimension()
+        mesh_dim = domain.mesh.geometric_dimension
         try:
             field_dim = state_fields(self.fname).ufl_shape[0]
         except IndexError:
@@ -600,7 +599,7 @@ class XComponent(VectorComponent):
             domain (:class:`Domain`): the model's domain object.
             state_fields (:class:`StateFields`): the model's field container.
         """
-        dim = domain.mesh.topological_dimension()
+        dim = domain.mesh.topological_dimension
         e_x = as_vector([Constant(1.0)]+[Constant(0.0)]*(dim-1))
         super().setup(domain, state_fields, e_x)
 
@@ -622,7 +621,7 @@ class YComponent(VectorComponent):
         """
         assert domain.metadata['domain_type'] not in ['interval', 'vertical_slice'], \
             f'Y-component diagnostic cannot be used with domain {domain.metadata["domain_type"]}'
-        dim = domain.mesh.topological_dimension()
+        dim = domain.mesh.topological_dimension
         e_y = as_vector([Constant(0.0), Constant(1.0)]+[Constant(0.0)]*(dim-2))
         super().setup(domain, state_fields, e_y)
 
@@ -644,7 +643,7 @@ class ZComponent(VectorComponent):
         """
         assert domain.metadata['domain_type'] not in ['interval', 'plane'], \
             f'Z-component diagnostic cannot be used with domain {domain.metadata["domain_type"]}'
-        dim = domain.mesh.topological_dimension()
+        dim = domain.mesh.topological_dimension
         e_x = as_vector([Constant(0.0)]*(dim-1)+[Constant(1.0)])
         super().setup(domain, state_fields, e_x)
 
@@ -675,7 +674,7 @@ class SphericalComponent(VectorComponent):
         """
 
         # check geometric dimension is 3D
-        if domain.mesh.geometric_dimension() != 3:
+        if domain.mesh.geometric_dimension != 3:
             raise ValueError('Spherical components only work when the geometric dimension is 3!')
 
         if np.prod(field.ufl_shape) != 3:
@@ -1028,7 +1027,7 @@ class TracerDensity(DiagnosticField):
             m_X_space = m_X.function_space()
             rho_d_space = rho_d.function_space()
 
-            if domain.spaces.extruded_mesh:
+            if domain.spaces.mesh.extruded:
                 # Extract the base horizontal and vertical elements
                 # for the mixing ratio and density.
                 m_X_horiz = m_X_space.ufl_element().factor_elements[0]
@@ -1039,7 +1038,7 @@ class TracerDensity(DiagnosticField):
                 horiz_degree = m_X_horiz.degree() + rho_d_horiz.degree()
                 vert_degree = m_X_vert.degree() + rho_d_vert.degree()
 
-                cell = domain.mesh._base_mesh.ufl_cell().cellname()
+                cell = domain.mesh._base_mesh.ufl_cell().cellname
                 horiz_elt = FiniteElement('DG', cell, horiz_degree)
                 vert_elt = FiniteElement('DG', cell, vert_degree)
                 elt = TensorProductElement(horiz_elt, vert_elt)
@@ -1048,7 +1047,7 @@ class TracerDensity(DiagnosticField):
                 rho_d_degree = rho_d_space.ufl_element().degree()
                 degree = m_X_degree + rho_d_degree
 
-                cell = domain.mesh.ufl_cell().cellname()
+                cell = domain.mesh.ufl_cell().cellname
                 elt = FiniteElement('DG', cell, degree)
 
             tracer_density_space = FunctionSpace(domain.mesh, elt, name='tracer_density_space')
@@ -1096,3 +1095,105 @@ class CumulativeSum(DiagnosticField):
     def name(self):
         """Gives the name of this diagnostic field."""
         return self.integral_name
+
+
+class TimeAveragedDiagnostic(DiagnosticField):
+    """
+    Computes a running time-average of a named field.
+
+    A new sample is added to the average every `sample_freq` calls to
+    `compute` (i.e. every `sample_freq` timesteps). The running sum and
+    number of samples are reset to zero each time the diagnostic is written
+    out (i.e. every `dumpfreq` timesteps), so each written value is the
+    average over the period since the previous output -- this allows e.g. a
+    spin-up period to be excluded by discarding the early output values. The
+    running sum and the number of samples taken are stored as fields (in the
+    'R' space) so that they -- and hence the average itself -- are correctly
+    checkpointed and restored when picking up a run.
+    """
+    def __init__(self, name, sample_freq=1):
+        """
+        Args:
+            name (str): name of the field to be time-averaged. This can be
+                the name of a prognostic field, or of another diagnostic
+                field's output -- in the latter case that diagnostic must
+                also be registered so that it is computed before this one.
+            sample_freq (int, optional): the number of calls to `compute`
+                (i.e. timesteps) between each sample added to the average.
+                Defaults to 1, so that a sample is taken every timestep.
+        """
+        self.field_name = name
+        self.average_name = name+"_average"
+        self.sample_freq = sample_freq
+        super().__init__(method='assign', required_fields=(self.field_name,))
+
+    def setup(self, domain, state_fields):
+        """
+        Sets up the :class:`Function` for the diagnostic field.
+
+        Args:
+            domain (:class:`Domain`): the model's domain object.
+            state_fields (:class:`StateFields`): the model's field container.
+        """
+
+        # Gather the field to be averaged
+        self.integrand = state_fields(self.field_name)
+        self.space = self.integrand.function_space()
+        R = FunctionSpace(domain.mesh, "R", 0)
+
+        # Running sum of the samples taken so far, and the number of samples
+        # taken. These are not dumped themselves, but must be checkpointed so
+        # that the average can be correctly continued after a pick-up.
+        self.running_sum = state_fields(
+            self.average_name+"_sum", space=self.space, dump=False, pick_up=True
+        )
+        self.num_samples = state_fields(
+            self.average_name+"_num_samples", space=R, dump=False, pick_up=True
+        )
+        # Counts the number of calls to compute() since the diagnostic was
+        # created, so that a pick-up resumes at the correct point in the
+        # sampling cycle.
+        self.num_calls = state_fields(
+            self.average_name+"_num_calls", space=R, dump=False, pick_up=True
+        )
+
+        # Initialise everything to zero. If picking up from a checkpoint file
+        # these fields will be loaded afterwards and so will not be
+        # overwritten by this.
+        self.running_sum.assign(0.0)
+        self.num_samples.assign(0.0)
+        self.num_calls.assign(0.0)
+
+        # Create the field to hold the time-average itself
+        self.field = state_fields(
+            self.average_name, space=self.space, dump=True, pick_up=True
+        )
+        self.field.assign(0.0)
+
+    def compute(self):
+        """
+        Increments the call counter, and if the sampling frequency has been
+        reached, adds a new sample to the running average.
+        """
+        self.num_calls.assign(self.num_calls + 1.0)
+
+        if int(round(float(self.num_calls))) % self.sample_freq == 0:
+            self.running_sum.assign(self.running_sum + self.integrand)
+            self.num_samples.assign(self.num_samples + 1.0)
+            self.field.assign(self.running_sum / self.num_samples)
+
+    def reset(self):
+        """
+        Zeroes the running sum and sample count, so that the average starts
+        accumulating afresh. This is called by the I/O once the averaged
+        diagnostic has been written out, so that e.g. a spin-up period can be
+        excluded from later averaging windows. The call counter (and hence
+        the point in the sampling cycle) is not reset.
+        """
+        self.running_sum.assign(0.0)
+        self.num_samples.assign(0.0)
+
+    @property
+    def name(self):
+        """Gives the name of this diagnostic field."""
+        return self.average_name

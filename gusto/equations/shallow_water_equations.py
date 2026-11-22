@@ -217,7 +217,7 @@ class ShallowWaterEquations(PrognosticEquationSet):
 
         topog_expr = self.parameters.topog_expr
         if topog_expr is not None:
-            self.prescribed_fields('topography', self.domain.spaces('DG')).interpolate(topog_expr)
+            self.prescribed_fields('topography', self.domain.spaces('DG')).project(topog_expr)
             topography_form = subject(prognostic
                                       (-g*div(w)*topog_expr*dx(degree=quad), 'u'),
                                       self.X)
@@ -510,7 +510,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         topog_expr = self.parameters.topog_expr
         if topog_expr is not None:
             topog = self.prescribed_fields(
-                'topography', self.domain.spaces('DG')).interpolate(topog_expr)
+                'topography', self.domain.spaces('DG')).project(topog_expr)
             if self.equivalent_buoyancy:
                 topography_form = subject(prognostic(
                     - topog * div(b*w) * dx
@@ -552,7 +552,7 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
         tau_values = tau_values or {}
         beta_u = dt*tau_values.get("u", alpha)
         beta_d = dt*tau_values.get("D", alpha)
-        beta_b = dt*tau_values.get("b", alpha)
+        beta_b = dt*tau_values.get(self.b_name, alpha)
 
         n = FacetNormal(domain.mesh)
         Vu = domain.spaces("HDiv")
@@ -577,16 +577,19 @@ class ThermalShallowWaterEquations(ShallowWaterEquations):
                 conditional(qtbar < self.q_sat_func, qtbar, self.q_sat_func),
                 VD)
 
-            # bbar was be_bar and here we correct to become bbar
-            bref += self.parameters.beta2 * self.qvbar
+            # Effective buoyancy b_e + beta2*q_v; not in-place, as bref views X_ref
+            bbar = bref + self.parameters.beta2 * self.qvbar
+        else:
+            bbar = bref
 
         seqn = (
             inner(w_, (u_)) * dx
-            - beta_u * (D_) * div(w_*bref) * dx
-            + beta_u * jump(w_*bref, n) * avg(D_) * dS
-            - beta_u * 0.5 * Dref * b_ * div(w_) * dx
-            - beta_u * 0.5 * bref * div(w_*(D_)) * dx
-            + beta_u * 0.5 * jump((D_)*w_, n) * avg(bref) * dS
+            - beta_u * (D_) * div(w_*bbar) * dx
+            + beta_u * jump(w_*bbar, n) * avg(D_) * dS
+            - beta_u * 0.5 * b_ * div(Dref*w_) * dx
+            + beta_u * 0.5 * jump(Dref*w_, n) * avg(b_) * dS
+            - beta_u * 0.5 * bbar * div(w_*(D_)) * dx
+            + beta_u * 0.5 * jump((D_)*w_, n) * avg(bbar) * dS
             + inner(phi_, (D_)) * dx
             + beta_d * phi_ * div(Dref*u_) * dx
         )

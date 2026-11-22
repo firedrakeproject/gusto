@@ -7,7 +7,7 @@ REXI applied to the compressible Boussinesq equations.
 from os.path import join, abspath, dirname
 from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
-                       exp, SpatialCoordinate, Function)
+                       exp, SpatialCoordinate, Function, CheckpointFile)
 from firedrake.output import VTKFile
 import pytest
 
@@ -74,7 +74,8 @@ def run_rexi_linear_boussinesq(tmpdir, coefficients):
     # Compute exponential solution
     # ----------------------------------------------------------------------- #
     # REXI output
-    rexi_output = VTKFile(str(tmpdir)+"/sk_wave/rexi.pvd")
+    outdir = f"linear_sw_{coefficients}"
+    rexi_output = VTKFile(join(tmpdir, outdir, "rexi.pvd"))
     u1, p1, b1 = U_expl.subfunctions
     p1.assign(p)
     b1.assign(b)
@@ -83,6 +84,15 @@ def run_rexi_linear_boussinesq(tmpdir, coefficients):
     rexi.solve(U_expl, U_in, tmax)
     u1, p1, b1 = U_expl.subfunctions
     rexi_output.write(u1, p1, b1)
+
+    # Since this test does not use Gusto timesteppers, we have to
+    # checkpoint ourselves. This is useful when regenerating KGOs.
+    with CheckpointFile(join(tmpdir, outdir, "chkpt.h5"), 'w', mesh.comm) as chk:
+        chk.save_mesh(domain.mesh)
+        chk.save_function(u1, name='u')
+        chk.save_function(p1, name='p')
+        chk.save_function(b1, name='b')
+        chk.set_attr("/", "time", tmax)
 
     # Checkpointing
     checkpoint_name = 'linear_sk_rexi_chkpt.h5'
@@ -103,7 +113,7 @@ def run_rexi_linear_boussinesq(tmpdir, coefficients):
     return usoln, psoln, bsoln, u1, p1, b1
 
 
-@pytest.mark.parametrize("coefficients", ["Haut", "Caliari"])
+@pytest.mark.parametrize("coefficients", ["haut", "caliari"])
 def test_rexi_linear_boussinesq(tmpdir, coefficients):
 
     dirname = str(tmpdir)

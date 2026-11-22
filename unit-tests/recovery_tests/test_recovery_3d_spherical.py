@@ -49,7 +49,7 @@ def test_3D_spherical_recovery(element, mesh):
     hcurl_family = "RTCE" if element == "quadrilateral" else "RTE"
 
     # horizontal base spaces
-    cell = mesh._base_mesh.ufl_cell().cellname()
+    cell = mesh._base_mesh.ufl_cell().cellname
     u_div_hori = FiniteElement(hdiv_family, cell, 1)
     w_div_hori = FiniteElement("DG", cell, 0)
     u_curl_hori = FiniteElement(hcurl_family, cell, 1)

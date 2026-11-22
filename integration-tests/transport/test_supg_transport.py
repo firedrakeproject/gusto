@@ -116,7 +116,7 @@ def test_supg_transport_vector(tmpdir, equation_form, scheme, space,
     setup = tracer_setup(tmpdir, geometry="slice")
     domain = setup.domain
 
-    gdim = domain.mesh.geometric_dimension()
+    gdim = domain.mesh.geometric_dimension
     f_init = as_vector([setup.f_init]*gdim)
     if space == "CG":
         V = VectorFunctionSpace(domain.mesh, "CG", 1)

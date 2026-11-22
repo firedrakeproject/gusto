@@ -112,6 +112,7 @@ class OutputParameters(Configuration):
     # name and points is the points at which to dump them
     point_data = []
     tolerance = None
+    overwrite_files = False
 
 
 class WrapperOptions(Configuration, metaclass=ABCMeta):

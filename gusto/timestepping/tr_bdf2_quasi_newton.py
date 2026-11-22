@@ -3,7 +3,7 @@ The TR-BDF2 Quasi-Newton timestepper.
 """
 
 from firedrake import (
-    Function, FunctionSpace, sqrt
+    Function, FunctionSpace, sqrt, SpatialCoordinate, dot, Projector
 )
 
 
@@ -30,25 +30,18 @@ class TRBDF2QuasiNewton(BaseTimestepper):
 
     """
 
-    def __init__(self, equation_set, io, transport_schemes, spatial_methods,
-                 tr_solver=None,
-                 bdf_solver=None,
-                 diffusion_schemes=None,
-                 physics_schemes=None,
-                 slow_physics_schemes=None,
-                 fast_physics_schemes=None,
-                 gamma=(1-sqrt(2)/2),
-                 tau_values_tr=None,
-                 tau_values_bdf=None,
-                 num_outer_tr=2, num_inner_tr=2,
-                 num_outer_bdf=2, num_inner_bdf=2,
-                 reference_update_freq=None,
-                 solver_prognostics=None,
-                 tr_solver_parameters=None,
-                 tr_appctx=None,
-                 bdf_solver_parameters=None,
-                 bdf_appctx=None
-                 ):
+    def __init__(
+            self, equation_set, io, transport_schemes, spatial_methods,
+            tr_solver=None, bdf_solver=None,
+            diffusion_schemes=None, physics_schemes=None,
+            slow_physics_schemes=None, fast_physics_schemes=None,
+            gamma=(1-sqrt(2)/2), tau_values_tr=None, tau_values_bdf=None,
+            num_outer_tr=2, num_inner_tr=2, num_outer_bdf=2, num_inner_bdf=2,
+            reference_update_freq=None, consistent_metric=False,
+            solver_prognostics=None,
+            tr_solver_parameters=None, tr_appctx=None,
+            bdf_solver_parameters=None, bdf_appctx=None
+    ):
         """
         Args:
             equation_set (:class:`PrognosticEquationSet`): the prognostic
@@ -113,6 +106,9 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 time step. Setting it to None turns off the update, and
                 reference profiles will remain at their initial values.
                 Defaults to None.
+            consistent_metric (bool, optional): whether to use the consistent
+                metric term for transporting potential temperature. Improves
+                transport over orography.
             solver_prognostics (list, optional): a list of the names of
                 prognostic variables to include in the solver. Defaults to None,
                 in which case all prognostics that aren't active tracers are
@@ -145,15 +141,13 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.gamma2 = Function(R, val=((1 - 2*float(gamma))/(2 - 2*float(gamma))))
         self.gamma3 = Function(R, val=((1-float(self.gamma2))/(2*float(gamma))))
         self.implicit_terms = [incompressible, sponge]
+        self.consistent_metric = consistent_metric
 
         # Options relating to reference profiles
         self.reference_update_freq = reference_update_freq
         self.to_update_ref_profile = False
 
-        # Set transporting velocity to be average
-        self.alpha_u = Function(R, val=0.5)
         self.implicit_terms = [incompressible, sponge]
-        self.spatial_methods = spatial_methods
 
         # Determine prognostics for solver -------------------------------------
         self.non_solver_prognostics = []
@@ -217,6 +211,37 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 assert isinstance(scheme, ExplicitTimeDiscretisation), \
                     ("Only explicit time discretisations can be used with "
                      + f"physics scheme {parametrisation.label.label}")
+
+        # Transport ------------------------------------------------------------
+        self.spatial_methods = spatial_methods
+
+        # Consistent metric term
+        if self.consistent_metric:
+            # Check that potential temperature is a variable
+            if 'theta' not in equation_set.field_names:
+                raise ValueError(
+                    "Cannot use consistent metric term for transporting theta "
+                    + "if theta is not a prognostic variable"
+                )
+            # Check that z is in all of the correct places
+            if 'z' not in equation_set.field_names:
+                raise ValueError(
+                    "Cannot use consistent metric term for transporting theta "
+                    + "if z is not added as an active tracer"
+                )
+            if transport_schemes[0].field_name != 'z':
+                raise ValueError(
+                    "Cannot use consistent metric term for transporting theta "
+                    + "if z has no transport scheme specified"
+                )
+
+            # Set up adv_z term
+            self.adv_z = Function(
+                equation_set.domain.spaces('theta'), name='adv_z'
+            )
+            self.consistent_wind = Function(
+                equation_set.domain.spaces('HDiv'), name='consistent_wind'
+            )
 
         self.active_transport = []
         for scheme in transport_schemes:
@@ -303,6 +328,18 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         self.bdf_forcing = Forcing(equation_set, self.implicit_terms, alpha=1.0, dt=self.gamma2*dt)
         self.bcs = equation_set.bcs
 
+        # Consistent metric term -- things that need setting up afterwards as
+        # the state fields need to be created first
+        if self.consistent_metric:
+            k = self.equation.domain.k
+            x = SpatialCoordinate(self.equation.domain.mesh)
+            z = dot(k, x)
+            self.z = Function(self.equation.domain.spaces('theta')).interpolate(z)
+            expr = self.ubar + k*(dot(self.ubar, k) - self.adv_z)
+            self.consistent_wind_projection = Projector(
+                expr, self.consistent_wind, bcs=equation_set.bcs['u']
+            )
+
     def _apply_bcs(self, X):
         """
         Set the zero boundary conditions in the velocity.
@@ -334,9 +371,12 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         # tests with KGOs fail
         apply_bcs = True
         self.setup_equation(self.equation)
-        for _, scheme in self.active_transport:
+        for field_name, scheme in self.active_transport:
             scheme.setup(self.equation, apply_bcs, transport)
-            self.setup_transporting_velocity(scheme)
+            if self.consistent_metric and field_name == 'theta':
+                self.setup_transporting_velocity(scheme, self.consistent_wind)
+            else:
+                self.setup_transporting_velocity(scheme)
             if self.io.output.log_courant:
                 scheme.courant_max = self.io.courant_max
 
@@ -361,7 +401,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         for name in self.tracers_to_copy:
             x_out(name).assign(x_in(name))
 
-    def transport_fields(self, outer, x_in, x_out):
+    def transport_fields(self, outer, x_in, x_out, factor):
         """
         Transports all fields in x_in with a transport scheme
         and places the result in x_out.
@@ -369,15 +409,31 @@ class TRBDF2QuasiNewton(BaseTimestepper):
         Args:
             outer (int): the outer loop iteration number
             x_in (:class:`Fields`): the collection of state fields to be
-                  transported.
+                transported.
             x_out (:class:`Fields`): the collection of state fields resulting from
-                  the transport.
+                the transport.
+            factor (float): the factor to scale the timestep by, for different
+                stages of the TR-BDF2 timestepper.
         """
         for name, scheme in self.active_transport:
 
             logger.info(f'TR-BDF2 Quasi Newton: Transport {outer}: {name}')
             # transports a single field from x_in and puts the result in x_out
-            scheme.apply(x_out(name), x_in(name))
+            if self.consistent_metric and name == 'z':
+                # Reset z to z
+                k = self.equation.domain.k
+                x = SpatialCoordinate(self.equation.domain.mesh)
+                x_in('z').interpolate(dot(k, x))
+                self.true_adv_z_projection.project()
+                # Apply transport
+                scheme.apply(x_out(name), x_in(name))
+                # Compute adv_z
+                self.adv_z.interpolate((x_in('z') - x_out('z'))/(self.dt * factor))
+                self.consistent_wind_projection.project()
+
+            else:
+                # Standard transport
+                scheme.apply(x_out(name), x_in(name))
 
     def update_reference_profiles(self):
         """
@@ -447,7 +503,7 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 self.update_transporting_velocity(xn('u'), xm('u'), 2*self.gamma)
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'TR: transporting velocity, outer iteration {outer}')
-                self.transport_fields(f'TR: {outer}', xstar, xp)
+                self.transport_fields(f'TR: {outer}', xstar, xp, 2*self.gamma)
 
             # Fast physics -----------------------------------------------------
             x_after_fast(self.field_name).assign(xp(self.field_name))
@@ -504,13 +560,13 @@ class TRBDF2QuasiNewton(BaseTimestepper):
                 self.update_transporting_velocity(xnp1('u'), xnp1('u'), 1-2*self.gamma)
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'BDF m: transporting velocity, outer iteration {outer}')
-                self.transport_fields(f'BDF m: {outer}', xm, xpm)
+                self.transport_fields(f'BDF m: {outer}', xm, xpm, 1-2*self.gamma)
 
                 # Transport by u^np1 for dt, so scale u by 1
                 self.update_transporting_velocity(xnp1('u'), xnp1('u'), 1)
                 self.io.log_courant(self.fields, 'transporting_velocity',
                                     message=f'BDF n: transporting velocity, outer iteration {outer}')
-                self.transport_fields(f'BDF n:{outer}', xn, xp)
+                self.transport_fields(f'BDF n:{outer}', xn, xp, 1)
 
             # Combine transported fields into a single variable
             xp(fname).assign((1 - self.gamma3)*xp(fname) + self.gamma3*xpm(fname))

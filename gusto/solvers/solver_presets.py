@@ -40,7 +40,7 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
 
     # Callback function for the nullspace of the trace system
     def trace_nullsp(T):
-        return VectorSpaceBasis(constant=True)
+        return VectorSpaceBasis(constant=True, comm=equation.function_space.mesh().comm)
 
     # Prepare some generic variables to help with logic below ------------------
 
@@ -67,12 +67,96 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # Compressible Euler equations - (u, rho, theta) system. We use a
         # bespoke hybridization preconditioner for this system owing to the
         # nonlinear pressure gradient term.
+        r_tol = 1e-8
+
+        if equation.domain.horizontal_degree < 1 or equation.domain.vertical_degree < 1:
+            # Lowest-order configurations seem to suffer from diverged linear
+            # solves if using tinyasm
+            assembled_pc_star_backend = 'petscasm'
+        else:
+            assembled_pc_star_backend = 'tinyasm'
+
+        theta_backsub_settings = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+            'ksp_rtol': r_tol
+        }
+
+        exnerbar_avg_settings = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+            'ksp_rtol': r_tol
+        }
+
+        rhobar_avg_settings = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+            'ksp_rtol': r_tol
+        }
+
+        riesz_map_settings = {
+            'ksp_type': 'cg',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu',
+            'ksp_rtol': r_tol
+        }
+
+        trace_params = {
+            'pc_type': 'ksp',
+            'ksp': {
+                'ksp_rtol': r_tol,
+                'ksp_type': 'fgmres',
+                'pc_type': 'gamg',
+                'mg_levels': {
+                    'ksp_type': 'gmres',
+                    'ksp_max_it': 5,
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu',
+                },
+            }
+        }
+
+        slate_schur_params = {
+            'mat_type': 'matfree',
+            'ksp_type': 'preonly',
+            'pc_type': 'fieldsplit',
+            'pc_fieldsplit_type': 'schur',
+            'pc_fieldsplit_schur_fact_type': 'full',
+            'pc_fieldsplit_0_fields': '0,1',
+            # The reduced operator is not symmetric
+            'pc_fieldsplit_1_fields': '2',
+            'fieldsplit_0': {
+                'ksp_type': 'preonly',
+                'pc_type': 'python',
+                'pc_python_type': 'firedrake.AssembledPC',
+                'assembled_pc_type': 'python',
+                'assembled_pc_python_type': 'firedrake.ASMExtrudedStarPC',
+                'assembled_pc_star_construct_dim': equation.domain.mesh.topological_dimension,
+                'assembled_pc_star_backend': assembled_pc_star_backend,
+            },
+            'fieldsplit_1': {
+                'ksp_type': 'preonly',
+                'pc_type': 'python',
+                'pc_python_type': 'gusto.SlateSchurPC',
+                'slate_schur_nfields0': 2,
+                'slate_schur': trace_params,
+            }
+        }
+
         settings = {
             'ksp_monitor': None,
             'ksp_type': 'preonly',
             'mat_type': 'matfree',
             'pc_type': 'python',
             'pc_python_type': 'gusto.CompressibleHybridisedSCPC',
+            'theta_backsub': theta_backsub_settings,
+            'exnerbar_avg': exnerbar_avg_settings,
+            'rhobar_avg': rhobar_avg_settings,
+            'riesz_map': riesz_map_settings,
+            'compressible_hybrid_scpc': slate_schur_params
         }
 
         # We pass the implicit weighting parameter (alpha) and tau_values to the
@@ -120,7 +204,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                     'pc_type': 'python',
                     'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
                     'hybridization': {                              # hybridization PC
-                        'ksp_type': 'cg',
+                        'ksp_type': 'gmres',
+                        'mat_type': 'aij',
                         'pc_type': 'gamg',  # AMG for trace system
                         'ksp_rtol': 1e-8,
                         'mg_levels': {
@@ -143,7 +228,9 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # BoussinesqEquations class.
         # Provide callback for nullspace of the trace system with trace_nullsp
         appctx = {
-            'auxform': equation.schur_complement_form(alpha=alpha),
+            'auxform': equation.schur_complement_form(
+                alpha=alpha, tau_values=tau_values
+            ),
             'trace_nullspace': trace_nullsp,
         }
 
@@ -184,7 +271,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                         'pc_type': 'python',
                         'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's hybridization PC
                         'hybridization': {
-                            'ksp_type': 'cg',
+                            'ksp_type': 'gmres',
+                            'mat_type': 'aij',
                             'pc_type': 'gamg',  # AMG for trace system
                             'ksp_rtol': 1e-8,
                             'mg_levels': {
@@ -212,7 +300,9 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # ThermalShallowWaterEquations class.
         # Provide callback for nullspace of the trace system with trace_nullsp
         appctx = {
-            'auxform': equation.schur_complement_form(alpha=alpha),
+            'auxform': equation.schur_complement_form(
+                alpha=alpha, tau_values=tau_values
+            ),
             'trace_nullspace': trace_nullsp,
         }
 
@@ -247,7 +337,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                     'pc_type': 'python',
                     'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
                     'hybridization': {                              # hybridization PC
-                        'ksp_type': 'cg',
+                        'ksp_type': 'gmres',
+                        'mat_type': 'aij',
                         'pc_type': 'gamg',  # AMG for trace system
                         'ksp_rtol': 1e-8,
                         'mg_levels': {
@@ -270,7 +361,9 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
         # ThermalShallowWaterEquations class.
         # Provide callback for nullspace of the trace system with trace_nullsp
         appctx = {
-            'auxform': equation.schur_complement_form(alpha=alpha),
+            'auxform': equation.schur_complement_form(
+                alpha=alpha, tau_values=tau_values
+            ),
             'trace_nullspace': trace_nullsp,
         }
 
@@ -293,7 +386,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
                 'pc_type': 'python',
                 'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
                 'hybridization': {                              # hybridization PC
-                    'ksp_type': 'cg',
+                    'ksp_type': 'gmres',
+                    'mat_type': 'aij',
                     'pc_type': 'gamg',  # AMG for trace system
                     'ksp_rtol': 1e-8,
                     'mg_levels': {
@@ -327,7 +421,8 @@ def hybridised_solver_parameters(equation, solver_prognostics, alpha=0.5, tau_va
             'pc_type': 'python',
             'pc_python_type': 'firedrake.HybridizationPC',  # Uses Firedrake's
             'hybridization': {                              # hybridization PC
-                'ksp_type': 'cg',
+                'ksp_type': 'gmres',
+                'mat_type': 'aij',
                 'pc_type': 'gamg',  # AMG for trace system
                 'ksp_rtol': 1e-8,
                 'mg_levels': {
