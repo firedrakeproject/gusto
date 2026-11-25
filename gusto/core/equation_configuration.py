@@ -125,6 +125,9 @@ class ShallowWaterParameters(EquationParameters):
     # Scaling factor for evaporation term when present
     cD = None
     r = 3.6e-5          # linear coefficient of friction (N kg^-1 m^-1 s)
+    r_nl = None         # nonlinear friction coefficient
+    Q = None            # atmospheric cooling rate
+    tauR = None        # longwave radiative relaxation time
     # =======================================================================
     # Large scale moisture parameters
     q_ut = 0.004        # upper-tropospheric specific humidity (kg kg^-1)
