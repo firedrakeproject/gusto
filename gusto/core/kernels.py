@@ -43,16 +43,16 @@ class LimitMidpoints():
                   <float64> min_value = 0.0
                   for i
                       for j
-                          field_hat[i*3+2*j] = field_DG1[i*2+j]
+                          field_hat[i*3+2*j, 0] = field_DG1[i*2+j, 0]
                       end
-                      max_value = fmax(field_DG1[i*2], field_DG1[i*2+1])
-                      min_value = fmin(field_DG1[i*2], field_DG1[i*2+1])
-                      if field_old[i*3+1] > max_value
-                          field_hat[i*3+1] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
-                      elif field_old[i*3+1] < min_value
-                          field_hat[i*3+1] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
+                      max_value = fmax(field_DG1[i*2, 0], field_DG1[i*2+1, 0])
+                      min_value = fmin(field_DG1[i*2, 0], field_DG1[i*2+1, 0])
+                      if field_old[i*3+1, 0] > max_value
+                          field_hat[i*3+1, 0] = 0.5 * (field_DG1[i*2, 0] + field_DG1[i*2+1, 0])
+                      elif field_old[i*3+1, 0] < min_value
+                          field_hat[i*3+1, 0] = 0.5 * (field_DG1[i*2, 0] + field_DG1[i*2+1, 0])
                       else
-                          field_hat[i*3+1] = field_old[i*3+1]
+                          field_hat[i*3+1, 0] = field_old[i*3+1, 0]
                       end
                   end
                   """)
@@ -91,10 +91,10 @@ class ClipZero():
 
         instrs = ("""
                   for i
-                      if field_in[i] < 0.0
-                          field[i] = 0.0
+                      if field_in[i, 0] < 0.0
+                          field[i, 0] = 0.0
                       else
-                          field[i] = field_in[i]
+                          field[i, 0] = field_in[i, 0]
                       end
                   end
                   """)
@@ -107,8 +107,11 @@ class ClipZero():
 
         Args:
             field (:class:`Function`): The field to be written to.
-            field_in (:class:`Function`): The field to be clipped.
+            field_in (:class:`Function`): The field to be clipped, may be the
+                same as ``field``.
         """
+        if field_in.dat.buffer is field.dat.buffer:
+            field_in = field_in.copy(deepcopy=True)
         par_loop(self._kernel, dx,
                  {"field": (field, WRITE),
                   "field_in": (field_in, READ)})
@@ -138,11 +141,11 @@ class MeanMixingRatioWeights():
                   <float64> min_value = 0.0
 
                   for i
-                      min_value = fmin(min_value, mX_field[i])
+                      min_value = fmin(min_value, mX_field[i, 0])
                   end
 
                   if min_value < 0.0
-                    lamda[0] = fmax(lamda[0],-min_value/(mean_field[0] - min_value))
+                    lamda[0, 0] = fmax(lamda[0, 0],-min_value/(mean_field[0, 0] - min_value))
                   end
 
                   """)

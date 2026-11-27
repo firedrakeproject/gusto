@@ -252,6 +252,7 @@ class VerticalHybridizationPC(PCBase):
         # TODO: When PyOP2 is able to write into mixed dats,
         # the reconstruction expressions can simplify into
         # one clean expression.
+        # NOTE: This is likely now possible with pyop3.
         A = Tensor(split_mixed_op[(id0, id0)])
         B = Tensor(split_mixed_op[(id0, id1)])
         C = Tensor(split_mixed_op[(id1, id0)])

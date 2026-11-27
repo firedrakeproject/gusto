@@ -196,23 +196,23 @@ class BoundaryRecoveryHCurl():
         # x_out is the corrected output field
         top_instrs = ("""
                       for i
-                          x_out[2*i] = x_in[2*i]
-                          x_out[2*i+1] = -x_in[2*i] + 2 * x_in[2*i+1]
+                          x_out[2*i, 0] = x_in[2*i, 0]
+                          x_out[2*i+1, 0] = -x_in[2*i, 0] + 2 * x_in[2*i+1, 0]
                       end
 
                       for j
-                          x_out[2*{ndofs_hori_base}+j] = x_in[2*{ndofs_hori_base}+j]
+                          x_out[2*{ndofs_hori_base}+j, 0] = x_in[2*{ndofs_hori_base}+j, 0]
                       end
                       """).format(**shapes)
 
         bot_instrs = ("""
                       for i
-                          x_out[2*i] = 2 * x_in[2*i] - x_in[2*i+1]
-                          x_out[2*i+1] = x_in[2*i+1]
+                          x_out[2*i, 0] = 2 * x_in[2*i, 0] - x_in[2*i+1, 0]
+                          x_out[2*i+1, 0] = x_in[2*i+1, 0]
                       end
 
                       for j
-                          x_out[2*{ndofs_hori_base}+j] = x_in[2*{ndofs_hori_base}+j]
+                          x_out[2*{ndofs_hori_base}+j, 0] = x_in[2*{ndofs_hori_base}+j, 0]
                       end
                       """).format(**shapes)
 
@@ -233,11 +233,9 @@ class BoundaryRecoveryHCurl():
         par_loop(self._top_kernel, ds_t,
                  args={"x_out": (x_out, WRITE),
                        "x_in": (x_in, READ)})
-                 # iteration_region=ON_TOP)
         par_loop(self._bot_kernel, ds_b,
                  args={"x_out": (x_out, WRITE),
                        "x_in": (x_in, READ)})
-                 # iteration_region=ON_BOTTOM)
 
 
 class BoundaryGaussianElimination(object):

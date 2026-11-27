@@ -38,7 +38,7 @@ from pathlib import Path
 
 from firedrake.slate.static_condensation import scpc, hybridization
 from petsc4py import PETSc
-from pyop2.mpi import COMM_WORLD
+from pyop3.mpi import COMM_WORLD
 
 __all__ = [
     "logger", "set_log_handler", "LoggingError", "NOTSET", "DEBUG",

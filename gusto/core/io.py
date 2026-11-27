@@ -11,7 +11,7 @@ from firedrake import (Function, functionspaceimpl, Constant, COMM_WORLD,
                        DumbCheckpoint, FILE_CREATE, FILE_READ, CheckpointFile,
                        MeshGeometry)
 from firedrake.output import VTKFile
-from pyop2.mpi import MPI
+from pyop3.mpi import MPI
 import numpy as np
 from gusto.core.logging import logger, update_logfile_location
 from collections import namedtuple

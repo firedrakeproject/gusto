@@ -11,7 +11,7 @@ This example uses an explicit RK4 timestepper to solve the equations.
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import numpy as np
-from pyop2.mpi import MPI
+from pyop3.mpi import MPI
 from firedrake import (
     PeriodicIntervalMesh, Function, assemble, SpatialCoordinate, COMM_WORLD,
     pi, sin, exp, dx

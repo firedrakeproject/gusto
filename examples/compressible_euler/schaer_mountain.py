@@ -19,8 +19,7 @@ from gusto import (
     CompressibleParameters, logger,
     OutputParameters, SIQNModel,
     compressible_hydrostatic_balance, SpongeLayerParameters, Exner, ZComponent,
-    Perturbation
-    CompressibleEulerEquations, SubcyclingOptions
+    Perturbation, CompressibleEulerEquations, SubcyclingOptions
 )
 
 schaer_mountain_defaults = {
