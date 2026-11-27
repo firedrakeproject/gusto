@@ -69,6 +69,6 @@ class Averager(object):
     def project(self):
         """Apply the recovery."""
         # Ensure that the function being populated is zeroed out
-        self.v_out.dat.zero()
+        self.v_out.zero()
         self.average_kernel.apply(self.v_out, self._weighting, self.v)
         return self.v_out

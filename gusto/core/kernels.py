@@ -10,7 +10,7 @@ tested.
 """
 
 from firedrake import dx
-from firedrake.parloops import par_loop, READ, WRITE, RW, MIN, MAX, op2
+from firedrake.parloops import par_loop, READ, WRITE, RW, MIN, MAX
 import numpy as np
 
 
@@ -43,16 +43,16 @@ class LimitMidpoints():
                   <float64> min_value = 0.0
                   for i
                       for j
-                          field_hat[i*3+2*j] = field_DG1[i*2+j]
+                          field_hat[i*3+2*j, 0] = field_DG1[i*2+j, 0]
                       end
-                      max_value = fmax(field_DG1[i*2], field_DG1[i*2+1])
-                      min_value = fmin(field_DG1[i*2], field_DG1[i*2+1])
-                      if field_old[i*3+1] > max_value
-                          field_hat[i*3+1] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
-                      elif field_old[i*3+1] < min_value
-                          field_hat[i*3+1] = 0.5 * (field_DG1[i*2] + field_DG1[i*2+1])
+                      max_value = fmax(field_DG1[i*2, 0], field_DG1[i*2+1, 0])
+                      min_value = fmin(field_DG1[i*2, 0], field_DG1[i*2+1, 0])
+                      if field_old[i*3+1, 0] > max_value
+                          field_hat[i*3+1, 0] = 0.5 * (field_DG1[i*2, 0] + field_DG1[i*2+1, 0])
+                      elif field_old[i*3+1, 0] < min_value
+                          field_hat[i*3+1, 0] = 0.5 * (field_DG1[i*2, 0] + field_DG1[i*2+1, 0])
                       else
-                          field_hat[i*3+1] = field_old[i*3+1]
+                          field_hat[i*3+1, 0] = field_old[i*3+1, 0]
                       end
                   end
                   """)
@@ -91,10 +91,10 @@ class ClipZero():
 
         instrs = ("""
                   for i
-                      if field_in[i] < 0.0
-                          field[i] = 0.0
+                      if field_in[i, 0] < 0.0
+                          field[i, 0] = 0.0
                       else
-                          field[i] = field_in[i]
+                          field[i, 0] = field_in[i, 0]
                       end
                   end
                   """)
@@ -107,8 +107,11 @@ class ClipZero():
 
         Args:
             field (:class:`Function`): The field to be written to.
-            field_in (:class:`Function`): The field to be clipped.
+            field_in (:class:`Function`): The field to be clipped, may be the
+                same as ``field``.
         """
+        if field_in.dat.buffer is field.dat.buffer:
+            field_in = field_in.copy(deepcopy=True)
         par_loop(self._kernel, dx,
                  {"field": (field, WRITE),
                   "field_in": (field_in, READ)})
@@ -138,11 +141,11 @@ class MeanMixingRatioWeights():
                   <float64> min_value = 0.0
 
                   for i
-                      min_value = fmin(min_value, mX_field[i])
+                      min_value = fmin(min_value, mX_field[i, 0])
                   end
 
                   if min_value < 0.0
-                    lamda[0] = fmax(lamda[0],-min_value/(mean_field[0] - min_value))
+                    lamda[0, 0] = fmax(lamda[0, 0],-min_value/(mean_field[0, 0] - min_value))
                   end
 
                   """)
@@ -161,61 +164,3 @@ class MeanMixingRatioWeights():
                  {"lamda": (lamda, RW),
                   "mX_field": (mX_field, READ),
                   "mean_field": (mean_field, READ)})
-
-
-class MinKernel():
-    """Finds the minimum DoF value of a field."""
-
-    def __init__(self):
-
-        self._kernel = op2.Kernel("""
-            static void minify(double *a, double *b) {
-                a[0] = a[0] > b[0] ? b[0] : a[0];
-            }
-            """, "minify")
-
-    def apply(self, field):
-        """
-        Performs the par loop.
-
-        Args:
-            field (:class:`Function`): The field to take the minimum of.
-
-        Returns:
-            The minimum DoF value of the field.
-        """
-
-        fmin = op2.Global(1, np.finfo(float).max, dtype=float, comm=field.comm)
-
-        op2.par_loop(self._kernel, field.dof_dset.set, fmin(MIN), field.dat(READ))
-
-        return fmin.data[0]
-
-
-class MaxKernel():
-    """Finds the maximum DoF value of a field."""
-
-    def __init__(self):
-
-        self._kernel = op2.Kernel("""
-            static void maxify(double *a, double *b) {
-                a[0] = a[0] < b[0] ? b[0] : a[0];
-            }
-            """, "maxify")
-
-    def apply(self, field):
-        """
-        Performs the par loop.
-
-        Args:
-            field (:class:`Function`): The field to take the maximum of.
-
-        Returns:
-            The maximum DoF value of the field.
-        """
-
-        fmax = op2.Global(1, np.finfo(float).min, dtype=float, comm=field.comm)
-
-        op2.par_loop(self._kernel, field.dof_dset.set, fmax(MAX), field.dat(READ))
-
-        return fmax.data[0]
