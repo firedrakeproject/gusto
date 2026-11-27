@@ -135,7 +135,9 @@ class EmbeddedDGWrapper(Wrapper):
 
         if self.options.project_back_method == 'project':
             self.x_out_projector = Projector(self.x_out, self.x_projected,
-                                             bcs=post_apply_bcs)
+                                             bcs=post_apply_bcs,
+                                             solver_parameters={'ksp_type': 'preonly',
+                                                    'pc_type': 'lu'})
         elif self.options.project_back_method == 'recover':
             self.x_out_projector = Recoverer(self.x_out, self.x_projected)
         elif self.options.project_back_method == 'conservative_project':
@@ -267,7 +269,9 @@ class RecoveryWrapper(Wrapper):
             self.x_out_projector = interpolate(self.x_out, self.original_space)
         elif self.options.project_low_method == 'project':
             self.x_out_projector = Projector(self.x_out, self.x_projected,
-                                             bcs=post_apply_bcs)
+                                             bcs=post_apply_bcs,
+                                             solver_parameters={'ksp_type': 'preonly',
+                                                                'pc_type': 'lu'})
         elif self.options.project_low_method == 'recover':
             self.x_out_projector = Recoverer(self.x_out, self.x_projected,
                                              method=self.options.broken_method)

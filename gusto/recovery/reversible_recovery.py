@@ -66,7 +66,8 @@ class ReversibleRecoverer(object):
                                            method=self.opts.broken_method,
                                            boundary_method=None)
         elif self.opts.project_low_method == 'project':
-            self.projector_low = Projector(self.q_rec_high, self.q_corr_low)
+            self.projector_low = Projector(self.q_rec_high, self.q_corr_low, solver_parameters={'ksp_type': 'preonly',
+                                                                            'pc_type': 'lu'})
         elif self.opts.project_low_method == 'interpolate':
             self.projector_low = interpolate(self.q_rec_high, source_field.function_space())
             self.interp_low = True
